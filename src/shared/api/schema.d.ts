@@ -910,7 +910,7 @@ export interface paths {
             cookie?: never;
         };
         /** Editor/ops: job status and per-status row counts */
-        get: operations["getPlaceImport"];
+        get: operations["getPlaceImportJob"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1234,7 +1234,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Editor: catalog list with status/text filter */
+        /**
+         * Editor/ops: catalog list with server-side filter, sort and cursor paging
+         * @description Keyset pagination, not offset: the catalog is written to while editors browse it (background imports), so an offset would repeat or skip rows. Pass the returned `nextCursor` back to get the next page; `nextCursor` is null only when there is genuinely nothing more. Text search runs on the normalized name — accent-insensitive, same behaviour as the consumer-facing search.
+         */
         get: operations["cmsListPlaces"];
         put?: never;
         post?: never;
@@ -1639,6 +1642,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/cms/emergency/places/{id}/suspend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Any active admin: take a published place down (SEC-001 break-glass)
+         * @description Break-glass, deliberately asymmetric. Taking content **down** is open to every active admin role because it is reversible and reduces harm; putting it **back up** keeps its usual privileged role. Only `published → suspended` is accepted — any other current state is refused rather than coerced. One resource per call; there is no bulk form. Rate limited to 20 per hour per admin with a 5-per-minute burst cap, separately from the normal baseline. Every call is audited with actor, role, request id, staff IP, reason and before/after state, and raises an alert.
+         */
+        post: operations["emergencySuspendPlace"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/emergency/reviews/{id}/hide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Any active admin: hide a published review (SEC-001 break-glass)
+         * @description `published → hidden`. `hidden` is distinct from the moderator verdicts `rejected`/`removed` on purpose: it records "taken down under time pressure, pending review". Same limits and audit as the place route.
+         */
+        post: operations["emergencyHideReview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/emergency/checkins/{id}/hide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Any active admin: hide a stop check-in (SEC-001 break-glass)
+         * @description Same limits and audit as the place route.
+         */
+        post: operations["emergencyHideCheckin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/cms/ops/kpis": {
         parameters: {
             query?: never;
@@ -1941,10 +2004,20 @@ export interface components {
             costMax?: number | null;
             /** @description Locked stops are invariant across regenerate. */
             isLocked?: boolean;
-            /** @enum {string} */
+            /**
+             * @description Progress of the stop itself, not of the place behind it.
+             * @enum {string}
+             */
             status?: "planned" | "completed" | "skipped";
             /** Format: date-time */
             completedAt?: string;
+            /** @description False when the place behind this stop is no longer usable — taken down, archived or never published. The stop is deliberately kept: a locked stop is invariant, and dropping stops would rewrite a plan people already agreed on. Show a warning; do not present it as fine. */
+            placeAvailable?: boolean;
+            /**
+             * @description Present only when `placeAvailable` is false. Resolve copy via i18n.
+             * @enum {string}
+             */
+            unavailableReason?: "PLACE_SUSPENDED" | "PLACE_ARCHIVED" | "PLACE_NOT_PUBLISHED" | "PLACE_MISSING";
         };
         Plan: {
             /** Format: uuid */
@@ -1960,6 +2033,8 @@ export interface components {
             totals?: components["schemas"]["PlanTotals"];
             /** Format: date-time */
             createdAt?: string;
+            /** @description True when at least one stop points at a place that is no longer usable — lets a client show one banner without scanning stops. */
+            hasUnavailableStops?: boolean;
             stops?: components["schemas"]["PlanStop"][];
         };
         Checkin: {
@@ -2163,6 +2238,28 @@ export interface components {
             matchConfidence?: number | null;
             errors?: components["schemas"]["IngestMessage"][];
             warnings?: components["schemas"]["IngestMessage"][];
+        };
+        CmsPlaceListItem: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @enum {string} */
+            status: "draft" | "community_submitted" | "review" | "published" | "suspended" | "archived";
+            areaKey?: string;
+            /** Format: float */
+            rating?: number;
+            /** Format: float */
+            confidence: number;
+            /** Format: date-time */
+            freshnessCheckedAt?: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        EmergencyTakedownRequest: {
+            /** @description Why this was taken down. Required and stored in the audit record — it is the only explanation anyone reviewing the incident later has. */
+            reason: string;
         };
     };
     responses: {
@@ -3981,7 +4078,7 @@ export interface operations {
             429: components["responses"]["RateLimited"];
         };
     };
-    getPlaceImport: {
+    getPlaceImportJob: {
         parameters: {
             query?: never;
             header?: never;
@@ -4520,9 +4617,21 @@ export interface operations {
     cmsListPlaces: {
         parameters: {
             query?: {
-                status?: string;
+                status?: "draft" | "community_submitted" | "review" | "published" | "suspended" | "archived";
+                /** @description Accent-insensitive name search */
                 q?: string;
+                areaKey?: string;
+                /** @description Taxonomy key of kind `category` */
+                category?: string;
+                /** @description Where the place came from, derived from provider/submission links. */
+                source?: "google" | "community" | "manual";
+                /** @description Freshness last verified more than N days ago, or never. */
+                staleDays?: number;
+                sort?: "updated_at" | "created_at" | "name" | "confidence";
+                direction?: "asc" | "desc";
                 limit?: number;
+                /** @description Opaque cursor from a previous page */
+                cursor?: string;
             };
             header?: never;
             path?: never;
@@ -4530,12 +4639,27 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Places with freshness and confidence */
+            /** @description One page of places */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["CmsPlaceListItem"][];
+                        /** @description Null when this is the last page. */
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description INVALID_CURSOR or a rejected filter value */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
             };
             403: components["responses"]["Forbidden"];
         };
@@ -5179,6 +5303,119 @@ export interface operations {
                 };
                 content?: never;
             };
+        };
+    };
+    emergencySuspendPlace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmergencyTakedownRequest"];
+            };
+        };
+        responses: {
+            /** @description Place suspended; it leaves search and suggestion immediately */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        id?: string;
+                        /** @enum {string} */
+                        status?: "suspended";
+                    };
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description NOT_TAKEDOWNABLE — the resource is not in a state this applies to */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    emergencyHideReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmergencyTakedownRequest"];
+            };
+        };
+        responses: {
+            /** @description Review hidden */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        id?: string;
+                        /** @enum {string} */
+                        status?: "hidden";
+                    };
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    emergencyHideCheckin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmergencyTakedownRequest"];
+            };
+        };
+        responses: {
+            /** @description Check-in hidden */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        id?: string;
+                        /** @enum {string} */
+                        moderation?: "hidden";
+                    };
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["RateLimited"];
         };
     };
     cmsOpsKpis: {

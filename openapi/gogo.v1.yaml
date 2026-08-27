@@ -1504,7 +1504,7 @@ paths:
 
   /cms/place-imports/{jobId}:
     get:
-      operationId: getPlaceImport
+      operationId: getPlaceImportJob
       tags: [cms]
       summary: 'Editor/ops: job status and per-status row counts'
       parameters:
@@ -1950,13 +1950,78 @@ paths:
     get:
       operationId: cmsListPlaces
       tags: [cms]
-      summary: 'Editor: catalog list with status/text filter'
+      summary: 'Editor/ops: catalog list with server-side filter, sort and cursor paging'
+      description: >
+        Keyset pagination, not offset: the catalog is written to while editors
+        browse it (background imports), so an offset would repeat or skip rows.
+        Pass the returned `nextCursor` back to get the next page; `nextCursor`
+        is null only when there is genuinely nothing more. Text search runs on
+        the normalized name — accent-insensitive, same behaviour as the
+        consumer-facing search.
       parameters:
-        - { name: status, in: query, schema: { type: string } }
-        - { name: q, in: query, schema: { type: string } }
-        - { name: limit, in: query, schema: { type: integer, maximum: 200, default: 50 } }
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, community_submitted, review, published, suspended, archived]
+        - {
+            name: q,
+            in: query,
+            description: Accent-insensitive name search,
+            schema: { type: string, maxLength: 120 },
+          }
+        - { name: areaKey, in: query, schema: { type: string, maxLength: 64 } }
+        - {
+            name: category,
+            in: query,
+            description: Taxonomy key of kind `category`,
+            schema: { type: string, maxLength: 64 },
+          }
+        - name: source
+          in: query
+          description: Where the place came from, derived from provider/submission links.
+          schema: { type: string, enum: [google, community, manual] }
+        - name: staleDays
+          in: query
+          description: Freshness last verified more than N days ago, or never.
+          schema: { type: integer, minimum: 0, maximum: 3650 }
+        - name: sort
+          in: query
+          schema:
+            { type: string, enum: [updated_at, created_at, name, confidence], default: updated_at }
+        - { name: direction, in: query, schema: { type: string, enum: [asc, desc], default: desc } }
+        - {
+            name: limit,
+            in: query,
+            schema: { type: integer, minimum: 1, maximum: 200, default: 50 },
+          }
+        - {
+            name: cursor,
+            in: query,
+            description: Opaque cursor from a previous page,
+            schema: { type: string, maxLength: 512 },
+          }
       responses:
-        '200': { description: Places with freshness and confidence }
+        '200':
+          description: One page of places
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, nextCursor]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/CmsPlaceListItem' }
+                  nextCursor:
+                    type: string
+                    nullable: true
+                    description: Null when this is the last page.
+        '400':
+          description: INVALID_CURSOR or a rejected filter value
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
   /cms/places/stale:
@@ -2399,6 +2464,105 @@ paths:
       responses:
         '200': { description: Flag updated (audited) }
 
+  /cms/emergency/places/{id}/suspend:
+    post:
+      operationId: emergencySuspendPlace
+      tags: [cms]
+      summary: 'Any active admin: take a published place down (SEC-001 break-glass)'
+      description: >
+        Break-glass, deliberately asymmetric. Taking content **down** is open to
+        every active admin role because it is reversible and reduces harm; putting
+        it **back up** keeps its usual privileged role. Only `published →
+        suspended` is accepted — any other current state is refused rather than
+        coerced. One resource per call; there is no bulk form. Rate limited to 20
+        per hour per admin with a 5-per-minute burst cap, separately from the
+        normal baseline. Every call is audited with actor, role, request id, staff
+        IP, reason and before/after state, and raises an alert.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmergencyTakedownRequest' }
+      responses:
+        '201':
+          description: Place suspended; it leaves search and suggestion immediately
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  status: { type: string, enum: [suspended] }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: NOT_TAKEDOWNABLE — the resource is not in a state this applies to
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /cms/emergency/reviews/{id}/hide:
+    post:
+      operationId: emergencyHideReview
+      tags: [cms]
+      summary: 'Any active admin: hide a published review (SEC-001 break-glass)'
+      description: >
+        `published → hidden`. `hidden` is distinct from the moderator verdicts
+        `rejected`/`removed` on purpose: it records "taken down under time
+        pressure, pending review". Same limits and audit as the place route.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmergencyTakedownRequest' }
+      responses:
+        '201':
+          description: Review hidden
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  status: { type: string, enum: [hidden] }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /cms/emergency/checkins/{id}/hide:
+    post:
+      operationId: emergencyHideCheckin
+      tags: [cms]
+      summary: 'Any active admin: hide a stop check-in (SEC-001 break-glass)'
+      description: Same limits and audit as the place route.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmergencyTakedownRequest' }
+      responses:
+        '201':
+          description: Check-in hidden
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  moderation: { type: string, enum: [hidden] }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
   /cms/ops/kpis:
     get:
       operationId: cmsOpsKpis
@@ -2762,8 +2926,22 @@ components:
         isLocked:
           type: boolean
           description: Locked stops are invariant across regenerate.
-        status: { type: string, enum: [planned, completed, skipped] }
+        status:
+          type: string
+          enum: [planned, completed, skipped]
+          description: Progress of the stop itself, not of the place behind it.
         completedAt: { type: string, format: date-time }
+        placeAvailable:
+          type: boolean
+          description: >
+            False when the place behind this stop is no longer usable — taken
+            down, archived or never published. The stop is deliberately kept:
+            a locked stop is invariant, and dropping stops would rewrite a plan
+            people already agreed on. Show a warning; do not present it as fine.
+        unavailableReason:
+          type: string
+          enum: [PLACE_SUSPENDED, PLACE_ARCHIVED, PLACE_NOT_PUBLISHED, PLACE_MISSING]
+          description: Present only when `placeAvailable` is false. Resolve copy via i18n.
     Plan:
       type: object
       properties:
@@ -2777,6 +2955,11 @@ components:
         constraintVersion: { type: integer }
         totals: { $ref: '#/components/schemas/PlanTotals' }
         createdAt: { type: string, format: date-time }
+        hasUnavailableStops:
+          type: boolean
+          description: >
+            True when at least one stop points at a place that is no longer
+            usable — lets a client show one banner without scanning stops.
         stops:
           type: array
           items: { $ref: '#/components/schemas/PlanStop' }
@@ -3054,6 +3237,32 @@ components:
         warnings:
           type: array
           items: { $ref: '#/components/schemas/IngestMessage' }
+    CmsPlaceListItem:
+      type: object
+      required: [id, name, status, confidence, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        status:
+          type: string
+          enum: [draft, community_submitted, review, published, suspended, archived]
+        areaKey: { type: string }
+        rating: { type: number, format: float }
+        confidence: { type: number, format: float, minimum: 0, maximum: 1 }
+        freshnessCheckedAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    EmergencyTakedownRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 10
+          maxLength: 500
+          description: >
+            Why this was taken down. Required and stored in the audit record —
+            it is the only explanation anyone reviewing the incident later has.
   responses:
     BadRequest:
       description: Validation or business rule failure
