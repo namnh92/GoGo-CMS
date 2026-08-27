@@ -16,3 +16,6 @@ coverage/
 
 playwright-report/
 test-results/
+
+# TypeScript build info
+*.tsbuildinfo

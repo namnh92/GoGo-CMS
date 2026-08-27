@@ -8,13 +8,13 @@ Tài liệu nguồn (workspace docs): `GOGO_SRS.md` §8.8–8.10, `GOGO_IMPLEMEN
 
 ## Hệ sinh thái GoGo
 
-| Repo | Phạm vi |
-| --- | --- |
-| [GoGo-BE](https://github.com/namnh92/GoGo-BE) | API BFF, database, search, suggestion, workers, **CMS APIs** |
-| **GoGo-CMS** (repo này) | Back-office web cho Editor / Moderator / Ops Admin / Super Admin |
-| [GoGo-WebApp](https://github.com/namnh92/GoGo-WebApp) | Responsive Web/PWA và Mini Web App |
-| [GoGo-MobileApp](https://github.com/namnh92/GoGo-MobileApp) | React Native iOS/Android |
-| [GoGo-Mockup](https://github.com/namnh92/GoGo-Mockup) | Prototype, UI/UX fixtures và design validation |
+| Repo                                                        | Phạm vi                                                          |
+| ----------------------------------------------------------- | ---------------------------------------------------------------- |
+| [GoGo-BE](https://github.com/namnh92/GoGo-BE)               | API BFF, database, search, suggestion, workers, **CMS APIs**     |
+| **GoGo-CMS** (repo này)                                     | Back-office web cho Editor / Moderator / Ops Admin / Super Admin |
+| [GoGo-WebApp](https://github.com/namnh92/GoGo-WebApp)       | Responsive Web/PWA và Mini Web App                               |
+| [GoGo-MobileApp](https://github.com/namnh92/GoGo-MobileApp) | React Native iOS/Android                                         |
+| [GoGo-Mockup](https://github.com/namnh92/GoGo-Mockup)       | Prototype, UI/UX fixtures và design validation                   |
 
 ## Vì sao tách repo riêng
 
@@ -24,38 +24,43 @@ CMS là ứng dụng nội bộ, dùng bởi nhân sự chứ không phải ngư
 - **Ưu tiên UI ngược nhau.** App consumer tối ưu cảm xúc và chuyển động; CMS tối ưu mật độ dữ liệu, tốc độ thao tác bàn phím và khả năng đọc bảng lớn.
 - **Nhịp phát hành khác nhau.** CMS deploy được bất cứ lúc nào sau backend; app consumer đi theo chu kỳ store/release.
 
-## Stack định hướng
+## Stack
 
-React + TypeScript strict · Vite · TanStack Query (server state) · TanStack Table (data grid) · react-hook-form + zod · API client **generate từ OpenAPI của GoGo-BE** · Vitest + Playwright + axe · pnpm.
+React 19 + TypeScript strict · Vite 6 · Tailwind v4 (token qua `@theme`) · TanStack Query (server state) · TanStack Table (data grid) · react-hook-form + zod · API client **generate từ OpenAPI của GoGo-BE** · MSW (mock contract dùng chung cho dev/test/E2E) · Vitest + Playwright · pnpm.
 
-> Stack chốt tại Sprint 0 của CMS (CMS-001). README này mô tả định hướng, không phải bằng chứng code đã tồn tại.
+Chi tiết và lý do: [`docs/adr/0001-cms-stack.md`](docs/adr/0001-cms-stack.md).
 
 ## Cấu trúc thư mục
 
 ```text
 GoGo-CMS/
 ├── src/
-│   ├── app/                    # Shell, routing, providers, error boundaries
+│   ├── app/                    # Shell, sidebar, page header, routing, providers, gates
 │   ├── features/
-│   │   ├── auth/               # Login, TOTP, SSO, session, role gate
-│   │   ├── places/             # List, detail, edit, status workflow, freshness
-│   │   ├── duplicates/         # Merge candidate, merge/skip
-│   │   ├── imports/            # Bulk import wizard, job progress, row errors
-│   │   ├── submissions/        # Hàng chờ đề xuất từ Mobile
-│   │   ├── taxonomy/           # Taxonomy, synonym, localization
-│   │   ├── collections/        # Editorial collection, banner
-│   │   ├── moderation/         # Review / report / check-in queue
-│   │   ├── ranking/            # Ranking config, feature flag, A-B
-│   │   └── ops/                # Dashboard KPI
-│   └── shared/
-│       ├── api/                # Generated client + query hooks + error mapping
-│       ├── auth/               # Session store, RoleGate, permission map
-│       ├── ui/                 # Tokens, primitives, DataTable, Form, Drawer
-│       ├── i18n/               # vi mặc định, en phụ
-│       └── test/               # MSW handlers, fixtures
-├── e2e/                        # Playwright: role matrix + luồng import
+│   │   ├── auth/               # login.view + TOTP, xử lý MFA_REQUIRED
+│   │   ├── ops/                # dashboard.view — KPI, provider health, alert
+│   │   ├── places/             # placeList / placeEditor / duplicateQueue + status
+│   │   ├── imports/            # importList / importWizard / jobDetail / candidateDrawer
+│   │   ├── moderation/         # moderationQueue.view — review, report, check-in, submission
+│   │   ├── taxonomy/           # taxonomy.view — key, nhãn i18n, synonym
+│   │   ├── collections/        # collections.view — editorial collection + thứ tự
+│   │   ├── ranking/            # settings.view — feature flag, trọng số, health
+│   │   └── errors/             # 403 / 404
+│   ├── shared/
+│   │   ├── api/                # client, error envelope, contracts (zod), generated types
+│   │   ├── auth/               # session (cookie-first), permission map, token in-memory
+│   │   ├── ui/                 # primitives, DataTable, Drawer/Modal, State, Toast
+│   │   ├── i18n/               # vi mặc định, en phụ
+│   │   ├── format/             # tiền (minor units), ngày giờ, phần trăm
+│   │   └── test/               # MSW handlers, fixtures, render helper
+│   └── styles/                 # tokens.css (nơi DUY NHẤT có literal màu) + global.css
+├── e2e/                        # Playwright: role matrix, luồng import, a11y
+├── docs/                       # permissions, ui-conventions, adr/
 └── openapi/                    # Contract vendored từ GoGo-BE + type sinh ra
 ```
+
+Mỗi màn là một cặp `{screen}.view.tsx` + `{screen}.style.tsx`
+(`.claude/rules/core.md` §13); `src/app/routes.tsx` chỉ trỏ tới `.view`.
 
 ## Nguyên tắc cốt lõi
 
@@ -87,53 +92,80 @@ Bắt buộc: WCAG 2.2 AA trên mọi luồng chính, thao tác bàn phím đầ
 
 41 path dưới `/v1/cms/*`, đã live và có trong Swagger (`/v1/docs`). Nhóm theo màn hình:
 
-| Nhóm | Endpoint chính |
-| --- | --- |
-| Auth | `POST /cms/auth/login` · `POST /cms/auth/totp/setup` · `POST /cms/auth/admins` |
-| Places | `GET /cms/places` · `GET/PATCH /cms/places/{id}` · `POST /cms/places/{id}/status` · `PUT .../hours` · `PUT .../prices` · `POST .../verify-freshness` · `GET /cms/places/stale` |
-| Duplicates | `GET /cms/places/duplicates` · `POST /cms/places/{id}/merge` |
-| Bulk import | `POST /cms/place-imports` (multipart) · `POST .../google-sheet` · `GET /cms/place-imports` · `GET .../{jobId}` · `GET .../{jobId}/rows` · `POST .../start|cancel|retry|publish` · `POST .../rows/{rowId}/confirm-candidate|merge|skip` · `GET .../{jobId}/error-report` |
-| Submissions | `POST /cms/place-submissions/{id}/decide` |
-| Taxonomy | `GET/POST /cms/taxonomies` · `PATCH /cms/taxonomies/{id}` · `POST /cms/taxonomies/{id}/synonyms` |
-| Collections | `GET/POST /cms/collections` · `PUT /cms/collections/{id}` · `PATCH .../status` · `PATCH .../items` |
-| Moderation | `GET /cms/moderation` · `POST /cms/moderation/reviews\|reports\|checkins/{id}` |
-| Ranking & flags | `POST /cms/ranking-configs` · `POST .../{id}/approve\|activate` · `POST .../{key}/rollback` · `PATCH /cms/feature-flags/{key}` |
-| Ops | `GET /cms/ops/kpis` |
+| Nhóm            | Endpoint chính                                                                                                                                                                 |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Auth            | `POST /cms/auth/login` · `POST /cms/auth/totp/setup` · `POST /cms/auth/admins`                                                                                                 |
+| Places          | `GET /cms/places` · `GET/PATCH /cms/places/{id}` · `POST /cms/places/{id}/status` · `PUT .../hours` · `PUT .../prices` · `POST .../verify-freshness` · `GET /cms/places/stale` |
+| Duplicates      | `GET /cms/places/duplicates` · `POST /cms/places/{id}/merge`                                                                                                                   |
+| Bulk import     | `POST /cms/place-imports` (multipart) · `POST .../google-sheet` · `GET /cms/place-imports` · `GET .../{jobId}` · `GET .../{jobId}/rows` · `POST .../start                      | cancel | retry | publish`·`POST .../rows/{rowId}/confirm-candidate | merge | skip`·`GET .../{jobId}/error-report` |
+| Submissions     | `POST /cms/place-submissions/{id}/decide`                                                                                                                                      |
+| Taxonomy        | `GET/POST /cms/taxonomies` · `PATCH /cms/taxonomies/{id}` · `POST /cms/taxonomies/{id}/synonyms`                                                                               |
+| Collections     | `GET/POST /cms/collections` · `PUT /cms/collections/{id}` · `PATCH .../status` · `PATCH .../items`                                                                             |
+| Moderation      | `GET /cms/moderation` · `POST /cms/moderation/reviews\|reports\|checkins/{id}`                                                                                                 |
+| Ranking & flags | `POST /cms/ranking-configs` · `POST .../{id}/approve\|activate` · `POST .../{key}/rollback` · `PATCH /cms/feature-flags/{key}`                                                 |
+| Ops             | `GET /cms/ops/kpis`                                                                                                                                                            |
 
 Chi tiết từng operation: đọc `openapi/gogo.v1.yaml` hoặc Swagger UI tại `/v1/docs` của môi trường tương ứng. **Không viết tay DTO.**
 
 ## Ma trận quyền
 
-Quyền do BE quyết; bảng này để dựng `RoleGate` cho khớp, không phải để thay thế.
+Quyền do GoGo-BE quyết. Quy tắc từ `AdminGuard` (GoGo-BE#144): **đọc phân cấp,
+ghi khớp chính xác** — method an toàn pass khi rank người gọi ≥ rank thấp nhất
+route yêu cầu (`editor` = `moderator` = 1, `ops_admin` = 2, `super_admin` = 3),
+mọi ghi vẫn cần đúng vai.
 
-| Hành động | editor | moderator | ops_admin | super_admin |
-| --- | --- | --- | --- | --- |
-| Xem/sửa place, hours, price | ✅ | — | ✅ | ✅ |
-| Đổi trạng thái place, merge duplicate | ✅ | — | ✅ | ✅ |
-| Tạo/chạy/huỷ/retry import job | ✅ | — | ✅ | ✅ |
-| **Publish import → catalog** | ❌ | — | ✅ | ✅ |
-| Duyệt review/report/check-in | — | ✅ | ✅ | ✅ |
-| Quyết định đề xuất từ Mobile | ✅ | ✅ | ✅ | ✅ |
-| Taxonomy, collection, feature flag | — | — | ✅ | ✅ |
-| Ranking config: approve ≠ activate | — | — | ✅ (hai người khác nhau) | ✅ |
-| Tạo admin | — | — | — | ✅ |
+Bảng đầy đủ, kèm ánh xạ controller → `@RequireRole`, ở
+[`docs/permissions.md`](docs/permissions.md).
 
-Admin bị suspend hoặc hạ quyền **mất quyền ngay lập tức** — BE đọc lại hàng admin mỗi request, không tin token. CMS phải xử lý được 403 giữa phiên: hiện màn permission-denied, không văng ra trang trắng.
+| Hành động                                                 | editor | moderator | ops_admin | super_admin |
+| --------------------------------------------------------- | :----: | :-------: | :-------: | :---------: |
+| **Xem** catalog, import, hàng chờ kiểm duyệt, collections |   ✅   |    ✅     |    ✅     |     ✅      |
+| **Xem** ops KPI                                           |   ❌   |    ❌     |    ✅     |     ✅      |
+| Sửa place, giờ, giá · đổi trạng thái · merge              |   ✅   |    ❌     |    ❌     |     ✅      |
+| Sửa taxonomy, collection                                  |   ✅   |    ❌     |    ✅     |     ✅      |
+| Duyệt review/report/check-in                              |   ❌   |    ✅     |    ❌     |     ✅      |
+| Quyết định đề xuất từ Mobile                              |   ✅   |    ✅     |    ❌     |     ✅      |
+| Tạo/chạy/huỷ/retry import job                             |   ✅   |    ❌     |    ✅     |     ✅      |
+| **Publish import → catalog**                              |   ❌   |    ❌     |    ✅     |     ✅      |
+| Ranking config, feature flag                              |   ❌   |    ❌     |    ✅     |     ✅      |
+| Gỡ khẩn cấp                                               |   ✅   |    ✅     |    ✅     |     ✅      |
+| Tạo admin                                                 |   ❌   |    ❌     |    ❌     |     ✅      |
 
-## Local development (dự kiến — chốt tại Sprint 0)
+Admin bị suspend hoặc hạ quyền **mất quyền ngay lập tức**, kể cả quyền đọc — BE
+đọc lại hàng admin mỗi request, không tin token. CMS xử lý 403 giữa phiên bằng
+màn permission-denied, không văng ra trang trắng.
 
-Yêu cầu: Node.js LTS, pnpm, và một GoGo-BE đang chạy.
+## Local development
+
+Yêu cầu: Node.js ≥ 20.19, pnpm.
 
 ```bash
 pnpm install
-cp .env.example .env.local     # VITE_API_BASE_URL trỏ tới BFF
-pnpm api:types                 # sinh client từ openapi/gogo.v1.yaml
-pnpm dev
+cp .env.example .env.local     # VITE_USE_MOCK=true để chạy không cần backend
+pnpm dev                       # http://localhost:5174
 ```
 
-Lệnh chuẩn mục tiêu: `pnpm lint` · `pnpm typecheck` · `pnpm test` · `pnpm test:e2e` · `pnpm build` · `pnpm api:check`.
+**Không cần GoGo-BE để dựng UI.** Với `VITE_USE_MOCK=true`, MSW phục vụ toàn bộ
+`/v1/cms/*` từ `src/shared/test/handlers.ts` — kể cả các nhánh lỗi thật:
+`MFA_REQUIRED`, `SELF_APPROVAL`, `CANDIDATE_NOT_LISTED`,
+`paused_provider_quota`. Đăng nhập dev: mật khẩu bất kỳ + mã 6 số bất kỳ; vai
+trò suy ra từ phần local của email — `editor@…`, `moderator@…`, `ops@…`, còn
+lại là `super_admin`.
 
-Chạy BE local: xem `README.md` của GoGo-BE (Docker stack một lệnh). Tài khoản CMS seed dùng cho dev nằm trong seed data của BE.
+Chạy với backend thật: đặt `VITE_USE_MOCK=false` và `VITE_API_ORIGIN` trỏ tới
+GoGo-BE (xem `README.md` của GoGo-BE cho Docker stack một lệnh; tài khoản CMS
+seed nằm trong seed data của BE).
+
+| Lệnh             | Việc                                                |
+| ---------------- | --------------------------------------------------- |
+| `pnpm dev`       | Vite dev server, proxy `/v1` sang `VITE_API_ORIGIN` |
+| `pnpm typecheck` | `tsc -b --noEmit`                                   |
+| `pnpm lint`      | ESLint (chặn literal màu ngoài file token)          |
+| `pnpm test`      | Vitest + Testing Library trên MSW                   |
+| `pnpm test:e2e`  | Playwright: role matrix, luồng import, a11y         |
+| `pnpm build`     | Production bundle                                   |
+| `pnpm api:types` | Sinh lại client từ `openapi/gogo.v1.yaml`           |
+| `pnpm api:check` | Chặn CI khi contract/type lệch nhau                 |
 
 ## Git
 
@@ -152,6 +184,75 @@ Backlog theo `GOGO_IMPLEMENTATION_WBS.md`, quản lý bằng GitHub issues (labe
 
 Backend cho toàn bộ nhóm này **đã xong và đang chạy** (GoGo-BE `develop`), nên CMS không bị chặn bởi API — trừ SSO (chờ IdP) và dashboard metric (chờ chốt nơi nhận metric).
 
+## Màn hình đã dựng
+
+| Route             | Màn                                                                                    | WBS                             |
+| ----------------- | -------------------------------------------------------------------------------------- | ------------------------------- |
+| `/login`          | Đăng nhập + TOTP, xử lý `MFA_REQUIRED` / `MFA_SETUP_REQUIRED`                          | CMS-001                         |
+| `/`               | Dashboard vận hành: KPI, xu hướng, provider health, activity, alert                    | CMS-010                         |
+| `/places`         | Danh sách catalog: tab trạng thái + `Cần xác minh lại` + `Trùng lặp`, lọc, bulk action | CMS-002, CMS-003, CMS-004       |
+| `/places/:id`     | Editor: định danh, phân loại, geo, giờ, giá, nguồn, freshness, audit diff              | CMS-002, CMS-003                |
+| `/imports`        | Lịch sử phiên nhập, tiến trình, start/cancel/retry, báo cáo lỗi                        | PI-CMS-001, PI-CMS-003, CMS-009 |
+| `/imports/new`    | Wizard: nguồn → ánh xạ cột (preview CSV) → chế độ ghi                                  | PI-CMS-001, PI-CMS-002          |
+| `/imports/:jobId` | Chi tiết phiên: tổng quan, lọc dòng, xác nhận/gộp/bỏ qua, publish                      | PI-CMS-003..006                 |
+| `/moderation`     | Hàng chờ: đánh giá, báo cáo, địa điểm người dùng gửi, check-in                         | CMS-007, PI-CMS-007             |
+| `/taxonomy`       | Khoá phân loại theo nhóm, nhãn vi/en, synonym, bật/tắt                                 | CMS-005                         |
+| `/collections`    | Bộ sưu tập biên tập: form, trạng thái, thứ tự địa điểm                                 | CMS-006                         |
+| `/settings`       | Cờ tính năng, trọng số ranking (bốn mắt + rollback), sức khoẻ nền tảng                 | CMS-008                         |
+
 ## Trạng thái
 
-**Sprint 0 — chưa có code.** Repo mới khởi tạo: README + backlog. Bước kế tiếp là CMS-001 (shell, auth, RBAC, app skeleton), sau đó chạy song song hai nhánh: quản trị catalog (CMS-002..005) và bulk import (PI-CMS-001..006).
+**CMS-001 đã có shell chạy được** cùng lớp UI cho CMS-002..010 và
+PI-CMS-001..007. Toàn bộ đã được đối chiếu lại với GoGo-BE `develop`
+(`5095d0c`) — RBAC, tham số truy vấn và shape response đều đọc từ controller,
+không đoán.
+
+### Chưa có endpoint (UI đã dựng, đang chạy trên MSW)
+
+Không chặn việc review, nhưng chặn việc ghép backend thật. Đã mở issue phía
+GoGo-BE cho từng cái:
+
+| Endpoint                                             | Màn dùng                                                               | Issue                                                        |
+| ---------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `GET /cms/places/{id}`                               | Place Editor (spec chỉ có `PATCH`)                                     | [GoGo-BE#157](https://github.com/namnh92/GoGo-BE/issues/157) |
+| `GET /cms/audit`                                     | Drawer nhật ký thay đổi — audit đã ghi từ GoGo-BE#148, chưa có API đọc | [GoGo-BE#158](https://github.com/namnh92/GoGo-BE/issues/158) |
+| `GET /cms/taxonomies`                                | Taxonomy + picker phân loại — cần `usageCount` và khoá đang tắt        | [GoGo-BE#159](https://github.com/namnh92/GoGo-BE/issues/159) |
+| `GET /cms/ranking-configs`, `GET /cms/feature-flags` | Console ranking, tab cờ tính năng                                      | [GoGo-BE#160](https://github.com/namnh92/GoGo-BE/issues/160) |
+| Đọc lại danh sách địa điểm của collection            | Bộ sưu tập — `PUT .../items` ghi đè toàn bộ mà không xem lại được      | [GoGo-BE#161](https://github.com/namnh92/GoGo-BE/issues/161) |
+
+### Lệch khác đã xử lý ở phía UI
+
+- Hàng chờ kiểm duyệt trả `communityPlaces` (place ở trạng thái
+  `community_submitted`), còn `POST /cms/place-submissions/{id}/decide` cần
+  **submission id** — chưa API nào trả id đó. Tab này hiện chỉ xem được, và nói
+  rõ lý do thay vì hiện nút không bấm được.
+  → [GoGo-BE#162](https://github.com/namnh92/GoGo-BE/issues/162)
+- `GET /cms/ops/kpis` chỉ có sáu số tổng hợp trên cửa sổ cố định. Dashboard bỏ
+  biểu đồ chuỗi thời gian, provider health và activity feed — những thứ không
+  đo được.
+- Chưa có endpoint sức khoẻ theo từng nhà cung cấp; tab "Sức khoẻ nền tảng"
+  hiện đúng một chỉ số contract có (`providerErrorsLast7d`).
+- 26/27 endpoint `/cms/*` chưa khai báo `schema` cho response nên client
+  generate ra `unknown` → đang validate bằng zod ở boundary.
+  → [GoGo-BE#163](https://github.com/namnh92/GoGo-BE/issues/163), điều kiện gỡ ở
+  [`docs/adr/0002-boundary-validation.md`](docs/adr/0002-boundary-validation.md)
+
+### Gỡ khẩn cấp (break-glass, SEC-001)
+
+Ba route `/cms/emergency/*` (GoGo-BE#149) đã có UI (#19). Thiết kế cố ý bất đối
+xứng: **gỡ xuống** mở cho mọi vai admin đang active vì đảo ngược được và giảm
+thiệt hại; **đưa lên lại** vẫn giữ vai đặc quyền và đi qua màn thường.
+
+Điểm vào: hàng trong catalog và Place Editor (chỉ bật khi `published`), và chi
+tiết một báo cáo trong bảng kiểm duyệt — dùng `targetType`/`targetId` của
+report. Hàng chờ kiểm duyệt không dùng được cho việc này vì nó chỉ liệt kê
+review `pending`, còn route nhắm vào review `published`.
+
+Dialog nêu rõ chuyển trạng thái, bắt lý do ≥ 10 ký tự (đúng ngưỡng máy chủ) và
+nói thẳng rằng thao tác được ghi audit kèm vai/IP/request id và bắn cảnh báo.
+`409 NOT_TAKEDOWNABLE` và `429` (20/giờ, burst 5/phút) đều có thông điệp riêng.
+
+### Chưa dựng UI
+
+- SSO chờ IdP ([GoGo-BE#62](https://github.com/namnh92/GoGo-BE/issues/62)); hiện chỉ mật khẩu + TOTP.
+- Upload ảnh trong Place Editor chờ endpoint tương ứng.

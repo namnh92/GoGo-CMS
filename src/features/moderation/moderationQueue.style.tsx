@@ -1,0 +1,27 @@
+export const styles = {
+  kpiGrid: 'grid gap-4 sm:grid-cols-3',
+  layout: 'grid gap-5 xl:grid-cols-5',
+  listCol: 'xl:col-span-3',
+  detailCol: 'xl:col-span-2',
+  item: 'w-full cursor-pointer border-b border-line p-4 text-left last:border-b-0',
+  itemActive: 'bg-coral-soft/40',
+  itemIdle: 'hover:bg-surface-muted',
+  itemHead: 'mb-1.5 flex flex-wrap items-center justify-between gap-2',
+  author: 'text-[13px] font-semibold text-text',
+  time: 'text-[11px] tabular-nums text-text-subtle',
+  body: 'line-clamp-2 text-[13px] text-text-muted',
+  itemFoot: 'mt-2 flex flex-wrap items-center justify-between gap-2',
+  place: 'text-[11px] font-semibold text-coral-deep',
+  kind: 'text-[11px] text-text-subtle',
+  detailStack: 'flex flex-col gap-4',
+  quote: 'rounded-compact bg-surface-muted p-3 text-[13px] italic text-text-muted',
+  snapshot: 'rounded-compact border border-line p-3',
+  snapshotHead: 'mb-1 flex items-center gap-2',
+  snapshotThumb: 'h-12 w-12 rounded-compact object-cover',
+  decisionGrid: 'grid grid-cols-2 gap-2',
+  attribution: 'mt-2 text-[11px] text-text-subtle',
+  privacyNote:
+    'rounded-compact bg-surface-muted px-3 py-2 text-[11px] leading-relaxed text-text-subtle',
+  contractNote:
+    'flex items-start gap-2 rounded-compact border border-amber/45 bg-amber-soft px-3 py-2 text-xs text-text',
+} as const

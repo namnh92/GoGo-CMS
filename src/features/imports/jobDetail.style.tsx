@@ -1,0 +1,18 @@
+export const styles = {
+  summaryGrid: 'grid gap-4 sm:grid-cols-2 xl:grid-cols-5',
+  quota:
+    'flex items-start gap-2 rounded-compact border border-amber/45 bg-amber-soft px-3 py-2 text-xs text-text',
+  headerActions: 'flex flex-wrap items-center gap-2',
+  filterRow: 'flex flex-wrap items-center gap-2',
+  rowNumber: 'font-mono text-[12px] text-text-subtle',
+  placeName: 'max-w-[18rem] truncate text-[13px] font-semibold text-text',
+  placeMeta: 'max-w-[18rem] truncate text-[11px] text-text-subtle',
+  reasons: 'flex max-w-[12rem] flex-wrap gap-1',
+  reason: 'rounded-pill bg-surface-sunken px-2 py-0.5 font-mono text-[10px] text-text-muted',
+  messages: 'flex max-w-[14rem] flex-col gap-0.5',
+  errorMsg: 'text-[11px] font-medium text-danger',
+  warnMsg: 'text-[11px] text-amber',
+  actions: 'flex items-center justify-end gap-1',
+  unmapped: 'flex flex-wrap gap-1',
+  unmappedChip: 'rounded-pill bg-amber-soft px-2 py-0.5 font-mono text-[10px] text-text',
+} as const

@@ -1,0 +1,75 @@
+/*
+ * GoGo semantic design tokens — the ONLY file in this repo allowed to hold
+ * colour literals (hex OR rgba). Components consume semantic names.
+ *
+ * Values mirror GoGo-MobileApp `src/shared/ui/tokens.ts` (Warm Liquid Glass,
+ * spec §42–§49) so brand colour is identical across mobile, web and CMS.
+ * The palette is shared; the SURFACE is not: the CMS is a data-dense tool, so
+ * backgrounds stay opaque and contrast stays high. Glass/blur is reserved for
+ * overlays (drawer, modal, popover) — never tables, forms or page chrome.
+ */
+@theme {
+  /* ---- Brand (= colors.brand on mobile) ----------------------------- */
+  --color-coral: #d84f4a;
+  --color-coral-deep: #c74552;
+  --color-coral-bright: #ff746c;
+  --color-coral-soft: #ffd8d4;
+  --color-coral-ghost: rgb(216 79 74 / 0.1);
+  --color-lavender: #7667e8;
+  --color-lavender-soft: #e5e0ff;
+  --color-mint: #4faf86;
+  --color-mint-soft: #d9f3e7;
+  --color-amber: #d99028;
+  --color-amber-soft: #fcebcb;
+  --color-danger: #c84455;
+  --color-danger-soft: #fadde2;
+
+  /* ---- Neutrals (= colors.neutral on mobile) ------------------------ */
+  --color-neutral-0: #ffffff;
+  --color-neutral-25: #fcfbf8;
+  --color-neutral-50: #f6f3ee;
+  --color-neutral-100: #ece8e1;
+  --color-neutral-300: #c8c1b8;
+  --color-neutral-500: #817b74;
+  --color-neutral-700: #4a4641;
+  --color-neutral-900: #211f1c;
+
+  /* ---- Surfaces (opaque by design) ---------------------------------- */
+  --color-surface: var(--color-neutral-0);
+  --color-surface-muted: var(--color-neutral-25);
+  --color-surface-sunken: var(--color-neutral-50);
+  --color-surface-inverse: var(--color-neutral-900);
+
+  /* ---- Text --------------------------------------------------------- */
+  --color-text: var(--color-neutral-900);
+  --color-text-muted: var(--color-neutral-700);
+  --color-text-subtle: var(--color-neutral-500);
+  --color-text-on-accent: var(--color-neutral-0);
+
+  /* ---- Lines and focus ---------------------------------------------- */
+  --color-line: var(--color-neutral-100);
+  --color-line-strong: var(--color-neutral-300);
+  --color-focus: var(--color-lavender);
+
+  /* ---- Overlay material (only place blur is allowed) ---------------- */
+  --color-backdrop: rgb(33 31 28 / 0.55);
+  --color-glass: rgb(252 251 248 / 0.94);
+  --color-glass-border: rgb(255 255 255 / 0.72);
+
+  /* ---- Type --------------------------------------------------------- */
+  --font-display: 'Outfit', 'Segoe UI', system-ui, sans-serif;
+  --font-sans: 'Manrope', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  /* ---- Radius (mobile `radius`, tightened for a dense tool) --------- */
+  --radius-compact: 8px;
+  --radius-card: 12px;
+  --radius-sheet: 16px;
+  --radius-pill: 999px;
+
+  /* ---- Motion (mobile `motion`: 140/240/320ms) ---------------------- */
+  --duration-fast: 140ms;
+  --duration-base: 240ms;
+  --duration-slow: 320ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+}

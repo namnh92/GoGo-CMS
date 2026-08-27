@@ -1,0 +1,15 @@
+export const styles = {
+  kpiGrid: 'grid gap-4 sm:grid-cols-2 xl:grid-cols-3',
+  splitGrid: 'grid gap-4 xl:grid-cols-2',
+  breakdown: 'flex flex-col gap-3',
+  barTrack: 'flex h-3 w-full overflow-hidden rounded-pill bg-surface-sunken',
+  legend: 'flex flex-wrap gap-4 text-[11px] text-text-muted',
+  legendItem: 'flex items-center gap-1.5',
+  legendSwatch: 'inline-block h-2.5 w-2.5 rounded-sm',
+  legendValue: 'font-semibold tabular-nums text-text',
+  backlogRow: 'flex items-baseline justify-between border-b border-line py-2 last:border-b-0',
+  backlogLabel: 'text-[13px] text-text-muted',
+  backlogValue: 'font-display text-lg font-extrabold tabular-nums text-text',
+  note: 'flex items-start gap-2 rounded-compact border border-line bg-surface-muted px-3 py-2 text-xs text-text-muted',
+  cta: 'mt-3 flex justify-end',
+} as const
