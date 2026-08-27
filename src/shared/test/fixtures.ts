@@ -693,3 +693,51 @@ export const auditEntries = [
     after: { status: 'published' },
   },
 ]
+
+/** PI-CMS-007 — three pending proposals; the first is the popular one. */
+export const placeSubmissions = [
+  {
+    id: '9a1d0c00-0000-4000-8000-000000000001',
+    googlePlaceId: 'ChIJpopular',
+    status: 'pending' as const,
+    submissionCount: 4,
+    categoryKey: 'cafe',
+    estimatedPrice: { min: 60_000, max: 120_000, unit: 'per_person' },
+    vibeKeys: ['chill'],
+    note: 'Quán mới mở, view đẹp',
+    roomId: null,
+    resultPlaceId: null,
+    resultPlaceName: null,
+    fromRegisteredUser: true,
+    createdAt: '2026-08-27T02:00:00.000Z',
+    decidedAt: null,
+    decisionReason: null,
+  },
+  {
+    id: '9a1d0c00-0000-4000-8000-000000000002',
+    googlePlaceId: 'ChIJguest',
+    status: 'pending' as const,
+    submissionCount: 1,
+    categoryKey: null,
+    estimatedPrice: null,
+    vibeKeys: [],
+    note: null,
+    roomId: '11111111-2222-4333-8444-555555555555',
+    resultPlaceId: null,
+    resultPlaceName: null,
+    fromRegisteredUser: false,
+    createdAt: '2026-08-27T01:00:00.000Z',
+    decidedAt: null,
+    decisionReason: null,
+  },
+]
+
+export const decidedSubmissions = [
+  {
+    ...placeSubmissions[1]!,
+    id: '9a1d0c00-0000-4000-8000-000000000003',
+    status: 'rejected' as const,
+    decidedAt: '2026-08-27T03:00:00.000Z',
+    decisionReason: 'trùng địa điểm đã có',
+  },
+]

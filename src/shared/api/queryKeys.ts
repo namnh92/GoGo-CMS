@@ -40,6 +40,12 @@ export const queryKeys = {
       ['imports', 'rows', jobId, status, offset] as const,
   },
 
+  submissions: {
+    all: ['submissions'] as const,
+    list: (status: string, cursor?: string) =>
+      ['submissions', 'list', status, cursor ?? 'first'] as const,
+  },
+
   ranking: {
     configs: ['ranking', 'configs'] as const,
     flags: ['ranking', 'flags'] as const,

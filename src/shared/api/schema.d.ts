@@ -844,6 +844,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/cms/place-submissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Moderator/editor: queue of places proposed from Mobile (PI-CMS-007)
+         * @description Keyset paging on `(created_at, id)`, newest first — proposals keep arriving while a moderator works through the queue, so an offset would repeat or skip them. Repeat proposals of the same provider place are one row with `submissionCount`, which is what a moderator prioritises by. The submitter is reduced to `fromRegisteredUser`: moderating does not need the person's identity.
+         */
+        get: operations["cmsListPlaceSubmissions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/cms/place-submissions/{id}/decide": {
         parameters: {
             query?: never;
@@ -1187,6 +1207,46 @@ export interface paths {
         put?: never;
         /** Staff login — argon2id + TOTP (MFA mandatory in production) */
         post: operations["cmsLogin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/auth/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rotate the staff session (SEC-003)
+         * @description Reads the refresh token from the `gogo_rt` cookie, or from the body for non-browser callers. Single-use: presenting a superseded token is treated as theft and revokes the whole session family. The admin row is re-read, so a suspended or demoted account cannot refresh onward.
+         */
+        post: operations["cmsRefresh"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * End the staff session (SEC-003)
+         * @description Revokes the session and denylists its id, so an access token already in flight stops working immediately rather than at expiry. Idempotent.
+         */
+        post: operations["cmsLogout"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1986,6 +2046,8 @@ export interface components {
             overBudget?: boolean;
             /** @description Some stop has unknown/low-confidence price — surface the uncertainty. */
             uncertain?: boolean;
+            /** @description True when at least one leg is a straight-line estimate rather than a routed travel time. Say so in the UI: in city traffic the two differ by a lot, and presenting a guess as a measured duration is what core rule #8 forbids. */
+            travelEstimated?: boolean;
         };
         PlanStop: {
             /** Format: uuid */
@@ -2014,10 +2076,10 @@ export interface components {
             /** @description False when the place behind this stop is no longer usable — taken down, archived or never published. The stop is deliberately kept: a locked stop is invariant, and dropping stops would rewrite a plan people already agreed on. Show a warning; do not present it as fine. */
             placeAvailable?: boolean;
             /**
-             * @description Present only when `placeAvailable` is false. Resolve copy via i18n.
+             * @description Present only when `placeAvailable` is false. Two independent axes: `PLACE_SUSPENDED`/`PLACE_ARCHIVED`/`PLACE_NOT_PUBLISHED` are GoGo moderation states, while `PLACE_TEMPORARILY_CLOSED`/`PLACE_CLOSED` are what the provider reports about the business itself. A place on holiday and a place taken down need different copy — resolve it via i18n, never render the code.
              * @enum {string}
              */
-            unavailableReason?: "PLACE_SUSPENDED" | "PLACE_ARCHIVED" | "PLACE_NOT_PUBLISHED" | "PLACE_MISSING";
+            unavailableReason?: "PLACE_SUSPENDED" | "PLACE_ARCHIVED" | "PLACE_NOT_PUBLISHED" | "PLACE_MISSING" | "PLACE_TEMPORARILY_CLOSED" | "PLACE_CLOSED";
         };
         Plan: {
             /** Format: uuid */
@@ -2174,8 +2236,11 @@ export interface components {
             id?: string;
             /** @enum {string} */
             status?: "uploaded" | "validating" | "processing" | "review_required" | "completed" | "partial_success" | "failed" | "cancelled" | "paused_provider_quota";
-            /** @enum {string} */
-            mode?: "dry_run" | "create_drafts" | "publish_approved";
+            /**
+             * @description `update_existing` re-syncs an edited sheet onto places that already exist: provider facts refresh from Google, editorial fields come from the sheet, and an empty cell means "unknown", not "delete". A row whose provider place now looks like a *different business* is written nowhere and lands in review instead.
+             * @enum {string}
+             */
+            mode?: "dry_run" | "create_drafts" | "publish_approved" | "update_existing";
             /** @enum {string} */
             sourceType?: "csv" | "xlsx" | "google_sheet" | "mobile_link";
             sourceFileName?: string | null;
@@ -2260,6 +2325,46 @@ export interface components {
         EmergencyTakedownRequest: {
             /** @description Why this was taken down. Required and stored in the audit record — it is the only explanation anyone reviewing the incident later has. */
             reason: string;
+        };
+        AdminSession: {
+            /** @description For non-browser callers. Browser clients use the cookie. */
+            accessToken?: string;
+            refreshToken?: string;
+            /** @description Access token lifetime */
+            expiresIn?: number;
+            /** @description Session lifetime, seconds. Deliberately shorter than the consumer app's (security rule): a shift, not a month. */
+            refreshExpiresIn?: number;
+            role?: components["schemas"]["AdminRole"];
+            displayName?: string;
+        };
+        PlaceSubmissionSummary: {
+            /** Format: uuid */
+            id: string;
+            googlePlaceId: string;
+            /** @enum {string} */
+            status: "pending" | "approved" | "rejected" | "merged";
+            /** @description How many people proposed this same provider place. */
+            submissionCount: number;
+            categoryKey?: string;
+            estimatedPrice?: {
+                min?: number;
+                max?: number;
+                unit?: string;
+            };
+            vibeKeys?: string[];
+            note?: string;
+            /** Format: uuid */
+            roomId?: string;
+            /** Format: uuid */
+            resultPlaceId?: string;
+            resultPlaceName?: string;
+            /** @description Whether it came from an account rather than a guest session. */
+            fromRegisteredUser?: boolean;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            decidedAt?: string;
+            decisionReason?: string;
         };
     };
     responses: {
@@ -3923,6 +4028,35 @@ export interface operations {
             403: components["responses"]["Forbidden"];
         };
     };
+    cmsListPlaceSubmissions: {
+        parameters: {
+            query?: {
+                status?: "pending" | "approved" | "rejected" | "merged";
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of submissions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["PlaceSubmissionSummary"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
     decidePlaceSubmission: {
         parameters: {
             query?: never;
@@ -3998,7 +4132,7 @@ export interface operations {
                      * @default dry_run
                      * @enum {string}
                      */
-                    mode?: "dry_run" | "create_drafts" | "publish_approved";
+                    mode?: "dry_run" | "create_drafts" | "publish_approved" | "update_existing";
                     defaultCity?: string;
                     /** @description JSON object mapping raw header → canonical field */
                     mapping?: string;
@@ -4036,7 +4170,7 @@ export interface operations {
                      * @default dry_run
                      * @enum {string}
                      */
-                    mode?: "dry_run" | "create_drafts" | "publish_approved";
+                    mode?: "dry_run" | "create_drafts" | "publish_approved" | "update_existing";
                     defaultCity?: string;
                     tabCityMapping?: {
                         [key: string]: string;
@@ -4521,18 +4655,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Admin token grant (act=admin; role re-checked per request) */
+            /** @description Session opened. Sets `gogo_at` (HttpOnly), `gogo_rt` (HttpOnly, scoped to `/v1/cms/auth/refresh`) and `gogo_csrf` (readable, for the double-submit header). **Browser clients authenticate by cookie and must ignore the body tokens** — those exist for non-browser callers. */
             201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        accessToken?: string;
-                        role?: components["schemas"]["AdminRole"];
-                        displayName?: string;
-                        expiresIn?: number;
-                    };
+                    "application/json": components["schemas"]["AdminSession"];
                 };
             };
             /** @description Bad credentials or missing/invalid TOTP (`MFA_REQUIRED`) */
@@ -4554,6 +4683,76 @@ export interface operations {
                 };
             };
             429: components["responses"]["RateLimited"];
+        };
+    };
+    cmsRefresh: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    refreshToken?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Rotated session; cookies reset */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSession"];
+                };
+            };
+            /** @description INVALID_REFRESH_TOKEN / SESSION_REVOKED / SESSION_EXPIRED */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    cmsLogout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /**
+                     * @description Revoke every session in this login's family.
+                     * @default false
+                     */
+                    allDevices?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Session ended and cookies cleared */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        loggedOut?: boolean;
+                    };
+                };
+            };
+            403: components["responses"]["Forbidden"];
         };
     };
     cmsSetupTotp: {

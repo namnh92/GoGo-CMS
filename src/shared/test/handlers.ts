@@ -4,12 +4,14 @@ import type { ImportRow } from '@/shared/api/contracts-import'
 import {
   auditEntries,
   collections,
+  decidedSubmissions,
   duplicateRows,
   featureFlags,
   importJobs,
   importRows,
   moderationQueue,
   opsKpis,
+  placeSubmissions,
   places,
   rankingBounds,
   rankingConfigs,
@@ -32,6 +34,8 @@ const db = {
   rows: JSON.parse(JSON.stringify(importRows)) as Record<string, ImportRow[]>,
   duplicates: duplicateRows.map((row) => ({ ...row })),
   moderation: JSON.parse(JSON.stringify(moderationQueue)) as typeof moderationQueue,
+  submissions: placeSubmissions.map((item) => ({ ...item })),
+  decidedSubmissions: decidedSubmissions.map((item) => ({ ...item })),
   /** Counts break-glass calls so the burst limit is reachable in dev. */
   takedowns: 0,
 }
@@ -308,6 +312,12 @@ export const handlers = [
     return HttpResponse.json({ decided: true }, { status: 201 })
   }),
 
+  http.get(`${BASE}/cms/place-submissions`, ({ request }) => {
+    const status = new URL(request.url).searchParams.get('status') ?? 'pending'
+    const items = status === 'pending' ? db.submissions : db.decidedSubmissions
+    return HttpResponse.json({ items, nextCursor: null })
+  }),
+
   http.post(`${BASE}/cms/place-submissions/:id/decide`, async ({ params, request }) => {
     const body = (await request.json()) as { decision: string; reason: string }
     if (!body.reason || body.reason.trim().length < 3) {
@@ -316,6 +326,7 @@ export const handlers = [
     db.moderation.communityPlaces = db.moderation.communityPlaces.filter(
       (item) => item.id !== params.id,
     )
+    db.submissions = db.submissions.filter((item: { id: string }) => item.id !== params.id)
     return HttpResponse.json({ decided: true }, { status: 201 })
   }),
 

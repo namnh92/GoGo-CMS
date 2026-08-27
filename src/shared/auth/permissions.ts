@@ -90,6 +90,7 @@ const PERMISSIONS = {
   // Moderation — everyone reads the queue, only the moderator decides.
   'moderation.read': ['moderation', 'read'],
   'moderation.decide': ['moderation', 'write'],
+  'submission.read': ['submissions', 'read'],
   'submission.decide': ['submissions', 'write'],
 
   // Ingestion — editor and ops run jobs; publishing to the catalog is ops-only.

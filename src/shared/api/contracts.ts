@@ -379,3 +379,36 @@ export const auditEntrySchema = z.object({
 })
 export type AuditEntry = z.infer<typeof auditEntrySchema>
 export const auditListSchema = z.object({ items: z.array(auditEntrySchema).default([]) })
+
+/**
+ * PI-CMS-007 — `GET /cms/place-submissions`.
+ *
+ * The queue deliberately carries no submitter identity: deciding whether a
+ * place belongs in the catalog does not need to know who proposed it, so the
+ * server sends only `fromRegisteredUser`.
+ */
+export const placeSubmissionSchema = z.object({
+  id: z.string(),
+  googlePlaceId: z.string(),
+  status: z.enum(['pending', 'approved', 'rejected', 'merged']),
+  /** Repeat proposals of the same place are one row; this is how many. */
+  submissionCount: z.number(),
+  categoryKey: z.string().nullish(),
+  estimatedPrice: z.object({ min: z.number(), max: z.number(), unit: z.string() }).nullish(),
+  vibeKeys: z.array(z.string()).default([]),
+  note: z.string().nullish(),
+  roomId: z.string().nullish(),
+  resultPlaceId: z.string().nullish(),
+  resultPlaceName: z.string().nullish(),
+  fromRegisteredUser: z.boolean(),
+  createdAt: z.string(),
+  decidedAt: z.string().nullish(),
+  decisionReason: z.string().nullish(),
+})
+export type PlaceSubmission = z.infer<typeof placeSubmissionSchema>
+
+export const placeSubmissionListSchema = z.object({
+  items: z.array(placeSubmissionSchema),
+  nextCursor: z.string().nullable(),
+})
+export type PlaceSubmissionList = z.infer<typeof placeSubmissionListSchema>
