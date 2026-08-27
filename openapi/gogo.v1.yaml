@@ -1,0 +1,3090 @@
+openapi: 3.1.0
+info:
+  title: GoGo API
+  version: 1.0.0-alpha.1
+  description: |
+    Public contract for GoGo clients (Mobile, Web, Mini App). This page is the
+    integration guide — every rule below is enforced by the API, not advisory.
+
+    ## Base URL & versioning
+
+    All paths are relative to `/v1`. Breaking changes to `/v1` are blocked in
+    CI (oasdiff gate); additive changes ship freely. The deployed spec is
+    always downloadable at `GET /v1/openapi.yaml` — generate your client from
+    that file, never hand-write DTOs.
+
+    ## Authentication (mobile)
+
+    Mobile uses **bearer tokens**, not cookies (cookies + CSRF are the Web
+    path; ignore them). Store tokens in Keychain/Keystore, never in
+    AsyncStorage.
+
+    1. `POST /auth/register` or `POST /auth/login` → `{ accessToken,
+       refreshToken, expiresIn }`.
+    2. Send `Authorization: Bearer <accessToken>` on every call. Access tokens
+       live ≤15 minutes.
+    3. On `401`, call `POST /auth/refresh` with `{ refreshToken }` → a **new
+       pair**. Refresh tokens are single-use: store the new one immediately and
+       discard the old.
+    4. **Reusing an old refresh token revokes the entire session family** (theft
+       detection) — the user is logged out everywhere. Serialise refresh calls
+       behind one mutex; parallel refreshes will log the user out.
+    5. `DELETE /sessions/current` with `{ "allDevices": true|false }` to log out.
+
+    ### Guest sessions (no account)
+
+    `POST /sessions/guest` (room code) or `POST /rooms/join/guest` (invite code)
+    returns `accessToken` **scoped to that one room** plus a long-lived
+    `guestToken`. Persist `guestToken` to re-enter the room later
+    (`POST /auth/refresh` with `{ guestToken }` returns a fresh access token).
+    On registration, pass the stored token as `claimGuestToken` to migrate the
+    guest's memberships, preferences and votes to the new account.
+
+    Guests can only touch their own room — any other room returns
+    `403 ROOM_SCOPE_VIOLATION`. Guests cannot create rooms or use `/me/saved`,
+    `/reviews` (`403 USER_ONLY`).
+
+    ## Errors
+
+    Every failure uses one envelope:
+
+    ```json
+    { "code": "ROOM_NOT_MATCHING", "message": "...", "field_errors": [],
+      "request_id": "9f0c…", "retryable": false }
+    ```
+
+    Branch on `code` (stable), never on `message` (may change / is not
+    localised). `field_errors[]` maps validation failures to form fields.
+    Include `request_id` in bug reports. `retryable: true` means a backoff
+    retry is sensible (429, 5xx).
+
+    ## Idempotency
+
+    Any retryable mutation accepts `Idempotency-Key: <8–128 chars>`. Replaying
+    the same key returns the original response with `x-idempotent-replay: true`
+    instead of acting twice. Same key + a different body → `422
+    IDEMPOTENCY_KEY_REUSED`. Use it on room creation, votes, plan edits and
+    check-ins — anything you might retry after a flaky network.
+
+    ## Rate limits
+
+    `429 RATE_LIMITED` (`retryable: true`) with per-action budgets: login 5/min,
+    guest session 10/min, room join 10/min, suggestions 6/min, votes 60/min,
+    search 60/min, place resolve 10/min, submissions 5/min. Back off, do not
+    hammer.
+
+    ## Data conventions
+
+    - **Money is integer minor units** (VND has no decimals → `250000` means
+      250.000 ₫). Never send floats.
+    - `budgetMode` is `total` or `per_person`; convert consistently — the API
+      never mixes them.
+    - Times are ISO-8601 UTC. Opening hours use minutes-of-day in **place-local
+      time** (`closesAtMinute: 1380` = 23:00).
+    - **DTOs return facts, not sentences.** Compose copy client-side from
+      `type` + `participantCount` + `budgetMode` — the API deliberately never
+      sends "Cả hai bạn…" strings, so i18n stays on the client.
+    - Lists are cursor-paginated: pass back `nextCursor` verbatim; `null` means
+      the end.
+
+    ## Permissions
+
+    `host` / `member` / `guest` are enforced server-side on every call. Hiding a
+    button is UX, not security — expect `403 HOST_ONLY` if a non-host calls a
+    host action. Room state also gates actions (`409 ROOM_NOT_MATCHING`,
+    `ROOM_ACTIVE`, …), so drive the UI from `room.status`.
+
+    ## Typical mobile flow
+
+    `POST /rooms` → `PATCH /rooms/{id}/status` (`collecting`) →
+    `POST /rooms/{id}/invites` (share code) → guests join →
+    `PUT /rooms/{id}/preferences/me` + `POST …/preferences/complete` →
+    room flips to `matching` automatically → `POST /rooms/{id}/suggestions` →
+    `PUT /rooms/{id}/votes/{placeId}` → `POST /rooms/{id}/votes/finalize` →
+    plan appears (`GET /rooms/{id}/plans/current`) → lock/regenerate →
+    `PATCH /rooms/{id}/status` (`active`) → complete stops + check-ins.
+servers:
+  - url: /v1
+    description: Same-origin (app talks to the deployed API host)
+tags:
+  - name: system
+    description: Health probes and the contract itself.
+  - name: sessions
+    description: Register, login, refresh rotation, guest sessions.
+  - name: rooms
+    description: Room lifecycle, constraints, invites, members, seed places.
+  - name: preferences
+    description: Private per-member preferences and the taxonomy that drives them.
+  - name: places
+    description: Search, place detail, area autocomplete, add-by-link ingestion.
+  - name: suggestions
+    description: Deterministic suggestion runs, voting, decisions.
+  - name: plans
+    description: Itinerary versions, lock/regenerate, active date, check-ins.
+  - name: me
+    description: Profile, saved items, reviews, notifications, privacy.
+  - name: cms
+    description: Staff-only endpoints — not used by the mobile app.
+
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      tags: [system]
+      summary: Liveness probe
+      security: []
+      responses:
+        '200':
+          description: Service is alive
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    enum: [ok]
+
+  /health/ready:
+    get:
+      operationId: getReadiness
+      tags: [system]
+      summary: Readiness probe — checks database and Redis
+      description: >
+        Returns 503 when the database is unreachable. Redis failure degrades
+        (rate limits fail open) and is reported without failing readiness.
+        Uptime monitors should point here, not at /health.
+      security: []
+      responses:
+        '200':
+          description: Dependencies reachable
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [ready] }
+                  checks:
+                    type: object
+                    properties:
+                      db: { type: string, enum: [ok, failed] }
+                      redis: { type: string, enum: [ok, failed, skipped] }
+        '503':
+          description: Database unreachable
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /openapi.yaml:
+    get:
+      operationId: getOpenapiSpec
+      tags: [system]
+      summary: The deployed contract — generate clients from this
+      security: []
+      responses:
+        '200':
+          description: OpenAPI document (YAML)
+          content:
+            application/yaml:
+              schema: { type: string }
+
+  /auth/register:
+    post:
+      operationId: register
+      tags: [sessions]
+      summary: Register a user account (optionally claiming a guest session)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, displayName]
+              properties:
+                email: { type: string, format: email, maxLength: 254 }
+                password: { type: string, minLength: 10, maxLength: 128 }
+                displayName: { type: string, minLength: 1, maxLength: 50 }
+                claimGuestToken:
+                  type: string
+                  description: Opaque guest token to re-parent guest history (FR-AUTH-003).
+      responses:
+        '201':
+          description: Registered; web clients also receive HttpOnly session cookies.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenGrant' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409':
+          description: Registration could not be completed (never confirms account existence)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [sessions]
+      summary: Login with email + password (enumeration-safe, lockout on abuse)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        '201':
+          description: Authenticated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenGrant' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /auth/refresh:
+    post:
+      operationId: refreshSession
+      tags: [sessions]
+      summary: Rotate a refresh token or renew a guest access token
+      description: >
+        Refresh tokens are single-use; presenting a superseded token revokes
+        the whole session family. Web clients may rely on the HttpOnly refresh
+        cookie instead of the body field.
+      security: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refreshToken: { type: string }
+                guestToken: { type: string }
+      responses:
+        '201':
+          description: New token grant
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenGrant' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /sessions/guest:
+    post:
+      operationId: createGuestSession
+      tags: [sessions]
+      summary: Join a room as a guest with a display name only (FR-AUTH-002)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [roomCode, displayName]
+              properties:
+                roomCode: { type: string, minLength: 6, maxLength: 64 }
+                displayName: { type: string, minLength: 1, maxLength: 50 }
+      responses:
+        '201':
+          description: Guest session created; access token is scoped to this room only.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [guestSessionId, roomId, accessToken, guestToken]
+                properties:
+                  guestSessionId: { type: string, format: uuid }
+                  roomId: { type: string, format: uuid }
+                  accessToken: { type: string }
+                  guestToken:
+                    type: string
+                    description: Long-lived opaque credential for re-entry and claim.
+        '404': { $ref: '#/components/responses/NotFound' }
+        '410':
+          description: Room expired or no longer joinable
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /sessions/current:
+    delete:
+      operationId: endCurrentSession
+      tags: [sessions]
+      summary: Logout — revoke the current session (or all devices)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                allDevices: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Session revoked; cookies cleared.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  revoked: { type: boolean }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /me:
+    patch:
+      operationId: updateProfile
+      tags: [me]
+      summary: Update display name / locale
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                displayName: { type: string, minLength: 1, maxLength: 50 }
+                locale: { type: string, enum: [vi, en] }
+      responses:
+        '200': { description: Updated profile facts }
+    delete:
+      operationId: deleteAccount
+      tags: [me]
+      summary: Delete account — PII nulled, sessions revoked, content pseudonymized
+      responses:
+        '200': { description: '{ deleted: true }' }
+    get:
+      operationId: getMe
+      tags: [me]
+      summary: Current actor profile facts
+      responses:
+        '200':
+          description: Actor profile (shape depends on actorType)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [actorType, id]
+                properties:
+                  actorType: { type: string, enum: [user, guest] }
+                  id: { type: string, format: uuid }
+                  displayName: { type: string }
+                  email: { type: string }
+                  locale: { type: string }
+                  roomId: { type: string, format: uuid }
+                  expiresAt: { type: string, format: date-time }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /rooms:
+    post:
+      operationId: createRoom
+      tags: [rooms]
+      summary: Create a couple/group room with constraint v1 and optional seed places
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, decisionMode, participantCount, constraint]
+              properties:
+                type: { type: string, enum: [couple, group] }
+                decisionMode:
+                  type: string
+                  enum: [match, vote, host]
+                  description: couple allows match|host; group allows vote|host.
+                participantCount: { type: integer, minimum: 2, maximum: 20 }
+                title: { type: string, maxLength: 80 }
+                scheduledDate: { type: string, format: date-time }
+                constraint: { $ref: '#/components/schemas/RoomConstraintInput' }
+                seedPlaceIds:
+                  type: array
+                  maxItems: 10
+                  items: { type: string, format: uuid }
+      responses:
+        '201':
+          description: Room created (creator becomes host)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RoomSummary' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /rooms/{id}:
+    get:
+      operationId: getRoom
+      tags: [rooms]
+      summary: Room summary facts (members only; share code is host-only)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Room summary
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RoomSummary' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /rooms/{id}/constraints:
+    patch:
+      operationId: updateRoomConstraints
+      tags: [rooms]
+      summary: 'Host-only: new constraint version; marks scores/plans stale'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/RoomConstraintInput'
+                - type: object
+                  required: [expectedConstraintVersion]
+                  properties:
+                    expectedConstraintVersion: { type: integer, minimum: 1 }
+                    participantCount: { type: integer, minimum: 2, maximum: 20 }
+      responses:
+        '200':
+          description: Updated summary with bumped constraintVersion
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RoomSummary' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /rooms/{id}/status:
+    patch:
+      operationId: transitionRoom
+      tags: [rooms]
+      summary: 'Host-only: validated room state transition (SRS §7.2)'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [draft, collecting, matching, ready, active, completed, cancelled, expired]
+      responses:
+        '200':
+          description: Transitioned
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RoomSummary' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /rooms/{id}/members:
+    get:
+      operationId: listRoomMembers
+      tags: [rooms]
+      summary: Member progress facts (never other members' preference selections)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Members
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/RoomMember' }
+
+  /rooms/{id}/members/{memberId}:
+    delete:
+      operationId: removeRoomMember
+      tags: [rooms]
+      summary: 'Host-only: remove a member (revokes guest session if guest)'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: memberId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Removed }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /rooms/{id}/invites:
+    post:
+      operationId: createRoomInvite
+      tags: [rooms]
+      summary: 'Host-only: create a high-entropy expiring invite (code shown once)'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                maxUses: { type: integer, minimum: 1, maximum: 100 }
+      responses:
+        '201':
+          description: Invite created — plaintext code returned exactly once, only hash stored.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [inviteId, code, expiresAt]
+                properties:
+                  inviteId: { type: string, format: uuid }
+                  code: { type: string }
+                  expiresAt: { type: string, format: date-time }
+                  maxUses: { type: integer }
+    get:
+      operationId: listRoomInvites
+      tags: [rooms]
+      summary: 'Host-only: invite metadata (never codes)'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Invites }
+
+  /rooms/{id}/invites/{inviteId}:
+    delete:
+      operationId: revokeRoomInvite
+      tags: [rooms]
+      summary: 'Host-only: revoke an invite'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: inviteId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Revoked }
+
+  /rooms/join:
+    post:
+      operationId: joinRoom
+      tags: [rooms]
+      summary: Authenticated user joins via invite code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [inviteCode]
+              properties:
+                inviteCode: { type: string }
+      responses:
+        '201':
+          description: Joined (idempotent — re-joining returns the existing membership)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  roomId: { type: string, format: uuid }
+                  memberId: { type: string, format: uuid }
+                  role: { type: string, enum: [host, member] }
+        '410':
+          description: Invite expired/revoked/spent or room not joinable
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /rooms/join/guest:
+    post:
+      operationId: joinRoomAsGuest
+      tags: [rooms]
+      summary: Guest joins via invite code without an account (FR-AUTH-002)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [inviteCode, displayName]
+              properties:
+                inviteCode: { type: string }
+                displayName: { type: string, minLength: 1, maxLength: 50 }
+      responses:
+        '201':
+          description: Guest session bound to the invite's room
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  guestSessionId: { type: string, format: uuid }
+                  roomId: { type: string, format: uuid }
+                  accessToken: { type: string }
+                  guestToken: { type: string }
+        '410':
+          description: Invite expired/revoked/spent
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /rooms/{id}/seed-places:
+    post:
+      operationId: addRoomSeedPlaces
+      tags: [rooms]
+      summary: 'Host-only: attach verified places to the room (FR-ROOM-010)'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [placeIds]
+              properties:
+                placeIds:
+                  type: array
+                  minItems: 1
+                  maxItems: 10
+                  items: { type: string, format: uuid }
+      responses:
+        '200': { description: Updated seed list }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /rooms/{id}/seed-places/{placeId}:
+    delete:
+      operationId: removeRoomSeedPlace
+      tags: [rooms]
+      summary: 'Host-only: remove a seed place'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: placeId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Updated seed list }
+
+  /rooms/{roomId}/preferences/me:
+    get:
+      operationId: getMyPreferences
+      tags: [preferences]
+      summary: Caller's own preference draft (private to the member)
+      parameters:
+        - { name: roomId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Own preferences with version
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  selections:
+                    type: object
+                    additionalProperties:
+                      type: array
+                      items: { type: string }
+                  weights:
+                    type: object
+                    additionalProperties: { type: number }
+                  version:
+                    type: integer
+                    description: Pass back as `expectedVersion`; 0 means nothing saved yet.
+                  isDraft: { type: boolean }
+                  completedAt: { type: string, format: date-time }
+    put:
+      operationId: saveMyPreferences
+      tags: [preferences]
+      summary: Autosave with optimistic concurrency (expectedVersion)
+      parameters:
+        - { name: roomId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [selections, expectedVersion]
+              properties:
+                selections:
+                  type: object
+                  additionalProperties:
+                    type: array
+                    items: { type: string }
+                  description: Taxonomy kind → selected stable keys.
+                weights:
+                  type: object
+                  additionalProperties: { type: number }
+                expectedVersion: { type: integer, minimum: 0 }
+      responses:
+        '200':
+          description: Autosaved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version: { type: integer }
+                  isDraft: { type: boolean }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /rooms/{roomId}/preferences/complete:
+    post:
+      operationId: completeMyPreferences
+      tags: [preferences]
+      summary: Mark own preferences complete; room auto-moves to matching when everyone is done
+      parameters:
+        - { name: roomId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Completed; room flips to `matching` when everyone is done
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  completed: { type: boolean }
+                  roomReadyForMatching: { type: boolean }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /taxonomies:
+    get:
+      operationId: listTaxonomies
+      tags: [preferences]
+      summary: Stable taxonomy keys + i18n labels (clients never hard-code ids)
+      security: []
+      parameters:
+        - name: kinds
+          in: query
+          schema: { type: string }
+          description: Comma-separated kind filter (mood,category,setting,dietary,accessibility,spending_style,suitability)
+      responses:
+        '200':
+          description: Taxonomy keys with i18n labels
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TaxonomyList' }
+
+  /places/search:
+    get:
+      operationId: searchPlaces
+      tags: [places]
+      summary: Place search — Vietnamese-normalized text, filters, ranking, cursor
+      description: >
+        FR-SEARCH-001..004/009 + SE-010. Accent-insensitive FTS + trigram typo
+        tolerance + synonym expansion; hard filters in SQL; weighted versioned
+        ranking (meta.weightsVersion); stable keyset cursor. Lodging excluded
+        unless requested. Zero-results emit telemetry without raw PII.
+      security: []
+      parameters:
+        - { name: q, in: query, schema: { type: string, maxLength: 200 } }
+        - { name: lat, in: query, schema: { type: number } }
+        - { name: lng, in: query, schema: { type: number } }
+        - { name: radiusM, in: query, schema: { type: integer, minimum: 100, maximum: 100000 } }
+        - { name: openAt, in: query, schema: { type: string }, description: "'now' or ISO-8601" }
+        - { name: categories, in: query, schema: { type: string }, description: CSV, multi-select }
+        - { name: suitedFor, in: query, schema: { type: string, enum: [couple, group, family] } }
+        - { name: priceMinPerPerson, in: query, schema: { type: integer, minimum: 0 } }
+        - { name: priceMaxPerPerson, in: query, schema: { type: integer, minimum: 0 } }
+        - { name: minRating, in: query, schema: { type: number, minimum: 0, maximum: 5 } }
+        - { name: dietary, in: query, schema: { type: string }, description: CSV, ALL required }
+        - {
+            name: accessibility,
+            in: query,
+            schema: { type: string },
+            description: CSV,
+            ALL required,
+          }
+        - { name: includeLodging, in: query, schema: { type: boolean } }
+        - name: sort
+          in: query
+          schema:
+            {
+              type: string,
+              enum: [relevance, distance, rating, price, curated],
+              default: relevance,
+            }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Ranked results with reason codes and open/price facts
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [results, nextCursor, meta]
+                properties:
+                  results:
+                    type: array
+                    items: { $ref: '#/components/schemas/PlaceSearchResult' }
+                  nextCursor: { type: [string, 'null'] }
+                  meta:
+                    type: object
+                    properties:
+                      weightsVersion: { type: string }
+                      sort: { type: string }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /places/{id}:
+    get:
+      operationId: getPlaceDetail
+      tags: [places]
+      summary: Place detail with sources, freshness, hours, verified prices
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Place aggregate with hours, verified prices, sources and freshness
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PlaceDetail' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /rooms/{roomId}/suggestions:
+    post:
+      operationId: generateSuggestions
+      tags: [suggestions]
+      summary: Run the deterministic suggestion pipeline (SG-002..005)
+      parameters:
+        - { name: roomId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '201':
+          description: Ranked candidates with explainable components + reason codes
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuggestionsCurrent' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /rooms/{roomId}/suggestions/current:
+    get:
+      operationId: getCurrentSuggestions
+      tags: [suggestions]
+      summary: Current ranking, my votes, vote progress
+      parameters:
+        - { name: roomId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Current run, candidates and vote progress
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuggestionsCurrent' }
+
+  /rooms/{roomId}/votes/{placeId}:
+    put:
+      operationId: castVote
+      tags: [suggestions]
+      summary: Idempotent vote on a current candidate (FR-SUG-004)
+      description: Couple match mode auto-creates the plan when everyone matched.
+      parameters:
+        - { name: roomId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: placeId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [value]
+              properties:
+                value: { type: string, enum: [yes, no, star] }
+      responses:
+        '200':
+          description: Vote recorded (idempotent). Couple `match` mode may auto-create the plan.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  voted: { type: boolean }
+                  matched: { type: boolean }
+                  planId: { type: string, format: uuid }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /rooms/{roomId}/votes/finalize:
+    post:
+      operationId: finalizeVotes
+      tags: [suggestions]
+      summary: 'Host-only: finalize decision (tally star=2/yes=1; tie → candidate rank or host pick)'
+      parameters:
+        - { name: roomId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                placeId:
+                  type: string
+                  format: uuid
+                  description: Optional explicit winner (host mode / tie-break) — must be a current candidate.
+      responses:
+        '201':
+          description: Decision applied and the first plan version created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  finalized: { type: boolean }
+                  tie:
+                    type: boolean
+                    description: True when points tied and candidate rank broke it.
+                  winnerPlaceId: { type: string, format: uuid }
+                  planId: { type: string, format: uuid }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /rooms/{roomId}/plans/current:
+    get:
+      operationId: getCurrentPlan
+      tags: [plans]
+      summary: The room's current plan version with stops
+      parameters:
+        - { name: roomId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Current plan version with stops and totals
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Plan' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /plans/{id}:
+    get:
+      operationId: getPlan
+      tags: [plans]
+      summary: Plan by id (members only)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Plan with stops
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Plan' }
+    patch:
+      operationId: editPlanStops
+      tags: [plans]
+      summary: 'Host-only: replace stop list; times/travel/costs recalculated server-side'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expectedVersion, stops]
+              properties:
+                expectedVersion: { type: integer, minimum: 1 }
+                stops:
+                  type: array
+                  minItems: 1
+                  maxItems: 8
+                  items:
+                    type: object
+                    required: [placeId]
+                    properties:
+                      placeId: { type: string, format: uuid }
+                      durationMinutes: { type: integer, minimum: 10 }
+                      isLocked: { type: boolean, default: false }
+      responses:
+        '200':
+          description: New plan version (times, travel and totals recalculated server-side)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Plan' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /plans/{id}/regenerate:
+    post:
+      operationId: regeneratePlan
+      tags: [plans]
+      summary: 'Host-only: regenerate — locked stops are invariant (SG-008)'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                excludePlaceIds:
+                  type: array
+                  items: { type: string, format: uuid }
+      responses:
+        '201':
+          description: New plan version — every locked stop is preserved verbatim
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Plan' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /plans/{id}/stops/{stopId}/lock:
+    patch:
+      operationId: lockPlanStop
+      tags: [plans]
+      summary: 'Host-only: lock/unlock a stop'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: stopId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [locked]
+              properties:
+                locked: { type: boolean }
+      responses:
+        '200':
+          description: Updated plan
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Plan' }
+
+  /plans/{id}/stops/{stopId}/complete:
+    post:
+      operationId: completePlanStop
+      tags: [plans]
+      summary: Complete a stop during the active date (FR-PLAN-008)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: stopId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '201': { description: '{ completed: true }' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /plans/{id}/stops/{stopId}/checkin:
+    post:
+      operationId: checkinPlanStop
+      tags: [plans]
+      summary: Stop check-in — rating/tags/note/photos, optional verified bill (FR-PLAN-008/009)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: stopId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                rating: { type: integer, minimum: 1, maximum: 5 }
+                tags:
+                  type: array
+                  maxItems: 10
+                  items: { type: string, maxLength: 40 }
+                note: { type: string, maxLength: 1000 }
+                photoKeys:
+                  type: array
+                  maxItems: 3
+                  items: { type: string }
+                billTotal:
+                  type: integer
+                  minimum: 0
+                  description: Requires billPhotoKey as evidence.
+                billPeopleCount: { type: integer, minimum: 1 }
+                billPhotoKey: { type: string }
+      responses:
+        '201':
+          description: Check-in saved (photos/bill go to moderation)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Checkin' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /places/imports:
+    post:
+      operationId: submitPlaceImport
+      tags: [places]
+      summary: Submit a Google Maps link for verification (FR-PLACE-001..005)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                url: { type: string, format: uri, maxLength: 2000 }
+                roomId: { type: string, format: uuid }
+      responses:
+        '201':
+          description: >
+            Import result: pending → verified | rejected. Rejections carry a
+            stable reasonCode (NOT_FOUND, INSUFFICIENT_REVIEWS, LOW_RATING,
+            OUT_OF_AREA, CLOSED, INVALID_URL, PROVIDER_ERROR).
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /places/imports/{importId}:
+    get:
+      operationId: getPlaceImport
+      tags: [places]
+      summary: Poll an import (owner only)
+      parameters:
+        - { name: importId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: '{ id, status, reasonCode?, placeId? }' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /places/areas:
+    get:
+      operationId: suggestAreas
+      tags: [places]
+      summary: Area autocomplete proxy — provider key server-side, static fallback (FR-PLACE-007)
+      security: []
+      parameters:
+        - { name: query, in: query, required: true, schema: { type: string, maxLength: 120 } }
+        - name: sessionToken
+          in: query
+          required: true
+          schema: { type: string, minLength: 8, maxLength: 64 }
+          description: Groups one typing session for provider billing.
+      responses:
+        '200':
+          description: Ranked area predictions (or the static fallback list)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AreaPredictions' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /me/saved:
+    get:
+      operationId: listSaved
+      tags: [me]
+      summary: Saved places/plans (FR-USER-001)
+      responses:
+        '200':
+          description: Saved items
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SavedItem' }
+
+  /me/saved/{type}/{id}:
+    put:
+      operationId: saveItem
+      tags: [me]
+      summary: Save a place or plan (idempotent)
+      parameters:
+        - { name: type, in: path, required: true, schema: { type: string, enum: [place, plan] } }
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Saved }
+    delete:
+      operationId: unsaveItem
+      tags: [me]
+      summary: Remove a saved item
+      parameters:
+        - { name: type, in: path, required: true, schema: { type: string, enum: [place, plan] } }
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Removed }
+
+  /reviews:
+    post:
+      operationId: createReview
+      tags: [me]
+      summary: Create a review (moderation pending; owner-only edits — FR-USER-002)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rating]
+              properties:
+                placeId: { type: string, format: uuid }
+                planId: { type: string, format: uuid }
+                rating: { type: integer, minimum: 1, maximum: 5 }
+                text: { type: string, maxLength: 2000 }
+      responses:
+        '201':
+          description: Review created; awaits moderation
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Review' }
+
+  /me/export:
+    get:
+      operationId: exportMyData
+      tags: [me]
+      summary: Export all actor-owned data (privacy rule)
+      responses:
+        '200': { description: JSON export; audit-logged }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /me/notifications:
+    get:
+      operationId: listNotifications
+      tags: [me]
+      summary: In-app notification inbox (cursor by createdAt)
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Notification inbox page
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  notifications:
+                    type: array
+                    items: { $ref: '#/components/schemas/Notification' }
+                  nextCursor: { type: [string, 'null'] }
+
+  /me/device-tokens:
+    put:
+      operationId: registerDeviceToken
+      tags: [me]
+      summary: Register a push device token (BE-BFF-010)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [platform, token]
+              properties:
+                platform: { type: string, enum: [ios, android, web] }
+                token: { type: string }
+      responses:
+        '200': { description: Registered }
+
+  /places/resolve-google-maps-link:
+    post:
+      operationId: resolveGoogleMapsLink
+      tags: [places]
+      summary: Resolve a Google Maps link to a provider place (preview only)
+      description: >
+        PI-BE-018 / FR-INGEST-002/010. Hostname allowlist, ≤5 redirects with
+        SSRF guard, no HTML scraping. Returns RESOLVED, ALREADY_EXISTS (opens
+        the canonical place), CANDIDATE_SELECTION (user picks the branch) or
+        UNRESOLVED with reason codes. Provider data carries source, fetchedAt
+        and attributions; Google rating and derived score stay separate.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                url: { type: string, format: uri, maxLength: 2000 }
+                cityHint: { type: string, maxLength: 80 }
+                roomId: { type: string, format: uuid }
+      responses:
+        '201':
+          description: Resolution outcome with candidate + attribution facts
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ResolveLinkResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /place-submissions:
+    post:
+      operationId: submitPlace
+      tags: [places]
+      summary: Propose a place from a resolved provider id (FR-INGEST-011/012)
+      description: >
+        Creates at most one pending proposal per provider place; repeat
+        submissions increment submissionCount. Never publishes to the catalog.
+        Guests must submit within their room-scoped session.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [googlePlaceId]
+              properties:
+                googlePlaceId: { type: string }
+                roomId: { type: string, format: uuid }
+                category: { type: string }
+                estimatedPrice:
+                  type: object
+                  properties:
+                    min: { type: integer, minimum: 0 }
+                    max: { type: integer, minimum: 0 }
+                    unit:
+                      type: string
+                      enum: [per_person, per_group, per_item, free, unknown]
+                vibes:
+                  type: array
+                  items: { type: string }
+                note: { type: string, maxLength: 1000 }
+      responses:
+        '201':
+          description: Proposal accepted (or the place already exists)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SubmissionResult' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Place is closed/suspended and cannot be added
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /place-submissions/{id}:
+    get:
+      operationId: getPlaceSubmission
+      tags: [places]
+      summary: Poll a submission (owner only)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Submission status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  status: { type: string, enum: [pending, approved, rejected, merged] }
+                  googlePlaceId: { type: string }
+                  placeId: { type: string, format: uuid }
+                  submissionCount: { type: integer }
+                  createdAt: { type: string, format: date-time }
+                  decidedAt: { type: string, format: date-time }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /cms/place-submissions/{id}/decide:
+    post:
+      operationId: decidePlaceSubmission
+      tags: [cms]
+      summary: 'Moderator/editor: approve, reject or merge a submission (PI-CMS-007)'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision, reason]
+              properties:
+                decision: { type: string, enum: [approved, rejected, merged] }
+                reason: { type: string, minLength: 3, maxLength: 500 }
+                mergeIntoPlaceId: { type: string, format: uuid }
+      responses:
+        '201': { description: Decision applied; audited + reindex event emitted }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /cms/place-imports:
+    post:
+      operationId: createPlaceImport
+      tags: [cms]
+      summary: 'Editor/ops: upload a CSV or XLSX bulk import (PI-BE-011)'
+      description: >
+        multipart/form-data with one `file` part plus text fields. The format is
+        decided by the file content, not the extension or mimetype: CSV must be
+        UTF-8, XLSX must be a real workbook and macro-enabled workbooks are
+        rejected. Limits: 20 MB, 5.000 data rows, 64 columns, 2.000 chars/cell.
+        Re-uploading identical bytes in the same mode returns the existing job
+        (`reused: true`) instead of re-billing the provider. `dry_run` validates
+        only and never calls the provider.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+                mode:
+                  type: string
+                  enum: [dry_run, create_drafts, publish_approved]
+                  default: dry_run
+                defaultCity: { type: string, maxLength: 80 }
+                mapping:
+                  type: string
+                  description: JSON object mapping raw header → canonical field
+      responses:
+        '201':
+          description: Job created (or an identical one reused)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportJob' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+    get:
+      operationId: listPlaceImports
+      tags: [cms]
+      summary: 'Editor/ops: import history, newest first'
+      parameters:
+        - {
+            name: limit,
+            in: query,
+            schema: { type: integer, minimum: 1, maximum: 100, default: 25 },
+          }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        '200':
+          description: Import history page
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/ImportJobSummary' }
+                  nextOffset: { type: integer, nullable: true }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /cms/place-imports/google-sheet:
+    post:
+      operationId: createPlaceImportFromSheet
+      tags: [cms]
+      summary: 'Editor/ops: import from a Google Sheet (PI-BE-012)'
+      description: >
+        Reads the named tabs through the Sheets API with a bounded range. Only
+        `docs.google.com` spreadsheet links (or a bare spreadsheet id) are
+        accepted and the URL is never fetched directly. A tab name can map to a
+        city via `tabCityMapping` — this is how the legacy HCM/HN sheet imports.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [spreadsheetUrl]
+              properties:
+                spreadsheetUrl: { type: string, maxLength: 2000 }
+                sheets:
+                  type: array
+                  maxItems: 20
+                  items: { type: string }
+                mode:
+                  type: string
+                  enum: [dry_run, create_drafts, publish_approved]
+                  default: dry_run
+                defaultCity: { type: string, maxLength: 80 }
+                tabCityMapping:
+                  type: object
+                  additionalProperties: { type: string }
+                mapping:
+                  type: object
+                  additionalProperties: { type: string }
+      responses:
+        '201':
+          description: Job created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportJob' }
+        '400':
+          description: SHEET_URL_INVALID / SHEET_NOT_FOUND / SHEET_TAB_NOT_FOUND
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '403':
+          description: SHEET_PERMISSION_DENIED, or the caller lacks the CMS role
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /cms/place-imports/{jobId}:
+    get:
+      operationId: getPlaceImport
+      tags: [cms]
+      summary: 'Editor/ops: job status and per-status row counts'
+      parameters:
+        - { name: jobId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Job detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportJob' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /cms/place-imports/{jobId}/rows:
+    get:
+      operationId: listPlaceImportRows
+      tags: [cms]
+      summary: 'Editor/ops: rows with validation errors, match reasons and candidates'
+      parameters:
+        - { name: jobId, in: path, required: true, schema: { type: string, format: uuid } }
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum:
+              [
+                pending,
+                validation_failed,
+                resolving,
+                unresolved,
+                needs_confirmation,
+                duplicate,
+                ready,
+                imported,
+                failed,
+              ]
+        - {
+            name: limit,
+            in: query,
+            schema: { type: integer, minimum: 1, maximum: 100, default: 25 },
+          }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        '200':
+          description: Row page
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/ImportRow' }
+                  nextOffset: { type: integer, nullable: true }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /cms/place-imports/{jobId}/error-report:
+    get:
+      operationId: downloadPlaceImportErrorReport
+      tags: [cms]
+      summary: 'Editor/ops: downloadable error report (PI-BE-017)'
+      description: >
+        UTF-8 CSV of every row carrying an error or warning. Cells starting with
+        `=`, `+`, `-` or `@` are prefixed with an apostrophe so the report cannot
+        execute a formula when it is opened in Excel or Sheets.
+      parameters:
+        - { name: jobId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: CSV attachment
+          content:
+            text/csv:
+              schema: { type: string }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /cms/place-imports/{jobId}/start:
+    post:
+      operationId: startPlaceImport
+      tags: [cms]
+      summary: 'Editor/ops: start (or resume) background processing (PI-BE-015)'
+      description: >
+        Flips the job to `processing`; the worker advances it in chunks of 50
+        rows. Also the resume path for a job parked at
+        `paused_provider_quota`. Rejected for `dry_run` jobs.
+      parameters:
+        - { name: jobId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '201':
+          description: Job is processing
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportJob' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /cms/place-imports/{jobId}/cancel:
+    post:
+      operationId: cancelPlaceImport
+      tags: [cms]
+      summary: 'Editor/ops: cancel remaining chunks'
+      description: Stops unprocessed rows only — rows already imported are never rolled back.
+      parameters:
+        - { name: jobId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '201':
+          description: Job cancelled
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportJob' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /cms/place-imports/{jobId}/retry:
+    post:
+      operationId: retryPlaceImport
+      tags: [cms]
+      summary: 'Editor/ops: re-queue failed and unresolved rows'
+      description: >
+        Idempotent by `(job_id, source_row_id)`: a retry updates the same rows
+        and can never create a duplicate canonical place.
+      parameters:
+        - { name: jobId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '201':
+          description: Rows re-queued
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ImportJob'
+                  - type: object
+                    properties:
+                      retriedRows: { type: integer }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /cms/place-imports/{jobId}/rows/{rowId}/confirm-candidate:
+    post:
+      operationId: confirmPlaceImportCandidate
+      tags: [cms]
+      summary: 'Editor/ops: pick the right branch for an ambiguous row'
+      description: >
+        Only a `googlePlaceId` the resolver actually surfaced on this row is
+        accepted; an arbitrary provider id is refused with CANDIDATE_NOT_LISTED.
+      parameters:
+        - { name: jobId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: rowId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [googlePlaceId]
+              properties:
+                googlePlaceId: { type: string, minLength: 5, maxLength: 255 }
+      responses:
+        '201':
+          description: Row resolved
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportRowDecision' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /cms/place-imports/{jobId}/rows/{rowId}/merge:
+    post:
+      operationId: mergePlaceImportRow
+      tags: [cms]
+      summary: 'Editor/ops: merge a duplicate row into an existing place'
+      parameters:
+        - { name: jobId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: rowId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [placeId]
+              properties:
+                placeId: { type: string, format: uuid }
+      responses:
+        '201':
+          description: Row merged; provider snapshot linked and reindex emitted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportRowDecision' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /cms/place-imports/{jobId}/rows/{rowId}/skip:
+    post:
+      operationId: skipPlaceImportRow
+      tags: [cms]
+      summary: 'Editor/ops: skip a row so it is excluded from publish'
+      parameters:
+        - { name: jobId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: rowId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '201':
+          description: Row skipped
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportRowDecision' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /cms/place-imports/{jobId}/publish:
+    post:
+      operationId: publishPlaceImport
+      tags: [cms]
+      summary: 'Ops only: create catalog places from ready rows (PI-BE-016)'
+      description: >
+        Separated from importing on purpose: an editor prepares the batch and
+        ops publishes it (spec §9.3). `create_drafts` writes places in `draft`;
+        `publish_approved` publishes and emits a reindex event. Unknown taxonomy
+        keys are skipped, never created.
+      parameters:
+        - { name: jobId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                rowIds:
+                  type: array
+                  maxItems: 500
+                  items: { type: string, format: uuid }
+      responses:
+        '201':
+          description: Publish result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobId: { type: string, format: uuid }
+                  created: { type: integer }
+                  failed:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        rowId: { type: string, format: uuid }
+                        code: { type: string }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /me/reviews:
+    get:
+      operationId: listMyReviews
+      tags: [me]
+      summary: Reviews written by the caller, with moderation status
+      responses:
+        '200':
+          description: Own reviews
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Review' }
+
+  /reviews/{id}:
+    patch:
+      operationId: updateReview
+      tags: [me]
+      summary: Edit own review — goes back to moderation (owner only)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                rating: { type: integer, minimum: 1, maximum: 5 }
+                text: { type: string, maxLength: 2000 }
+      responses:
+        '200':
+          description: Updated; status returns to `pending`
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Review' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /me/notifications/{id}/read:
+    post:
+      operationId: markNotificationRead
+      tags: [me]
+      summary: Mark one notification read
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '201':
+          description: '{ read: true }'
+
+  /me/notification-preferences:
+    get:
+      operationId: getNotificationPreferences
+      tags: [me]
+      summary: Per-channel, per-kind notification opt-ins
+      responses:
+        '200':
+          description: Preferences (absent rows default to enabled)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    channel: { type: string, enum: [push, email] }
+                    kind: { $ref: '#/components/schemas/NotificationKind' }
+                    enabled: { type: boolean }
+    put:
+      operationId: setNotificationPreference
+      tags: [me]
+      summary: Opt in/out of one notification kind on one channel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [channel, kind, enabled]
+              properties:
+                channel: { type: string, enum: [push, email] }
+                kind: { $ref: '#/components/schemas/NotificationKind' }
+                enabled: { type: boolean }
+      responses:
+        '200':
+          description: '{ updated: true }'
+
+  /docs:
+    get:
+      operationId: getDocsPage
+      tags: [system]
+      summary: Swagger UI over the deployed contract
+      security: []
+      responses:
+        '200':
+          description: HTML page
+          content:
+            text/html:
+              schema: { type: string }
+
+  /cms/auth/login:
+    post:
+      operationId: cmsLogin
+      tags: [cms]
+      summary: Staff login — argon2id + TOTP (MFA mandatory in production)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+                totp: { type: string, minLength: 6, maxLength: 6 }
+      responses:
+        '201':
+          description: Admin token grant (act=admin; role re-checked per request)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken: { type: string }
+                  role: { $ref: '#/components/schemas/AdminRole' }
+                  displayName: { type: string }
+                  expiresIn: { type: integer }
+        '401':
+          description: Bad credentials or missing/invalid TOTP (`MFA_REQUIRED`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '403':
+          description: Production refuses accounts without MFA (`MFA_SETUP_REQUIRED`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /cms/auth/totp/setup:
+    post:
+      operationId: cmsSetupTotp
+      tags: [cms]
+      summary: Enroll TOTP (requires a fresh password proof)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password: { type: string }
+      responses:
+        '201':
+          description: Secret + otpauth URI for the authenticator app
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  secret: { type: string }
+                  otpauthUri: { type: string }
+
+  /cms/auth/admins:
+    post:
+      operationId: cmsCreateAdmin
+      tags: [cms]
+      summary: 'Super admin: create a staff account'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, displayName, role]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 12 }
+                displayName: { type: string }
+                role: { $ref: '#/components/schemas/AdminRole' }
+      responses:
+        '201': { description: Created }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /cms/places:
+    get:
+      operationId: cmsListPlaces
+      tags: [cms]
+      summary: 'Editor: catalog list with status/text filter'
+      parameters:
+        - { name: status, in: query, schema: { type: string } }
+        - { name: q, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, maximum: 200, default: 50 } }
+      responses:
+        '200': { description: Places with freshness and confidence }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /cms/places/stale:
+    get:
+      operationId: cmsStaleQueue
+      tags: [cms]
+      summary: 'Editor: published places whose facts need re-verification'
+      parameters:
+        - { name: days, in: query, schema: { type: integer, default: 30 } }
+        - { name: limit, in: query, schema: { type: integer, maximum: 200, default: 50 } }
+      responses:
+        '200': { description: Stale queue }
+
+  /cms/places/duplicates:
+    get:
+      operationId: cmsDuplicateCandidates
+      tags: [cms]
+      summary: 'Editor: duplicate candidates (name similarity + 150m proximity)'
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, maximum: 200, default: 50 } }
+      responses:
+        '200': { description: Candidate pairs with similarity + distance }
+
+  /cms/places/{id}:
+    patch:
+      operationId: cmsUpdatePlace
+      tags: [cms]
+      summary: 'Editor: edit canonical place facts (audited with a before/after diff)'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+                addressText: { type: string }
+                areaKey: { type: string }
+                lat: { type: number }
+                lng: { type: number }
+                avgVisitMinutes: { type: integer }
+                suitability:
+                  type: object
+                  additionalProperties: { type: number }
+                isLodging: { type: boolean }
+                curatedRank: { type: [integer, 'null'] }
+                taxonomyIds:
+                  type: array
+                  items: { type: string, format: uuid }
+      responses:
+        '200': { description: Updated }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /cms/places/{id}/status:
+    patch:
+      operationId: cmsTransitionPlace
+      tags: [cms]
+      summary: 'Editor: place workflow transition (draft→review→published→suspended)'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [draft, community_submitted, review, published, suspended, archived]
+      responses:
+        '200': { description: Transitioned; suspended places leave search immediately }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /cms/places/{id}/hours:
+    put:
+      operationId: cmsSetPlaceHours
+      tags: [cms]
+      summary: 'Editor: replace weekly hours (editor-verified, bumps freshness)'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [hours]
+              properties:
+                hours:
+                  type: array
+                  maxItems: 21
+                  items:
+                    type: object
+                    required: [dayOfWeek, openMinute, closeMinute]
+                    properties:
+                      dayOfWeek: { type: integer, minimum: 0, maximum: 6 }
+                      openMinute: { type: integer, minimum: 0, maximum: 1439 }
+                      closeMinute: { type: integer, minimum: 0, maximum: 1439 }
+                      isOvernight: { type: boolean, default: false }
+      responses:
+        '200': { description: Hours replaced }
+
+  /cms/places/{id}/prices:
+    post:
+      operationId: cmsAddPlacePrice
+      tags: [cms]
+      summary: 'Editor: add a verified price observation'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [priceMin, priceMax]
+              properties:
+                priceMin: { type: integer, minimum: 0 }
+                priceMax: { type: integer, minimum: 0 }
+                unit:
+                  type: string
+                  enum: [per_person, per_item, per_hour, per_night]
+                  default: per_person
+      responses:
+        '201': { description: Price recorded with editor confidence }
+
+  /cms/places/{id}/verify-freshness:
+    post:
+      operationId: cmsVerifyFreshness
+      tags: [cms]
+      summary: 'Editor: mark place facts re-verified now'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '201': { description: Freshness timestamp and confidence bumped }
+
+  /cms/places/{id}/merge:
+    post:
+      operationId: cmsMergePlaces
+      tags: [cms]
+      summary: 'Editor: merge a duplicate into this canonical place'
+      description: References (sources, media, prices, reviews, seeds) move over; the duplicate is archived, never deleted.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [duplicateId]
+              properties:
+                duplicateId: { type: string, format: uuid }
+      responses:
+        '201': { description: Merged; audited }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /cms/taxonomies:
+    post:
+      operationId: cmsCreateTaxonomy
+      tags: [cms]
+      summary: 'Editor/Ops: create a taxonomy key with i18n labels'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind, key, labels]
+              properties:
+                kind:
+                  type: string
+                  enum:
+                    [mood, category, setting, dietary, accessibility, spending_style, suitability]
+                key: { type: string, pattern: '^[a-z0-9_]{2,40}$' }
+                labels:
+                  type: object
+                  additionalProperties: { type: string }
+                sortOrder: { type: integer }
+      responses:
+        '201': { description: Created }
+
+  /cms/taxonomies/{id}:
+    patch:
+      operationId: cmsUpdateTaxonomy
+      tags: [cms]
+      summary: 'Editor/Ops: update labels/order or deactivate (never delete a referenced key)'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                labels:
+                  type: object
+                  additionalProperties: { type: string }
+                sortOrder: { type: integer }
+                isActive: { type: boolean }
+      responses:
+        '200': { description: Updated }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /cms/taxonomies/{id}/synonyms:
+    post:
+      operationId: cmsAddSynonym
+      tags: [cms]
+      summary: 'Editor/Ops: add a search synonym for this taxonomy key'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [term]
+              properties:
+                term: { type: string }
+                locale: { type: string, default: vi }
+      responses:
+        '201': { description: Synonym added (feeds query expansion) }
+
+  /cms/collections:
+    get:
+      operationId: cmsListCollections
+      tags: [cms]
+      summary: 'Editor/Ops: editorial collections'
+      parameters:
+        - {
+            name: status,
+            in: query,
+            schema: { type: string, enum: [draft, scheduled, published, archived] },
+          }
+      responses:
+        '200': { description: Collections }
+    post:
+      operationId: cmsCreateCollection
+      tags: [cms]
+      summary: 'Editor/Ops: create a collection'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [slug, title]
+              properties:
+                slug: { type: string, pattern: '^[a-z0-9-]{2,60}$' }
+                locale: { type: string, default: vi }
+                title: { type: string }
+                description: { type: string }
+                startsAt: { type: string, format: date-time }
+                endsAt: { type: string, format: date-time }
+      responses:
+        '201': { description: Created }
+
+  /cms/collections/{id}/status:
+    patch:
+      operationId: cmsSetCollectionStatus
+      tags: [cms]
+      summary: 'Editor/Ops: publish/schedule/archive a collection'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [draft, scheduled, published, archived] }
+      responses:
+        '200': { description: Status changed }
+
+  /cms/collections/{id}/items:
+    put:
+      operationId: cmsSetCollectionItems
+      tags: [cms]
+      summary: 'Editor/Ops: replace the ordered place list'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [placeIds]
+              properties:
+                placeIds:
+                  type: array
+                  maxItems: 100
+                  items: { type: string, format: uuid }
+      responses:
+        '200': { description: Items replaced }
+
+  /cms/moderation:
+    get:
+      operationId: cmsModerationQueue
+      tags: [cms]
+      summary: 'Moderator: pending reviews, reports, check-ins and community places'
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, maximum: 200, default: 50 } }
+      responses:
+        '200': { description: Unified queue }
+
+  /cms/moderation/reviews/{id}:
+    post:
+      operationId: cmsDecideReview
+      tags: [cms]
+      summary: 'Moderator: publish or reject a review (reason required, audited)'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ModerationDecision' }
+      responses:
+        '201': { description: Decided }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /cms/moderation/checkins/{id}:
+    post:
+      operationId: cmsDecideCheckin
+      tags: [cms]
+      summary: 'Moderator: approve or reject a stop check-in (photos/bill)'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ModerationDecision' }
+      responses:
+        '201': { description: Decided }
+
+  /cms/moderation/reports/{id}:
+    post:
+      operationId: cmsDecideReport
+      tags: [cms]
+      summary: 'Moderator: action or dismiss a report'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ModerationDecision' }
+      responses:
+        '201': { description: Decided }
+
+  /cms/ranking-configs:
+    post:
+      operationId: cmsCreateRankingConfig
+      tags: [cms]
+      summary: 'Ops: draft a versioned ranking/scoring config (weights bounds-checked)'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [key, weights]
+              properties:
+                key: { type: string, enum: [suggestion.scoring, search.ranking] }
+                weights:
+                  type: object
+                  additionalProperties: { type: number }
+      responses:
+        '201': { description: Draft created }
+        '400':
+          description: Unknown weight or value outside the engine's bounds
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /cms/ranking-configs/{id}/approve:
+    post:
+      operationId: cmsApproveRankingConfig
+      tags: [cms]
+      summary: 'Ops: approve a draft — four-eyes, the creator cannot self-approve'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '201': { description: Approved }
+        '403':
+          description: Same admin who created it (`SELF_APPROVAL`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /cms/ranking-configs/{id}/activate:
+    post:
+      operationId: cmsActivateRankingConfig
+      tags: [cms]
+      summary: 'Ops: activate an approved config (supersedes the previous active one)'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '201': { description: Activated }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /cms/ranking-configs/{key}/rollback:
+    post:
+      operationId: cmsRollbackRankingConfig
+      tags: [cms]
+      summary: 'Ops: deactivate the active config — the engine falls back to bounded defaults'
+      parameters:
+        - { name: key, in: path, required: true, schema: { type: string } }
+      responses:
+        '201': { description: '{ rolledBack: boolean }' }
+
+  /cms/feature-flags/{key}:
+    put:
+      operationId: cmsSetFeatureFlag
+      tags: [cms]
+      summary: 'Ops: toggle a feature flag / kill switch'
+      parameters:
+        - { name: key, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties:
+                enabled: { type: boolean }
+                payload: {}
+      responses:
+        '200': { description: Flag updated (audited) }
+
+  /cms/ops/kpis:
+    get:
+      operationId: cmsOpsKpis
+      tags: [cms]
+      summary: 'Ops: health KPIs (freshness, zero-result, suggestion success, budget, providers)'
+      responses:
+        '200': { description: Aggregated KPIs without exposing PII }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: gogo_at
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: >
+        Client-generated key for retryable mutations. Repeating a request with
+        the same key returns the original result instead of re-applying it.
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque cursor from a previous page.
+      schema:
+        type: string
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+  schemas:
+    RoomConstraintInput:
+      type: object
+      required: [budgetMode, budgetAmount]
+      properties:
+        originText: { type: string, maxLength: 200 }
+        originLat: { type: number, minimum: -90, maximum: 90 }
+        originLng: { type: number, minimum: -180, maximum: 180 }
+        areaKey: { type: string }
+        radiusM: { type: integer, minimum: 100, maximum: 50000 }
+        startAt: { type: string, format: date-time }
+        endAt: { type: string, format: date-time }
+        budgetMode: { type: string, enum: [total, per_person] }
+        budgetAmount:
+          type: integer
+          minimum: 0
+          description: Integer minor units, interpreted per budgetMode.
+        currency: { type: string, minLength: 3, maxLength: 3, default: VND }
+        dietaryKeys:
+          type: array
+          items: { type: string }
+        accessibilityKeys:
+          type: array
+          items: { type: string }
+    RoomMember:
+      type: object
+      required: [id, displayName, role, selectionStatus, isGuest]
+      properties:
+        id: { type: string, format: uuid }
+        displayName: { type: string }
+        role: { type: string, enum: [host, member] }
+        selectionStatus: { type: string, enum: [pending, in_progress, completed] }
+        isGuest: { type: boolean }
+        joinedAt: { type: string, format: date-time }
+    RoomSummary:
+      type: object
+      description: Facts only — audience copy is composed client-side from type/participantCount/budgetMode.
+      required: [id, type, status, decisionMode, participantCount, constraintVersion]
+      properties:
+        id: { type: string, format: uuid }
+        code:
+          type: string
+          description: Share code — present for the host only.
+        type: { type: string, enum: [couple, group] }
+        status:
+          type: string
+          enum: [draft, collecting, matching, ready, active, completed, cancelled, expired]
+        decisionMode: { type: string, enum: [match, vote, host] }
+        participantCount: { type: integer }
+        constraintVersion: { type: integer }
+        title: { type: string }
+        scheduledDate: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        myMemberId: { type: string, format: uuid }
+        myRole: { type: string, enum: [host, member] }
+        constraints:
+          allOf:
+            - $ref: '#/components/schemas/RoomConstraintInput'
+        members:
+          type: array
+          items: { $ref: '#/components/schemas/RoomMember' }
+        seedPlaces:
+          type: array
+          items:
+            type: object
+            properties:
+              placeId: { type: string, format: uuid }
+              name: { type: string }
+    PlaceSearchResult:
+      type: object
+      required: [id, name, lat, lng, isLodging, open, reasonCodes, confidence]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        addressText: { type: string }
+        areaKey: { type: string }
+        lat: { type: number }
+        lng: { type: number }
+        rating: { type: number }
+        ratingCount: { type: integer }
+        avgVisitMinutes: { type: integer }
+        suitability:
+          type: object
+          additionalProperties: { type: number }
+        isLodging: { type: boolean }
+        distanceM: { type: integer }
+        pricePerPerson:
+          type: object
+          description: Estimated per-person range with confidence — never fake precision (FR-SEARCH-009).
+          properties:
+            min: { type: integer }
+            max: { type: integer }
+            currency: { type: string }
+            confidence: { type: number }
+        open:
+          type: object
+          description: Facts for "Đang mở · Đóng 23:00" composition client-side.
+          properties:
+            openNow: { type: boolean }
+            closesAtMinute: { type: integer }
+            opensAtMinute: { type: integer }
+            opensDayOffset: { type: integer }
+        freshnessCheckedAt: { type: string, format: date-time }
+        confidence: { type: number }
+        reasonCodes:
+          type: array
+          items: { type: string, enum: [TEXT_MATCH, NEAR_YOU, HIGHLY_RATED, CURATED, OPEN_NOW] }
+    AdminRole:
+      type: string
+      enum: [editor, moderator, ops_admin, super_admin]
+    ModerationDecision:
+      type: object
+      required: [decision, reason]
+      description: The reason is mandatory and stored in the audit log.
+      properties:
+        decision: { type: string, enum: [published, rejected, approved, actioned, dismissed] }
+        reason: { type: string, minLength: 3, maxLength: 500 }
+    NotificationKind:
+      type: string
+      enum:
+        [invite, preference_reminder, plan_ready, plan_changed, date_reminder, moderation_update]
+    Review:
+      type: object
+      required: [id, rating, status]
+      properties:
+        id: { type: string, format: uuid }
+        placeId: { type: string, format: uuid }
+        planId: { type: string, format: uuid }
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        text: { type: string }
+        status:
+          type: string
+          enum: [pending, published, rejected, removed]
+          description: New and edited reviews start at `pending` until moderation.
+        createdAt: { type: string, format: date-time }
+    SavedItem:
+      type: object
+      properties:
+        targetType: { type: string, enum: [place, plan] }
+        targetId: { type: string, format: uuid }
+        savedAt: { type: string, format: date-time }
+    Notification:
+      type: object
+      description: Facts only — compose the display string client-side from `kind` + `payload`.
+      properties:
+        id: { type: string, format: uuid }
+        kind: { $ref: '#/components/schemas/NotificationKind' }
+        payload:
+          type: object
+          additionalProperties: true
+        readAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+    OpenState:
+      type: object
+      description: Minutes-of-day in place-local time; render "Đang mở · Đóng 23:00" client-side.
+      properties:
+        openNow: { type: boolean }
+        closesAtMinute: { type: integer }
+        opensAtMinute: { type: integer }
+        opensDayOffset: { type: integer }
+    PricePerPerson:
+      type: object
+      description: Estimated range in integer minor units — never present it as an exact figure.
+      properties:
+        min: { type: integer }
+        max: { type: integer }
+        currency: { type: string }
+        confidence: { type: number, minimum: 0, maximum: 1 }
+    PlaceDetail:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        status: { type: string }
+        address_text: { type: string }
+        area_key: { type: string }
+        lat: { type: number }
+        lng: { type: number }
+        phone: { type: string }
+        website: { type: string }
+        rating: { type: number }
+        rating_count: { type: integer }
+        avg_visit_minutes: { type: integer }
+        suitability:
+          type: object
+          additionalProperties: { type: number }
+        is_lodging: { type: boolean }
+        confidence: { type: number }
+        freshness_checked_at: { type: string, format: date-time }
+        taxonomies:
+          type: array
+          items:
+            type: object
+            properties:
+              kind: { type: string }
+              key: { type: string }
+        hours:
+          type: array
+          items:
+            type: object
+            properties:
+              dayOfWeek: { type: integer, minimum: 0, maximum: 6 }
+              openMinute: { type: integer }
+              closeMinute: { type: integer }
+              isOvernight: { type: boolean }
+        prices:
+          type: array
+          items:
+            type: object
+            properties:
+              priceMin: { type: integer }
+              priceMax: { type: integer }
+              currency: { type: string }
+              unit: { type: string, enum: [per_person, per_item, per_hour, per_night] }
+              confidence: { type: number }
+              verifiedAt: { type: string, format: date-time }
+        sources:
+          type: array
+          description: Provider attribution — must be displayed with provider-sourced facts.
+          items:
+            type: object
+            properties:
+              provider: { type: string }
+              url: { type: string }
+              attribution: { type: string }
+    SuggestionCandidate:
+      type: object
+      properties:
+        placeId: { type: string, format: uuid }
+        name: { type: string }
+        rank: { type: integer }
+        score: { type: number, minimum: 0, maximum: 1 }
+        components:
+          type: object
+          description: Explainable score parts — drives the "Vì sao phù hợp" UI.
+          additionalProperties: { type: number }
+        reasonCodes:
+          type: array
+          items:
+            type: string
+            enum:
+              [
+                MATCHES_PREFERENCES,
+                LIKED_BY_EVERYONE,
+                FITS_BUDGET,
+                NEAR_ORIGIN,
+                HIGHLY_RATED,
+                HOST_SUGGESTED,
+              ]
+        stale:
+          type: boolean
+          description: True after a constraint edit — regenerate before showing as current.
+        myVote: { type: string, enum: [yes, no, star] }
+        points: { type: integer }
+    SuggestionsCurrent:
+      type: object
+      properties:
+        run:
+          type: [object, 'null']
+          properties:
+            id: { type: string, format: uuid }
+            createdAt: { type: string, format: date-time }
+            constraintVersion: { type: integer }
+            engineVersion: { type: string }
+            weightsVersion: { type: string }
+            stale: { type: boolean }
+        decisionMode: { type: string, enum: [match, vote, host] }
+        candidates:
+          type: array
+          items: { $ref: '#/components/schemas/SuggestionCandidate' }
+        votes:
+          type: object
+          properties:
+            mine:
+              type: object
+              additionalProperties: { type: string, enum: [yes, no, star] }
+            progress:
+              type: array
+              items:
+                type: object
+                properties:
+                  placeId: { type: string, format: uuid }
+                  points: { type: integer }
+                  yes: { type: integer }
+                  star: { type: integer }
+                  no: { type: integer }
+    PlanTotals:
+      type: object
+      properties:
+        costMin: { type: integer }
+        costMax: { type: integer }
+        currency: { type: string }
+        durationMinutes: { type: integer }
+        travelDistanceM: { type: integer }
+        overBudget:
+          type: boolean
+          description: Computed from the UPPER bound — never show "trong ngân sách" when true.
+        uncertain:
+          type: boolean
+          description: Some stop has unknown/low-confidence price — surface the uncertainty.
+    PlanStop:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        placeId: { type: string, format: uuid }
+        position: { type: integer }
+        arriveAt: { type: string, format: date-time }
+        departAt: { type: string, format: date-time }
+        durationMinutes: { type: integer }
+        travelMinutesFromPrev: { type: [integer, 'null'] }
+        travelDistanceMFromPrev: { type: [integer, 'null'] }
+        costMin: { type: [integer, 'null'] }
+        costMax: { type: [integer, 'null'] }
+        isLocked:
+          type: boolean
+          description: Locked stops are invariant across regenerate.
+        status: { type: string, enum: [planned, completed, skipped] }
+        completedAt: { type: string, format: date-time }
+    Plan:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        roomId: { type: string, format: uuid }
+        version: { type: integer }
+        status: { type: string, enum: [draft, current, superseded, archived] }
+        isStale:
+          type: boolean
+          description: Constraints changed after this plan was built.
+        constraintVersion: { type: integer }
+        totals: { $ref: '#/components/schemas/PlanTotals' }
+        createdAt: { type: string, format: date-time }
+        stops:
+          type: array
+          items: { $ref: '#/components/schemas/PlanStop' }
+    Checkin:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        tags:
+          type: array
+          items: { type: string }
+        note: { type: string }
+        photoKeys:
+          type: array
+          maxItems: 3
+          items: { type: string }
+        billTotal: { type: integer }
+        billPeopleCount: { type: integer }
+        billPerPerson:
+          type: integer
+          description: Rounded display value; `billTotal` is the canonical number.
+        moderation: { type: string, enum: [pending, approved, rejected] }
+    TaxonomyList:
+      type: object
+      properties:
+        kinds:
+          type: object
+          description: Kind → entries. Store the stable `key`, resolve labels via `labels[locale]`.
+          additionalProperties:
+            type: array
+            items:
+              type: object
+              properties:
+                key: { type: string }
+                sortOrder: { type: integer }
+                labels:
+                  type: object
+                  additionalProperties: { type: string }
+    AreaPredictions:
+      type: object
+      properties:
+        predictions:
+          type: array
+          items:
+            type: object
+            properties:
+              key: { type: string }
+              description: { type: string }
+              lat: { type: number }
+              lng: { type: number }
+        source:
+          type: string
+          enum: [provider, fallback]
+          description: '`fallback` means the provider failed and static areas were served.'
+        attribution: { type: [string, 'null'] }
+    ResolveLinkResult:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [RESOLVED, ALREADY_EXISTS, CANDIDATE_SELECTION, UNRESOLVED]
+          description: >
+            ALREADY_EXISTS → open `existingPlaceId` instead of submitting.
+            CANDIDATE_SELECTION → make the user pick a branch.
+        matchConfidence: { type: number }
+        reasonCodes:
+          type: array
+          items: { type: string }
+        existingPlaceId: { type: string, format: uuid }
+        candidate:
+          type: object
+          properties:
+            googlePlaceId: { type: string }
+            name: { type: string }
+            address: { type: string }
+            location:
+              type: object
+              properties:
+                lat: { type: number }
+                lng: { type: number }
+            googleRating: { type: [number, 'null'] }
+            googleRatingCount: { type: integer }
+            googleScore:
+              type: [number, 'null']
+              description: Derived 0–100 score; keep it visually separate from the raw rating.
+            businessStatus: { type: string }
+            source: { type: string }
+            fetchedAt: { type: string, format: date-time }
+            attributions:
+              type: array
+              items: { type: string }
+        candidates:
+          type: array
+          items:
+            type: object
+            properties:
+              googlePlaceId: { type: string }
+              name: { type: string }
+              address: { type: string }
+              confidence: { type: number }
+    SubmissionResult:
+      type: object
+      properties:
+        status: { type: string, enum: [PENDING, ALREADY_EXISTS] }
+        submissionId: { type: string, format: uuid }
+        placeId: { type: string, format: uuid }
+        deduped:
+          type: boolean
+          description: True when another user already proposed the same place.
+    TokenGrant:
+      type: object
+      required: [accessToken, expiresIn]
+      properties:
+        userId: { type: string, format: uuid }
+        claimedRoomId: { type: string, format: uuid }
+        accessToken: { type: string }
+        refreshToken:
+          type: string
+          description: Absent for guest access renewal.
+        roomId:
+          type: string
+          format: uuid
+          description: Present for guest access renewal only.
+        expiresIn:
+          type: integer
+          description: Access token TTL in seconds.
+    ErrorEnvelope:
+      type: object
+      required: [code, message, field_errors, request_id, retryable]
+      properties:
+        code:
+          type: string
+          description: Stable machine-readable error code.
+        message:
+          type: string
+        field_errors:
+          type: array
+          items:
+            type: object
+            required: [field, code, message]
+            properties:
+              field: { type: string }
+              code: { type: string }
+              message: { type: string }
+        request_id:
+          type: string
+        retryable:
+          type: boolean
+    Money:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount:
+          type: integer
+          description: Integer minor units (e.g. VND has 0 decimals, amount = dong).
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+    IngestMessage:
+      type: object
+      description: One validation error or warning, keyed by a stable code.
+      properties:
+        code: { type: string, example: PRICE_RANGE_INVALID }
+        field: { type: string }
+        message: { type: string }
+    ImportTotals:
+      type: object
+      properties:
+        rows: { type: integer }
+        processed: { type: integer }
+        success: { type: integer }
+        warnings: { type: integer }
+        failed: { type: integer }
+    ImportJobSummary:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        status:
+          type: string
+          enum:
+            [
+              uploaded,
+              validating,
+              processing,
+              review_required,
+              completed,
+              partial_success,
+              failed,
+              cancelled,
+              paused_provider_quota,
+            ]
+        mode: { type: string, enum: [dry_run, create_drafts, publish_approved] }
+        sourceType: { type: string, enum: [csv, xlsx, google_sheet, mobile_link] }
+        sourceFileName: { type: string, nullable: true }
+        totals: { $ref: '#/components/schemas/ImportTotals' }
+        createdAt: { type: string, format: date-time }
+        completedAt: { type: string, format: date-time }
+    ImportJob:
+      allOf:
+        - $ref: '#/components/schemas/ImportJobSummary'
+        - type: object
+          properties:
+            defaultCity: { type: string, nullable: true }
+            rowsByStatus:
+              type: object
+              additionalProperties: { type: integer }
+            startedAt: { type: string, format: date-time }
+            cancelledAt: { type: string, format: date-time }
+            reused:
+              type: boolean
+              description: True when identical bytes/mode returned the existing job.
+            unmappedHeaders:
+              type: array
+              items: { type: string }
+    ImportCandidate:
+      type: object
+      properties:
+        googlePlaceId: { type: string }
+        name: { type: string }
+        address: { type: string }
+        confidence: { type: number, format: float, minimum: 0, maximum: 1 }
+        lat: { type: number }
+        lng: { type: number }
+    ImportRow:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        rowNumber: { type: integer }
+        sourceRowId: { type: string }
+        status:
+          type: string
+          enum:
+            [
+              pending,
+              validation_failed,
+              resolving,
+              unresolved,
+              needs_confirmation,
+              duplicate,
+              ready,
+              imported,
+              failed,
+            ]
+        normalized:
+          type: object
+          description: Structured facts parsed from the row (price, audiences, vibes, keys).
+        resolvedGooglePlaceId: { type: string, nullable: true }
+        matchedPlaceId: { type: string, format: uuid, nullable: true }
+        matchConfidence: { type: number, format: float, nullable: true }
+        matchReasons:
+          type: array
+          items: { type: string }
+        candidates:
+          type: array
+          description: Present on PLACE_MATCH_AMBIGUOUS rows (spec §10.4).
+          items: { $ref: '#/components/schemas/ImportCandidate' }
+        errors:
+          type: array
+          items: { $ref: '#/components/schemas/IngestMessage' }
+        warnings:
+          type: array
+          items: { $ref: '#/components/schemas/IngestMessage' }
+    ImportRowDecision:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        status: { type: string }
+        resolvedGooglePlaceId: { type: string, nullable: true }
+        matchedPlaceId: { type: string, format: uuid, nullable: true }
+        matchConfidence: { type: number, format: float, nullable: true }
+        errors:
+          type: array
+          items: { $ref: '#/components/schemas/IngestMessage' }
+        warnings:
+          type: array
+          items: { $ref: '#/components/schemas/IngestMessage' }
+  responses:
+    BadRequest:
+      description: Validation or business rule failure
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    Unauthorized:
+      description: Missing or invalid credentials
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    Forbidden:
+      description: Actor lacks permission on this resource
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    Conflict:
+      description: Version/state conflict
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    RateLimited:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+security:
+  - bearerAuth: []

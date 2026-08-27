@@ -1,0 +1,11 @@
+# Instruction file — owned by the repo, not by the formatter.
+CLAUDE.md
+
+dist
+node_modules
+public/mockServiceWorker.js
+pnpm-lock.yaml
+src/shared/api/schema.d.ts
+openapi/gogo.v1.yaml
+playwright-report
+test-results

@@ -1,0 +1,5 @@
+# pnpm 11 reads repo settings from here. esbuild and msw need their install
+# scripts (native binary / service-worker file); nothing else does.
+onlyBuiltDependencies:
+  - esbuild
+  - msw
