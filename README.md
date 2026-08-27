@@ -111,19 +111,27 @@ Chi tiết từng operation: đọc `openapi/gogo.v1.yaml` hoặc Swagger UI t�
 
 Quyền do BE quyết; bảng này để dựng `RoleGate` cho khớp, không phải để thay thế.
 
-| Hành động                             | editor | moderator | ops_admin                | super_admin |
-| ------------------------------------- | ------ | --------- | ------------------------ | ----------- |
-| Xem/sửa place, hours, price           | ✅     | —         | ✅                       | ✅          |
-| Đổi trạng thái place, merge duplicate | ✅     | —         | ✅                       | ✅          |
-| Tạo/chạy/huỷ/retry import job         | ✅     | —         | ✅                       | ✅          |
-| **Publish import → catalog**          | ❌     | —         | ✅                       | ✅          |
-| Duyệt review/report/check-in          | —      | ✅        | ✅                       | ✅          |
-| Quyết định đề xuất từ Mobile          | ✅     | ✅        | ✅                       | ✅          |
-| Taxonomy, collection, feature flag    | —      | —         | ✅                       | ✅          |
-| Ranking config: approve ≠ activate    | —      | —         | ✅ (hai người khác nhau) | ✅          |
-| Tạo admin                             | —      | —         | —                        | ✅          |
+**Đọc phân cấp, ghi thì không.** Bốn vai là ngang hàng chứ không phải một chuỗi — `ops_admin` **không** bao gồm `editor`. Đó là đúng cho việc *ghi*: ops không có việc gì phải sửa nội dung biên tập. Nhưng với việc *đọc* thì sai — ops publish import (tạo place) rồi lại 403 khi mở danh sách place vừa tạo, còn người trực ca không xem được cả catalog lẫn hàng chờ kiểm duyệt.
 
-Admin bị suspend hoặc hạ quyền **mất quyền ngay lập tức** — BE đọc lại hàng admin mỗi request, không tin token. CMS phải xử lý được 403 giữa phiên: hiện màn permission-denied, không văng ra trang trắng.
+Nên: **method an toàn (GET/HEAD/OPTIONS)** pass khi rank của người gọi ≥ rank thấp nhất route yêu cầu — vai ngang hàng đọc được của nhau, vai cao đọc được xuống dưới, **không ai đọc lên trên**. Mọi **ghi** giữ nguyên khớp vai chính xác.
+
+Rank: `editor` = `moderator` = 1 · `ops_admin` = 2 · `super_admin` = 3 (pass mọi nơi).
+
+| Hành động | editor | moderator | ops_admin | super_admin |
+| --- | --- | --- | --- | --- |
+| **Xem** catalog, hours, price, import, hàng chờ kiểm duyệt | ✅ | ✅ | ✅ | ✅ |
+| **Xem** ranking config, feature flag, ops KPI | ❌ | ❌ | ✅ | ✅ |
+| Sửa place, hours, price · đổi trạng thái · merge duplicate | ✅ | ❌ | ❌ | ✅ |
+| Tạo/chạy/huỷ/retry import job | ✅ | ❌ | ✅ | ✅ |
+| **Publish import → catalog** | ❌ | ❌ | ✅ | ✅ |
+| Duyệt review/report/check-in | ❌ | ✅ | ❌ | ✅ |
+| Quyết định đề xuất từ Mobile | ✅ | ✅ | ❌ | ✅ |
+| Sửa taxonomy, collection | ✅ | ❌ | ✅ | ✅ |
+| Ranking config: approve ≠ activate | ❌ | ❌ | ✅ (hai người khác nhau) | ✅ |
+| Feature flag | ❌ | ❌ | ✅ | ✅ |
+| Tạo admin | ❌ | ❌ | ❌ | ✅ |
+
+Admin bị suspend hoặc hạ quyền **mất quyền ngay lập tức** — kể cả quyền đọc. BE đọc lại hàng admin mỗi request, không tin token. CMS phải xử lý được 403 giữa phiên: hiện màn permission-denied, không văng ra trang trắng.
 
 ## Local development
 
