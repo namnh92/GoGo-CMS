@@ -90,6 +90,11 @@ export const en: Partial<Record<MessageKey, string>> = {
   'dashboard.budget.title': 'Plans over budget',
   'dashboard.provider.title': 'Provider errors',
   'dashboard.backlog.title': 'Moderation backlog',
+  'emergency.action': 'Emergency takedown',
+  'emergency.confirm': 'Take down now',
+  'emergency.reason': 'Takedown reason',
+  'error.NOT_TAKEDOWNABLE': 'This content is not in a state the emergency takedown applies to.',
+
   'places.title': 'Places management',
   'places.breadcrumb': 'Places',
   'places.add': 'Add place',

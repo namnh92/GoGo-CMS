@@ -24,7 +24,8 @@ import { Drawer, ConfirmDialog } from '@/shared/ui/Overlay'
 import { AsyncBoundary, PermissionDeniedState, useErrorMessage } from '@/shared/ui/State'
 import { AuditTrail } from '@/shared/ui/AuditTrail'
 import { useToast } from '@/shared/ui/Toast'
-import { CloseIcon, PlusIcon } from '@/shared/ui/icons'
+import { CloseIcon, PlusIcon, ShieldOffIcon } from '@/shared/ui/icons'
+import { TakedownDialog } from '@/features/emergency/takedownDialog.view'
 import { fetchTaxonomies } from '@/features/taxonomy/api'
 import type { PlaceHour, PlaceStatus, PriceUnit } from '@/shared/api/contracts'
 import {
@@ -74,6 +75,7 @@ export default function PlaceEditorScreen() {
 
   const canWrite = can('place.write')
   const [auditOpen, setAuditOpen] = useState(false)
+  const [takedownOpen, setTakedownOpen] = useState(false)
   const [mergeTarget, setMergeTarget] = useState<{ id: string; name: string } | null>(null)
   const [hours, setHours] = useState<PlaceHour[]>([])
   const [taxonomyIds, setTaxonomyIds] = useState<string[]>([])
@@ -234,9 +236,26 @@ export default function PlaceEditorScreen() {
         title={place?.name ?? t('placeEditor.breadcrumb')}
         showSearch={false}
         actions={
-          <Button size="sm" variant="secondary" onClick={() => setAuditOpen(true)}>
-            {t('action.viewAudit')}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="secondary" onClick={() => setAuditOpen(true)}>
+              {t('action.viewAudit')}
+            </Button>
+            <Button
+              size="sm"
+              variant="danger"
+              iconLeft={<ShieldOffIcon size={14} />}
+              // Break-glass: any active admin, but only from `published`.
+              disabled={!can('emergency.takedown') || place?.status !== 'published' || !online}
+              title={
+                place?.status !== 'published'
+                  ? t('emergency.notApplicable', { from: 'published' })
+                  : undefined
+              }
+              onClick={() => setTakedownOpen(true)}
+            >
+              {t('emergency.action')}
+            </Button>
+          </div>
         }
       />
       <PageBody>
@@ -663,6 +682,14 @@ export default function PlaceEditorScreen() {
           {(entries) => <AuditTrail entries={entries} />}
         </AsyncBoundary>
       </Drawer>
+
+      <TakedownDialog
+        open={takedownOpen}
+        onClose={() => setTakedownOpen(false)}
+        target="place"
+        resourceId={id}
+        resourceLabel={place?.name}
+      />
 
       <ConfirmDialog
         open={mergeTarget !== null}

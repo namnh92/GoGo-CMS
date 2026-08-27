@@ -32,6 +32,8 @@ const db = {
   rows: JSON.parse(JSON.stringify(importRows)) as Record<string, ImportRow[]>,
   duplicates: duplicateRows.map((row) => ({ ...row })),
   moderation: JSON.parse(JSON.stringify(moderationQueue)) as typeof moderationQueue,
+  /** Counts break-glass calls so the burst limit is reachable in dev. */
+  takedowns: 0,
 }
 
 function envelope(status: number, code: string, message: string) {
@@ -257,6 +259,43 @@ export const handlers = [
   }),
 
   http.get(`${BASE}/cms/moderation`, () => HttpResponse.json(db.moderation)),
+
+  // SEC-001 break-glass. The mock enforces the two rules the UI has to survive:
+  // only the one accepted transition, and the per-actor rate limit.
+  ...(['places', 'reviews', 'checkins'] as const).map((kind) =>
+    http.post(
+      `${BASE}/cms/emergency/${kind}/:id/${kind === 'places' ? 'suspend' : 'hide'}`,
+      async ({ params, request }) => {
+        const body = (await request.json()) as { reason?: string }
+        if (!body.reason || body.reason.trim().length < 10) {
+          return envelope(400, 'VALIDATION_FAILED', 'reason must be at least 10 characters')
+        }
+        db.takedowns += 1
+        if (db.takedowns > 5) {
+          return envelope(429, 'RATE_LIMITED', 'emergency takedown burst limit reached')
+        }
+        if (kind === 'places') {
+          const place = db.places.find((item) => item.id === params.id)
+          if (!place) return envelope(404, 'PLACE_NOT_FOUND', 'place not found')
+          if (place.status !== 'published') {
+            return envelope(
+              409,
+              'NOT_TAKEDOWNABLE',
+              'emergency takedown applies to published places only',
+            )
+          }
+          place.status = 'suspended'
+          return HttpResponse.json({ id: place.id, status: 'suspended' }, { status: 201 })
+        }
+        if (kind === 'reviews') {
+          db.moderation.reviews = db.moderation.reviews.filter((item) => item.id !== params.id)
+          return HttpResponse.json({ id: params.id, status: 'hidden' }, { status: 201 })
+        }
+        db.moderation.checkins = db.moderation.checkins.filter((item) => item.id !== params.id)
+        return HttpResponse.json({ id: params.id, moderation: 'hidden' }, { status: 201 })
+      },
+    ),
+  ),
 
   http.post(`${BASE}/cms/moderation/:kind/:id`, async ({ params, request }) => {
     const body = (await request.json()) as { decision: string; reason: string }

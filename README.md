@@ -232,9 +232,22 @@ Không chặn việc review, nhưng chặn việc ghép backend thật:
 - Chưa có endpoint sức khoẻ theo từng nhà cung cấp; tab "Sức khoẻ nền tảng"
   hiện đúng một chỉ số contract có (`providerErrorsLast7d`).
 
+### Gỡ khẩn cấp (break-glass, SEC-001)
+
+Ba route `/cms/emergency/*` (GoGo-BE#149) đã có UI (#19). Thiết kế cố ý bất đối
+xứng: **gỡ xuống** mở cho mọi vai admin đang active vì đảo ngược được và giảm
+thiệt hại; **đưa lên lại** vẫn giữ vai đặc quyền và đi qua màn thường.
+
+Điểm vào: hàng trong catalog và Place Editor (chỉ bật khi `published`), và chi
+tiết một báo cáo trong bảng kiểm duyệt — dùng `targetType`/`targetId` của
+report. Hàng chờ kiểm duyệt không dùng được cho việc này vì nó chỉ liệt kê
+review `pending`, còn route nhắm vào review `published`.
+
+Dialog nêu rõ chuyển trạng thái, bắt lý do ≥ 10 ký tự (đúng ngưỡng máy chủ) và
+nói thẳng rằng thao tác được ghi audit kèm vai/IP/request id và bắn cảnh báo.
+`409 NOT_TAKEDOWNABLE` và `429` (20/giờ, burst 5/phút) đều có thông điệp riêng.
+
 ### Chưa dựng UI
 
-- `POST /cms/emergency/places/{id}/suspend` · `/reviews/{id}/hide` ·
-  `/checkins/{id}/hide` (GoGo-BE#149) — bề mặt mới, chưa có issue phía CMS.
 - SSO chờ IdP ([GoGo-BE#62](https://github.com/namnh92/GoGo-BE/issues/62)); hiện chỉ mật khẩu + TOTP.
 - Upload ảnh trong Place Editor chờ endpoint tương ứng.

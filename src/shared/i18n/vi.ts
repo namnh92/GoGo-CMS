@@ -532,6 +532,30 @@ export const vi = {
   'circuit.open': 'Mở',
   'circuit.half_open': 'Nửa mở',
 
+  'emergency.action': 'Gỡ khẩn cấp',
+  'emergency.title': 'Gỡ khẩn cấp — {target}',
+  'emergency.subtitle': 'Cửa thoát hiểm cho sự cố. Mọi vai admin đang hoạt động đều dùng được.',
+  'emergency.target.place': 'Địa điểm',
+  'emergency.target.review': 'Đánh giá',
+  'emergency.target.checkin': 'Check-in',
+  'emergency.transition': 'Trạng thái',
+  'emergency.reason': 'Lý do gỡ',
+  'emergency.reasonHint':
+    'Tối thiểu 10 ký tự. Đây là lời giải thích duy nhất người rà soát sự cố về sau có được.',
+  'emergency.reasonTooShort': 'Lý do cần ít nhất 10 ký tự.',
+  'emergency.auditWarning':
+    'Thao tác được ghi audit kèm vai, IP và mã yêu cầu, đồng thời bắn cảnh báo. Đây không phải thao tác thường ngày.',
+  'emergency.reversible':
+    'Đưa nội dung trở lại không thuộc cửa thoát hiểm — việc đó vẫn do vai sở hữu làm qua màn thường.',
+  'emergency.confirm': 'Gỡ ngay',
+  'emergency.done': 'Đã gỡ nội dung',
+  'emergency.notApplicable': 'Chỉ áp dụng khi nội dung đang ở trạng thái {from}.',
+  'emergency.oneAtATime': 'Mỗi lần một tài nguyên — API không có dạng hàng loạt.',
+  'error.NOT_TAKEDOWNABLE': 'Nội dung không ở trạng thái áp dụng được thao tác gỡ khẩn cấp.',
+  'error.PLACE_NOT_FOUND': 'Không tìm thấy địa điểm.',
+  'error.REVIEW_NOT_FOUND': 'Không tìm thấy đánh giá.',
+  'error.CHECKIN_NOT_FOUND': 'Không tìm thấy check-in.',
+
   'confirm.destructiveTitle': 'Xác nhận thao tác',
   'confirm.changesTitle': 'Những thay đổi sẽ xảy ra',
   'confirm.irreversible': 'Thao tác này không thể hoàn tác từ CMS.',
@@ -549,7 +573,8 @@ export const vi = {
   'error.FORBIDDEN': 'Bạn không có quyền thực hiện thao tác này.',
   'error.NOT_FOUND': 'Không tìm thấy bản ghi.',
   'error.CONFLICT': 'Bản ghi đã thay đổi ở nơi khác. Tải lại rồi thử lại.',
-  'error.RATE_LIMITED': 'Quá nhiều yêu cầu. Thử lại sau ít phút.',
+  'error.RATE_LIMITED':
+    'Quá nhiều yêu cầu. Với gỡ khẩn cấp, giới hạn là 20 lượt/giờ và 5 lượt/phút mỗi tài khoản.',
   'error.CANDIDATE_NOT_LISTED': 'Mã chi nhánh không nằm trong danh sách ứng viên của dòng này.',
   'error.SELF_APPROVAL': 'Người tạo không được tự duyệt bản nháp.',
   'error.SHEET_URL_INVALID': 'Đường dẫn Google Sheet không hợp lệ.',

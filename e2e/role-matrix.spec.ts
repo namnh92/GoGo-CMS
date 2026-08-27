@@ -60,3 +60,26 @@ test('ops admin sees the dashboard and the publish CTA', async ({ page }) => {
   await page.getByRole('link', { name: 'Nhập liệu' }).click()
   await expect(page.getByRole('heading', { name: 'Quản lý nhập hàng loạt' })).toBeVisible()
 })
+
+/**
+ * SEC-001 — break-glass is deliberately open to every active admin. A narrower
+ * list rebuilds the shared-super_admin problem it exists to prevent.
+ */
+for (const [email, role] of [
+  ['editor@gogo.vn', 'editor'],
+  ['moderator@gogo.vn', 'moderator'],
+  ['ops@gogo.vn', 'ops_admin'],
+] as const) {
+  test(`${role} can reach the emergency takedown`, async ({ page }) => {
+    await signIn(page, email)
+    await page.goto('/places')
+    await page.getByRole('button', { name: 'Gỡ khẩn cấp' }).first().click()
+
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible()
+    // It names the transition and warns, rather than asking "are you sure?".
+    await expect(dialog.getByText('suspended')).toBeVisible()
+    await expect(dialog.getByText(/ghi audit/)).toBeVisible()
+    await expect(dialog.getByRole('button', { name: 'Gỡ ngay' })).toBeDisabled()
+  })
+}

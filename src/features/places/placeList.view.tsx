@@ -21,7 +21,8 @@ import {
   useErrorMessage,
 } from '@/shared/ui/State'
 import { useToast } from '@/shared/ui/Toast'
-import { EditIcon, ImportIcon, MoreIcon, PlusIcon, StarIcon } from '@/shared/ui/icons'
+import { EditIcon, ImportIcon, PlusIcon, ShieldOffIcon, StarIcon } from '@/shared/ui/icons'
+import { TakedownDialog } from '@/features/emergency/takedownDialog.view'
 import type {
   CmsPlace,
   PlaceSort,
@@ -74,11 +75,14 @@ export default function PlaceListScreen() {
   // without an offset the server does not support.
   const [cursors, setCursors] = useState<(string | null)[]>([null])
   const [pageIndex, setPageIndex] = useState(0)
+  const [takedownTarget, setTakedownTarget] = useState<CmsPlace | null>(null)
 
   // Reads are hierarchical on the server, so every role can open the catalog.
   // Writing is exact-match: only an editor (and super_admin) may change it.
   const canWrite = can('place.write')
   const canTransition = can('place.transition')
+  // Break-glass is open to every active admin, by design (SEC-001).
+  const canTakedown = can('emergency.takedown')
 
   const filters = {
     status: tab === 'stale' || tab === 'duplicates' ? ('all' as const) : tab,
@@ -226,27 +230,39 @@ export default function PlaceListScreen() {
       {
         id: 'actions',
         header: () => <span className="sr-only">{t('places.col.actions')}</span>,
-        cell: ({ row }) => (
-          <div className={styles.actions} onClick={(event) => event.stopPropagation()}>
-            <IconButton
-              label={t('action.edit')}
-              disabled={!canWrite}
-              onClick={() => navigate(`/places/${row.original.id}`)}
-            >
-              <EditIcon size={15} />
-            </IconButton>
-            <IconButton
-              label={t('action.more')}
-              onClick={() => navigate(`/places/${row.original.id}`)}
-            >
-              <MoreIcon size={15} />
-            </IconButton>
-          </div>
-        ),
+        cell: ({ row }) => {
+          // The route accepts `published → suspended` and nothing else, so an
+          // unpublished place gets a disabled control with the reason, not a
+          // 409 discovered mid-incident.
+          const takedownable = row.original.status === 'published'
+          return (
+            <div className={styles.actions} onClick={(event) => event.stopPropagation()}>
+              <IconButton
+                label={t('action.edit')}
+                disabled={!canWrite}
+                onClick={() => navigate(`/places/${row.original.id}`)}
+              >
+                <EditIcon size={15} />
+              </IconButton>
+              <IconButton
+                label={
+                  takedownable
+                    ? t('emergency.action')
+                    : `${t('emergency.action')} — ${t('emergency.notApplicable', { from: 'published' })}`
+                }
+                tone="danger"
+                disabled={!canTakedown || !takedownable || !online}
+                onClick={() => setTakedownTarget(row.original)}
+              >
+                <ShieldOffIcon size={15} />
+              </IconButton>
+            </div>
+          )
+        },
         enableSorting: false,
       },
     ],
-    [t, locale, selected, rows, canWrite, navigate],
+    [t, locale, selected, rows, canWrite, canTakedown, online, navigate],
   )
 
   const staleColumns = useMemo<ColumnDef<StalePlace, unknown>[]>(
@@ -552,6 +568,14 @@ export default function PlaceListScreen() {
           </>
         )}
       </PageBody>
+
+      <TakedownDialog
+        open={takedownTarget !== null}
+        onClose={() => setTakedownTarget(null)}
+        target="place"
+        resourceId={takedownTarget?.id ?? ''}
+        resourceLabel={takedownTarget?.name}
+      />
     </>
   )
 }
