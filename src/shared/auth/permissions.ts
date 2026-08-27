@@ -1,51 +1,129 @@
 import type { AdminRole } from '@/shared/api/contracts'
 
 /**
- * Mirror of the server-side matrix (README "Ma trận quyền").
+ * Mirror of GoGo-BE's `AdminGuard` (BE-IMP-008, GoGo-BE#144).
  *
- * This map decides what the UI SHOWS. It is not, and can never be, the
- * authorization check — every action must survive a hand-crafted request. If
- * the UI hides a button and the API still accepts the call, that is a GoGo-BE
- * bug: report it, do not patch around it here.
+ * The four roles are peers, not a chain — `ops_admin` is not a superset of
+ * `editor`. The server resolves access as:
+ *
+ *   allowed = role === 'super_admin'
+ *          || routeRoles.includes(role)
+ *          || (safeMethod && rank[role] >= min(rank of routeRoles))
+ *
+ * so **reads are hierarchical and writes are exact**: peers read each other's
+ * areas, a higher rank reads below it, nothing reads above it, and every write
+ * still needs the exact role.
+ *
+ * This module reproduces that rule rather than restating its conclusions,
+ * because a flattened copy is what drifted last time. It decides what the UI
+ * SHOWS and is never the authorization check: every action must still survive
+ * a hand-crafted request. If the UI hides a button and the API accepts the
+ * call, that is a GoGo-BE bug — report it, do not patch around it here.
  */
-export const PERMISSIONS = {
-  'place.read': ['editor', 'ops_admin', 'super_admin'],
-  'place.write': ['editor', 'ops_admin', 'super_admin'],
-  'place.transition': ['editor', 'ops_admin', 'super_admin'],
-  'place.merge': ['editor', 'ops_admin', 'super_admin'],
-  'place.verifyFreshness': ['editor', 'ops_admin', 'super_admin'],
+const ROLE_RANK: Record<AdminRole, number> = {
+  editor: 1,
+  moderator: 1,
+  ops_admin: 2,
+  super_admin: 3,
+}
 
-  'import.read': ['editor', 'ops_admin', 'super_admin'],
-  'import.manage': ['editor', 'ops_admin', 'super_admin'],
-  /** Publish (import → catalog) is deliberately ops-only. */
-  'import.publish': ['ops_admin', 'super_admin'],
-
-  'moderation.read': ['moderator', 'ops_admin', 'super_admin'],
-  'moderation.decide': ['moderator', 'ops_admin', 'super_admin'],
-  'submission.decide': ['editor', 'moderator', 'ops_admin', 'super_admin'],
-
-  'taxonomy.manage': ['ops_admin', 'super_admin'],
-  'collection.manage': ['ops_admin', 'super_admin'],
-  'flag.manage': ['ops_admin', 'super_admin'],
-
-  'ranking.draft': ['ops_admin', 'super_admin'],
-  /** Four-eyes: the API rejects self-approval, the UI only reflects it. */
-  'ranking.approve': ['ops_admin', 'super_admin'],
-  'ranking.activate': ['ops_admin', 'super_admin'],
-  'ranking.rollback': ['ops_admin', 'super_admin'],
-
-  'ops.dashboard': ['editor', 'moderator', 'ops_admin', 'super_admin'],
-  'admin.create': ['super_admin'],
+/** `@RequireRole(...)` as declared on each CMS controller/handler. */
+const ROUTE_ROLES = {
+  /** `CmsCatalogController` — @RequireRole('editor') */
+  catalog: ['editor'],
+  /** `CmsContentController` — @RequireRole('editor', 'ops_admin') */
+  content: ['editor', 'ops_admin'],
+  /** `CmsModerationController` — @RequireRole('moderator') */
+  moderation: ['moderator'],
+  /** `CmsSubmissionController` — @RequireRole('moderator', 'editor') */
+  submissions: ['moderator', 'editor'],
+  /** `CmsOpsController` + ranking/flags — @RequireRole('ops_admin') */
+  ops: ['ops_admin'],
+  /** `PlaceImportController` — @RequireRole('editor', 'ops_admin') */
+  imports: ['editor', 'ops_admin'],
+  /** `PlaceImportController#publish` — handler-level @RequireRole('ops_admin') */
+  importPublish: ['ops_admin'],
+  /** `EmergencyController` — @RequireRole('editor', 'moderator', 'ops_admin') */
+  emergency: ['editor', 'moderator', 'ops_admin'],
+  /** `POST /cms/auth/admins` — @RequireRole('super_admin') */
+  admins: ['super_admin'],
 } as const satisfies Record<string, readonly AdminRole[]>
+
+export type RouteGroup = keyof typeof ROUTE_ROLES
+
+/** Safe methods are the ones the guard lets through on rank. */
+export type Access = 'read' | 'write'
+
+export function canAccess(
+  role: AdminRole | null | undefined,
+  group: RouteGroup,
+  access: Access,
+): boolean {
+  if (!role) return false
+  if (role === 'super_admin') return true
+  const required = ROUTE_ROLES[group] as readonly AdminRole[]
+  if (required.includes(role)) return true
+  if (access === 'write') return false
+  const lowest = Math.min(...required.map((candidate) => ROLE_RANK[candidate]))
+  return ROLE_RANK[role] >= lowest
+}
+
+/**
+ * Named permissions the UI asks about, each pointing at the route group and
+ * method class the server actually gates. Adding one means finding its
+ * controller in GoGo-BE, not guessing.
+ */
+const PERMISSIONS = {
+  // Catalog — everyone reads, only the editor writes.
+  'place.read': ['catalog', 'read'],
+  'place.write': ['catalog', 'write'],
+  'place.transition': ['catalog', 'write'],
+  'place.merge': ['catalog', 'write'],
+  'place.verifyFreshness': ['catalog', 'write'],
+
+  // Editorial content — editor and ops both write taxonomy and collections.
+  'taxonomy.read': ['content', 'read'],
+  'taxonomy.manage': ['content', 'write'],
+  'collection.read': ['content', 'read'],
+  'collection.manage': ['content', 'write'],
+
+  // Moderation — everyone reads the queue, only the moderator decides.
+  'moderation.read': ['moderation', 'read'],
+  'moderation.decide': ['moderation', 'write'],
+  'submission.decide': ['submissions', 'write'],
+
+  // Ingestion — editor and ops run jobs; publishing to the catalog is ops-only.
+  'import.read': ['imports', 'read'],
+  'import.manage': ['imports', 'write'],
+  'import.publish': ['importPublish', 'write'],
+
+  // Ops — rank 2 and above, reads included.
+  'ops.dashboard': ['ops', 'read'],
+  'ranking.read': ['ops', 'read'],
+  'ranking.draft': ['ops', 'write'],
+  'ranking.approve': ['ops', 'write'],
+  'ranking.activate': ['ops', 'write'],
+  'ranking.rollback': ['ops', 'write'],
+  'flag.manage': ['ops', 'write'],
+
+  // Emergency takedown — anyone on shift can pull content down.
+  'emergency.takedown': ['emergency', 'write'],
+
+  'admin.create': ['admins', 'write'],
+} as const satisfies Record<string, readonly [RouteGroup, Access]>
 
 export type Permission = keyof typeof PERMISSIONS
 
 export function roleCan(role: AdminRole | null | undefined, permission: Permission): boolean {
-  if (!role) return false
-  return (PERMISSIONS[permission] as readonly AdminRole[]).includes(role)
+  const [group, access] = PERMISSIONS[permission]
+  return canAccess(role, group, access)
 }
 
-/** Where a role lands after login — the first screen it can actually use. */
+/**
+ * Where a role lands after login — the first screen it can actually act on,
+ * not merely read. Reads being hierarchical means everyone can open the
+ * catalog now, which would make it a useless landing page for a moderator.
+ */
 export function landingPathFor(role: AdminRole): string {
   if (role === 'moderator') return '/moderation'
   if (role === 'editor') return '/places'

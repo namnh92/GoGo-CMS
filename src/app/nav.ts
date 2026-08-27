@@ -11,6 +11,12 @@ import {
   TaxonomyIcon,
 } from '@/shared/ui/icons'
 
+/**
+ * Reads are hierarchical on the server, so an item is offered whenever the
+ * role can at least open the screen — the screen itself then decides which
+ * actions to enable. Gating nav on the write permission would hide screens a
+ * role is allowed to read.
+ */
 export type NavItem = {
   to: string
   labelKey: MessageKey
@@ -39,7 +45,7 @@ export const NAV_ITEMS: NavItem[] = [
     to: '/moderation',
     labelKey: 'nav.moderation',
     icon: ModerationIcon,
-    permission: 'submission.decide',
+    permission: 'moderation.read',
     match: (p) => p.startsWith('/moderation'),
   },
   {
@@ -53,7 +59,7 @@ export const NAV_ITEMS: NavItem[] = [
     to: '/collections',
     labelKey: 'nav.collections',
     icon: CollectionsIcon,
-    permission: 'collection.manage',
+    permission: 'collection.read',
     match: (p) => p.startsWith('/collections'),
   },
   {
@@ -67,7 +73,7 @@ export const NAV_ITEMS: NavItem[] = [
     to: '/settings',
     labelKey: 'nav.settings',
     icon: SettingsIcon,
-    permission: 'flag.manage',
+    permission: 'ranking.read',
     match: (p) => p.startsWith('/settings'),
   },
 ]

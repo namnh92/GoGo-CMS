@@ -5,48 +5,75 @@
 > cùng. Nếu UI ẩn nút mà API vẫn cho gọi, đó là bug của GoGo-BE — báo, đừng vá
 > ở client.
 
-Nguồn: `README.md` (bảng quyền), `GOGO_SRS.md` §8.8, `GOGO_PLACE_INGESTION_SPEC.md` §9.3.
+Nguồn sự thật: `libs/modules/cms/presentation/admin.guard.ts` của GoGo-BE
+(BE-IMP-008, GoGo-BE#144) cùng các `@RequireRole(...)` trên từng controller.
+Tài liệu này là bản sao — khi hai bên lệch nhau, guard đúng.
 
-## Khoá quyền → endpoint
+## Quy tắc: đọc phân cấp, ghi khớp chính xác
 
-Định nghĩa trong `src/shared/auth/permissions.ts`. Kiểm thử trong
-`src/shared/auth/permissions.test.ts`.
+```
+allowed = role === 'super_admin'
+       || routeRoles.includes(role)
+       || (safeMethod && rank[role] >= min(rank of routeRoles))
+```
 
-| Khoá quyền              | editor | moderator | ops_admin | super_admin | Endpoint                                                            |
-| ----------------------- | :----: | :-------: | :-------: | :---------: | ------------------------------------------------------------------- |
-| `place.read`            |   ✅   |     —     |    ✅     |     ✅      | `GET /cms/places`, `/stale`, `/duplicates`, `/{id}`                 |
-| `place.write`           |   ✅   |     —     |    ✅     |     ✅      | `PATCH /cms/places/{id}`, `PUT .../hours`, `POST .../prices`        |
-| `place.transition`      |   ✅   |     —     |    ✅     |     ✅      | `PATCH /cms/places/{id}/status`                                     |
-| `place.merge`           |   ✅   |     —     |    ✅     |     ✅      | `POST /cms/places/{id}/merge`                                       |
-| `place.verifyFreshness` |   ✅   |     —     |    ✅     |     ✅      | `POST /cms/places/{id}/verify-freshness`                            |
-| `import.read`           |   ✅   |     —     |    ✅     |     ✅      | `GET /cms/place-imports*`                                           |
-| `import.manage`         |   ✅   |     —     |    ✅     |     ✅      | `POST /cms/place-imports`, `/start`, `/cancel`, `/retry`, `/rows/*` |
-| **`import.publish`**    |   ❌   |     —     |    ✅     |     ✅      | `POST /cms/place-imports/{jobId}/publish`                           |
-| `moderation.read`       |   —    |    ✅     |    ✅     |     ✅      | `GET /cms/moderation`                                               |
-| `moderation.decide`     |   —    |    ✅     |    ✅     |     ✅      | `POST /cms/moderation/{reviews\|reports\|checkins}/{id}`            |
-| `submission.decide`     |   ✅   |    ✅     |    ✅     |     ✅      | `POST /cms/place-submissions/{id}/decide`                           |
-| `taxonomy.manage`       |   —    |     —     |    ✅     |     ✅      | `POST/PATCH /cms/taxonomies*`                                       |
-| `collection.manage`     |   —    |     —     |    ✅     |     ✅      | `POST/PUT/PATCH /cms/collections*`                                  |
-| `flag.manage`           |   —    |     —     |    ✅     |     ✅      | `PUT /cms/feature-flags/{key}`                                      |
-| `ranking.draft`         |   —    |     —     |    ✅     |     ✅      | `POST /cms/ranking-configs`                                         |
-| `ranking.approve`       |   —    |     —     |    ✅     |     ✅      | `POST /cms/ranking-configs/{id}/approve`                            |
-| `ranking.activate`      |   —    |     —     |    ✅     |     ✅      | `POST /cms/ranking-configs/{id}/activate`                           |
-| `ranking.rollback`      |   —    |     —     |    ✅     |     ✅      | `POST /cms/ranking-configs/{key}/rollback`                          |
-| `ops.dashboard`         |   ✅   |    ✅     |    ✅     |     ✅      | `GET /cms/ops/kpis`                                                 |
-| `admin.create`          |   —    |     —     |     —     |     ✅      | `POST /cms/auth/admins`                                             |
+- `safeMethod` = `GET` / `HEAD` / `OPTIONS`.
+- Rank: `editor` = `moderator` = **1** · `ops_admin` = **2** · `super_admin` = **3**.
+- Bốn vai là **ngang hàng**, không phải một chuỗi: `ops_admin` **không** bao gồm
+  `editor`. Đúng cho việc ghi — ops không có việc gì phải sửa nội dung biên tập.
+- Nhưng với việc đọc thì sai: ops publish import (tạo place) rồi 403 khi mở
+  danh sách place vừa tạo; người trực ca không xem được cả catalog lẫn hàng chờ.
+  Nên method an toàn pass theo rank: vai ngang hàng đọc được của nhau, vai cao
+  đọc xuống dưới, **không ai đọc lên trên**.
+
+`src/shared/auth/permissions.ts` tái hiện đúng công thức này thay vì chép lại
+kết luận đã làm phẳng — bản phẳng chính là thứ đã lệch lần trước.
+
+## Controller → `@RequireRole`
+
+| Controller                         | Route                                                               | `@RequireRole`                     |
+| ---------------------------------- | ------------------------------------------------------------------- | ---------------------------------- |
+| `CmsCatalogController`             | `/cms/places/**`                                                    | `editor`                           |
+| `CmsContentController`             | `/cms/taxonomies/**`, `/cms/collections/**`                         | `editor`, `ops_admin`              |
+| `CmsModerationController`          | `/cms/moderation/**`                                                | `moderator`                        |
+| `CmsSubmissionController`          | `/cms/place-submissions/{id}/decide`                                | `moderator`, `editor`              |
+| `CmsOpsController` + ranking/flags | `/cms/ranking-configs/**`, `/cms/feature-flags/**`, `/cms/ops/kpis` | `ops_admin`                        |
+| `PlaceImportController`            | `/cms/place-imports/**`                                             | `editor`, `ops_admin`              |
+| `PlaceImportController#publish`    | `/cms/place-imports/{jobId}/publish`                                | `ops_admin` (handler-level)        |
+| `EmergencyController`              | `/cms/emergency/**`                                                 | `editor`, `moderator`, `ops_admin` |
+| `CmsAuthController#createAdmin`    | `/cms/auth/admins`                                                  | `super_admin`                      |
+
+## Kết quả
+
+| Hành động                                                         | editor | moderator | ops_admin | super_admin |
+| ----------------------------------------------------------------- | :----: | :-------: | :-------: | :---------: |
+| **Xem** catalog, stale, duplicates                                |   ✅   |    ✅     |    ✅     |     ✅      |
+| **Xem** hàng chờ kiểm duyệt                                       |   ✅   |    ✅     |    ✅     |     ✅      |
+| **Xem** collections                                               |   ✅   |    ✅     |    ✅     |     ✅      |
+| **Xem** phiên nhập, dòng, báo cáo lỗi                             |   ✅   |    ✅     |    ✅     |     ✅      |
+| **Xem** ops KPI (rank ≥ 2)                                        |   ❌   |    ❌     |    ✅     |     ✅      |
+| Sửa place · đổi trạng thái · giờ · giá · merge · verify freshness |   ✅   |    ❌     |    ❌     |     ✅      |
+| Sửa taxonomy, synonym, collection                                 |   ✅   |    ❌     |    ✅     |     ✅      |
+| Duyệt review / report / check-in                                  |   ❌   |    ✅     |    ❌     |     ✅      |
+| Quyết định đề xuất từ Mobile                                      |   ✅   |    ✅     |    ❌     |     ✅      |
+| Tạo/chạy/huỷ/retry import job, xử lý dòng                         |   ✅   |    ❌     |    ✅     |     ✅      |
+| **Publish import → catalog**                                      |   ❌   |    ❌     |    ✅     |     ✅      |
+| Ranking config (draft/approve/activate/rollback), feature flag    |   ❌   |    ❌     |    ✅     |     ✅      |
+| Gỡ khẩn cấp place/review/check-in                                 |   ✅   |    ✅     |    ✅     |     ✅      |
+| Tạo admin                                                         |   ❌   |    ❌     |    ❌     |     ✅      |
 
 ## Quy tắc không nằm trong bảng
 
 - **Publish import tách khỏi import.** Biên tập viên chuẩn bị lô, vận hành mới
-  xuất bản (`GOGO_PLACE_INGESTION_SPEC.md` §9.3). UI vẫn hiện nút publish cho
-  editor nhưng ở trạng thái `disabled` để giải thích được, thay vì biến mất.
-- **Bốn mắt cho ranking config.** Người tạo không được tự duyệt. API trả
-  `403 SELF_APPROVAL`; UI chỉ tránh mời một cú click vô nghĩa.
-- **Mất quyền giữa phiên.** Admin bị suspend/hạ quyền mất quyền ở request kế
-  tiếp. `401` phát sự kiện `gogo:session-expired` → về màn đăng nhập kèm thông
-  báo; `403` render màn permission-denied. Không bao giờ để trang trắng.
+  xuất bản (`GOGO_PLACE_INGESTION_SPEC.md` §9.3).
+- **Bốn mắt cho ranking config.** Người tạo không được tự duyệt — API trả
+  `403 SELF_APPROVAL`. UI chỉ tránh mời một cú click vô nghĩa.
+- **Mất quyền giữa phiên** — kể cả quyền đọc. Guard đọc lại hàng admin mỗi
+  request, không tin token. `401` → về login giữ đường dẫn quay lại; `403` →
+  màn permission-denied. Không bao giờ trang trắng.
 
 ## Điểm hạ cánh sau đăng nhập
 
-`landingPathFor()` đưa mỗi vai trò tới màn đầu tiên nó thật sự dùng được:
-`moderator → /moderation`, `editor → /places`, `ops_admin`/`super_admin → /`.
+`landingPathFor()` đưa mỗi vai tới màn nó **thao tác** được, không phải màn nó
+chỉ đọc được: `moderator → /moderation`, `editor → /places`,
+`ops_admin`/`super_admin` → `/`.
