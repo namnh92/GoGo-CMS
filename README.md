@@ -109,29 +109,31 @@ Chi tiết từng operation: đọc `openapi/gogo.v1.yaml` hoặc Swagger UI t�
 
 ## Ma trận quyền
 
-Quyền do BE quyết; bảng này để dựng `RoleGate` cho khớp, không phải để thay thế.
+Quyền do GoGo-BE quyết. Quy tắc từ `AdminGuard` (GoGo-BE#144): **đọc phân cấp,
+ghi khớp chính xác** — method an toàn pass khi rank người gọi ≥ rank thấp nhất
+route yêu cầu (`editor` = `moderator` = 1, `ops_admin` = 2, `super_admin` = 3),
+mọi ghi vẫn cần đúng vai.
 
-**Đọc phân cấp, ghi thì không.** Bốn vai là ngang hàng chứ không phải một chuỗi — `ops_admin` **không** bao gồm `editor`. Đó là đúng cho việc *ghi*: ops không có việc gì phải sửa nội dung biên tập. Nhưng với việc *đọc* thì sai — ops publish import (tạo place) rồi lại 403 khi mở danh sách place vừa tạo, còn người trực ca không xem được cả catalog lẫn hàng chờ kiểm duyệt.
+Bảng đầy đủ, kèm ánh xạ controller → `@RequireRole`, ở
+[`docs/permissions.md`](docs/permissions.md).
 
-Nên: **method an toàn (GET/HEAD/OPTIONS)** pass khi rank của người gọi ≥ rank thấp nhất route yêu cầu — vai ngang hàng đọc được của nhau, vai cao đọc được xuống dưới, **không ai đọc lên trên**. Mọi **ghi** giữ nguyên khớp vai chính xác.
+| Hành động                                                 | editor | moderator | ops_admin | super_admin |
+| --------------------------------------------------------- | :----: | :-------: | :-------: | :---------: |
+| **Xem** catalog, import, hàng chờ kiểm duyệt, collections |   ✅   |    ✅     |    ✅     |     ✅      |
+| **Xem** ops KPI                                           |   ❌   |    ❌     |    ✅     |     ✅      |
+| Sửa place, giờ, giá · đổi trạng thái · merge              |   ✅   |    ❌     |    ❌     |     ✅      |
+| Sửa taxonomy, collection                                  |   ✅   |    ❌     |    ✅     |     ✅      |
+| Duyệt review/report/check-in                              |   ❌   |    ✅     |    ❌     |     ✅      |
+| Quyết định đề xuất từ Mobile                              |   ✅   |    ✅     |    ❌     |     ✅      |
+| Tạo/chạy/huỷ/retry import job                             |   ✅   |    ❌     |    ✅     |     ✅      |
+| **Publish import → catalog**                              |   ❌   |    ❌     |    ✅     |     ✅      |
+| Ranking config, feature flag                              |   ❌   |    ❌     |    ✅     |     ✅      |
+| Gỡ khẩn cấp                                               |   ✅   |    ✅     |    ✅     |     ✅      |
+| Tạo admin                                                 |   ❌   |    ❌     |    ❌     |     ✅      |
 
-Rank: `editor` = `moderator` = 1 · `ops_admin` = 2 · `super_admin` = 3 (pass mọi nơi).
-
-| Hành động | editor | moderator | ops_admin | super_admin |
-| --- | --- | --- | --- | --- |
-| **Xem** catalog, hours, price, import, hàng chờ kiểm duyệt | ✅ | ✅ | ✅ | ✅ |
-| **Xem** ranking config, feature flag, ops KPI | ❌ | ❌ | ✅ | ✅ |
-| Sửa place, hours, price · đổi trạng thái · merge duplicate | ✅ | ❌ | ❌ | ✅ |
-| Tạo/chạy/huỷ/retry import job | ✅ | ❌ | ✅ | ✅ |
-| **Publish import → catalog** | ❌ | ❌ | ✅ | ✅ |
-| Duyệt review/report/check-in | ❌ | ✅ | ❌ | ✅ |
-| Quyết định đề xuất từ Mobile | ✅ | ✅ | ❌ | ✅ |
-| Sửa taxonomy, collection | ✅ | ❌ | ✅ | ✅ |
-| Ranking config: approve ≠ activate | ❌ | ❌ | ✅ (hai người khác nhau) | ✅ |
-| Feature flag | ❌ | ❌ | ✅ | ✅ |
-| Tạo admin | ❌ | ❌ | ❌ | ✅ |
-
-Admin bị suspend hoặc hạ quyền **mất quyền ngay lập tức** — kể cả quyền đọc. BE đọc lại hàng admin mỗi request, không tin token. CMS phải xử lý được 403 giữa phiên: hiện màn permission-denied, không văng ra trang trắng.
+Admin bị suspend hoặc hạ quyền **mất quyền ngay lập tức**, kể cả quyền đọc — BE
+đọc lại hàng admin mỗi request, không tin token. CMS xử lý 403 giữa phiên bằng
+màn permission-denied, không văng ra trang trắng.
 
 ## Local development
 
@@ -201,18 +203,38 @@ Backend cho toàn bộ nhóm này **đã xong và đang chạy** (GoGo-BE `devel
 ## Trạng thái
 
 **CMS-001 đã có shell chạy được** cùng lớp UI cho CMS-002..010 và
-PI-CMS-001..007 trên mock contract. Việc còn lại trước khi ghép backend thật:
+PI-CMS-001..007. Toàn bộ đã được đối chiếu lại với GoGo-BE `develop`
+(`5095d0c`) — RBAC, tham số truy vấn và shape response đều đọc từ controller,
+không đoán.
 
-- SSO/IdP chờ chốt ([GoGo-BE#62](https://github.com/namnh92/GoGo-BE/issues/62)); hiện chỉ có mật khẩu + TOTP.
-- **Năm read-endpoint UI cần nhưng contract chưa có** (spec chỉ khai báo phía ghi). UI đã dựng và mock theo shape đề xuất; cần GoGo-BE bổ sung rồi chạy lại `pnpm api:types`:
+### Chưa có endpoint (UI đã dựng, đang chạy trên MSW)
 
-  | Endpoint                     | Dùng ở màn                                                                    |
-  | ---------------------------- | ----------------------------------------------------------------------------- |
-  | `GET /cms/places/{id}`       | Place Editor                                                                  |
-  | `GET /cms/places/{id}/audit` | Drawer nhật ký thay đổi                                                       |
-  | `GET /cms/taxonomies`        | Taxonomy (cần `usageCount` + khoá đang tắt, khác `GET /taxonomies` công khai) |
-  | `GET /cms/ranking-configs`   | Console ranking (danh sách phiên bản + biên trọng số)                         |
-  | `GET /cms/feature-flags`     | Tab cờ tính năng                                                              |
+Không chặn việc review, nhưng chặn việc ghép backend thật:
 
-- Response của phần lớn endpoint CMS chưa có `schema` trong OpenAPI nên đang validate bằng zod ở boundary — xem [`docs/adr/0002-boundary-validation.md`](docs/adr/0002-boundary-validation.md).
-- Upload ảnh trong Place Editor và autocomplete địa điểm cho Collections còn là placeholder, chờ endpoint tương ứng.
+| Endpoint                          | Màn dùng                                                                                 |
+| --------------------------------- | ---------------------------------------------------------------------------------------- |
+| `GET /cms/places/{id}`            | Place Editor (spec chỉ có `PATCH`)                                                       |
+| `GET /cms/places/{id}/audit`      | Drawer nhật ký thay đổi (GoGo-BE#148 đã ghi audit, chưa có API đọc)                      |
+| `GET /cms/taxonomies`             | Taxonomy — cần `usageCount` + khoá đang tắt; `GET /taxonomies` công khai không thay được |
+| `GET /cms/ranking-configs`        | Console ranking — danh sách phiên bản + biên trọng số                                    |
+| `GET /cms/feature-flags`          | Tab cờ tính năng                                                                         |
+| `GET /cms/collections/{id}/items` | Bộ sưu tập — `PUT .../items` ghi được nhưng **không đọc lại được** danh sách hiện tại    |
+
+### Lệch khác đã xử lý ở phía UI
+
+- Hàng chờ kiểm duyệt trả `communityPlaces` (place ở trạng thái
+  `community_submitted`), còn `POST /cms/place-submissions/{id}/decide` cần
+  **submission id** — chưa API nào trả id đó. Tab này hiện chỉ xem được, và nói
+  rõ lý do thay vì hiện nút không bấm được.
+- `GET /cms/ops/kpis` chỉ có sáu số tổng hợp trên cửa sổ cố định. Dashboard bỏ
+  biểu đồ chuỗi thời gian, provider health và activity feed — những thứ không
+  đo được.
+- Chưa có endpoint sức khoẻ theo từng nhà cung cấp; tab "Sức khoẻ nền tảng"
+  hiện đúng một chỉ số contract có (`providerErrorsLast7d`).
+
+### Chưa dựng UI
+
+- `POST /cms/emergency/places/{id}/suspend` · `/reviews/{id}/hide` ·
+  `/checkins/{id}/hide` (GoGo-BE#149) — bề mặt mới, chưa có issue phía CMS.
+- SSO chờ IdP ([GoGo-BE#62](https://github.com/namnh92/GoGo-BE/issues/62)); hiện chỉ mật khẩu + TOTP.
+- Upload ảnh trong Place Editor chờ endpoint tương ứng.

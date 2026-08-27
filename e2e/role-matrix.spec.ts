@@ -20,18 +20,38 @@ test('editor lands on the catalog and cannot reach ranking settings', async ({ p
   await expect(page).toHaveURL(/\/places$/)
   await expect(page.getByRole('heading', { name: 'Quản lý địa điểm' })).toBeVisible()
 
-  // The nav entry is not offered…
+  // The nav entry is not offered — `ops` routes ask for rank 2 and an editor
+  // is rank 1, so it cannot even read them.
   await expect(page.getByRole('link', { name: 'Cấu hình' })).toHaveCount(0)
   // …and typing the URL lands on permission-denied, never a blank page.
   await page.goto('/settings')
   await expect(page.getByText('Không đủ quyền')).toBeVisible()
 })
 
-test('moderator lands on the queue and cannot open the catalog', async ({ page }) => {
+test('moderator lands on the queue and may read but not edit the catalog', async ({ page }) => {
   await signIn(page, 'moderator@gogo.vn')
   await expect(page).toHaveURL(/\/moderation$/)
+
+  // Reads are hierarchical since GoGo-BE#144, so the catalog opens…
   await page.goto('/places')
-  await expect(page.getByText('Không đủ quyền')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Quản lý địa điểm' })).toBeVisible()
+  // …but writing is exact-match, so nothing on it is actionable.
+  await expect(page.getByRole('button', { name: /Thêm địa điểm/ })).toBeDisabled()
+})
+
+test('ops admin may read the catalog and still cannot edit a place', async ({ page }) => {
+  await signIn(page, 'ops@gogo.vn')
+  await page.goto('/places')
+  await expect(page.getByRole('heading', { name: 'Quản lý địa điểm' })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Thêm địa điểm/ })).toBeDisabled()
+})
+
+test('editor may read the moderation queue and not decide on it', async ({ page }) => {
+  await signIn(page, 'editor@gogo.vn')
+  await page.goto('/moderation')
+  await expect(page.getByRole('heading', { name: 'Bảng kiểm duyệt nội dung' })).toBeVisible()
+  await page.getByLabel(/Lý do quyết định/).fill('Nội dung vi phạm quy tắc cộng đồng.')
+  await expect(page.getByRole('button', { name: 'Đã xử lý' })).toBeDisabled()
 })
 
 test('ops admin sees the dashboard and the publish CTA', async ({ page }) => {
