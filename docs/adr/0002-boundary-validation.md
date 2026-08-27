@@ -50,7 +50,8 @@ chỉ do MSW phục vụ. Không được coi là contract cho tới khi endpoin
 
 ## Điều kiện gỡ bỏ
 
-Khi GoGo-BE bổ sung `schema` cho response của các endpoint CMS, thay
+Theo dõi ở [GoGo-BE#163](https://github.com/namnh92/GoGo-BE/issues/163). Khi
+GoGo-BE bổ sung `schema` cho response của các endpoint CMS, thay
 `apiFetchParsed` bằng type generated và xoá schema zod tương ứng. Zod vẫn giữ
 lại cho các boundary không do OpenAPI mô tả (deep-link param, storage).
 

@@ -209,16 +209,16 @@ không đoán.
 
 ### Chưa có endpoint (UI đã dựng, đang chạy trên MSW)
 
-Không chặn việc review, nhưng chặn việc ghép backend thật:
+Không chặn việc review, nhưng chặn việc ghép backend thật. Đã mở issue phía
+GoGo-BE cho từng cái:
 
-| Endpoint                          | Màn dùng                                                                                 |
-| --------------------------------- | ---------------------------------------------------------------------------------------- |
-| `GET /cms/places/{id}`            | Place Editor (spec chỉ có `PATCH`)                                                       |
-| `GET /cms/places/{id}/audit`      | Drawer nhật ký thay đổi (GoGo-BE#148 đã ghi audit, chưa có API đọc)                      |
-| `GET /cms/taxonomies`             | Taxonomy — cần `usageCount` + khoá đang tắt; `GET /taxonomies` công khai không thay được |
-| `GET /cms/ranking-configs`        | Console ranking — danh sách phiên bản + biên trọng số                                    |
-| `GET /cms/feature-flags`          | Tab cờ tính năng                                                                         |
-| `GET /cms/collections/{id}/items` | Bộ sưu tập — `PUT .../items` ghi được nhưng **không đọc lại được** danh sách hiện tại    |
+| Endpoint                                             | Màn dùng                                                               | Issue                                                        |
+| ---------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `GET /cms/places/{id}`                               | Place Editor (spec chỉ có `PATCH`)                                     | [GoGo-BE#157](https://github.com/namnh92/GoGo-BE/issues/157) |
+| `GET /cms/audit`                                     | Drawer nhật ký thay đổi — audit đã ghi từ GoGo-BE#148, chưa có API đọc | [GoGo-BE#158](https://github.com/namnh92/GoGo-BE/issues/158) |
+| `GET /cms/taxonomies`                                | Taxonomy + picker phân loại — cần `usageCount` và khoá đang tắt        | [GoGo-BE#159](https://github.com/namnh92/GoGo-BE/issues/159) |
+| `GET /cms/ranking-configs`, `GET /cms/feature-flags` | Console ranking, tab cờ tính năng                                      | [GoGo-BE#160](https://github.com/namnh92/GoGo-BE/issues/160) |
+| Đọc lại danh sách địa điểm của collection            | Bộ sưu tập — `PUT .../items` ghi đè toàn bộ mà không xem lại được      | [GoGo-BE#161](https://github.com/namnh92/GoGo-BE/issues/161) |
 
 ### Lệch khác đã xử lý ở phía UI
 
@@ -226,11 +226,16 @@ Không chặn việc review, nhưng chặn việc ghép backend thật:
   `community_submitted`), còn `POST /cms/place-submissions/{id}/decide` cần
   **submission id** — chưa API nào trả id đó. Tab này hiện chỉ xem được, và nói
   rõ lý do thay vì hiện nút không bấm được.
+  → [GoGo-BE#162](https://github.com/namnh92/GoGo-BE/issues/162)
 - `GET /cms/ops/kpis` chỉ có sáu số tổng hợp trên cửa sổ cố định. Dashboard bỏ
   biểu đồ chuỗi thời gian, provider health và activity feed — những thứ không
   đo được.
 - Chưa có endpoint sức khoẻ theo từng nhà cung cấp; tab "Sức khoẻ nền tảng"
   hiện đúng một chỉ số contract có (`providerErrorsLast7d`).
+- 26/27 endpoint `/cms/*` chưa khai báo `schema` cho response nên client
+  generate ra `unknown` → đang validate bằng zod ở boundary.
+  → [GoGo-BE#163](https://github.com/namnh92/GoGo-BE/issues/163), điều kiện gỡ ở
+  [`docs/adr/0002-boundary-validation.md`](docs/adr/0002-boundary-validation.md)
 
 ### Gỡ khẩn cấp (break-glass, SEC-001)
 
