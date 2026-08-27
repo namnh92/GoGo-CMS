@@ -9,14 +9,25 @@ import {
   type CmsPlaceDetail,
   type DuplicatePair,
   type PlaceHour,
+  type PlaceSort,
+  type PlaceSourceFilter,
   type PlaceStatus,
   type PriceUnit,
+  type StalePlace,
 } from '@/shared/api/contracts'
 
+/** Every parameter `GET /cms/places` actually accepts (GoGo-BE#141). */
 export type PlaceListFilters = {
   status?: PlaceStatus | 'all'
   q?: string
+  areaKey?: string
+  category?: string
+  source?: PlaceSourceFilter | 'all'
+  staleDays?: number
+  sort?: PlaceSort
+  direction?: 'asc' | 'desc'
   limit?: number
+  cursor?: string | null
 }
 
 export function fetchPlaces(filters: PlaceListFilters, signal?: AbortSignal) {
@@ -24,7 +35,16 @@ export function fetchPlaces(filters: PlaceListFilters, signal?: AbortSignal) {
     query: {
       status: filters.status && filters.status !== 'all' ? filters.status : undefined,
       q: filters.q,
+      areaKey: filters.areaKey,
+      category: filters.category,
+      source: filters.source && filters.source !== 'all' ? filters.source : undefined,
+      staleDays: filters.staleDays,
+      sort: filters.sort ?? 'updated_at',
+      direction: filters.direction ?? 'desc',
       limit: filters.limit ?? 50,
+      // Keyset, not offset: the catalog is written to while editors browse it,
+      // so an offset would repeat or skip rows.
+      cursor: filters.cursor ?? undefined,
     },
     signal,
   })
@@ -35,18 +55,38 @@ export function fetchPlace(id: string, signal?: AbortSignal): Promise<CmsPlaceDe
   return apiFetchParsed(cmsPlaceDetailSchema, `/cms/places/${id}`, { signal })
 }
 
-export function fetchStalePlaces(days: number, signal?: AbortSignal) {
-  return apiFetchParsed(staleListSchema, '/cms/places/stale', {
+/** The endpoint returns raw snake_case rows; normalize at the boundary. */
+export async function fetchStalePlaces(days: number, signal?: AbortSignal): Promise<StalePlace[]> {
+  const rows = await apiFetchParsed(staleListSchema, '/cms/places/stale', {
     query: { days, limit: 100 },
     signal,
   })
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    status: row.status,
+    freshnessCheckedAt: row.freshness_checked_at,
+  }))
 }
 
-export function fetchDuplicates(signal?: AbortSignal): Promise<{ items: DuplicatePair[] }> {
-  return apiFetchParsed(duplicateListSchema, '/cms/places/duplicates', {
+/**
+ * Pairs come back as `place_a`/`place_b` with no notion of which side wins —
+ * `a` is simply the lower id. The UI treats `a` as canonical and lets the
+ * operator swap, because the API decides nothing here either.
+ */
+export async function fetchDuplicates(signal?: AbortSignal): Promise<DuplicatePair[]> {
+  const rows = await apiFetchParsed(duplicateListSchema, '/cms/places/duplicates', {
     query: { limit: 100 },
     signal,
   })
+  return rows.map((row) => ({
+    canonicalId: row.place_a,
+    canonicalName: row.name_a,
+    duplicateId: row.place_b,
+    duplicateName: row.name_b,
+    similarity: row.name_similarity,
+    distanceMeters: row.distance_m,
+  }))
 }
 
 /** ⚠ Not yet in openapi/gogo.v1.yaml. Audit is a feature, so the UI needs it. */

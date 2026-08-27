@@ -307,9 +307,9 @@ export default function PlaceEditorScreen() {
                           <Badge tone="neutral">
                             {t('placeEditor.sources')}: {detail.sourceCount}
                           </Badge>
-                          <Badge tone={detail.freshnessVerifiedAt ? 'mint' : 'amber'}>
-                            {detail.freshnessVerifiedAt
-                              ? formatRelative(detail.freshnessVerifiedAt, locale)
+                          <Badge tone={detail.freshnessCheckedAt ? 'mint' : 'amber'}>
+                            {detail.freshnessCheckedAt
+                              ? formatRelative(detail.freshnessCheckedAt, locale)
                               : t('places.freshness.never')}
                           </Badge>
                         </div>

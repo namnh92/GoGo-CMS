@@ -14,4 +14,6 @@ export const styles = {
   itemNote: 'shrink-0 text-[11px] text-text-subtle',
   orderButtons: 'flex flex-col',
   scheduleRow: 'grid gap-3 sm:grid-cols-2',
+  contractNote:
+    'flex items-start gap-2 rounded-compact border border-amber/45 bg-amber-soft px-3 py-2 text-xs text-text',
 } as const

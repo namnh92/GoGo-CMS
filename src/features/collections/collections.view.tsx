@@ -9,7 +9,8 @@ import { PageBody, PageHeader } from '@/app/PageHeader'
 import { Card, CardBody, CardHeader } from '@/shared/ui/Card'
 import { Button, IconButton } from '@/shared/ui/Button'
 import { StatusBadge, type Tone } from '@/shared/ui/Badge'
-import { Select, TextArea, TextInput } from '@/shared/ui/Field'
+import { SearchInput, Select, TextInput } from '@/shared/ui/Field'
+import { ConfirmDialog } from '@/shared/ui/Overlay'
 import {
   AsyncBoundary,
   EmptyState,
@@ -18,6 +19,7 @@ import {
 } from '@/shared/ui/State'
 import { useToast } from '@/shared/ui/Toast'
 import { CloseIcon, PlusIcon } from '@/shared/ui/icons'
+import { fetchPlaces } from '@/features/places/api'
 import type { Collection, CollectionStatus } from '@/shared/api/contracts'
 import { createCollection, fetchCollections, setCollectionItems, setCollectionStatus } from './api'
 import { styles } from './collections.style'
@@ -31,6 +33,8 @@ const STATUS_TONE: Record<CollectionStatus, Tone> = {
   archived: 'neutral',
 }
 
+type PickedPlace = { id: string; name: string }
+
 export default function CollectionsScreen() {
   const t = useT()
   const { locale } = useI18n()
@@ -41,24 +45,36 @@ export default function CollectionsScreen() {
   const describeError = useErrorMessage()
 
   const [activeId, setActiveId] = useState<string | null>(null)
-  const [orderedIds, setOrderedIds] = useState<string[]>([])
+  const [picked, setPicked] = useState<PickedPlace[]>([])
+  const [search, setSearch] = useState('')
   const [draft, setDraft] = useState({ slug: '', title: '' })
+  const [replaceOpen, setReplaceOpen] = useState(false)
 
+  // Reads are hierarchical; writing collections is editor/ops (and super).
+  const canRead = can('collection.read')
   const canManage = can('collection.manage')
 
   const query = useQuery({
     queryKey: queryKeys.collections.list(),
     queryFn: ({ signal }) => fetchCollections(undefined, signal),
-    enabled: canManage,
+    enabled: canRead,
   })
 
-  const collections = query.data?.items ?? []
+  // The catalog list IS readable, so the picker searches it for real.
+  const catalogQuery = useQuery({
+    queryKey: queryKeys.places.list({ q: search, limit: 10 }),
+    queryFn: ({ signal }) => fetchPlaces({ q: search, limit: 10 }, signal),
+    enabled: canManage && search.trim().length >= 2,
+  })
+
+  const collections = query.data ?? []
   const active: Collection | null =
     collections.find((item) => item.id === activeId) ?? collections[0] ?? null
 
   useEffect(() => {
-    if (active) setOrderedIds(active.items.map((item) => item.placeId))
-  }, [active])
+    setPicked([])
+    setSearch('')
+  }, [activeId])
 
   const invalidate = () =>
     void queryClient.invalidateQueries({ queryKey: queryKeys.collections.all })
@@ -80,16 +96,21 @@ export default function CollectionsScreen() {
     onError: (error) => toast.error(describeError(error)),
   })
 
-  const saveItems = useMutation({
-    mutationFn: (id: string) => setCollectionItems(id, orderedIds),
+  const replaceItems = useMutation({
+    mutationFn: (id: string) =>
+      setCollectionItems(
+        id,
+        picked.map((place) => place.id),
+      ),
     onSuccess: () => {
+      setReplaceOpen(false)
       toast.success(t('collections.items'))
       invalidate()
     },
     onError: (error) => toast.error(describeError(error)),
   })
 
-  if (!canManage) {
+  if (!canRead) {
     return (
       <>
         <PageHeader breadcrumb={[{ label: t('app.suffix') }]} title={t('collections.title')} />
@@ -101,7 +122,7 @@ export default function CollectionsScreen() {
   }
 
   const move = (index: number, delta: number) => {
-    setOrderedIds((current) => {
+    setPicked((current) => {
       const next = [...current]
       const target = index + delta
       if (target < 0 || target >= next.length) return current
@@ -110,8 +131,6 @@ export default function CollectionsScreen() {
       return next
     })
   }
-
-  const itemsById = new Map(active?.items.map((item) => [item.placeId, item]) ?? [])
 
   return (
     <>
@@ -144,24 +163,12 @@ export default function CollectionsScreen() {
                           active?.id === collection.id ? styles.itemActive : styles.itemIdle
                         }`}
                       >
-                        {collection.coverUrl ? (
-                          <img
-                            src={collection.coverUrl}
-                            alt=""
-                            className={styles.cover}
-                            loading="lazy"
-                          />
-                        ) : (
-                          <span className={styles.coverFallback} aria-hidden="true">
-                            {collection.locale.toUpperCase()}
-                          </span>
-                        )}
+                        <span className={styles.coverFallback} aria-hidden="true">
+                          {collection.locale.toUpperCase()}
+                        </span>
                         <span className="min-w-0 flex-1">
                           <span className={`block ${styles.title}`}>{collection.title}</span>
-                          <span className={`block ${styles.meta}`}>
-                            /{collection.slug} ·{' '}
-                            {t('collections.placesCount', { count: collection.items.length })}
-                          </span>
+                          <span className={`block ${styles.meta}`}>/{collection.slug}</span>
                         </span>
                         <StatusBadge
                           tone={STATUS_TONE[collection.status]}
@@ -181,6 +188,7 @@ export default function CollectionsScreen() {
                 <TextInput
                   label={t('collections.titleField')}
                   value={draft.title}
+                  disabled={!canManage}
                   onChange={(event) =>
                     setDraft((current) => ({ ...current, title: event.target.value }))
                   }
@@ -188,6 +196,7 @@ export default function CollectionsScreen() {
                 <TextInput
                   label={t('collections.slug')}
                   value={draft.slug}
+                  disabled={!canManage}
                   onChange={(event) =>
                     setDraft((current) => ({ ...current, slug: event.target.value }))
                   }
@@ -198,7 +207,10 @@ export default function CollectionsScreen() {
                     size="sm"
                     iconLeft={<PlusIcon size={14} />}
                     disabled={
-                      !online || !/^[a-z0-9-]{2,60}$/.test(draft.slug) || draft.title.trim() === ''
+                      !canManage ||
+                      !online ||
+                      !/^[a-z0-9-]{2,60}$/.test(draft.slug) ||
+                      draft.title.trim() === ''
                     }
                     loading={create.isPending}
                     onClick={() => create.mutate()}
@@ -211,47 +223,29 @@ export default function CollectionsScreen() {
           </div>
 
           <Card>
-            <CardHeader
-              title={t('collections.form')}
-              actions={
-                active ? (
-                  <Button
-                    size="sm"
-                    variant="primary"
-                    disabled={!online}
-                    loading={saveItems.isPending}
-                    onClick={() => saveItems.mutate(active.id)}
-                  >
-                    {t('action.save')}
-                  </Button>
-                ) : null
-              }
-            />
+            <CardHeader title={t('collections.form')} />
             <CardBody className={styles.form}>
               {!active ? (
                 <p className="text-xs text-text-muted">{t('collections.selectHint')}</p>
               ) : (
                 <>
                   <TextInput
+                    key={`${active.id}-title`}
                     label={t('collections.titleField')}
                     defaultValue={active.title}
-                    key={`${active.id}-title`}
-                  />
-                  <TextInput
-                    label={t('collections.slug')}
-                    defaultValue={active.slug}
-                    key={`${active.id}-slug`}
-                  />
-                  <TextArea
-                    label={t('collections.description')}
-                    defaultValue={active.description ?? ''}
-                    key={`${active.id}-desc`}
+                    disabled
                   />
                   <div className={styles.scheduleRow}>
+                    <TextInput
+                      key={`${active.id}-slug`}
+                      label={t('collections.slug')}
+                      defaultValue={active.slug}
+                      disabled
+                    />
                     <Select
                       label={t('placeEditor.status')}
                       value={active.status}
-                      disabled={!online}
+                      disabled={!canManage || !online}
                       onChange={(event) =>
                         changeStatus.mutate({
                           id: active.id,
@@ -265,76 +259,116 @@ export default function CollectionsScreen() {
                         </option>
                       ))}
                     </Select>
-                    <Select
-                      label={t('collections.locale')}
-                      defaultValue={active.locale}
-                      key={`${active.id}-locale`}
-                    >
-                      <option value="vi">vi</option>
-                      <option value="en">en</option>
-                    </Select>
                   </div>
                   <p className="text-[11px] text-text-subtle">
                     {t('collections.startsAt')}: {formatDateTime(active.startsAt, locale)} ·{' '}
                     {t('collections.endsAt')}: {formatDateTime(active.endsAt, locale)}
                   </p>
 
+                  {/* `PUT .../items` exists but nothing reads the current list
+                      back, so the screen must not render an empty list as if
+                      it were the collection's contents. */}
+                  <p className={styles.contractNote}>
+                    <span aria-hidden="true">⚠</span>
+                    {t('collections.itemsUnreadable')}
+                  </p>
+
+                  <SearchInput
+                    label={t('collections.searchCatalog')}
+                    placeholder={t('collections.searchCatalog')}
+                    value={search}
+                    disabled={!canManage}
+                    onChange={(event) => setSearch(event.target.value)}
+                  />
+
+                  {search.trim().length >= 2 ? (
+                    <div className="flex flex-col gap-1">
+                      <p className="text-[11px] font-semibold text-text-muted">
+                        {t('collections.searchResults')}
+                      </p>
+                      {(catalogQuery.data?.items ?? []).map((place) => (
+                        <div key={place.id} className={styles.itemRow}>
+                          <span className={styles.itemName}>{place.name}</span>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={picked.some((entry) => entry.id === place.id)}
+                            onClick={() =>
+                              setPicked((current) => [
+                                ...current,
+                                { id: place.id, name: place.name },
+                              ])
+                            }
+                          >
+                            {t('collections.addPlace')}
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+
                   <div>
                     <p className="mb-2 text-xs font-semibold text-text-muted">
-                      {t('collections.items')}{' '}
+                      {t('collections.newList')}{' '}
                       <span className="font-normal text-text-subtle">
                         — {t('collections.itemsHint')}
                       </span>
                     </p>
                     <div className="flex flex-col gap-2">
-                      {orderedIds.map((placeId, index) => {
-                        const item = itemsById.get(placeId)
-                        return (
-                          <div key={placeId} className={styles.itemRow}>
-                            <div className={styles.orderButtons}>
-                              <button
-                                type="button"
-                                aria-label={t('collections.moveUp')}
-                                disabled={index === 0}
-                                onClick={() => move(index, -1)}
-                                className="px-1 text-[10px] text-text-subtle disabled:opacity-30"
-                              >
-                                ▲
-                              </button>
-                              <button
-                                type="button"
-                                aria-label={t('collections.moveDown')}
-                                disabled={index === orderedIds.length - 1}
-                                onClick={() => move(index, 1)}
-                                className="px-1 text-[10px] text-text-subtle disabled:opacity-30"
-                              >
-                                ▼
-                              </button>
-                            </div>
-                            <span className="w-5 text-[11px] tabular-nums text-text-subtle">
-                              {index + 1}
-                            </span>
-                            <span className={styles.itemName}>{item?.name ?? placeId}</span>
-                            {item?.note ? (
-                              <span className={styles.itemNote}>{item.note}</span>
-                            ) : null}
-                            <IconButton
-                              label={t('collections.remove')}
-                              tone="danger"
-                              className="h-8 w-8"
-                              onClick={() =>
-                                setOrderedIds((current) => current.filter((id) => id !== placeId))
-                              }
+                      {picked.map((place, index) => (
+                        <div key={place.id} className={styles.itemRow}>
+                          <div className={styles.orderButtons}>
+                            <button
+                              type="button"
+                              aria-label={t('collections.moveUp')}
+                              disabled={index === 0}
+                              onClick={() => move(index, -1)}
+                              className="px-1 text-[10px] text-text-subtle disabled:opacity-30"
                             >
-                              <CloseIcon size={12} />
-                            </IconButton>
+                              ▲
+                            </button>
+                            <button
+                              type="button"
+                              aria-label={t('collections.moveDown')}
+                              disabled={index === picked.length - 1}
+                              onClick={() => move(index, 1)}
+                              className="px-1 text-[10px] text-text-subtle disabled:opacity-30"
+                            >
+                              ▼
+                            </button>
                           </div>
-                        )
-                      })}
-                      {orderedIds.length === 0 ? (
-                        <p className="text-xs text-text-subtle">{t('state.emptyHint')}</p>
+                          <span className="w-5 text-[11px] tabular-nums text-text-subtle">
+                            {index + 1}
+                          </span>
+                          <span className={styles.itemName}>{place.name}</span>
+                          <IconButton
+                            label={t('collections.remove')}
+                            tone="danger"
+                            className="h-8 w-8"
+                            onClick={() =>
+                              setPicked((current) =>
+                                current.filter((entry) => entry.id !== place.id),
+                              )
+                            }
+                          >
+                            <CloseIcon size={12} />
+                          </IconButton>
+                        </div>
+                      ))}
+                      {picked.length === 0 ? (
+                        <p className="text-xs text-text-subtle">{t('collections.emptyNewList')}</p>
                       ) : null}
                     </div>
+                  </div>
+
+                  <div className="flex justify-end">
+                    <Button
+                      variant="primary"
+                      disabled={!canManage || !online || picked.length === 0}
+                      onClick={() => setReplaceOpen(true)}
+                    >
+                      {t('collections.replaceList', { count: picked.length })}
+                    </Button>
                   </div>
                 </>
               )}
@@ -342,6 +376,20 @@ export default function CollectionsScreen() {
           </Card>
         </div>
       </PageBody>
+
+      <ConfirmDialog
+        open={replaceOpen}
+        onClose={() => setReplaceOpen(false)}
+        onConfirm={() => active && replaceItems.mutate(active.id)}
+        title={t('collections.replaceList', { count: picked.length })}
+        description={t('collections.replaceWarning', { count: picked.length })}
+        confirmLabel={t('action.save')}
+        loading={replaceItems.isPending}
+        changes={picked.map((place, index) => ({
+          label: `${index + 1}`,
+          to: place.name,
+        }))}
+      />
     </>
   )
 }

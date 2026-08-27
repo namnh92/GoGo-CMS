@@ -1,7 +1,10 @@
 import { apiFetch, apiFetchParsed, newIdempotencyKey } from '@/shared/api/client'
 import { moderationQueueSchema, type ModerationQueue } from '@/shared/api/contracts'
 
-export type ModerationDecision = 'published' | 'rejected' | 'approved' | 'actioned' | 'dismissed'
+/** Each queue accepts only its own pair; the controller casts per route. */
+export type ReviewDecision = 'published' | 'rejected'
+export type ReportDecision = 'actioned' | 'dismissed'
+export type CheckinDecision = 'approved' | 'rejected'
 export type SubmissionDecision = 'approved' | 'rejected' | 'merged'
 
 export function fetchModerationQueue(
@@ -12,7 +15,7 @@ export function fetchModerationQueue(
 }
 
 /** The reason is mandatory (3–500 chars) and lands in the audit log. */
-export function decideReview(id: string, decision: ModerationDecision, reason: string) {
+export function decideReview(id: string, decision: ReviewDecision, reason: string) {
   return apiFetch(`/cms/moderation/reviews/${id}`, {
     method: 'POST',
     body: { decision, reason },
@@ -20,7 +23,7 @@ export function decideReview(id: string, decision: ModerationDecision, reason: s
   })
 }
 
-export function decideReport(id: string, decision: ModerationDecision, reason: string) {
+export function decideReport(id: string, decision: ReportDecision, reason: string) {
   return apiFetch(`/cms/moderation/reports/${id}`, {
     method: 'POST',
     body: { decision, reason },
@@ -28,7 +31,7 @@ export function decideReport(id: string, decision: ModerationDecision, reason: s
   })
 }
 
-export function decideCheckin(id: string, decision: ModerationDecision, reason: string) {
+export function decideCheckin(id: string, decision: CheckinDecision, reason: string) {
   return apiFetch(`/cms/moderation/checkins/${id}`, {
     method: 'POST',
     body: { decision, reason },

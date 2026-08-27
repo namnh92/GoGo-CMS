@@ -67,8 +67,10 @@ export function KpiCard({
                 : 'text-text-subtle',
           )}
         >
-          {/* Arrow glyph carries the direction so colour is not the only cue. */}
-          {tone === 'positive' ? '▲ ' : tone === 'negative' ? '▼ ' : ''}
+          {/* A glyph carries the judgement so colour is not the only cue. It is
+              deliberately not an arrow: most of these lines describe what the
+              figure covers, and an arrow would imply a trend we cannot see. */}
+          {tone === 'positive' ? '✓ ' : tone === 'negative' ? '! ' : ''}
           {sub}
         </p>
       ) : null}

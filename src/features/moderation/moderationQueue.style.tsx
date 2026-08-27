@@ -20,4 +20,8 @@ export const styles = {
   snapshotThumb: 'h-12 w-12 rounded-compact object-cover',
   decisionGrid: 'grid grid-cols-2 gap-2',
   attribution: 'mt-2 text-[11px] text-text-subtle',
+  privacyNote:
+    'rounded-compact bg-surface-muted px-3 py-2 text-[11px] leading-relaxed text-text-subtle',
+  contractNote:
+    'flex items-start gap-2 rounded-compact border border-amber/45 bg-amber-soft px-3 py-2 text-xs text-text',
 } as const

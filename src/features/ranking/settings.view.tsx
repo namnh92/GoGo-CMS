@@ -8,7 +8,7 @@ import { formatDateTime, formatPercent } from '@/shared/format'
 import { PageBody, PageHeader } from '@/app/PageHeader'
 import { Card, CardBody, CardHeader } from '@/shared/ui/Card'
 import { Button } from '@/shared/ui/Button'
-import { Badge, StatusBadge, type Tone } from '@/shared/ui/Badge'
+import { Badge } from '@/shared/ui/Badge'
 import { Toggle } from '@/shared/ui/Field'
 import { Tabs, type TabItem } from '@/shared/ui/Tabs'
 import { ConfirmDialog } from '@/shared/ui/Overlay'
@@ -36,8 +36,6 @@ import { styles } from './settings.style'
 type TabId = 'flags' | 'ranking' | 'health'
 
 const RANKING_KEY: RankingKey = 'suggestion.scoring'
-
-const PROVIDER_TONE: Record<string, Tone> = { healthy: 'mint', degraded: 'amber', down: 'danger' }
 
 function WeightSlider({
   weight,
@@ -342,56 +340,44 @@ export default function SettingsScreen() {
 
             {tab === 'health' ? (
               <Card>
-                <CardHeader title={t('settings.health.title')} />
+                <CardHeader title={t('settings.health.title')} hint={t('settings.health.hint')} />
                 <CardBody className="flex flex-col gap-3">
                   <AsyncBoundary
                     status={kpisQuery.status}
                     error={kpisQuery.error}
-                    data={kpisQuery.data?.providers ?? []}
-                    isEmpty={(items) => items.length === 0}
+                    data={kpisQuery.data}
                     onRetry={() => void kpisQuery.refetch()}
-                    empty={<EmptyState />}
                   >
-                    {(providers) =>
-                      providers.map((provider) => (
-                        <div key={provider.name} className={styles.providerCard}>
+                    {(kpis) => (
+                      <>
+                        {/* There is no per-provider health endpoint. The only
+                            provider signal the contract exposes is this count,
+                            so the tab reports it plainly instead of drawing a
+                            status board out of nothing. */}
+                        <div className={styles.providerCard}>
                           <div className={styles.providerHead}>
                             <span className="text-[13px] font-semibold text-text">
-                              {provider.name}
+                              {t('dashboard.provider.title')}
                             </span>
-                            <StatusBadge
-                              tone={PROVIDER_TONE[provider.status] ?? 'neutral'}
-                              shape={provider.status === 'healthy' ? 'check' : 'alert'}
-                              label={t(`providerStatus.${provider.status}` as const)}
-                            />
+                            <Badge tone={kpis.providerErrorsLast7d > 0 ? 'amber' : 'mint'}>
+                              {t('dashboard.window7d')}
+                            </Badge>
                           </div>
-                          <dl className={styles.providerGrid}>
-                            <div>
-                              <dt className="text-text-subtle">{t('settings.health.errorRate')}</dt>
-                              <dd className="font-semibold tabular-nums text-text">
-                                {formatPercent(provider.errorRate, locale, { digits: 2 })}
-                              </dd>
-                            </div>
-                            <div>
-                              <dt className="text-text-subtle">
-                                {t('dashboard.providers.latency')}
-                              </dt>
-                              <dd className="font-semibold tabular-nums text-text">
-                                {provider.latencyMs != null ? `${provider.latencyMs} ms` : '—'}
-                              </dd>
-                            </div>
-                            <div>
-                              <dt className="text-text-subtle">
-                                {t('settings.health.circuitBreaker')}
-                              </dt>
-                              <dd className="font-semibold text-text">
-                                {t(`circuit.${provider.circuitBreaker}` as const)}
-                              </dd>
-                            </div>
-                          </dl>
+                          <p className="font-display text-2xl font-extrabold tabular-nums text-text">
+                            {formatPercent(null, locale) === '—'
+                              ? kpis.providerErrorsLast7d
+                              : kpis.providerErrorsLast7d}
+                          </p>
+                          <p className="mt-1 text-xs text-text-muted">
+                            {t('dashboard.provider.hint')}
+                          </p>
                         </div>
-                      ))
-                    }
+                        <p className={styles.fourEyes}>
+                          <span aria-hidden="true">ℹ</span>
+                          {t('settings.health.contractNote')}
+                        </p>
+                      </>
+                    )}
                   </AsyncBoundary>
                 </CardBody>
               </Card>

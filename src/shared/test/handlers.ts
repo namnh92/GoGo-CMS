@@ -4,7 +4,7 @@ import type { ImportRow } from '@/shared/api/contracts-import'
 import {
   auditEntries,
   collections,
-  duplicatePairs,
+  duplicateRows,
   featureFlags,
   importJobs,
   importRows,
@@ -30,7 +30,7 @@ const db = {
   configs: rankingConfigs.map((config) => ({ ...config })),
   jobs: importJobs.map((job) => ({ ...job })),
   rows: JSON.parse(JSON.stringify(importRows)) as Record<string, ImportRow[]>,
-  duplicates: duplicatePairs.map((pair) => ({ ...pair })),
+  duplicates: duplicateRows.map((row) => ({ ...row })),
   moderation: JSON.parse(JSON.stringify(moderationQueue)) as typeof moderationQueue,
 }
 
@@ -93,15 +93,21 @@ export const handlers = [
     return HttpResponse.json({ items, total: items.length, nextCursor: null })
   }),
 
+  // Raw SQL rows: bare array, snake_case, four columns.
   http.get(`${BASE}/cms/places/stale`, () =>
-    HttpResponse.json({
-      items: db.places
+    HttpResponse.json(
+      db.places
         .filter((place) => place.status === 'published')
-        .map((place) => ({ ...place, staleDays: place.freshnessVerifiedAt ? 14 : 999 })),
-    }),
+        .map((place) => ({
+          id: place.id,
+          name: place.name,
+          status: place.status,
+          freshness_checked_at: place.freshnessCheckedAt ?? null,
+        })),
+    ),
   ),
 
-  http.get(`${BASE}/cms/places/duplicates`, () => HttpResponse.json({ items: db.duplicates })),
+  http.get(`${BASE}/cms/places/duplicates`, () => HttpResponse.json(db.duplicates)),
 
   http.get(`${BASE}/cms/places/:id/audit`, () => HttpResponse.json({ items: auditEntries })),
 
@@ -133,7 +139,7 @@ export const handlers = [
     if (!place) return envelope(404, 'NOT_FOUND', 'place not found')
     const body = (await request.json()) as { hours: typeof place.hours }
     place.hours = body.hours
-    place.freshnessVerifiedAt = new Date().toISOString()
+    place.freshnessCheckedAt = new Date().toISOString()
     return HttpResponse.json(place)
   }),
 
@@ -159,14 +165,18 @@ export const handlers = [
   http.post(`${BASE}/cms/places/:id/verify-freshness`, ({ params }) => {
     const place = db.places.find((item) => item.id === params.id)
     if (!place) return envelope(404, 'NOT_FOUND', 'place not found')
-    place.freshnessVerifiedAt = new Date().toISOString()
+    place.freshnessCheckedAt = new Date().toISOString()
     return HttpResponse.json(place, { status: 201 })
   }),
 
   http.post(`${BASE}/cms/places/:id/merge`, async ({ params, request }) => {
     const body = (await request.json()) as { duplicateId: string }
     db.duplicates = db.duplicates.filter(
-      (pair) => !(pair.canonical.id === params.id && pair.duplicate.id === body.duplicateId),
+      (row) =>
+        !(
+          (row.place_a === params.id && row.place_b === body.duplicateId) ||
+          (row.place_b === params.id && row.place_a === body.duplicateId)
+        ),
     )
     return HttpResponse.json({ merged: true }, { status: 201 })
   }),
@@ -211,7 +221,7 @@ export const handlers = [
   http.get(`${BASE}/cms/collections`, ({ request }) => {
     const status = new URL(request.url).searchParams.get('status')
     const items = status ? db.collections.filter((item) => item.status === status) : db.collections
-    return HttpResponse.json({ items })
+    return HttpResponse.json(items)
   }),
 
   http.post(`${BASE}/cms/collections`, async ({ request }) => {
@@ -221,14 +231,9 @@ export const handlers = [
       slug: body.slug,
       locale: 'vi',
       title: body.title,
-      description: null,
       status: 'draft' as CollectionStatus,
       startsAt: null,
       endsAt: null,
-      coverUrl: null,
-      items: [],
-      updatedAt: new Date().toISOString(),
-      updatedBy: 'ban',
     }
     db.collections = [created, ...db.collections]
     return HttpResponse.json(created, { status: 201 })
@@ -242,22 +247,13 @@ export const handlers = [
     return HttpResponse.json(collection)
   }),
 
+  // Write-only on the real API too: nothing reads the item list back, so the
+  // mock does not pretend to store it either.
   http.put(`${BASE}/cms/collections/:id/items`, async ({ params, request }) => {
     const collection = db.collections.find((item) => item.id === params.id)
     if (!collection) return envelope(404, 'NOT_FOUND', 'collection not found')
     const body = (await request.json()) as { placeIds: string[] }
-    const byId = new Map(collection.items.map((item) => [item.placeId, item]))
-    collection.items = body.placeIds.map(
-      (placeId) =>
-        byId.get(placeId) ?? {
-          placeId,
-          name: placeId,
-          addressText: null,
-          coverUrl: null,
-          note: null,
-        },
-    )
-    return HttpResponse.json(collection)
+    return HttpResponse.json({ id: collection.id, count: body.placeIds.length })
   }),
 
   http.get(`${BASE}/cms/moderation`, () => HttpResponse.json(db.moderation)),
@@ -270,8 +266,6 @@ export const handlers = [
     const key =
       params.kind === 'reviews' ? 'reviews' : params.kind === 'reports' ? 'reports' : 'checkins'
     db.moderation[key] = db.moderation[key].filter((item) => item.id !== params.id) as never
-    db.moderation.stats.pending = Math.max(0, db.moderation.stats.pending - 1)
-    db.moderation.stats.resolvedToday += 1
     return HttpResponse.json({ decided: true }, { status: 201 })
   }),
 
@@ -280,7 +274,9 @@ export const handlers = [
     if (!body.reason || body.reason.trim().length < 3) {
       return envelope(400, 'REASON_REQUIRED', 'reason is mandatory')
     }
-    db.moderation.submissions = db.moderation.submissions.filter((item) => item.id !== params.id)
+    db.moderation.communityPlaces = db.moderation.communityPlaces.filter(
+      (item) => item.id !== params.id,
+    )
     return HttpResponse.json({ decided: true }, { status: 201 })
   }),
 

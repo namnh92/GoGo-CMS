@@ -13,6 +13,7 @@ import { Button, IconButton } from '@/shared/ui/Button'
 import { Checkbox, InlineSelect, SearchInput } from '@/shared/ui/Field'
 import { Tabs, type TabItem } from '@/shared/ui/Tabs'
 import { BulkActionBar, DataTable } from '@/shared/ui/DataTable'
+import { ConfidenceMeter } from '@/shared/ui/Progress'
 import {
   AsyncBoundary,
   EmptyState,
@@ -21,8 +22,13 @@ import {
 } from '@/shared/ui/State'
 import { useToast } from '@/shared/ui/Toast'
 import { EditIcon, ImportIcon, MoreIcon, PlusIcon, StarIcon } from '@/shared/ui/icons'
-import type { CmsPlace, PlaceStatus } from '@/shared/api/contracts'
-import { fetchTaxonomies } from '@/features/taxonomy/api'
+import type {
+  CmsPlace,
+  PlaceSort,
+  PlaceSourceFilter,
+  PlaceStatus,
+  StalePlace,
+} from '@/shared/api/contracts'
 import { fetchPlaces, fetchStalePlaces, transitionPlace, verifyFreshness } from './api'
 import { PlaceStatusBadge } from './status'
 import { DuplicateQueue } from './duplicateQueue.view'
@@ -42,24 +48,9 @@ const TAB_IDS: TabId[] = [
   'duplicates',
 ]
 
-function Rating({
-  label,
-  value,
-  count,
-}: {
-  label: string
-  value?: number | null
-  count?: number | null
-}) {
-  return (
-    <span className={styles.ratingRow}>
-      <span className={styles.ratingLabel}>{label}</span>
-      <StarIcon size={11} className="text-amber" />
-      <span className={styles.ratingValue}>{value != null ? value.toFixed(1) : '—'}</span>
-      {count != null ? <span>({count})</span> : null}
-    </span>
-  )
-}
+const SORTS: PlaceSort[] = ['updated_at', 'created_at', 'name', 'confidence']
+const SOURCES: PlaceSourceFilter[] = ['google', 'community', 'manual']
+const PAGE_SIZE = 50
 
 export default function PlaceListScreen() {
   const t = useT()
@@ -73,47 +64,51 @@ export default function PlaceListScreen() {
 
   const [tab, setTab] = useState<TabId>('all')
   const [search, setSearch] = useState('')
+  const [areaKey, setAreaKey] = useState('')
+  const [category, setCategory] = useState('')
+  const [source, setSource] = useState<PlaceSourceFilter | 'all'>('all')
+  const [sort, setSort] = useState<PlaceSort>('updated_at')
+  const [direction, setDirection] = useState<'asc' | 'desc'>('desc')
   const [selected, setSelected] = useState<string[]>([])
+  // Keyset paging: keep the cursors we have walked so "previous" is possible
+  // without an offset the server does not support.
+  const [cursors, setCursors] = useState<(string | null)[]>([null])
+  const [pageIndex, setPageIndex] = useState(0)
 
+  // Reads are hierarchical on the server, so every role can open the catalog.
+  // Writing is exact-match: only an editor (and super_admin) may change it.
   const canWrite = can('place.write')
   const canTransition = can('place.transition')
 
+  const filters = {
+    status: tab === 'stale' || tab === 'duplicates' ? ('all' as const) : tab,
+    q: search || undefined,
+    areaKey: areaKey || undefined,
+    category: category || undefined,
+    source,
+    sort,
+    direction,
+    limit: PAGE_SIZE,
+    cursor: cursors[pageIndex] ?? null,
+  }
+
   const listQuery = useQuery({
-    queryKey: queryKeys.places.list({
-      status: tab === 'stale' || tab === 'duplicates' ? 'all' : tab,
-      q: search,
-    }),
-    queryFn: ({ signal }) =>
-      fetchPlaces(
-        { status: tab === 'stale' || tab === 'duplicates' ? 'all' : tab, q: search || undefined },
-        signal,
-      ),
+    queryKey: queryKeys.places.list(filters),
+    queryFn: ({ signal }) => fetchPlaces(filters, signal),
     enabled: tab !== 'stale' && tab !== 'duplicates',
   })
-
-  // Taxonomy arrives as stable keys; the label always resolves through the
-  // catalogue (vi first), never from a display string stored on the place.
-  const taxonomyQuery = useQuery({
-    queryKey: queryKeys.taxonomies.all,
-    queryFn: ({ signal }) => fetchTaxonomies(signal),
-    staleTime: 300_000,
-  })
-
-  const taxonomyLabel = useMemo(() => {
-    const byKey = new Map(
-      (taxonomyQuery.data?.items ?? []).map((item) => [
-        item.key,
-        item.labels[locale] ?? item.labels.vi ?? item.key,
-      ]),
-    )
-    return (key: string) => byKey.get(key) ?? key
-  }, [taxonomyQuery.data, locale])
 
   const staleQuery = useQuery({
     queryKey: queryKeys.places.stale(30),
     queryFn: ({ signal }) => fetchStalePlaces(30, signal),
     enabled: tab === 'stale',
   })
+
+  const resetPaging = () => {
+    setCursors([null])
+    setPageIndex(0)
+    setSelected([])
+  }
 
   const transition = useMutation({
     mutationFn: ({ ids, status }: { ids: string[]; status: PlaceStatus }) =>
@@ -138,18 +133,18 @@ export default function PlaceListScreen() {
     onError: (error) => toast.error(describeError(error)),
   })
 
-  const columns = useMemo<ColumnDef<CmsPlace, unknown>[]>(() => {
-    const base: ColumnDef<CmsPlace, unknown>[] = [
+  const rows = listQuery.data?.items ?? []
+
+  const columns = useMemo<ColumnDef<CmsPlace, unknown>[]>(
+    () => [
       {
         id: 'select',
         header: () => (
           <Checkbox
             label={t('places.selected', { count: selected.length })}
-            checked={selected.length > 0 && selected.length === (listQuery.data?.items.length ?? 0)}
+            checked={selected.length > 0 && selected.length === rows.length}
             indeterminate={selected.length > 0}
-            onChange={(checked) =>
-              setSelected(checked ? (listQuery.data?.items ?? []).map((place) => place.id) : [])
-            }
+            onChange={(checked) => setSelected(checked ? rows.map((place) => place.id) : [])}
           />
         ),
         cell: ({ row }) => (
@@ -170,97 +165,61 @@ export default function PlaceListScreen() {
         enableSorting: false,
       },
       {
-        id: 'photo',
-        header: () => t('places.col.photo'),
-        cell: ({ row }) =>
-          row.original.coverUrl ? (
-            <img src={row.original.coverUrl} alt="" className={styles.cover} loading="lazy" />
-          ) : (
-            <span className={styles.coverFallback} aria-hidden="true">
-              {row.original.name.charAt(0).toUpperCase()}
-            </span>
-          ),
+        id: 'name',
+        header: () => t('places.col.details'),
+        cell: ({ row }) => <p className={styles.name}>{row.original.name}</p>,
         enableSorting: false,
       },
       {
-        id: 'details',
-        header: () => t('places.col.details'),
-        accessorFn: (place) => place.name,
-        cell: ({ row }) => (
-          <div>
-            <p className={styles.name}>{row.original.name}</p>
-            <p className={styles.address}>{row.original.addressText ?? '—'}</p>
-          </div>
-        ),
-      },
-      {
-        id: 'taxonomy',
-        header: () => t('places.col.categories'),
-        cell: ({ row }) => (
-          <div className={styles.tagRow}>
-            {row.original.taxonomyKeys.slice(0, 3).map((key) => (
-              <span key={key} className={styles.tag}>
-                {taxonomyLabel(key)}
-              </span>
-            ))}
-            {row.original.taxonomyKeys.length > 3 ? (
-              <span className={styles.tag}>+{row.original.taxonomyKeys.length - 3}</span>
-            ) : null}
-          </div>
-        ),
+        id: 'area',
+        header: () => t('places.col.area'),
+        cell: ({ row }) => <span className={styles.mono}>{row.original.areaKey ?? '—'}</span>,
         enableSorting: false,
       },
       {
         id: 'status',
         header: () => t('places.col.status'),
-        accessorFn: (place) => place.status,
         cell: ({ row }) => <PlaceStatusBadge status={row.original.status} />,
+        enableSorting: false,
       },
       {
-        id: 'ratings',
-        header: () => t('places.col.ratings'),
+        id: 'rating',
+        header: () => t('places.col.rating'),
         cell: ({ row }) => (
-          // Google, GoGo and composite are stored and shown separately.
-          <div className={styles.ratingStack}>
-            <Rating
-              label={t('places.rating.google')}
-              value={row.original.ratings.googleRating}
-              count={row.original.ratings.googleRatingCount}
-            />
-            <Rating label={t('places.rating.gogo')} value={row.original.ratings.gogoRating} />
-          </div>
+          <span className={styles.ratingRow}>
+            <StarIcon size={11} className="text-amber" />
+            <span className={styles.ratingValue}>
+              {row.original.rating != null ? row.original.rating.toFixed(1) : '—'}
+            </span>
+          </span>
+        ),
+        enableSorting: false,
+      },
+      {
+        id: 'confidence',
+        header: () => t('places.col.confidence'),
+        cell: ({ row }) => (
+          <ConfidenceMeter value={row.original.confidence} label={t('places.col.confidence')} />
         ),
         enableSorting: false,
       },
       {
         id: 'freshness',
         header: () => t('places.col.freshness'),
-        accessorFn: (place) => place.freshnessVerifiedAt ?? '',
         cell: ({ row }) => (
           <span className={styles.muted}>
-            {row.original.freshnessVerifiedAt
-              ? formatRelative(row.original.freshnessVerifiedAt, locale)
+            {row.original.freshnessCheckedAt
+              ? formatRelative(row.original.freshnessCheckedAt, locale)
               : t('places.freshness.never')}
-          </span>
-        ),
-      },
-      {
-        id: 'sources',
-        header: () => t('places.col.sources'),
-        cell: ({ row }) => (
-          <span className={styles.muted}>
-            {t('places.sourceCount', { count: row.original.sourceCount })}
           </span>
         ),
         enableSorting: false,
       },
       {
-        id: 'modified',
+        id: 'updated',
         header: () => t('places.col.modified'),
         cell: ({ row }) => (
-          <span className={styles.mono}>
-            {row.original.updatedBy ?? '—'} · {formatRelative(row.original.updatedAt, locale)}
-          </span>
+          <span className={styles.muted}>{formatRelative(row.original.updatedAt, locale)}</span>
         ),
         enableSorting: false,
       },
@@ -269,17 +228,6 @@ export default function PlaceListScreen() {
         header: () => <span className="sr-only">{t('places.col.actions')}</span>,
         cell: ({ row }) => (
           <div className={styles.actions} onClick={(event) => event.stopPropagation()}>
-            {tab === 'stale' ? (
-              <Button
-                size="sm"
-                variant="secondary"
-                disabled={!can('place.verifyFreshness') || !online}
-                loading={verify.isPending && verify.variables === row.original.id}
-                onClick={() => verify.mutate(row.original.id)}
-              >
-                {t('places.stale.verify')}
-              </Button>
-            ) : null}
             <IconButton
               label={t('action.edit')}
               disabled={!canWrite}
@@ -297,21 +245,57 @@ export default function PlaceListScreen() {
         ),
         enableSorting: false,
       },
-    ]
-    return base
-  }, [
-    t,
-    locale,
-    selected,
-    listQuery.data,
-    tab,
-    canWrite,
-    can,
-    online,
-    navigate,
-    verify,
-    taxonomyLabel,
-  ])
+    ],
+    [t, locale, selected, rows, canWrite, navigate],
+  )
+
+  const staleColumns = useMemo<ColumnDef<StalePlace, unknown>[]>(
+    () => [
+      {
+        id: 'name',
+        header: () => t('places.col.details'),
+        cell: ({ row }) => <p className={styles.name}>{row.original.name}</p>,
+        enableSorting: false,
+      },
+      {
+        id: 'status',
+        header: () => t('places.col.status'),
+        cell: ({ row }) => <PlaceStatusBadge status={row.original.status} />,
+        enableSorting: false,
+      },
+      {
+        id: 'freshness',
+        header: () => t('places.col.freshness'),
+        cell: ({ row }) => (
+          <span className={styles.muted}>
+            {row.original.freshnessCheckedAt
+              ? formatRelative(row.original.freshnessCheckedAt, locale)
+              : t('places.freshness.never')}
+          </span>
+        ),
+        enableSorting: false,
+      },
+      {
+        id: 'actions',
+        header: () => <span className="sr-only">{t('places.col.actions')}</span>,
+        cell: ({ row }) => (
+          <div className={styles.actions}>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={!can('place.verifyFreshness') || !online}
+              loading={verify.isPending && verify.variables === row.original.id}
+              onClick={() => verify.mutate(row.original.id)}
+            >
+              {t('places.stale.verify')}
+            </Button>
+          </div>
+        ),
+        enableSorting: false,
+      },
+    ],
+    [t, locale, can, online, verify],
+  )
 
   if (!can('place.read')) {
     return (
@@ -326,15 +310,9 @@ export default function PlaceListScreen() {
 
   const tabs: TabItem<TabId>[] = TAB_IDS.map((id) => ({
     id,
-    label:
-      id === 'all' || id === 'stale' || id === 'duplicates'
-        ? t(`places.tab.${id}` as const)
-        : t(`places.tab.${id}` as const),
+    label: t(`places.tab.${id}` as const),
   }))
-
-  const activeQuery = tab === 'stale' ? staleQuery : listQuery
-  const rows = tab === 'stale' ? (staleQuery.data?.items ?? []) : (listQuery.data?.items ?? [])
-  const total = listQuery.data?.total ?? rows.length
+  const nextCursor = listQuery.data?.nextCursor ?? null
 
   return (
     <>
@@ -347,6 +325,7 @@ export default function PlaceListScreen() {
               size="sm"
               variant="secondary"
               iconLeft={<ImportIcon size={14} />}
+              disabled={!can('import.read')}
               onClick={() => navigate('/imports/new')}
             >
               {t('places.bulkImport')}
@@ -369,13 +348,36 @@ export default function PlaceListScreen() {
           value={tab}
           onChange={(next) => {
             setTab(next)
-            setSelected([])
+            resetPaging()
           }}
           label={t('places.breadcrumb')}
         />
 
         {tab === 'duplicates' ? (
           <DuplicateQueue />
+        ) : tab === 'stale' ? (
+          <>
+            <p className="text-xs text-text-muted">{t('places.stale.hint')}</p>
+            <Card className={styles.tableCard}>
+              <AsyncBoundary
+                status={staleQuery.status}
+                error={staleQuery.error}
+                data={staleQuery.data ?? []}
+                isEmpty={(items) => items.length === 0}
+                onRetry={() => void staleQuery.refetch()}
+              >
+                {(items) => (
+                  <DataTable
+                    data={items}
+                    columns={staleColumns}
+                    getRowId={(place) => place.id}
+                    caption={t('places.stale.title')}
+                    onRowClick={(place) => navigate(`/places/${place.id}`)}
+                  />
+                )}
+              </AsyncBoundary>
+            </Card>
+          </>
         ) : (
           <>
             <div className={styles.toolbar}>
@@ -383,28 +385,81 @@ export default function PlaceListScreen() {
                 label={t('places.searchPlaceholder')}
                 placeholder={t('places.searchPlaceholder')}
                 value={search}
-                onChange={(event) => setSearch(event.target.value)}
+                onChange={(event) => {
+                  setSearch(event.target.value)
+                  resetPaging()
+                }}
                 className={styles.search}
               />
-              <InlineSelect label={t('places.filter.allCategories')} defaultValue="">
-                <option value="">{t('places.filter.allCategories')}</option>
+              <input
+                aria-label={t('places.filter.area')}
+                placeholder={t('places.filter.areaHint')}
+                value={areaKey}
+                onChange={(event) => {
+                  setAreaKey(event.target.value)
+                  resetPaging()
+                }}
+                className={styles.filterInput}
+              />
+              <input
+                aria-label={t('places.filter.category')}
+                placeholder={t('places.filter.categoryHint')}
+                value={category}
+                onChange={(event) => {
+                  setCategory(event.target.value)
+                  resetPaging()
+                }}
+                className={styles.filterInput}
+              />
+              <InlineSelect
+                label={t('places.filter.source')}
+                value={source}
+                onChange={(event) => {
+                  setSource(event.target.value as PlaceSourceFilter | 'all')
+                  resetPaging()
+                }}
+              >
+                <option value="all">{t('places.filter.allSources')}</option>
+                {SOURCES.map((option) => (
+                  <option key={option} value={option}>
+                    {t(`places.source.${option}` as const)}
+                  </option>
+                ))}
               </InlineSelect>
-              <InlineSelect label={t('places.filter.allAreas')} defaultValue="">
-                <option value="">{t('places.filter.allAreas')}</option>
+              <InlineSelect
+                label={t('places.filter.sort')}
+                value={sort}
+                onChange={(event) => {
+                  setSort(event.target.value as PlaceSort)
+                  resetPaging()
+                }}
+              >
+                {SORTS.map((option) => (
+                  <option key={option} value={option}>
+                    {t(`places.sort.${option}` as const)}
+                  </option>
+                ))}
+              </InlineSelect>
+              <InlineSelect
+                label={t('places.filter.direction')}
+                value={direction}
+                onChange={(event) => {
+                  setDirection(event.target.value as 'asc' | 'desc')
+                  resetPaging()
+                }}
+              >
+                <option value="desc">{t('places.direction.desc')}</option>
+                <option value="asc">{t('places.direction.asc')}</option>
               </InlineSelect>
             </div>
 
-            {tab === 'stale' ? (
-              <p className="text-xs text-text-muted">{t('places.stale.hint')}</p>
-            ) : null}
-
             <Card className={styles.tableCard}>
               <AsyncBoundary
-                status={activeQuery.status}
-                error={activeQuery.error}
+                status={listQuery.status}
+                error={listQuery.error}
                 data={rows}
                 isEmpty={(items) => items.length === 0}
-                onRetry={() => void activeQuery.refetch()}
+                onRetry={() => void listQuery.refetch()}
                 empty={<EmptyState />}
               >
                 {(items) => (
@@ -424,17 +479,44 @@ export default function PlaceListScreen() {
                             : 'default'
                       }
                     />
-                    <p className="border-t border-line px-4 py-3 text-xs text-text-subtle">
-                      {t('places.showing', {
-                        from: items.length === 0 ? 0 : 1,
-                        to: items.length,
-                        total: formatNumber(total, locale),
-                      })}
-                    </p>
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3">
+                      <p className="text-xs text-text-subtle">
+                        {t('places.pageInfo', { count: formatNumber(items.length, locale) })}
+                        {nextCursor === null ? ` · ${t('places.lastPage')}` : ''}
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={pageIndex === 0}
+                          onClick={() => setPageIndex((index) => Math.max(0, index - 1))}
+                        >
+                          {t('action.previous')}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={nextCursor === null}
+                          onClick={() => {
+                            setCursors((current) => {
+                              const next = current.slice(0, pageIndex + 1)
+                              next.push(nextCursor)
+                              return next
+                            })
+                            setPageIndex((index) => index + 1)
+                            setSelected([])
+                          }}
+                        >
+                          {t('action.next')}
+                        </Button>
+                      </div>
+                    </div>
                   </>
                 )}
               </AsyncBoundary>
             </Card>
+
+            <p className="text-[11px] text-text-subtle">{t('places.ratingNote')}</p>
 
             <BulkActionBar
               count={selected.length}

@@ -1,6 +1,8 @@
 export const styles = {
   toolbar: 'flex flex-wrap items-center gap-2',
   search: 'w-full max-w-xs',
+  filterInput:
+    'min-h-11 w-40 rounded-compact border border-line-strong bg-surface px-3 text-[13px] text-text placeholder:text-text-subtle',
   tableCard: 'overflow-hidden',
   cover: 'h-10 w-10 shrink-0 rounded-compact object-cover',
   coverFallback:

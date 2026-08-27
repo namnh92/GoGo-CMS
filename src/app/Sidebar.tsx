@@ -21,7 +21,15 @@ export function Sidebar() {
     enabled: can('moderation.read'),
     staleTime: 30_000,
   })
-  const pendingCount = moderation.data?.stats.pending ?? 0
+  // The queue returns four independent lists and no total, so the badge sums
+  // what is actually pending rather than reading a stat the API never sends.
+  const queue = moderation.data
+  const pendingCount = queue
+    ? queue.reviews.length +
+      queue.reports.length +
+      queue.checkins.length +
+      queue.communityPlaces.length
+    : 0
 
   const items = NAV_ITEMS.filter((item) => can(item.permission))
 
