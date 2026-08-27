@@ -14,6 +14,7 @@ const ImportListScreen = lazy(() => import('@/features/imports/importList.view')
 const ImportWizardScreen = lazy(() => import('@/features/imports/importWizard.view'))
 const ImportJobScreen = lazy(() => import('@/features/imports/jobDetail.view'))
 const ModerationQueueScreen = lazy(() => import('@/features/moderation/moderationQueue.view'))
+const SubmissionQueueScreen = lazy(() => import('@/features/submissions/submissionQueue.view'))
 const TaxonomyScreen = lazy(() => import('@/features/taxonomy/taxonomy.view'))
 const CollectionsScreen = lazy(() => import('@/features/collections/collections.view'))
 const SettingsScreen = lazy(() => import('@/features/ranking/settings.view'))
@@ -61,6 +62,7 @@ export const router = createBrowserRouter([
           { path: 'imports/new', element: <ImportWizardScreen /> },
           { path: 'imports/:jobId', element: <ImportJobScreen /> },
           { path: 'moderation', element: <ModerationQueueScreen /> },
+          { path: 'submissions', element: <SubmissionQueueScreen /> },
           { path: 'taxonomy', element: <TaxonomyScreen /> },
           { path: 'collections', element: <CollectionsScreen /> },
           { path: 'settings', element: <SettingsScreen /> },

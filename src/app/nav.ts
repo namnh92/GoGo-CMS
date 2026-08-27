@@ -49,6 +49,13 @@ export const NAV_ITEMS: NavItem[] = [
     match: (p) => p.startsWith('/moderation'),
   },
   {
+    to: '/submissions',
+    labelKey: 'nav.submissions',
+    icon: ModerationIcon,
+    permission: 'submission.read',
+    match: (p) => p.startsWith('/submissions'),
+  },
+  {
     to: '/taxonomy',
     labelKey: 'nav.taxonomy',
     icon: TaxonomyIcon,
