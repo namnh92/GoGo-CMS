@@ -1,0 +1,15 @@
+export const styles = {
+  list: 'flex flex-col gap-4',
+  pair: 'rounded-card border border-line bg-surface p-4',
+  pairHead: 'mb-3 flex flex-wrap items-center justify-between gap-2',
+  pairTitle: 'font-display text-sm font-bold text-text',
+  grid: 'grid gap-3 md:grid-cols-2',
+  side: 'rounded-compact border border-line bg-surface-muted p-3',
+  sideLabel: 'mb-1 text-[10px] font-bold uppercase tracking-wide text-text-subtle',
+  name: 'text-[13px] font-semibold text-text',
+  meta: 'mt-0.5 text-[11px] text-text-subtle',
+  moves: 'mt-3 flex flex-wrap gap-2 text-[11px] text-text-muted',
+  moveChip: 'rounded-pill bg-surface-sunken px-2 py-0.5 font-medium',
+  footer: 'mt-3 flex flex-wrap items-center justify-between gap-2',
+  hint: 'text-xs text-text-muted',
+} as const
