@@ -1,0 +1,27 @@
+export const styles = {
+  layout: 'grid gap-5 xl:grid-cols-3',
+  main: 'flex flex-col gap-5 xl:col-span-2',
+  side: 'flex flex-col gap-5',
+  weightRow: 'mb-4 last:mb-0',
+  weightHead: 'mb-1.5 flex items-center justify-between gap-2',
+  weightLabel: 'text-[13px] font-semibold text-text',
+  weightValue: 'text-[13px] font-bold tabular-nums text-coral-deep',
+  slider: 'h-1.5 w-full cursor-pointer appearance-none rounded-pill',
+  bounds: 'mt-0.5 flex justify-between text-[10px] tabular-nums text-text-subtle',
+  flagRow:
+    'flex flex-wrap items-start justify-between gap-3 border-b border-line py-3 last:border-b-0',
+  flagKey: 'font-mono text-[13px] font-semibold text-text',
+  flagDesc: 'mt-0.5 max-w-lg text-xs text-text-muted',
+  flagMeta: 'mt-1 text-[11px] text-text-subtle',
+  version: 'rounded-compact border p-3',
+  versionActive: 'border-coral/40 bg-coral-soft/40',
+  versionIdle: 'border-line',
+  versionHead: 'mb-1 flex items-center justify-between gap-2',
+  versionLabel: 'text-[13px] font-semibold text-text',
+  versionMeta: 'text-[11px] text-text-subtle',
+  providerCard: 'rounded-compact border border-line p-3',
+  providerHead: 'mb-2 flex items-center justify-between gap-2',
+  providerGrid: 'grid grid-cols-3 gap-2 text-[11px]',
+  fourEyes:
+    'flex items-start gap-2 rounded-compact border border-amber/45 bg-amber-soft px-3 py-2 text-xs text-text',
+} as const
