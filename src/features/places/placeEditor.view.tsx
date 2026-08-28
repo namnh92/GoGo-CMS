@@ -376,7 +376,10 @@ export default function PlaceEditorScreen() {
                         <div>
                           <dt className={styles.factLabel}>{t('placeEditor.priceLevel')}</dt>
                           <dd className={styles.factValue}>
-                            {detail.priceLevel == null ? '—' : '₫'.repeat(detail.priceLevel || 1)}
+                            {/* The glyphs alone are hard to count at a glance. */}
+                            {detail.priceLevel == null
+                              ? '—'
+                              : `${'₫'.repeat(detail.priceLevel || 1)} · ${detail.priceLevel}/4`}
                           </dd>
                         </div>
                         <div>

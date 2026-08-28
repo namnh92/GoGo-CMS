@@ -7,7 +7,7 @@ export const styles = {
   kpiWindow: 'mt-1 block text-[11px] text-text-subtle',
   trendRow: 'flex items-center gap-3 border-b border-line py-2 last:border-b-0',
   trendDay: 'w-24 shrink-0 text-[12px] tabular-nums text-text-muted',
-  trendBar: 'h-2.5 flex-1 overflow-hidden rounded-pill bg-surface-sunken',
+  trendBar: 'block h-2.5 w-full overflow-hidden rounded-pill bg-surface-sunken',
   trendFill: 'block h-full rounded-pill bg-coral',
   trendValue: 'w-32 shrink-0 text-right text-[12px] tabular-nums text-text',
   queryRow:
