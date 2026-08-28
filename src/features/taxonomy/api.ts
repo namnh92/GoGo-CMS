@@ -2,11 +2,19 @@ import { apiFetch, apiFetchParsed } from '@/shared/api/client'
 import { taxonomyListSchema, type TaxonomyKind } from '@/shared/api/contracts'
 
 /**
- * ⚠ Not yet in openapi/gogo.v1.yaml. The public `GET /taxonomies` is not a
- * substitute: the CMS needs usage counts and deactivated keys too.
+ * `cmsListTaxonomies`. Unfiltered it returns inactive keys too — the console is
+ * the only place a switched-off key can be found and switched back on, so the
+ * default must not hide it. The public `GET /taxonomies` is not a substitute:
+ * it returns neither the inactive keys nor `usageCount`.
  */
-export function fetchTaxonomies(signal?: AbortSignal) {
-  return apiFetchParsed(taxonomyListSchema, '/cms/taxonomies', { signal })
+export function fetchTaxonomies(
+  filters: { kind?: TaxonomyKind; isActive?: boolean } = {},
+  signal?: AbortSignal,
+) {
+  return apiFetchParsed(taxonomyListSchema, '/cms/taxonomies', {
+    query: { kind: filters.kind, isActive: filters.isActive },
+    signal,
+  })
 }
 
 export function createTaxonomy(input: {

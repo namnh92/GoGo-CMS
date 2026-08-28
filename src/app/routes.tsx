@@ -18,6 +18,8 @@ const SubmissionQueueScreen = lazy(() => import('@/features/submissions/submissi
 const TaxonomyScreen = lazy(() => import('@/features/taxonomy/taxonomy.view'))
 const CollectionsScreen = lazy(() => import('@/features/collections/collections.view'))
 const SettingsScreen = lazy(() => import('@/features/ranking/settings.view'))
+const AuditLogScreen = lazy(() => import('@/features/audit/auditLog.view'))
+const SearchQualityScreen = lazy(() => import('@/features/search/searchQuality.view'))
 const ForbiddenScreen = lazy(() => import('@/features/errors/forbidden.view'))
 const NotFoundScreen = lazy(() => import('@/features/errors/notFound.view'))
 
@@ -66,6 +68,8 @@ export const router = createBrowserRouter([
           { path: 'taxonomy', element: <TaxonomyScreen /> },
           { path: 'collections', element: <CollectionsScreen /> },
           { path: 'settings', element: <SettingsScreen /> },
+          { path: 'search-quality', element: <SearchQualityScreen /> },
+          { path: 'audit', element: <AuditLogScreen /> },
           { path: '403', element: <ForbiddenScreen /> },
           { path: '*', element: <NotFoundScreen /> },
         ],

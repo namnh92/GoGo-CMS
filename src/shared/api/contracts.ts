@@ -4,15 +4,16 @@ import { z } from 'zod'
  * Boundary schemas for the `/v1/cms/*` surface.
  *
  * Request bodies follow `openapi/gogo.v1.yaml` exactly (see each feature's
- * api.ts). Responses are validated here because the CMS half of the spec
- * documents most GETs with a prose description and no schema — see
- * `docs/adr/0002-boundary-validation.md`.
+ * api.ts). Responses are validated here because most of the CMS half of the
+ * spec still documents its GETs with a prose description and no schema — see
+ * `docs/adr/0002-boundary-validation.md`. GoGo-BE#175 filled the schemas for
+ * the seven operations the console reads most, and the shapes below now mirror
+ * those component schemas rather than guessing.
  *
- * Every shape below was read off GoGo-BE's controllers and services rather
- * than assumed, so several are leaner and less tidy than a DTO would be:
- * `/cms/places/stale` and `/cms/places/duplicates` return bare arrays of raw
- * snake_case SQL rows. The feature `api.ts` normalizes those into the camelCase
- * the UI uses, so the awkwardness stops at the boundary.
+ * Several shapes are leaner and less tidy than a DTO would be because they are
+ * the query result: `/cms/places/stale` and `/cms/places/duplicates` return
+ * bare arrays of raw snake_case SQL rows. The feature `api.ts` normalizes those
+ * into the camelCase the UI uses, so the awkwardness stops at the boundary.
  *
  * Optional fields are `nullish()` so a backend that omits one degrades a cell
  * to "—" instead of blanking the screen.
@@ -31,64 +32,97 @@ export const placeStatusSchema = z.enum([
 ])
 export type PlaceStatus = z.infer<typeof placeStatusSchema>
 
+/** The four units a price may be written with (`cmsAddPlacePrice`). */
 export const priceUnitSchema = z.enum(['per_person', 'per_item', 'per_hour', 'per_night'])
 export type PriceUnit = z.infer<typeof priceUnitSchema>
 
-/** Ratings are stored and shown separately — never merged into one number. */
-export const placeRatingsSchema = z.object({
-  googleRating: z.number().nullish(),
-  googleRatingCount: z.number().int().nullish(),
-  gogoRating: z.number().nullish(),
-  gogoRatingCount: z.number().int().nullish(),
-  compositeScore: z.number().nullish(),
+/** `{ id, displayName }` — the whole of what audit-adjacent reads say about an admin. */
+export const adminRefSchema = z.object({
+  id: z.string(),
+  displayName: z.string().nullish(),
 })
+export type AdminRef = z.infer<typeof adminRefSchema>
 
+/**
+ * `CmsPlaceDetail.ratings` — provider and GoGo kept apart, never averaged.
+ * They measure different populations, so a blended number would describe
+ * neither (FR-INGEST-006). The composite score the spec also mentions is not
+ * computed anywhere yet, so there is no field for it and the UI shows none.
+ */
+export const placeRatingsSchema = z.object({
+  provider: z.object({ rating: z.number().nullish(), count: z.number().int().default(0) }),
+  gogo: z.object({ rating: z.number().nullish(), count: z.number().int().default(0) }),
+})
+export type PlaceRatings = z.infer<typeof placeRatingsSchema>
+
+/** Money is integer minor units; `currency` travels with it, never assumed. */
 export const placePriceSchema = z.object({
-  id: z.string().nullish(),
+  id: z.string(),
   priceMin: z.number().int(),
   priceMax: z.number().int(),
-  currency: z.string().default('VND'),
-  unit: priceUnitSchema.default('per_person'),
-  observedAt: z.string().nullish(),
-  observedBy: z.string().nullish(),
+  currency: z.string(),
+  /** Free-form on read — labels resolve via i18n and fall back to the key. */
+  unit: z.string(),
+  source: z.string(),
+  confidence: z.number(),
+  verifiedAt: z.string().nullish(),
+  createdAt: z.string().nullish(),
 })
 export type PlacePrice = z.infer<typeof placePriceSchema>
 
+/** `dayOfWeek` follows `getUTCDay()`: 0 = Sunday, matching BE's `vnDayMinute()`. */
 export const placeHourSchema = z.object({
   dayOfWeek: z.number().int().min(0).max(6),
   openMinute: z.number().int().min(0).max(1439),
   closeMinute: z.number().int().min(0).max(1439),
   isOvernight: z.boolean().default(false),
+  source: z.string(),
+  verifiedAt: z.string().nullish(),
 })
 export type PlaceHour = z.infer<typeof placeHourSchema>
 
-export const placeSourceSchema = z.object({
-  kind: z.string(),
-  label: z.string().nullish(),
-  url: z.string().nullish(),
-  fetchedAt: z.string().nullish(),
-  attribution: z.string().nullish(),
-})
+/** Write body for `PUT /cms/places/{id}/hours` — narrower than what is read back. */
+export type PlaceHourInput = Pick<
+  PlaceHour,
+  'dayOfWeek' | 'openMinute' | 'closeMinute' | 'isOvernight'
+>
 
-export const placeMediaSchema = z.object({
+/** Provider facts must be shown with their attribution (FR-INGEST-014). */
+export const placeSourceSchema = z.object({
   id: z.string(),
-  url: z.string(),
-  source: z.string().nullish(),
+  provider: z.string(),
+  externalId: z.string(),
+  url: z.string().nullish(),
   attribution: z.string().nullish(),
+  fetchedAt: z.string().nullish(),
 })
+export type PlaceSource = z.infer<typeof placeSourceSchema>
 
 /**
- * `CmsPlaceListItem` in the spec — the only CMS response with a real schema
- * today (GoGo-BE#141). Deliberately lean: the list is a keyset-paged index,
- * not a projection of the whole place. Anything richer belongs on a detail
- * endpoint, which does not exist yet.
+ * Media is a storage key plus its moderation state — not a display URL. The
+ * console shows what exists and whether it passed moderation; it cannot render
+ * the bytes until a signed-read endpoint exists.
+ */
+export const placeMediaSchema = z.object({
+  id: z.string(),
+  storageKey: z.string(),
+  width: z.number().int().nullish(),
+  height: z.number().int().nullish(),
+  sortOrder: z.number().int().default(0),
+  moderation: z.string(),
+})
+export type PlaceMedia = z.infer<typeof placeMediaSchema>
+
+/**
+ * `CmsPlaceListItem` — deliberately lean: the list is a keyset-paged index,
+ * not a projection of the whole place. `rating` here is the provider figure
+ * the list sorts on; the detail view keeps the two rating sources apart.
  */
 export const cmsPlaceSchema = z.object({
   id: z.string(),
   name: z.string(),
   status: placeStatusSchema,
   areaKey: z.string().nullish(),
-  /** One blended figure on the list; the detail view keeps the sources apart. */
   rating: z.number().nullish(),
   confidence: z.number(),
   freshnessCheckedAt: z.string().nullish(),
@@ -97,29 +131,35 @@ export const cmsPlaceSchema = z.object({
 })
 export type CmsPlace = z.infer<typeof cmsPlaceSchema>
 
-/**
- * ⚠ Aspirational. `GET /cms/places/{id}` does not exist in GoGo-BE yet — only
- * `PATCH` does — so this shape is what the editor screen needs, agreed with
- * nobody. It is served by MSW today and tracked in the README; do not treat it
- * as contract until the endpoint lands.
- */
-export const cmsPlaceDetailSchema = cmsPlaceSchema.extend({
+/** `CmsPlaceDetail` (GoGo-BE#157) — every field `cmsUpdatePlace` accepts, plus relations. */
+export const cmsPlaceDetailSchema = z.object({
+  id: z.string(),
+  name: z.string(),
   description: z.string().nullish(),
+  status: placeStatusSchema,
   addressText: z.string().nullish(),
+  areaKey: z.string().nullish(),
   lat: z.number().nullish(),
   lng: z.number().nullish(),
+  phone: z.string().nullish(),
+  website: z.string().nullish(),
   avgVisitMinutes: z.number().int().nullish(),
-  isLodging: z.boolean().nullish(),
+  suitability: z.record(z.number()).default({}),
+  isLodging: z.boolean().default(false),
   curatedRank: z.number().int().nullish(),
-  taxonomyKeys: z.array(z.string()).default([]),
+  confidence: z.number().default(0),
+  priceLevel: z.number().int().nullish(),
+  ratings: placeRatingsSchema,
   taxonomyIds: z.array(z.string()).default([]),
-  ratings: placeRatingsSchema.default({}),
-  sourceCount: z.number().int().default(0),
-  updatedBy: z.string().nullish(),
+  /** Sent alongside the ids so a chip has a label; writes still send ids. */
+  taxonomyKeys: z.array(z.string()).default([]),
   hours: z.array(placeHourSchema).default([]),
   prices: z.array(placePriceSchema).default([]),
   sources: z.array(placeSourceSchema).default([]),
   media: z.array(placeMediaSchema).default([]),
+  freshnessCheckedAt: z.string().nullish(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
 })
 export type CmsPlaceDetail = z.infer<typeof cmsPlaceDetailSchema>
 
@@ -187,20 +227,23 @@ export const taxonomyKindSchema = z.enum([
   'accessibility',
   'spending_style',
   'suitability',
+  'checkin_tag',
 ])
 export type TaxonomyKind = z.infer<typeof taxonomyKindSchema>
 
 export const taxonomySynonymSchema = z.object({
-  id: z.string().nullish(),
+  id: z.string(),
   term: z.string(),
   locale: z.string().default('vi'),
 })
+export type TaxonomySynonym = z.infer<typeof taxonomySynonymSchema>
 
 /**
- * ⚠ Aspirational. There is no `GET /cms/taxonomies` — only the write side
- * exists. The public `GET /taxonomies` is not a substitute: the CMS needs
- * deactivated keys and usage counts, and that endpoint returns neither.
- * Served by MSW today; tracked in the README.
+ * `GET /cms/taxonomies` (GoGo-BE#159) — a bare array. Unfiltered it returns
+ * active *and* inactive keys on purpose: the CMS is the only place a
+ * deactivated key can be seen and switched back on, so hiding it by default
+ * would make it unreachable. `usageCount` is what makes the "never delete a
+ * referenced key" rule checkable from the console.
  */
 export const taxonomySchema = z.object({
   id: z.string(),
@@ -214,19 +257,12 @@ export const taxonomySchema = z.object({
   synonyms: z.array(taxonomySynonymSchema).default([]),
 })
 export type Taxonomy = z.infer<typeof taxonomySchema>
-export const taxonomyListSchema = z.object({ items: z.array(taxonomySchema).default([]) })
+export const taxonomyListSchema = z.array(taxonomySchema)
 
 export const collectionStatusSchema = z.enum(['draft', 'scheduled', 'published', 'archived'])
 export type CollectionStatus = z.infer<typeof collectionStatusSchema>
 
-/**
- * `GET /cms/collections` returns a bare array of headers — `CmsContentService`
- * selects the collection row and nothing else. The ordered place list is
- * writable (`PUT .../items`) but **not readable**: there is no endpoint that
- * returns the current items, so the editor can replace the list without being
- * able to see it. Tracked in the README; the screen says so rather than
- * showing an empty list as if it were the truth.
- */
+/** `GET /cms/collections` returns a bare array of headers. */
 export const collectionSchema = z.object({
   id: z.string(),
   slug: z.string(),
@@ -238,6 +274,28 @@ export const collectionSchema = z.object({
 })
 export type Collection = z.infer<typeof collectionSchema>
 export const collectionListSchema = z.array(collectionSchema)
+
+/**
+ * `GET /cms/collections/{id}/items` (GoGo-BE#161). `PUT .../items` replaces the
+ * whole list, so reading the current one first is not a convenience — writing
+ * back a list you could not read is how a curated collection gets erased.
+ *
+ * Each item carries the place's `status` so a curator sees that a pinned place
+ * has left publication, instead of a silently empty slot.
+ */
+export const collectionItemSchema = z.object({
+  position: z.number().int(),
+  placeId: z.string(),
+  name: z.string(),
+  addressText: z.string().nullish(),
+  status: placeStatusSchema,
+})
+export type CollectionItem = z.infer<typeof collectionItemSchema>
+
+export const collectionItemsSchema = z.object({
+  collectionId: z.string(),
+  items: z.array(collectionItemSchema).default([]),
+})
 
 /**
  * `GET /cms/moderation` — four independent pending lists, straight from
@@ -271,10 +329,9 @@ export const moderationCheckinSchema = z.object({
 export type ModerationCheckin = z.infer<typeof moderationCheckinSchema>
 
 /**
- * The community tab lists PLACES in `community_submitted`, not submissions.
- * `POST /cms/place-submissions/{id}/decide` wants a submission id, and no CMS
- * endpoint hands one out — so this tab can show the backlog but cannot act on
- * it yet. Tracked in the README.
+ * The community tab lists PLACES in `community_submitted`, not submissions —
+ * deciding one needs a submission id, which `GET /cms/place-submissions`
+ * hands out (PI-CMS-007, `features/submissions`). This tab links there.
  */
 export const moderationCommunityPlaceSchema = z.object({
   id: z.string(),
@@ -293,48 +350,88 @@ export type ModerationQueue = z.infer<typeof moderationQueueSchema>
 
 export type ModerationKind = 'review' | 'report' | 'checkin' | 'community'
 
-export const rankingConfigStatusSchema = z.enum(['draft', 'approved', 'active', 'superseded'])
+export const rankingConfigKeySchema = z.enum(['suggestion.scoring', 'search.ranking'])
+export type RankingConfigKey = z.infer<typeof rankingConfigKeySchema>
 
-/** ⚠ Aspirational — `GET /cms/ranking-configs` does not exist (write only). */
+export const rankingConfigStatusSchema = z.enum(['draft', 'approved', 'active', 'rolled_back'])
+export type RankingConfigStatus = z.infer<typeof rankingConfigStatusSchema>
+
+/**
+ * `GET /cms/ranking-configs` (GoGo-BE#160). Both names travel with the version
+ * because four-eyes is only checkable if the console can show that the
+ * approver and the drafter are different accounts.
+ *
+ * `bounds` are the engine's own limits, sent per config so a slider cannot
+ * drift from what the server will accept.
+ */
+export const rankingBoundSchema = z.object({ min: z.number(), max: z.number() })
+export type RankingBound = z.infer<typeof rankingBoundSchema>
+
 export const rankingConfigSchema = z.object({
   id: z.string(),
-  key: z.enum(['suggestion.scoring', 'search.ranking']),
+  key: rankingConfigKeySchema,
   version: z.number().int(),
   status: rankingConfigStatusSchema,
   weights: z.record(z.number()).default({}),
-  createdBy: z.string().nullish(),
-  createdAt: z.string().nullish(),
-  approvedBy: z.string().nullish(),
-  approvedAt: z.string().nullish(),
+  bounds: z.record(rankingBoundSchema).default({}),
+  createdBy: adminRefSchema,
+  approvedBy: adminRefSchema.nullish(),
   activatedAt: z.string().nullish(),
+  createdAt: z.string(),
 })
 export type RankingConfig = z.infer<typeof rankingConfigSchema>
+export const rankingConfigListSchema = z.array(rankingConfigSchema)
 
-export const rankingBoundSchema = z.object({
-  weight: z.string(),
-  min: z.number(),
-  max: z.number(),
-  step: z.number().default(0.01),
-  labelKey: z.string().nullish(),
+/**
+ * `GET /cms/ranking-configs/{id}/evaluate` — replays a candidate against the
+ * immutable snapshots stored with past suggestion runs. Nothing is written and
+ * no user is exposed; runs where no candidate survives the hard filters are
+ * reported in `skipped` rather than counted as agreement, which would flatter
+ * every candidate config.
+ */
+export const rankingEvaluationSchema = z.object({
+  configVersion: z.number().int(),
+  baselineVersion: z.string(),
+  runsEvaluated: z.number().int(),
+  metrics: z.object({
+    top1Agreement: z.number(),
+    top5Overlap: z.number(),
+    newZeroResults: z.number().int(),
+    meanCandidateCount: z.number(),
+  }),
+  skipped: z.array(z.object({ runId: z.string(), reason: z.string() })).default([]),
 })
+export type RankingEvaluation = z.infer<typeof rankingEvaluationSchema>
 
-export const rankingConfigListSchema = z.object({
-  items: z.array(rankingConfigSchema).default([]),
-  bounds: z.array(rankingBoundSchema).default([]),
-})
-
-/** ⚠ Aspirational — `GET /cms/feature-flags` does not exist (write only). */
+/** `GET /cms/feature-flags` (GoGo-BE#160) — a kill switch nobody can read is not a kill switch. */
 export const featureFlagSchema = z.object({
   key: z.string(),
   enabled: z.boolean(),
+  payload: z.unknown().nullish(),
   description: z.string().nullish(),
-  rolloutPercent: z.number().nullish(),
-  isKillSwitch: z.boolean().default(false),
-  updatedBy: z.string().nullish(),
-  updatedAt: z.string().nullish(),
+  updatedBy: adminRefSchema.nullish(),
+  updatedAt: z.string(),
 })
 export type FeatureFlag = z.infer<typeof featureFlagSchema>
-export const featureFlagListSchema = z.object({ items: z.array(featureFlagSchema).default([]) })
+export const featureFlagListSchema = z.array(featureFlagSchema)
+
+/**
+ * `GET /cms/experiments` / `PUT /cms/experiments/{key}`.
+ *
+ * Variant names are ranking config versions and only an **approved** version is
+ * honoured — an experiment must not become a way to put unreviewed weights in
+ * front of users. Shares may sum to less than 1; the remainder is control.
+ */
+export const experimentSchema = z.object({
+  key: z.string(),
+  description: z.string().nullish(),
+  enabled: z.boolean(),
+  variants: z.record(z.number()).default({}),
+  controlShare: z.number().default(1),
+  updatedAt: z.string().nullish(),
+})
+export type Experiment = z.infer<typeof experimentSchema>
+export const experimentListSchema = z.array(experimentSchema)
 
 /**
  * `GET /cms/ops/kpis` — exactly what `CmsOpsService#kpis` returns. Six
@@ -368,17 +465,86 @@ export const opsKpisSchema = z.object({
 })
 export type OpsKpis = z.infer<typeof opsKpisSchema>
 
-/** ⚠ Aspirational — no audit read endpoint exists yet (GoGo-BE#148 writes them). */
+/**
+ * `GET /cms/search-analytics` — built from a daily aggregate, never a
+ * per-request log. A term is named only once at least 5 searches produced it;
+ * below that floor the rows are still counted in `hiddenBelowFloor` but the
+ * text is withheld, because a query one person typed is that person's query.
+ */
+export const searchAnalyticsSchema = z.object({
+  days: z.number().int(),
+  totals: z.object({
+    searches: z.number().int(),
+    zeroResults: z.number().int(),
+    zeroResultRate: z.number(),
+    avgResults: z.number(),
+    avgLatencyMs: z.number().int(),
+  }),
+  trend: z
+    .array(
+      z.object({
+        day: z.string(),
+        searches: z.number().int(),
+        zeroResults: z.number().int(),
+        zeroResultRate: z.number(),
+      }),
+    )
+    .default([]),
+  worstQueries: z
+    .array(
+      z.object({
+        query: z.string(),
+        searches: z.number().int(),
+        zeroResults: z.number().int(),
+        zeroResultRate: z.number(),
+      }),
+    )
+    .default([]),
+  hiddenBelowFloor: z.object({
+    terms: z.number().int(),
+    searches: z.number().int(),
+    zeroResults: z.number().int(),
+  }),
+})
+export type SearchAnalytics = z.infer<typeof searchAnalyticsSchema>
+
+/**
+ * `GET /cms/audit` and `GET /cms/places/{id}/audit` (GoGo-BE#158).
+ *
+ * `ipAddress` is returned only to ops_admin and above — it is staff PII kept to
+ * tell "that admin did it" apart from "that admin's account was taken over".
+ * For every other role the field is absent, which is not missing data: the UI
+ * must not render an empty cell where a role is simply not entitled to look.
+ *
+ * The log is immutable (FR-CMS-008): there is no write path here, by design.
+ */
+export const auditActorTypeSchema = z.enum(['admin', 'user', 'system'])
+export const authorizationPathSchema = z.enum(['exact_role', 'rank_read', 'super_admin_bypass'])
+export type AuthorizationPath = z.infer<typeof authorizationPathSchema>
+
 export const auditEntrySchema = z.object({
   id: z.string(),
-  actor: z.string(),
   action: z.string(),
-  at: z.string(),
-  before: z.record(z.unknown()).nullish(),
-  after: z.record(z.unknown()).nullish(),
+  actorType: auditActorTypeSchema,
+  actorId: z.string().nullish(),
+  actorRole: adminRoleSchema.nullish(),
+  resourceType: z.string(),
+  resourceId: z.string(),
+  occurredAt: z.string(),
+  diff: z.unknown().nullish(),
+  reason: z.string().nullish(),
+  breakGlass: z.boolean().default(false),
+  requestId: z.string().nullish(),
+  ipAddress: z.string().nullish(),
+  authorizationPath: authorizationPathSchema.nullish(),
 })
 export type AuditEntry = z.infer<typeof auditEntrySchema>
-export const auditListSchema = z.object({ items: z.array(auditEntrySchema).default([]) })
+
+export const auditPageSchema = z.object({
+  items: z.array(auditEntrySchema).default([]),
+  nextCursor: z.string().nullable(),
+})
+export type AuditPage = z.infer<typeof auditPageSchema>
 
 /**
  * PI-CMS-007 — `GET /cms/place-submissions`.

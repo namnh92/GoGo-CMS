@@ -80,11 +80,23 @@ export default function DashboardScreen() {
                     })}
                     tone={successRatio != null && successRatio >= 0.85 ? 'positive' : 'negative'}
                   />
-                  <KpiCard
-                    label={t('dashboard.zeroResult.title')}
-                    value={formatNumber(kpis.zeroResultsLast7d, locale)}
-                    sub={`${t('dashboard.window7d')} · ${t('dashboard.zeroResult.hint')}`}
-                  />
+                  {/*
+                    The count alone has no denominator; the search-quality
+                    console has the rate it belongs to, so this card points there
+                    instead of standing on its own.
+                  */}
+                  <button
+                    type="button"
+                    className="text-left"
+                    disabled={!can('searchAnalytics.read')}
+                    onClick={() => navigate('/search-quality')}
+                  >
+                    <KpiCard
+                      label={t('dashboard.zeroResult.title')}
+                      value={formatNumber(kpis.zeroResultsLast7d, locale)}
+                      sub={`${t('dashboard.window7d')} · ${t('searchQuality.open')}`}
+                    />
+                  </button>
                   <KpiCard
                     label={t('dashboard.budget.title')}
                     value={formatNumber(kpis.currentPlansOverBudget, locale)}

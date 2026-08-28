@@ -3,6 +3,7 @@ import type { AdminRole, CollectionStatus, PlaceStatus } from '@/shared/api/cont
 import type { ImportRow } from '@/shared/api/contracts-import'
 import {
   auditEntries,
+  collectionItems,
   collections,
   decidedSubmissions,
   duplicateRows,
@@ -11,10 +12,12 @@ import {
   importRows,
   moderationQueue,
   opsKpis,
+  experiments,
   placeSubmissions,
   places,
-  rankingBounds,
   rankingConfigs,
+  rankingEvaluation,
+  searchAnalytics,
   taxonomies,
 } from './fixtures'
 
@@ -35,6 +38,8 @@ const db = {
   duplicates: duplicateRows.map((row) => ({ ...row })),
   moderation: JSON.parse(JSON.stringify(moderationQueue)) as typeof moderationQueue,
   submissions: placeSubmissions.map((item) => ({ ...item })),
+  experiments: experiments.map((item) => ({ ...item })),
+  items: JSON.parse(JSON.stringify(collectionItems)) as typeof collectionItems,
   decidedSubmissions: decidedSubmissions.map((item) => ({ ...item })),
   /** Counts break-glass calls so the burst limit is reachable in dev. */
   takedowns: 0,
@@ -51,6 +56,34 @@ function envelope(status: number, code: string, message: string) {
     },
     { status },
   )
+}
+
+/*
+ * The mocked signed-in admin. Set at login so the mock can behave the way the
+ * server does about *who* is asking: staff IP is only returned to ops_admin and
+ * above, and four-eyes refuses the account that drafted a config.
+ */
+let mockRole: AdminRole = 'super_admin'
+let mockDisplayName = 'ban'
+
+const HINT_KEY = 'gogo.cms.session-hint'
+
+/**
+ * Who the mock is answering. Read from the session hint rather than kept in
+ * module state, because a page reload restarts the worker while the session
+ * survives — and the mock has to keep behaving per role across one: staff IP
+ * in the audit log is ops_admin and above, and four-eyes refuses the account
+ * that drafted a config.
+ */
+function currentActor(): { role: AdminRole; displayName: string } {
+  try {
+    const raw = window.localStorage.getItem(HINT_KEY)
+    const hint = raw ? (JSON.parse(raw) as { role?: AdminRole; displayName?: string }) : null
+    if (hint?.role) return { role: hint.role, displayName: hint.displayName ?? mockDisplayName }
+  } catch {
+    // A locked-down profile falls back to the last login seen.
+  }
+  return { role: mockRole, displayName: mockDisplayName }
 }
 
 /** Dev accounts. `role` is chosen by the local part of the email. */
@@ -70,6 +103,8 @@ export const handlers = [
     if (!body.totp) return envelope(401, 'MFA_REQUIRED', 'totp required')
     if (!/^\d{6}$/.test(body.totp)) return envelope(401, 'MFA_REQUIRED', 'totp invalid')
     const role = roleFromEmail(body.email)
+    mockRole = role
+    mockDisplayName = body.email.split('@')[0] ?? 'ban'
     return HttpResponse.json(
       {
         accessToken: 'mock-access-token',
@@ -96,7 +131,21 @@ export const handlers = [
           (place.addressText ?? '').toLowerCase().includes(q),
       )
     }
-    return HttpResponse.json({ items, total: items.length, nextCursor: null })
+    // `GET /cms/places` returns the lean list item, not the detail row.
+    return HttpResponse.json({
+      items: items.map((place) => ({
+        id: place.id,
+        name: place.name,
+        status: place.status,
+        areaKey: place.areaKey,
+        rating: place.ratings.provider.rating ?? null,
+        confidence: place.confidence,
+        freshnessCheckedAt: place.freshnessCheckedAt,
+        createdAt: place.createdAt,
+        updatedAt: place.updatedAt,
+      })),
+      nextCursor: null,
+    })
   }),
 
   // Raw SQL rows: bare array, snake_case, four columns.
@@ -115,7 +164,41 @@ export const handlers = [
 
   http.get(`${BASE}/cms/places/duplicates`, () => HttpResponse.json(db.duplicates)),
 
-  http.get(`${BASE}/cms/places/:id/audit`, () => HttpResponse.json({ items: auditEntries })),
+  http.get(`${BASE}/cms/places/:id/audit`, ({ params }) =>
+    HttpResponse.json({
+      items: auditEntries.filter((entry) => entry.resourceId === params.id),
+      nextCursor: null,
+    }),
+  ),
+
+  /*
+   * `GET /cms/audit`. The mock reproduces the two behaviours the UI must
+   * handle: `breakGlass=true` narrows to emergency takedowns, and `ipAddress`
+   * is only present for ops_admin and above — for anyone else the field is
+   * absent rather than empty.
+   */
+  http.get(`${BASE}/cms/audit`, ({ request }) => {
+    const url = new URL(request.url)
+    const breakGlass = url.searchParams.get('breakGlass') === 'true'
+    const resourceType = url.searchParams.get('resourceType')
+    const action = url.searchParams.get('action')
+    const actorId = url.searchParams.get('actorId')
+    const { role } = currentActor()
+    const canSeeIp = role === 'ops_admin' || role === 'super_admin'
+
+    let items = auditEntries
+    if (breakGlass) items = items.filter((entry) => entry.breakGlass)
+    if (resourceType) items = items.filter((entry) => entry.resourceType === resourceType)
+    if (action) items = items.filter((entry) => entry.action.includes(action))
+    if (actorId) items = items.filter((entry) => entry.actorId === actorId)
+
+    return HttpResponse.json({
+      items: items.map(({ ipAddress, ...entry }) =>
+        canSeeIp && ipAddress ? { ...entry, ipAddress } : entry,
+      ),
+      nextCursor: null,
+    })
+  }),
 
   http.get(`${BASE}/cms/places/:id`, ({ params }) => {
     const place = db.places.find((item) => item.id === params.id)
@@ -128,7 +211,6 @@ export const handlers = [
     if (!place) return envelope(404, 'NOT_FOUND', 'place not found')
     Object.assign(place, await request.json())
     place.updatedAt = new Date().toISOString()
-    place.updatedBy = 'ban'
     return HttpResponse.json(place)
   }),
 
@@ -143,9 +225,13 @@ export const handlers = [
   http.put(`${BASE}/cms/places/:id/hours`, async ({ params, request }) => {
     const place = db.places.find((item) => item.id === params.id)
     if (!place) return envelope(404, 'NOT_FOUND', 'place not found')
-    const body = (await request.json()) as { hours: typeof place.hours }
-    place.hours = body.hours
-    place.freshnessCheckedAt = new Date().toISOString()
+    const body = (await request.json()) as {
+      hours: Omit<(typeof place.hours)[number], 'source' | 'verifiedAt'>[]
+    }
+    // The server stamps provenance; the client never sends it.
+    const verifiedAt = new Date().toISOString()
+    place.hours = body.hours.map((hour) => ({ ...hour, source: 'editor', verifiedAt }))
+    place.freshnessCheckedAt = verifiedAt
     return HttpResponse.json(place)
   }),
 
@@ -160,9 +246,11 @@ export const handlers = [
         priceMin: body.priceMin,
         priceMax: body.priceMax,
         currency: 'VND',
-        unit: body.unit as (typeof place.prices)[number]['unit'],
-        observedAt: new Date().toISOString(),
-        observedBy: 'ban',
+        unit: body.unit,
+        source: 'editor',
+        confidence: 1,
+        verifiedAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
       },
     ]
     return HttpResponse.json(place, { status: 201 })
@@ -187,7 +275,16 @@ export const handlers = [
     return HttpResponse.json({ merged: true }, { status: 201 })
   }),
 
-  http.get(`${BASE}/cms/taxonomies`, () => HttpResponse.json({ items: db.taxonomies })),
+  // A bare array, and inactive keys are included unless asked otherwise.
+  http.get(`${BASE}/cms/taxonomies`, ({ request }) => {
+    const url = new URL(request.url)
+    const kind = url.searchParams.get('kind')
+    const isActive = url.searchParams.get('isActive')
+    let items = db.taxonomies
+    if (kind) items = items.filter((item) => item.kind === kind)
+    if (isActive != null) items = items.filter((item) => item.isActive === (isActive === 'true'))
+    return HttpResponse.json(items)
+  }),
 
   http.post(`${BASE}/cms/taxonomies`, async ({ request }) => {
     const body = (await request.json()) as {
@@ -220,7 +317,14 @@ export const handlers = [
     const taxonomy = db.taxonomies.find((item) => item.id === params.id)
     if (!taxonomy) return envelope(404, 'NOT_FOUND', 'taxonomy not found')
     const body = (await request.json()) as { term: string; locale?: string }
-    taxonomy.synonyms = [...taxonomy.synonyms, { term: body.term, locale: body.locale ?? 'vi' }]
+    taxonomy.synonyms = [
+      ...taxonomy.synonyms,
+      {
+        id: `syn-${taxonomy.id}-${taxonomy.synonyms.length + 1}`,
+        term: body.term,
+        locale: body.locale ?? 'vi',
+      },
+    ]
     return HttpResponse.json(taxonomy, { status: 201 })
   }),
 
@@ -253,13 +357,32 @@ export const handlers = [
     return HttpResponse.json(collection)
   }),
 
-  // Write-only on the real API too: nothing reads the item list back, so the
-  // mock does not pretend to store it either.
+  http.get(`${BASE}/cms/collections/:id/items`, ({ params }) => {
+    const collection = db.collections.find((item) => item.id === params.id)
+    if (!collection) return envelope(404, 'NOT_FOUND', 'collection not found')
+    return HttpResponse.json({
+      collectionId: collection.id,
+      items: db.items[collection.id] ?? [],
+    })
+  }),
+
+  // Replaces the whole list, exactly like the real endpoint — which is why the
+  // read above has to exist for the write to be safe.
   http.put(`${BASE}/cms/collections/:id/items`, async ({ params, request }) => {
     const collection = db.collections.find((item) => item.id === params.id)
     if (!collection) return envelope(404, 'NOT_FOUND', 'collection not found')
     const body = (await request.json()) as { placeIds: string[] }
-    return HttpResponse.json({ id: collection.id, count: body.placeIds.length })
+    db.items[collection.id] = body.placeIds.map((placeId, position) => {
+      const place = db.places.find((item) => item.id === placeId)
+      return {
+        position,
+        placeId,
+        name: place?.name ?? placeId,
+        addressText: place?.addressText ?? null,
+        status: place?.status ?? ('draft' as PlaceStatus),
+      }
+    })
+    return HttpResponse.json({ count: body.placeIds.length })
   }),
 
   http.get(`${BASE}/cms/moderation`, () => HttpResponse.json(db.moderation)),
@@ -330,9 +453,55 @@ export const handlers = [
     return HttpResponse.json({ decided: true }, { status: 201 })
   }),
 
-  http.get(`${BASE}/cms/ranking-configs`, () =>
-    HttpResponse.json({ items: db.configs, bounds: rankingBounds }),
-  ),
+  http.get(`${BASE}/cms/ranking-configs`, ({ request }) => {
+    const url = new URL(request.url)
+    const key = url.searchParams.get('key')
+    const status = url.searchParams.get('status')
+    let items = db.configs
+    if (key) items = items.filter((config) => config.key === key)
+    if (status) items = items.filter((config) => config.status === status)
+    return HttpResponse.json(items)
+  }),
+
+  http.get(`${BASE}/cms/ranking-configs/:id/evaluate`, ({ params }) => {
+    const config = db.configs.find((item) => item.id === params.id)
+    if (!config) return envelope(404, 'NOT_FOUND', 'config not found')
+    return HttpResponse.json({ ...rankingEvaluation, configVersion: config.version })
+  }),
+
+  http.get(`${BASE}/cms/experiments`, () => HttpResponse.json(db.experiments)),
+
+  http.put(`${BASE}/cms/experiments/:key`, async ({ params, request }) => {
+    const body = (await request.json()) as {
+      enabled: boolean
+      variants: Record<string, number>
+      description?: string
+    }
+    const total = Object.values(body.variants).reduce((sum, share) => sum + share, 0)
+    // The real service refuses over-allocation rather than dropping a variant.
+    if (total > 1)
+      return envelope(400, 'VARIANT_SHARES_EXCEED_ONE', 'Variant shares must sum to at most 1')
+
+    const key = String(params.key)
+    const existing = db.experiments.find((item) => item.key === key)
+    const saved = {
+      key,
+      description: body.description ?? existing?.description ?? null,
+      enabled: body.enabled,
+      variants: body.variants,
+      controlShare: Number((1 - total).toFixed(4)),
+      updatedAt: new Date().toISOString(),
+    }
+    db.experiments = existing
+      ? db.experiments.map((item) => (item.key === key ? saved : item))
+      : [...db.experiments, saved]
+    return HttpResponse.json(saved)
+  }),
+
+  http.get(`${BASE}/cms/search-analytics`, ({ request }) => {
+    const days = Number.parseInt(new URL(request.url).searchParams.get('days') ?? '7', 10)
+    return HttpResponse.json({ ...searchAnalytics, days })
+  }),
 
   http.post(`${BASE}/cms/ranking-configs`, async ({ request }) => {
     const body = (await request.json()) as { key: string; weights: Record<string, number> }
@@ -342,10 +511,10 @@ export const handlers = [
       version: Math.max(...db.configs.map((config) => config.version)) + 1,
       status: 'draft' as const,
       weights: body.weights,
-      createdBy: 'ban',
+      bounds: db.configs[0]?.bounds ?? {},
+      createdBy: { id: 'ad-me', displayName: currentActor().displayName },
       createdAt: new Date().toISOString(),
       approvedBy: null,
-      approvedAt: null,
       activatedAt: null,
     }
     db.configs = [created, ...db.configs]
@@ -356,11 +525,10 @@ export const handlers = [
     const config = db.configs.find((item) => item.id === params.id)
     if (!config) return envelope(404, 'NOT_FOUND', 'config not found')
     // Four-eyes is a server rule; the mock enforces it so the UI can be tested.
-    if (config.createdBy === 'ban')
+    if (config.createdBy.displayName === currentActor().displayName)
       return envelope(403, 'SELF_APPROVAL', 'creator cannot self-approve')
     config.status = 'approved'
-    config.approvedBy = 'ban'
-    config.approvedAt = new Date().toISOString()
+    config.approvedBy = { id: 'ad-me', displayName: mockDisplayName }
     return HttpResponse.json(config, { status: 201 })
   }),
 
@@ -368,25 +536,25 @@ export const handlers = [
     const config = db.configs.find((item) => item.id === params.id)
     if (!config) return envelope(404, 'NOT_FOUND', 'config not found')
     if (config.status !== 'approved') return envelope(409, 'CONFLICT', 'config is not approved')
-    for (const other of db.configs) if (other.status === 'active') other.status = 'superseded'
+    for (const other of db.configs) if (other.status === 'active') other.status = 'rolled_back'
     config.status = 'active'
     config.activatedAt = new Date().toISOString()
     return HttpResponse.json(config, { status: 201 })
   }),
 
   http.post(`${BASE}/cms/ranking-configs/:key/rollback`, () => {
-    for (const config of db.configs) if (config.status === 'active') config.status = 'superseded'
+    for (const config of db.configs) if (config.status === 'active') config.status = 'rolled_back'
     return HttpResponse.json({ rolledBack: true }, { status: 201 })
   }),
 
-  http.get(`${BASE}/cms/feature-flags`, () => HttpResponse.json({ items: db.flags })),
+  http.get(`${BASE}/cms/feature-flags`, () => HttpResponse.json(db.flags)),
 
   http.put(`${BASE}/cms/feature-flags/:key`, async ({ params, request }) => {
     const flag = db.flags.find((item) => item.key === params.key)
     if (!flag) return envelope(404, 'NOT_FOUND', 'flag not found')
     const body = (await request.json()) as { enabled: boolean }
     flag.enabled = body.enabled
-    flag.updatedBy = 'ban'
+    flag.updatedBy = { id: 'ad-me', displayName: currentActor().displayName }
     flag.updatedAt = new Date().toISOString()
     return HttpResponse.json(flag)
   }),

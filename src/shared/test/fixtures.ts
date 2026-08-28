@@ -1,10 +1,15 @@
 import type {
+  AuditEntry,
   Collection,
+  CollectionItem,
   CmsPlaceDetail,
+  Experiment,
   FeatureFlag,
   ModerationQueue,
   OpsKpis,
   RankingConfig,
+  RankingEvaluation,
+  SearchAnalytics,
   Taxonomy,
 } from '@/shared/api/contracts'
 import type { ImportJob, ImportRow } from '@/shared/api/contracts-import'
@@ -28,9 +33,9 @@ export const taxonomies: Taxonomy[] = [
     isActive: true,
     usageCount: 2814,
     synonyms: [
-      { term: 'yên lặng', locale: 'vi' },
-      { term: 'không ồn ào', locale: 'vi' },
-      { term: 'peaceful', locale: 'en' },
+      { id: 'syn-1', term: 'yên lặng', locale: 'vi' },
+      { id: 'syn-2', term: 'không ồn ào', locale: 'vi' },
+      { id: 'syn-3', term: 'peaceful', locale: 'en' },
     ],
   },
   {
@@ -41,7 +46,7 @@ export const taxonomies: Taxonomy[] = [
     sortOrder: 2,
     isActive: true,
     usageCount: 1402,
-    synonyms: [{ term: 'nhộn nhịp', locale: 'vi' }],
+    synonyms: [{ id: 'syn-4', term: 'nhộn nhịp', locale: 'vi' }],
   },
   {
     id: 'tx-mood-chill',
@@ -61,7 +66,7 @@ export const taxonomies: Taxonomy[] = [
     sortOrder: 1,
     isActive: true,
     usageCount: 6120,
-    synonyms: [{ term: 'quán cà phê', locale: 'vi' }],
+    synonyms: [{ id: 'syn-5', term: 'quán cà phê', locale: 'vi' }],
   },
   {
     id: 'tx-cat-street-food',
@@ -81,7 +86,7 @@ export const taxonomies: Taxonomy[] = [
     sortOrder: 1,
     isActive: true,
     usageCount: 1180,
-    synonyms: [{ term: 'có ổ cắm', locale: 'vi' }],
+    synonyms: [{ id: 'syn-6', term: 'có ổ cắm', locale: 'vi' }],
   },
   {
     id: 'tx-diet-vegan',
@@ -135,7 +140,9 @@ export const places: CmsPlaceDetail[] = [
     name: 'Chào Bạn Cafe & Space',
     status: 'published',
     areaKey: 'hcm_q3',
-    rating: 4.8,
+    phone: '+84 28 3930 1234',
+    website: 'https://chaoban.cafe',
+    priceLevel: 2,
     confidence: 0.92,
     freshnessCheckedAt: iso(60 * 48),
     createdAt: iso(60 * 24 * 200),
@@ -146,28 +153,73 @@ export const places: CmsPlaceDetail[] = [
     lat: 10.7769,
     lng: 106.6953,
     avgVisitMinutes: 90,
+    suitability: { couple: 0.9, group: 0.6 },
     isLodging: false,
     curatedRank: 3,
     taxonomyKeys: ['cafe', 'work_friendly', 'quiet_peaceful'],
     taxonomyIds: ['tx-cat-cafe', 'tx-set-workfriendly', 'tx-mood-quiet'],
     ratings: {
-      googleRating: 4.8,
-      googleRatingCount: 1240,
-      gogoRating: 4.9,
-      gogoRatingCount: 86,
-      compositeScore: 0.91,
+      provider: { rating: 4.8, count: 1240 },
+      gogo: { rating: 4.9, count: 86 },
     },
-    sourceCount: 4,
-    updatedBy: 'huy.ng',
     // 0 = Sunday … 6 = Saturday, matching GoGo-BE's `vnDayMinute()`.
     hours: [
-      { dayOfWeek: 0, openMinute: 480, closeMinute: 1350, isOvernight: false },
-      { dayOfWeek: 1, openMinute: 420, closeMinute: 1350, isOvernight: false },
-      { dayOfWeek: 2, openMinute: 420, closeMinute: 1350, isOvernight: false },
-      { dayOfWeek: 3, openMinute: 420, closeMinute: 1350, isOvernight: false },
-      { dayOfWeek: 4, openMinute: 420, closeMinute: 1350, isOvernight: false },
-      { dayOfWeek: 5, openMinute: 420, closeMinute: 1380, isOvernight: false },
-      { dayOfWeek: 6, openMinute: 480, closeMinute: 1380, isOvernight: false },
+      {
+        dayOfWeek: 0,
+        openMinute: 480,
+        closeMinute: 1350,
+        isOvernight: false,
+        source: 'editor',
+        verifiedAt: iso(60 * 24 * 3),
+      },
+      {
+        dayOfWeek: 1,
+        openMinute: 420,
+        closeMinute: 1350,
+        isOvernight: false,
+        source: 'editor',
+        verifiedAt: iso(60 * 24 * 3),
+      },
+      {
+        dayOfWeek: 2,
+        openMinute: 420,
+        closeMinute: 1350,
+        isOvernight: false,
+        source: 'editor',
+        verifiedAt: iso(60 * 24 * 3),
+      },
+      {
+        dayOfWeek: 3,
+        openMinute: 420,
+        closeMinute: 1350,
+        isOvernight: false,
+        source: 'editor',
+        verifiedAt: iso(60 * 24 * 3),
+      },
+      {
+        dayOfWeek: 4,
+        openMinute: 420,
+        closeMinute: 1350,
+        isOvernight: false,
+        source: 'editor',
+        verifiedAt: iso(60 * 24 * 3),
+      },
+      {
+        dayOfWeek: 5,
+        openMinute: 420,
+        closeMinute: 1380,
+        isOvernight: false,
+        source: 'editor',
+        verifiedAt: iso(60 * 24 * 3),
+      },
+      {
+        dayOfWeek: 6,
+        openMinute: 480,
+        closeMinute: 1380,
+        isOvernight: false,
+        source: 'editor',
+        verifiedAt: iso(60 * 24 * 3),
+      },
     ],
     prices: [
       {
@@ -176,22 +228,28 @@ export const places: CmsPlaceDetail[] = [
         priceMax: 90_000,
         currency: 'VND',
         unit: 'per_person',
-        observedAt: iso(60 * 24 * 3),
-        observedBy: 'vy.vo',
+        source: 'editor',
+        confidence: 0.9,
+        verifiedAt: iso(60 * 24 * 3),
+        createdAt: iso(60 * 24 * 3),
       },
     ],
     sources: [
       {
-        kind: 'google_places',
-        label: 'Google Places',
-        fetchedAt: iso(60 * 48),
+        id: 'src-1',
+        provider: 'google_places',
+        externalId: 'ChIJ_chao_ban_cafe',
+        url: 'https://maps.google.com/?cid=chao-ban',
         attribution: 'Dữ liệu © Google',
+        fetchedAt: iso(60 * 48),
       },
       {
-        kind: 'editor',
-        label: 'Biên tập viên xác minh',
-        fetchedAt: iso(60 * 24 * 3),
+        id: 'src-2',
+        provider: 'editor',
+        externalId: 'manual-2026-08-24',
+        url: null,
         attribution: null,
+        fetchedAt: iso(60 * 24 * 3),
       },
     ],
     media: [],
@@ -201,7 +259,6 @@ export const places: CmsPlaceDetail[] = [
     name: 'Phở Bát Đàn',
     status: 'published',
     areaKey: 'hn_hoankiem',
-    rating: 4.5,
     confidence: 0.78,
     freshnessCheckedAt: iso(60 * 24 * 14),
     createdAt: iso(60 * 24 * 180),
@@ -211,27 +268,25 @@ export const places: CmsPlaceDetail[] = [
     lat: 21.0333,
     lng: 105.8452,
     avgVisitMinutes: 40,
+    suitability: { couple: 0.9, group: 0.6 },
     isLodging: false,
     curatedRank: null,
     taxonomyKeys: ['street_food'],
     taxonomyIds: ['tx-cat-street-food'],
     ratings: {
-      googleRating: 4.5,
-      googleRatingCount: 8210,
-      gogoRating: 4.7,
-      gogoRatingCount: 41,
-      compositeScore: 0.88,
+      provider: { rating: 4.5, count: 8210 },
+      gogo: { rating: 4.7, count: 41 },
     },
-    sourceCount: 2,
-    updatedBy: 'vy.vo',
     hours: [],
     prices: [],
     sources: [
       {
-        kind: 'google_places',
-        label: 'Google Places',
-        fetchedAt: iso(60 * 24 * 14),
+        id: 'src-3',
+        provider: 'google_places',
+        externalId: 'ChIJ_pho_bat_dan',
+        url: 'https://maps.google.com/?cid=pho-bat-dan',
         attribution: 'Dữ liệu © Google',
+        fetchedAt: iso(60 * 24 * 14),
       },
     ],
     media: [],
@@ -241,7 +296,6 @@ export const places: CmsPlaceDetail[] = [
     name: 'Tây Hồ Sunset SUP Club',
     status: 'review',
     areaKey: 'hn_tayho',
-    rating: 4.2,
     confidence: 0.44,
     freshnessCheckedAt: null,
     createdAt: iso(60 * 24 * 20),
@@ -251,19 +305,15 @@ export const places: CmsPlaceDetail[] = [
     lat: 21.0705,
     lng: 105.8221,
     avgVisitMinutes: 120,
+    suitability: { couple: 0.9, group: 0.6 },
     isLodging: false,
     curatedRank: null,
     taxonomyKeys: ['high_energy'],
     taxonomyIds: ['tx-mood-energetic'],
     ratings: {
-      googleRating: 4.2,
-      googleRatingCount: 310,
-      gogoRating: null,
-      gogoRatingCount: 0,
-      compositeScore: null,
+      provider: { rating: 4.2, count: 310 },
+      gogo: { count: 0 },
     },
-    sourceCount: 1,
-    updatedBy: 'dung.tr',
     hours: [],
     prices: [],
     sources: [],
@@ -274,7 +324,6 @@ export const places: CmsPlaceDetail[] = [
     name: 'GoPlay Entertainment',
     status: 'suspended',
     areaKey: 'hcm_q10',
-    rating: 4.1,
     confidence: 0.35,
     freshnessCheckedAt: iso(60 * 24 * 120),
     createdAt: iso(60 * 24 * 300),
@@ -284,19 +333,15 @@ export const places: CmsPlaceDetail[] = [
     lat: 10.7712,
     lng: 106.6702,
     avgVisitMinutes: 150,
+    suitability: { couple: 0.9, group: 0.6 },
     isLodging: false,
     curatedRank: null,
     taxonomyKeys: ['high_energy'],
     taxonomyIds: ['tx-mood-energetic'],
     ratings: {
-      googleRating: 4.1,
-      googleRatingCount: 520,
-      gogoRating: 3.5,
-      gogoRatingCount: 12,
-      compositeScore: 0.61,
+      provider: { rating: 4.1, count: 520 },
+      gogo: { rating: 3.5, count: 12 },
     },
-    sourceCount: 3,
-    updatedBy: 'system',
     hours: [],
     prices: [],
     sources: [],
@@ -307,7 +352,6 @@ export const places: CmsPlaceDetail[] = [
     name: 'Cơm Tấm Ba Ghiền',
     status: 'community_submitted',
     areaKey: 'hcm_phunhuan',
-    rating: 4.4,
     confidence: 0.5,
     freshnessCheckedAt: null,
     createdAt: iso(60 * 5),
@@ -317,19 +361,15 @@ export const places: CmsPlaceDetail[] = [
     lat: 10.7955,
     lng: 106.6752,
     avgVisitMinutes: 45,
+    suitability: { couple: 0.9, group: 0.6 },
     isLodging: false,
     curatedRank: null,
     taxonomyKeys: ['street_food'],
     taxonomyIds: ['tx-cat-street-food'],
     ratings: {
-      googleRating: 4.4,
-      googleRatingCount: 4100,
-      gogoRating: null,
-      gogoRatingCount: 0,
-      compositeScore: null,
+      provider: { rating: 4.4, count: 4100 },
+      gogo: { count: 0 },
     },
-    sourceCount: 1,
-    updatedBy: 'import',
     hours: [],
     prices: [],
     sources: [],
@@ -376,7 +416,6 @@ export const moderationQueue: ModerationQueue = {
   reviews: [
     {
       id: 'mr-1',
-      rating: 5,
       text: 'Check-in view đẹp, hoàng hôn hồ Tây rất đáng đi.',
       createdAt: iso(34),
     },
@@ -394,7 +433,6 @@ export const moderationQueue: ModerationQueue = {
   checkins: [
     {
       id: 'ci-1',
-      rating: 4,
       note: 'Ảnh hoá đơn và không gian tầng 2.',
       photoCount: 3,
       hasBill: true,
@@ -415,7 +453,37 @@ export const opsKpis: OpsKpis = {
   moderationBacklog: { reviews: 2, reports: 2 },
 }
 
+/**
+ * Bounds travel with each config (`CmsRankingConfig`), so the console cannot
+ * hold a slider range that the engine would reject.
+ */
+const SCORING_BOUNDS = {
+  preferenceMatch: { min: 0, max: 1 },
+  groupFairness: { min: 0, max: 1 },
+  distanceDecay: { min: 0, max: 1 },
+  budgetFit: { min: 0, max: 1 },
+  freshness: { min: 0, max: 1 },
+}
+
 export const rankingConfigs: RankingConfig[] = [
+  {
+    id: 'rc-3',
+    key: 'suggestion.scoring',
+    version: 3,
+    status: 'approved',
+    weights: {
+      preferenceMatch: 0.88,
+      groupFairness: 0.62,
+      distanceDecay: 0.7,
+      budgetFit: 0.32,
+      freshness: 0.45,
+    },
+    bounds: SCORING_BOUNDS,
+    createdBy: { id: 'ad-2', displayName: 'vy.vo' },
+    approvedBy: { id: 'ad-1', displayName: 'minh.anh' },
+    activatedAt: null,
+    createdAt: iso(90),
+  },
   {
     id: 'rc-2',
     key: 'suggestion.scoring',
@@ -428,17 +496,17 @@ export const rankingConfigs: RankingConfig[] = [
       budgetFit: 0.3,
       freshness: 0.4,
     },
-    createdBy: 'minh.anh',
-    createdAt: iso(120),
-    approvedBy: 'vy.vo',
-    approvedAt: iso(110),
+    bounds: SCORING_BOUNDS,
+    createdBy: { id: 'ad-1', displayName: 'minh.anh' },
+    approvedBy: { id: 'ad-2', displayName: 'vy.vo' },
     activatedAt: iso(105),
+    createdAt: iso(120),
   },
   {
     id: 'rc-1',
     key: 'suggestion.scoring',
     version: 1,
-    status: 'superseded',
+    status: 'rolled_back',
     weights: {
       preferenceMatch: 0.8,
       groupFairness: 0.55,
@@ -446,20 +514,52 @@ export const rankingConfigs: RankingConfig[] = [
       budgetFit: 0.35,
       freshness: 0.35,
     },
-    createdBy: 'vy.vo',
-    createdAt: iso(60 * 24 * 14),
-    approvedBy: 'minh.anh',
-    approvedAt: iso(60 * 24 * 14),
+    bounds: SCORING_BOUNDS,
+    createdBy: { id: 'ad-2', displayName: 'vy.vo' },
+    approvedBy: { id: 'ad-1', displayName: 'minh.anh' },
     activatedAt: iso(60 * 24 * 14),
+    createdAt: iso(60 * 24 * 14),
   },
 ]
 
-export const rankingBounds = [
-  { weight: 'preferenceMatch', min: 0, max: 1, step: 0.01 },
-  { weight: 'groupFairness', min: 0, max: 1, step: 0.01 },
-  { weight: 'distanceDecay', min: 0, max: 1, step: 0.01 },
-  { weight: 'budgetFit', min: 0, max: 1, step: 0.01 },
-  { weight: 'freshness', min: 0, max: 1, step: 0.01 },
+/**
+ * A candidate that mostly agrees with the baseline, with two runs skipped —
+ * the case the console has to report honestly rather than round away.
+ */
+export const rankingEvaluation: RankingEvaluation = {
+  configVersion: 3,
+  baselineVersion: '2',
+  runsEvaluated: 96,
+  metrics: {
+    top1Agreement: 0.83,
+    top5Overlap: 0.91,
+    newZeroResults: 1,
+    meanCandidateCount: 14.2,
+  },
+  skipped: [
+    { runId: 'run-0041', reason: 'NO_CANDIDATE_PASSES_HARD_FILTER' },
+    { runId: 'run-0077', reason: 'SNAPSHOT_MISSING' },
+  ],
+}
+
+/** SG-010 — one experiment running, one defined but switched off. */
+export const experiments: Experiment[] = [
+  {
+    key: 'suggestion.scoring.ab',
+    description: 'So sánh v3 với cấu hình đang chạy trên 20% phòng.',
+    enabled: true,
+    variants: { '3': 0.2 },
+    controlShare: 0.8,
+    updatedAt: iso(300),
+  },
+  {
+    key: 'search.ranking.ab',
+    description: 'Chưa bật — chưa có phiên bản search.ranking nào được duyệt.',
+    enabled: false,
+    variants: {},
+    controlShare: 1,
+    updatedAt: iso(60 * 24 * 6),
+  },
 ]
 
 export const featureFlags: FeatureFlag[] = [
@@ -468,30 +568,57 @@ export const featureFlags: FeatureFlag[] = [
     enabled: true,
     description:
       'Cho phép AI tinh chỉnh trên tập ứng viên đã hợp lệ. Tắt để quay về kết quả deterministic.',
-    rolloutPercent: 100,
-    isKillSwitch: true,
-    updatedBy: 'minh.anh',
+    payload: { timeoutMs: 15_000 },
+    updatedBy: { id: 'ad-1', displayName: 'minh.anh' },
     updatedAt: iso(240),
   },
   {
     key: 'ingest.auto_publish_community',
     enabled: false,
     description: 'Tự động xuất bản địa điểm do người dùng gửi sau khi verify.',
-    rolloutPercent: 0,
-    isKillSwitch: false,
-    updatedBy: 'vy.vo',
+    payload: null,
+    updatedBy: { id: 'ad-2', displayName: 'vy.vo' },
     updatedAt: iso(60 * 24 * 4),
   },
   {
     key: 'search.vi_synonym_expansion',
     enabled: true,
     description: 'Mở rộng truy vấn tiếng Việt bằng bảng từ đồng nghĩa.',
-    rolloutPercent: 100,
-    isKillSwitch: false,
-    updatedBy: 'huy.ng',
+    payload: null,
+    updatedBy: { id: 'ad-2', displayName: 'vy.vo' },
     updatedAt: iso(60 * 24 * 9),
   },
 ]
+
+/**
+ * Seven days of search, including one term below the naming floor — the row
+ * the console must still count without printing the text.
+ */
+export const searchAnalytics: SearchAnalytics = {
+  days: 7,
+  totals: {
+    searches: 18_402,
+    zeroResults: 412,
+    zeroResultRate: 0.0224,
+    avgResults: 11.4,
+    avgLatencyMs: 186,
+  },
+  trend: [
+    { day: '2026-08-21', searches: 2_410, zeroResults: 44, zeroResultRate: 0.0183 },
+    { day: '2026-08-22', searches: 2_680, zeroResults: 51, zeroResultRate: 0.019 },
+    { day: '2026-08-23', searches: 3_020, zeroResults: 88, zeroResultRate: 0.0291 },
+    { day: '2026-08-24', searches: 2_940, zeroResults: 74, zeroResultRate: 0.0252 },
+    { day: '2026-08-25', searches: 2_360, zeroResults: 49, zeroResultRate: 0.0208 },
+    { day: '2026-08-26', searches: 2_512, zeroResults: 58, zeroResultRate: 0.0231 },
+    { day: '2026-08-27', searches: 2_480, zeroResults: 48, zeroResultRate: 0.0194 },
+  ],
+  worstQueries: [
+    { query: 'quán chay quận 7 mở khuya', searches: 96, zeroResults: 71, zeroResultRate: 0.7396 },
+    { query: 'sân pickleball tây hồ', searches: 74, zeroResults: 48, zeroResultRate: 0.6486 },
+    { query: 'cafe pet friendly đà lạt', searches: 61, zeroResults: 33, zeroResultRate: 0.541 },
+  ],
+  hiddenBelowFloor: { terms: 214, searches: 486, zeroResults: 122 },
+}
 
 export const importJobs: ImportJob[] = [
   {
@@ -573,7 +700,6 @@ export const importRows: Record<string, ImportRow[]> = {
           confidence: 0.86,
           lat: 10.7771,
           lng: 106.6942,
-          rating: 4.4,
           ratingCount: 1980,
           photoUrl: null,
           fetchedAt: iso(45),
@@ -586,7 +712,6 @@ export const importRows: Record<string, ImportRow[]> = {
           confidence: 0.71,
           lat: 10.7801,
           lng: 106.7002,
-          rating: 4.3,
           ratingCount: 2410,
           photoUrl: null,
           fetchedAt: iso(45),
@@ -675,24 +800,86 @@ export const importRows: Record<string, ImportRow[]> = {
   ],
 }
 
-export const auditEntries = [
+/**
+ * `CmsAuditEntry` rows. The break-glass entry carries the fields incident
+ * review actually needs; `ipAddress` appears only on entries a mocked
+ * ops_admin would receive, which is how the real endpoint behaves.
+ */
+export const auditEntries: AuditEntry[] = [
   {
     id: 'au-1',
-    actor: 'huy.ng',
-    action: 'cập nhật địa điểm',
-    at: iso(120),
-    before: { name: 'Chao Ban Cafe', avgVisitMinutes: 60 },
-    after: { name: 'Chào Bạn Cafe & Space', avgVisitMinutes: 90 },
+    action: 'place.updated',
+    actorType: 'admin',
+    actorId: 'ad-3',
+    actorRole: 'editor',
+    resourceType: 'place',
+    resourceId: 'pl-chao-ban',
+    occurredAt: iso(120),
+    diff: {
+      before: { name: 'Chao Ban Cafe', avgVisitMinutes: 60 },
+      after: { name: 'Chào Bạn Cafe & Space', avgVisitMinutes: 90 },
+    },
+    breakGlass: false,
+    requestId: 'req-8ac31f',
+    authorizationPath: 'exact_role',
   },
   {
     id: 'au-2',
-    actor: 'vy.vo',
-    action: 'đổi trạng thái',
-    at: iso(60 * 24 * 3),
-    before: { status: 'review' },
-    after: { status: 'published' },
+    action: 'place.status_changed',
+    actorType: 'admin',
+    actorId: 'ad-2',
+    actorRole: 'editor',
+    resourceType: 'place',
+    resourceId: 'pl-chao-ban',
+    occurredAt: iso(60 * 24 * 3),
+    diff: { before: { status: 'review' }, after: { status: 'published' } },
+    breakGlass: false,
+    requestId: 'req-1b7702',
+    authorizationPath: 'exact_role',
+  },
+  {
+    id: 'au-3',
+    action: 'place.emergency_suspended',
+    actorType: 'admin',
+    actorId: 'ad-4',
+    actorRole: 'moderator',
+    resourceType: 'place',
+    resourceId: 'pl-goplay',
+    occurredAt: iso(60 * 24 * 12),
+    diff: {
+      breakGlass: true,
+      role: 'moderator',
+      before: { status: 'published' },
+      after: { status: 'suspended' },
+    },
+    reason: 'Báo chí đưa tin sự cố an toàn, gỡ tạm chờ xác minh.',
+    breakGlass: true,
+    requestId: 'req-c40e19',
+    ipAddress: '10.20.4.51',
+    authorizationPath: 'super_admin_bypass',
   },
 ]
+
+/** GoGo-BE#161 — the ordered list behind a collection, with each place's status. */
+export const collectionItems: Record<string, CollectionItem[]> = {
+  'col-cafe-q3': [
+    {
+      position: 0,
+      placeId: 'pl-chao-ban',
+      name: 'Chào Bạn Cafe & Space',
+      addressText: '126 Nguyễn Thị Minh Khai, Quận 3, TP.HCM',
+      status: 'published',
+    },
+    {
+      position: 1,
+      placeId: 'pl-goplay',
+      name: 'GoPlay Entertainment',
+      addressText: '812 Sư Vạn Hạnh, Quận 10, TP.HCM',
+      // Pinned, but no longer published — the curator has to see that.
+      status: 'suspended',
+    },
+  ],
+}
 
 /** PI-CMS-007 — three pending proposals; the first is the popular one. */
 export const placeSubmissions = [

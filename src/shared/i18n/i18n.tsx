@@ -71,4 +71,19 @@ export function useT(): Translate {
   return useI18n().t
 }
 
+/**
+ * Resolve a key that is only known at runtime — a price unit, a moderation
+ * state or a taxonomy kind read off the wire. Taxonomy values are stable keys
+ * by contract, but the client is not the place to assume the server's enum is
+ * closed: an unknown value falls back to the raw key rather than rendering a
+ * blank cell or a made-up label.
+ */
+export function useLabel(): (key: string, fallback: string) => string {
+  const { t } = useI18n()
+  return useCallback(
+    (key: string, fallback: string) => (key in vi ? t(key as MessageKey) : fallback),
+    [t],
+  )
+}
+
 export type { MessageKey }
