@@ -171,6 +171,37 @@ seed nằm trong seed data của BE).
 | `pnpm api:types` | Sinh lại client từ `openapi/gogo.v1.yaml`           |
 | `pnpm api:check` | Chặn CI khi contract/type lệch nhau                 |
 
+## Deploy (môi trường dev)
+
+CMS được serve bởi một Cloudflare Worker, và Worker đó **proxy `/v1` sang
+GoGo-BE trên cùng origin**. Đây không phải chi tiết triển khai tuỳ hứng: phiên
+đăng nhập là cookie `HttpOnly; SameSite=Lax`, gọi thẳng sang hostname của BFF sẽ
+biến mọi request thành cross-site và buộc cookie phải `SameSite=None` — đúng thứ
+CSRF protection sinh ra để tránh. Lý do đầy đủ:
+[`docs/adr/0003-cms-hosting.md`](docs/adr/0003-cms-hosting.md).
+
+Trong repo: `wrangler.jsonc`, `worker/index.ts`, `public/_headers`.
+Chạy thử Worker tại chỗ (cần `pnpm build` trước):
+
+```bash
+pnpm build
+pnpm cf:dev --var BE_ORIGIN:http://localhost:3000
+```
+
+**Ba thứ phải set ngoài repo** — thiếu thứ nào thì bản deploy chạy nhưng sai:
+
+| Ở đâu                 | Việc                                                                                                                             |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Cloudflare project    | Build command `pnpm build`, deploy command `npx wrangler versions upload`                                                        |
+| Cloudflare project    | Biến `BE_ORIGIN` = origin GoGo-BE của môi trường đó. Chưa set thì `/v1/*` trả `503 BACKEND_NOT_CONFIGURED` chứ không im lặng 404 |
+| Cloudflare Zero Trust | **Access** trước hostname. Bản deploy không tự xác thực; để trang đăng nhập admin công khai là mở sẵn bề mặt credential stuffing |
+
+Và ở GoGo-BE của môi trường đó: `COOKIE_SECURE=true`, `TRUST_PROXY` tin đúng hop
+Cloudflare. Không thì BE bỏ qua `x-forwarded-for` và **cột IP nhân viên trong
+nhật ký kiểm toán ghi sai người** — hỏng đúng thứ SEC-002 dựng ra để điều tra.
+
+Đưa toàn bộ về Terraform: [GoGo-Infra#25](https://github.com/namnh92/GoGo-Infra/issues/25).
+
 ## Git
 
 Git Flow: `master` (production, tag `vX.Y.Z`) · `develop` (integration) · `feature|bugfix/GOGO-<số issue>-<tên>` · `hotfix/GOGO-<số issue>-<tên>` · `release/x.y.z`.

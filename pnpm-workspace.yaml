@@ -1,6 +1,8 @@
 # pnpm 11 reads repo settings from here and refuses to run any dependency's
-# install script until it is listed. Only these two need one: esbuild fetches
-# its native binary, msw writes the service-worker file into public/.
+# install script until it is listed. esbuild fetches its native binary, msw
+# writes the service-worker file into public/, and workerd is the Workers
+# runtime `wrangler dev` runs the Worker on locally.
 allowBuilds:
   esbuild: true
   msw: true
+  workerd: true

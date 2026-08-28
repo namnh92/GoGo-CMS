@@ -19,6 +19,8 @@ CMS APIs — no database, no direct provider calls, no business logic of its own
 - **Design:** same semantic tokens as the consumer app (coral/lavender/mint/amber/ivory/ink), different surface. This is a data-dense tool: opaque backgrounds, high contrast, tight spacing. Glass/blur is for overlays only (drawer, modal, popover) — never tables, forms or page backgrounds. WCAG 2.2 AA, full keyboard operation, 44×44 targets, colour never the sole signal.
 - **Sessions** live in secure `HttpOnly` cookies; production requires SSO/MFA and a shorter timeout than the consumer app. No sensitive token in `localStorage` when a cookie will do.
 - Clients talk only to the BFF `/v1` contract. Error envelope `{ code, message, field_errors, request_id, retryable }`.
+- **Cookie sessions carry a CSRF double-submit.** Login sets `gogo_csrf` readable by JS; every cookie-authenticated mutation echoes it in `x-gogo-csrf` or GoGo-BE answers `403 CSRF_FAILED`. A 401 mid-session means the short-lived access cookie expired, not that the session ended — refresh once at `/v1/cms/auth/refresh` (single-use token, so never concurrently) and replay, then fall back to the login screen.
+- **Deployed CMS serves `/v1` from its own origin** (Cloudflare Worker proxy, `docs/adr/0003-cms-hosting.md`). Calling the BFF hostname directly would force `SameSite=None` on the session cookie — the setting CSRF protection exists to avoid.
 
 ## Ingestion specifics
 

@@ -10,6 +10,28 @@ const BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? '/v1'
  */
 export const SESSION_EXPIRED_EVENT = 'gogo:session-expired'
 
+/**
+ * Double-submit CSRF (GoGo-BE ADR-0003). Login sets `gogo_csrf` readable by
+ * JS; every cookie-authenticated mutation must echo it in this header or the
+ * guard answers `403 CSRF_FAILED`. `SameSite=Lax` alone does not cover every
+ * navigation, which is why the header exists at all.
+ */
+const CSRF_COOKIE = 'gogo_csrf'
+const CSRF_HEADER = 'x-gogo-csrf'
+
+const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
+
+/** The refresh cookie is path-scoped to exactly this endpoint (SEC-003). */
+const REFRESH_PATH = '/cms/auth/refresh'
+
+function readCookie(name: string): string | null {
+  const prefix = `${name}=`
+  for (const part of document.cookie.split('; ')) {
+    if (part.startsWith(prefix)) return decodeURIComponent(part.slice(prefix.length))
+  }
+  return null
+}
+
 function emitSessionExpired(): void {
   window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT))
 }
@@ -79,9 +101,43 @@ async function readError(response: Response): Promise<ApiError> {
   })
 }
 
+/**
+ * One refresh in flight at a time. Several queries fail with 401 together when
+ * the access cookie expires; refreshing per request would rotate the
+ * single-use refresh token concurrently, and GoGo-BE treats a superseded token
+ * as theft and kills the whole session family.
+ */
+let refreshInFlight: Promise<boolean> | null = null
+
+async function refreshSession(): Promise<boolean> {
+  refreshInFlight ??= (async () => {
+    try {
+      const headers = new Headers({ Accept: 'application/json' })
+      const csrf = readCookie(CSRF_COOKIE)
+      if (csrf) headers.set(CSRF_HEADER, csrf)
+      const response = await fetch(buildUrl(REFRESH_PATH), {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+      })
+      return response.ok
+    } catch {
+      return false
+    } finally {
+      // Cleared on the next tick so callers awaiting this attempt share it.
+      queueMicrotask(() => {
+        refreshInFlight = null
+      })
+    }
+  })()
+  return refreshInFlight
+}
+
 export async function apiFetch<T = unknown>(
   path: string,
   options: RequestOptions = {},
+  /** Internal: a request that already retried after a refresh does not retry again. */
+  allowRefresh = true,
 ): Promise<T> {
   const { method = 'GET', query, body, idempotencyKey, signal, raw } = options
 
@@ -97,6 +153,12 @@ export async function apiFetch<T = unknown>(
   // Cookie first; the in-memory bearer only covers split-origin dev.
   const bearer = getAccessToken()
   if (bearer) headers.set('Authorization', `Bearer ${bearer}`)
+  // Only mutations are checked, and only when the cookie exists — a bearer
+  // caller has no cookie to double-submit and the guard does not ask for one.
+  if (MUTATING.has(method)) {
+    const csrf = readCookie(CSRF_COOKIE)
+    if (csrf) headers.set(CSRF_HEADER, csrf)
+  }
 
   let response: Response
   try {
@@ -119,6 +181,15 @@ export async function apiFetch<T = unknown>(
   }
 
   if (response.status === 401) {
+    /*
+     * The access cookie is short-lived by design, so a 401 mid-session is the
+     * normal case, not the end of the session: the refresh cookie is still
+     * there. Dropping straight to the login screen would throw away work an
+     * editor had open.
+     */
+    if (allowRefresh && path !== REFRESH_PATH && (await refreshSession())) {
+      return apiFetch<T>(path, options, false)
+    }
     emitSessionExpired()
     throw await readError(response)
   }

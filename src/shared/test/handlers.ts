@@ -23,6 +23,30 @@ import {
 
 const BASE = '/v1'
 
+const MOCK_CSRF = 'mock-csrf-token'
+const CSRF_COOKIE = 'gogo_csrf'
+const CSRF_HEADER = 'x-gogo-csrf'
+const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
+
+/**
+ * The mock enforces the double-submit rule GoGo-BE's `AuthGuard` enforces
+ * (ADR-0003): a cookie-authenticated mutation without a matching
+ * `x-gogo-csrf` header is refused. Leaving it out here would let the client
+ * pass every test and then fail every write against a real backend — which is
+ * exactly what happened before this handler existed.
+ */
+function csrfFailure(request: Request, cookies: Record<string, string>) {
+  if (!MUTATING.has(request.method)) return null
+  const cookie = cookies[CSRF_COOKIE]
+  // No cookie means a non-browser caller on the bearer path; the guard does
+  // not ask those for a CSRF token either.
+  if (!cookie) return null
+  if (request.headers.get(CSRF_HEADER) !== cookie) {
+    return envelope(403, 'CSRF_FAILED', 'Missing or invalid CSRF token')
+  }
+  return null
+}
+
 /**
  * Mutable copies so the mocked CMS behaves like a real one: a toggle stays
  * toggled, a merged duplicate leaves the queue, a published row moves state.
@@ -43,6 +67,17 @@ const db = {
   decidedSubmissions: decidedSubmissions.map((item) => ({ ...item })),
   /** Counts break-glass calls so the burst limit is reachable in dev. */
   takedowns: 0,
+}
+
+/**
+ * What login and refresh set. `gogo_csrf` is deliberately readable — it is the
+ * value the client echoes back in the double-submit header.
+ */
+function sessionCookies(): Headers {
+  const headers = new Headers()
+  headers.append('Set-Cookie', 'gogo_at=mock-access-token; Path=/; SameSite=Lax')
+  headers.append('Set-Cookie', `gogo_csrf=${MOCK_CSRF}; Path=/; SameSite=Lax`)
+  return headers
 }
 
 function envelope(status: number, code: string, message: string) {
@@ -96,6 +131,10 @@ function roleFromEmail(email: string): AdminRole {
 }
 
 export const handlers = [
+  // Runs before every other handler: MSW walks this list in order, and
+  // returning nothing falls through to the real handler below.
+  http.all(`${BASE}/*`, ({ request, cookies }) => csrfFailure(request, cookies) ?? undefined),
+
   http.post(`${BASE}/cms/auth/login`, async ({ request }) => {
     const body = (await request.json()) as { email?: string; password?: string; totp?: string }
     if (!body.email || !body.password) return envelope(401, 'UNAUTHORIZED', 'bad credentials')
@@ -112,9 +151,21 @@ export const handlers = [
         displayName: body.email.split('@')[0],
         expiresIn: 900,
       },
-      { status: 201 },
+      { status: 201, headers: sessionCookies() },
     )
   }),
+
+  /*
+   * `POST /cms/auth/refresh`. The access cookie is short-lived, so the console
+   * has to survive its expiry without throwing the operator back to login.
+   * The mock rotates the same cookies the server rotates.
+   */
+  http.post(`${BASE}/cms/auth/refresh`, () =>
+    HttpResponse.json(
+      { accessToken: 'mock-access-token', role: mockRole, displayName: mockDisplayName },
+      { status: 201, headers: sessionCookies() },
+    ),
+  ),
 
   http.get(`${BASE}/cms/ops/kpis`, () => HttpResponse.json(opsKpis)),
 

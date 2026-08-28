@@ -18,6 +18,8 @@
     "test:e2e": "playwright test",
     "api:types": "openapi-typescript openapi/gogo.v1.yaml -o src/shared/api/schema.d.ts",
     "api:check": "node scripts/check-openapi-drift.mjs",
+    "cf:dev": "wrangler dev",
+    "cf:deploy": "wrangler versions upload",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
@@ -32,6 +34,7 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260827.1",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.49.1",
     "@tailwindcss/vite": "^4.0.0",
@@ -54,7 +57,8 @@
     "typescript": "^5.7.2",
     "typescript-eslint": "^8.18.1",
     "vite": "^6.0.5",
-    "vitest": "^2.1.8"
+    "vitest": "^2.1.8",
+    "wrangler": "^4.127.0"
   },
   "msw": {
     "workerDirectory": [
