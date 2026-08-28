@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "gogo-cms-dev",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-08-26",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    // React Router owns the URL space: /audit and /places/:id must serve the
+    // app shell, not a 404, on a direct load or a refresh.
+    "not_found_handling": "single-page-application",
+    // Without this the SPA fallback would answer /v1/* with index.html before
+    // the Worker ever saw the request, and every API call would "succeed"
+    // with HTML.
+    "run_worker_first": ["/v1/*"],
+  },
+  "observability": { "enabled": true },
+  "vars": {
+    // Set per environment in the Cloudflare dashboard (or `wrangler secret`
+    // if the origin itself is not public knowledge). Empty here on purpose:
+    // committing an environment's hostname makes it look like a contract.
+    "BE_ORIGIN": "",
+  },
+}

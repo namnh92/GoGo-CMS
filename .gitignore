@@ -17,5 +17,8 @@ coverage/
 playwright-report/
 test-results/
 
+# wrangler's local state (workerd runtime, dev caches)
+.wrangler/
+
 # TypeScript build info
 *.tsbuildinfo

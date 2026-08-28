@@ -13,6 +13,9 @@ export function signInAs(role: AdminRole, displayName = 'test.user'): void {
   // The mock reads this same hint, so it answers per role the way the server
   // does — staff IP in the audit log, four-eyes on a ranking config.
   window.localStorage.setItem(HINT_KEY, JSON.stringify({ role, displayName }))
+  // A restored session has the readable CSRF cookie login left behind; without
+  // it a test would exercise the bearer path and never check the header.
+  document.cookie = 'gogo_csrf=mock-csrf-token; path=/'
 }
 
 export function renderWithProviders(
