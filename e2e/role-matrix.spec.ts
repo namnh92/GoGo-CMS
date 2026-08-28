@@ -61,6 +61,39 @@ test('ops admin sees the dashboard and the publish CTA', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Quản lý nhập hàng loạt' })).toBeVisible()
 })
 
+test('every role reaches the audit log, and only ops sees the staff IP', async ({ page }) => {
+  await signIn(page, 'editor@gogo.vn')
+  await page.goto('/audit')
+  await expect(page.getByRole('heading', { level: 1, name: 'Nhật ký kiểm toán' })).toBeVisible()
+  // Staff IP is ops_admin and above; below that the field is absent, not blank.
+  await expect(page.getByText('10.20.4.51')).toHaveCount(0)
+
+  await signIn(page, 'ops@gogo.vn')
+  await page.goto('/audit')
+  await expect(page.getByText('10.20.4.51')).toBeVisible()
+})
+
+test('the break-glass filter narrows the log to emergency takedowns', async ({ page }) => {
+  await signIn(page, 'ops@gogo.vn')
+  await page.goto('/audit')
+  await expect(page.getByText('place.updated')).toBeVisible()
+
+  await page.getByRole('switch', { name: /Chỉ gỡ khẩn cấp/ }).click()
+  await expect(page.getByText('place.updated')).toHaveCount(0)
+  await expect(page.getByText('place.emergency_suspended')).toBeVisible()
+})
+
+test('search quality is ops-only and always shows the denominator', async ({ page }) => {
+  await signIn(page, 'editor@gogo.vn')
+  await page.goto('/search-quality')
+  await expect(page.getByText('Không đủ quyền')).toBeVisible()
+
+  await signIn(page, 'ops@gogo.vn')
+  await page.goto('/search-quality')
+  await expect(page.getByText('412 / 18.402')).toBeVisible()
+  await expect(page.getByText(/214 truy vấn/)).toBeVisible()
+})
+
 /**
  * SEC-001 — break-glass is deliberately open to every active admin. A narrower
  * list rebuilds the shared-super_admin problem it exists to prevent.

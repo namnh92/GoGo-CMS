@@ -9,7 +9,9 @@ import { formatNumber } from '@/shared/format'
 import { PageBody, PageHeader } from '@/app/PageHeader'
 import { Card, CardBody, CardHeader } from '@/shared/ui/Card'
 import { Button } from '@/shared/ui/Button'
-import { Select, TextInput, Toggle } from '@/shared/ui/Field'
+import { InlineSelect, Select, TextInput, Toggle } from '@/shared/ui/Field'
+import { Badge } from '@/shared/ui/Badge'
+import { ConfirmDialog } from '@/shared/ui/Overlay'
 import { DataTable } from '@/shared/ui/DataTable'
 import {
   AsyncBoundary,
@@ -31,7 +33,10 @@ const KINDS: TaxonomyKind[] = [
   'accessibility',
   'spending_style',
   'suitability',
+  'checkin_tag',
 ]
+
+type StateFilter = 'all' | 'active' | 'inactive'
 
 export default function TaxonomyScreen() {
   const t = useT()
@@ -43,17 +48,27 @@ export default function TaxonomyScreen() {
   const describeError = useErrorMessage()
 
   const [kind, setKind] = useState<TaxonomyKind>('mood')
+  const [stateFilter, setStateFilter] = useState<StateFilter>('all')
+  const [deactivating, setDeactivating] = useState<Taxonomy | null>(null)
   const [draft, setDraft] = useState({ key: '', labelVi: '', labelEn: '' })
   const [synonymDraft, setSynonymDraft] = useState<{ taxonomyId: string; term: string }>({
     taxonomyId: '',
     term: '',
   })
 
+  // Reads are hierarchical, so every role can open the list; only editor and
+  // ops (and super) may write, and each control asks separately below.
+  const canRead = can('taxonomy.read')
   const canManage = can('taxonomy.manage')
 
+  /*
+   * Unfiltered on purpose: the list must include switched-off keys, because
+   * this console is the only place one can be found and switched back on.
+   * The state filter is applied client-side so the counts per kind stay whole.
+   */
   const query = useQuery({
     queryKey: queryKeys.taxonomies.all,
-    queryFn: ({ signal }) => fetchTaxonomies(signal),
+    queryFn: ({ signal }) => fetchTaxonomies({}, signal),
   })
 
   const invalidate = () =>
@@ -92,8 +107,16 @@ export default function TaxonomyScreen() {
     onError: (error) => toast.error(describeError(error)),
   })
 
-  const all = useMemo(() => query.data?.items ?? [], [query.data])
-  const rows = useMemo(() => all.filter((item) => item.kind === kind), [all, kind])
+  const all = useMemo(() => query.data ?? [], [query.data])
+  const rows = useMemo(
+    () =>
+      all.filter(
+        (item) =>
+          item.kind === kind &&
+          (stateFilter === 'all' || (stateFilter === 'active' ? item.isActive : !item.isActive)),
+      ),
+    [all, kind, stateFilter],
+  )
   const countByKind = useMemo(() => {
     const counts = new Map<TaxonomyKind, number>()
     for (const item of all) counts.set(item.kind, (counts.get(item.kind) ?? 0) + 1)
@@ -105,7 +128,15 @@ export default function TaxonomyScreen() {
       {
         id: 'key',
         header: () => t('taxonomy.col.key'),
-        cell: ({ row }) => <span className={styles.key}>{row.original.key}</span>,
+        cell: ({ row }) => (
+          <span className="flex flex-wrap items-center gap-2">
+            <span className={styles.key}>{row.original.key}</span>
+            {/* State is spelled out, not only carried by the toggle's position. */}
+            {row.original.isActive ? null : (
+              <Badge tone="neutral">{t('taxonomy.filter.inactive')}</Badge>
+            )}
+          </span>
+        ),
       },
       {
         id: 'labelVi',
@@ -130,7 +161,12 @@ export default function TaxonomyScreen() {
         id: 'usage',
         header: () => t('taxonomy.col.usage'),
         cell: ({ row }) => (
-          <span className={styles.usage}>{formatNumber(row.original.usageCount, locale)}</span>
+          <span
+            className={styles.usage}
+            title={t('taxonomy.usage', { n: formatNumber(row.original.usageCount, locale) })}
+          >
+            {formatNumber(row.original.usageCount, locale)}
+          </span>
         ),
       },
       {
@@ -141,7 +177,16 @@ export default function TaxonomyScreen() {
             label={`${row.original.key} ${t('taxonomy.col.active')}`}
             checked={row.original.isActive}
             disabled={!canManage || !online}
-            onChange={(checked) => toggleActive.mutate({ id: row.original.id, isActive: checked })}
+            onChange={(checked) => {
+              // Switching a referenced key off changes what every picker in the
+              // product offers, so it is confirmed with its usage count rather
+              // than applied on a stray click.
+              if (!checked && row.original.usageCount > 0) {
+                setDeactivating(row.original)
+                return
+              }
+              toggleActive.mutate({ id: row.original.id, isActive: checked })
+            }}
           />
         ),
         enableSorting: false,
@@ -184,7 +229,7 @@ export default function TaxonomyScreen() {
     [t, locale, canManage, online, toggleActive],
   )
 
-  if (!canManage) {
+  if (!canRead) {
     return (
       <>
         <PageHeader breadcrumb={[{ label: t('app.suffix') }]} title={t('taxonomy.title')} />
@@ -227,7 +272,18 @@ export default function TaxonomyScreen() {
             <Card>
               <CardHeader
                 title={t(`taxonomyKind.${kind}` as const)}
-                hint={t('taxonomy.synonymsHint')}
+                hint={t('taxonomy.inactiveWarning')}
+                actions={
+                  <InlineSelect
+                    label={t('taxonomy.filter.state')}
+                    value={stateFilter}
+                    onChange={(event) => setStateFilter(event.target.value as StateFilter)}
+                  >
+                    <option value="all">{t('taxonomy.filter.all')}</option>
+                    <option value="active">{t('taxonomy.filter.active')}</option>
+                    <option value="inactive">{t('taxonomy.filter.inactive')}</option>
+                  </InlineSelect>
+                }
               />
               <AsyncBoundary
                 status={query.status}
@@ -294,7 +350,10 @@ export default function TaxonomyScreen() {
                     size="sm"
                     iconLeft={<PlusIcon size={14} />}
                     disabled={
-                      !online || !/^[a-z0-9_]{2,40}$/.test(draft.key) || draft.labelVi.trim() === ''
+                      !canManage ||
+                      !online ||
+                      !/^[a-z0-9_]{2,40}$/.test(draft.key) ||
+                      draft.labelVi.trim() === ''
                     }
                     loading={create.isPending}
                     onClick={() => create.mutate()}
@@ -353,7 +412,10 @@ export default function TaxonomyScreen() {
                     <Button
                       variant="secondary"
                       disabled={
-                        !online || !synonymDraft.taxonomyId || synonymDraft.term.trim() === ''
+                        !canManage ||
+                        !online ||
+                        !synonymDraft.taxonomyId ||
+                        synonymDraft.term.trim() === ''
                       }
                       loading={synonym.isPending}
                       onClick={() => synonym.mutate()}
@@ -373,6 +435,33 @@ export default function TaxonomyScreen() {
           </div>
         </div>
       </PageBody>
+
+      <ConfirmDialog
+        open={deactivating !== null}
+        onClose={() => setDeactivating(null)}
+        onConfirm={() => {
+          if (deactivating) toggleActive.mutate({ id: deactivating.id, isActive: false })
+          setDeactivating(null)
+        }}
+        title={t('taxonomy.filter.inactive')}
+        description={t('taxonomy.deactivateBlocked', {
+          n: formatNumber(deactivating?.usageCount ?? 0, locale),
+        })}
+        changes={
+          deactivating
+            ? [
+                {
+                  label: deactivating.key,
+                  from: t('taxonomy.filter.active'),
+                  to: t('taxonomy.filter.inactive'),
+                },
+              ]
+            : []
+        }
+        confirmLabel={t('action.confirm')}
+        tone="primary"
+        loading={toggleActive.isPending}
+      />
     </>
   )
 }

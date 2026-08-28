@@ -1,0 +1,17 @@
+export const styles = {
+  filters: 'grid gap-3 sm:grid-cols-2 xl:grid-cols-4',
+  filterActions: 'mt-3 flex flex-wrap items-center justify-between gap-3',
+  breakGlassToggle: 'flex items-center gap-2',
+  note: 'flex items-start gap-2 rounded-compact border border-line bg-surface-muted px-3 py-2 text-xs text-text-muted',
+  row: 'border-b border-line py-3 last:border-b-0',
+  rowBreakGlass: 'border-l-2 border-l-danger pl-3',
+  head: 'flex flex-wrap items-baseline justify-between gap-2',
+  action: 'text-[13px] font-semibold text-text',
+  actor: 'text-[12px] text-text-muted',
+  time: 'text-[12px] tabular-nums text-text-subtle',
+  meta: 'mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-text-subtle',
+  mono: 'font-mono',
+  reason: 'mt-1 text-[12px] text-text-muted',
+  diff: 'mt-2 max-h-56 overflow-auto rounded-compact bg-surface-sunken p-2 font-mono text-[11px] text-text-muted',
+  more: 'mt-4 flex justify-center',
+} as const

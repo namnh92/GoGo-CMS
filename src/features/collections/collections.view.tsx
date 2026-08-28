@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useI18n, useT } from '@/shared/i18n/i18n'
 import { queryKeys } from '@/shared/api/queryKeys'
@@ -20,8 +20,14 @@ import {
 import { useToast } from '@/shared/ui/Toast'
 import { CloseIcon, PlusIcon } from '@/shared/ui/icons'
 import { fetchPlaces } from '@/features/places/api'
-import type { Collection, CollectionStatus } from '@/shared/api/contracts'
-import { createCollection, fetchCollections, setCollectionItems, setCollectionStatus } from './api'
+import type { Collection, CollectionStatus, PlaceStatus } from '@/shared/api/contracts'
+import {
+  createCollection,
+  fetchCollectionItems,
+  fetchCollections,
+  setCollectionItems,
+  setCollectionStatus,
+} from './api'
 import { styles } from './collections.style'
 
 const STATUSES: CollectionStatus[] = ['draft', 'scheduled', 'published', 'archived']
@@ -33,7 +39,10 @@ const STATUS_TONE: Record<CollectionStatus, Tone> = {
   archived: 'neutral',
 }
 
-type PickedPlace = { id: string; name: string }
+/** Max items `cmsSetCollectionItems` accepts — enforced here so a save cannot fail on it. */
+const MAX_ITEMS = 100
+
+type PickedPlace = { id: string; name: string; status?: PlaceStatus }
 
 export default function CollectionsScreen() {
   const t = useT()
@@ -60,6 +69,17 @@ export default function CollectionsScreen() {
     enabled: canRead,
   })
 
+  /*
+   * Read before write. `PUT .../items` replaces the whole list, so the editor
+   * starts from what is stored rather than from an empty list that would erase
+   * the collection on the first save.
+   */
+  const itemsQuery = useQuery({
+    queryKey: queryKeys.collections.items(activeId ?? ''),
+    queryFn: ({ signal }) => fetchCollectionItems(activeId ?? '', signal),
+    enabled: canRead && Boolean(activeId),
+  })
+
   // The catalog list IS readable, so the picker searches it for real.
   const catalogQuery = useQuery({
     queryKey: queryKeys.places.list({ q: search, limit: 10 }),
@@ -67,14 +87,40 @@ export default function CollectionsScreen() {
     enabled: canManage && search.trim().length >= 2,
   })
 
-  const collections = query.data ?? []
+  // Memoized so the "select the first collection" effect below does not see a
+  // new array identity on every render.
+  const collections = useMemo(() => query.data ?? [], [query.data])
   const active: Collection | null =
     collections.find((item) => item.id === activeId) ?? collections[0] ?? null
 
+  // Keep the selection explicit once the list has loaded, so the items query
+  // has an id to fetch rather than silently reading nothing.
   useEffect(() => {
-    setPicked([])
+    if (!activeId && collections[0]) setActiveId(collections[0].id)
+  }, [activeId, collections])
+
+  useEffect(() => {
     setSearch('')
   }, [activeId])
+
+  const stored = itemsQuery.data?.items ?? []
+
+  useEffect(() => {
+    if (!itemsQuery.data) return
+    setPicked(
+      itemsQuery.data.items.map((item) => ({
+        id: item.placeId,
+        name: item.name,
+        status: item.status,
+      })),
+    )
+  }, [itemsQuery.data])
+
+  const dirty =
+    picked.length !== stored.length ||
+    picked.some((place, index) => stored[index]?.placeId !== place.id)
+
+  const removed = stored.filter((item) => !picked.some((place) => place.id === item.placeId))
 
   const invalidate = () =>
     void queryClient.invalidateQueries({ queryKey: queryKeys.collections.all })
@@ -104,8 +150,10 @@ export default function CollectionsScreen() {
       ),
     onSuccess: () => {
       setReplaceOpen(false)
-      toast.success(t('collections.items'))
+      toast.success(t('collections.items.saved'))
       invalidate()
+      if (activeId)
+        void queryClient.invalidateQueries({ queryKey: queryKeys.collections.items(activeId) })
     },
     onError: (error) => toast.error(describeError(error)),
   })
@@ -265,13 +313,14 @@ export default function CollectionsScreen() {
                     {t('collections.endsAt')}: {formatDateTime(active.endsAt, locale)}
                   </p>
 
-                  {/* `PUT .../items` exists but nothing reads the current list
-                      back, so the screen must not render an empty list as if
-                      it were the collection's contents. */}
-                  <p className={styles.contractNote}>
-                    <span aria-hidden="true">⚠</span>
-                    {t('collections.itemsUnreadable')}
-                  </p>
+                  {itemsQuery.status === 'pending' ? (
+                    <p className="text-xs text-text-muted">{t('state.loading')}</p>
+                  ) : itemsQuery.status === 'error' ? (
+                    <p className={styles.contractNote}>
+                      <span aria-hidden="true">⚠</span>
+                      {describeError(itemsQuery.error)}
+                    </p>
+                  ) : null}
 
                   <SearchInput
                     label={t('collections.searchCatalog')}
@@ -292,11 +341,21 @@ export default function CollectionsScreen() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            disabled={picked.some((entry) => entry.id === place.id)}
+                            disabled={
+                              picked.some((entry) => entry.id === place.id) ||
+                              picked.length >= MAX_ITEMS
+                            }
+                            title={
+                              picked.some((entry) => entry.id === place.id)
+                                ? t('collections.items.duplicate')
+                                : picked.length >= MAX_ITEMS
+                                  ? t('collections.items.limit')
+                                  : undefined
+                            }
                             onClick={() =>
                               setPicked((current) => [
                                 ...current,
-                                { id: place.id, name: place.name },
+                                { id: place.id, name: place.name, status: place.status },
                               ])
                             }
                           >
@@ -309,10 +368,15 @@ export default function CollectionsScreen() {
 
                   <div>
                     <p className="mb-2 text-xs font-semibold text-text-muted">
-                      {t('collections.newList')}{' '}
+                      {t('collections.items.title')}{' '}
                       <span className="font-normal text-text-subtle">
-                        — {t('collections.itemsHint')}
+                        — {t('collections.items.hint')}
                       </span>
+                      {dirty ? (
+                        <span className="ml-2 font-normal text-amber">
+                          {t('collections.items.dirty')}
+                        </span>
+                      ) : null}
                     </p>
                     <div className="flex flex-col gap-2">
                       {picked.map((place, index) => (
@@ -340,9 +404,17 @@ export default function CollectionsScreen() {
                           <span className="w-5 text-[11px] tabular-nums text-text-subtle">
                             {index + 1}
                           </span>
-                          <span className={styles.itemName}>{place.name}</span>
+                          <span className="min-w-0 flex-1">
+                            <span className={`block ${styles.itemName}`}>{place.name}</span>
+                            {/* A pinned place that left publication is named, not silently blank. */}
+                            {place.status && place.status !== 'published' ? (
+                              <span className="block text-[11px] text-amber">
+                                {t('collections.items.unpublished')}
+                              </span>
+                            ) : null}
+                          </span>
                           <IconButton
-                            label={t('collections.remove')}
+                            label={t('collections.items.remove')}
                             tone="danger"
                             className="h-8 w-8"
                             onClick={() =>
@@ -356,7 +428,7 @@ export default function CollectionsScreen() {
                         </div>
                       ))}
                       {picked.length === 0 ? (
-                        <p className="text-xs text-text-subtle">{t('collections.emptyNewList')}</p>
+                        <p className="text-xs text-text-subtle">{t('collections.items.empty')}</p>
                       ) : null}
                     </div>
                   </div>
@@ -364,10 +436,10 @@ export default function CollectionsScreen() {
                   <div className="flex justify-end">
                     <Button
                       variant="primary"
-                      disabled={!canManage || !online || picked.length === 0}
+                      disabled={!canManage || !online || !dirty}
                       onClick={() => setReplaceOpen(true)}
                     >
-                      {t('collections.replaceList', { count: picked.length })}
+                      {t('collections.items.save')}
                     </Button>
                   </div>
                 </>
@@ -385,10 +457,20 @@ export default function CollectionsScreen() {
         description={t('collections.replaceWarning', { count: picked.length })}
         confirmLabel={t('action.save')}
         loading={replaceItems.isPending}
-        changes={picked.map((place, index) => ({
-          label: `${index + 1}`,
-          to: place.name,
-        }))}
+        changes={[
+          {
+            label: t('collections.items.title'),
+            from: String(stored.length),
+            to: String(picked.length),
+          },
+          // Removal is the destructive half of a whole-list replace, so the
+          // dialog names every place that would drop out.
+          ...removed.map((item) => ({
+            label: t('collections.items.remove'),
+            from: item.name,
+            to: '—',
+          })),
+        ]}
       />
     </>
   )

@@ -6,11 +6,12 @@ import { I18nProvider } from '@/shared/i18n/i18n'
 import { SessionProvider } from '@/shared/auth/session'
 import { ToastProvider } from '@/shared/ui/Toast'
 import type { AdminRole } from '@/shared/api/contracts'
-
 const HINT_KEY = 'gogo.cms.session-hint'
 
 /** Seeds the session hint so a screen can be rendered as a given role. */
 export function signInAs(role: AdminRole, displayName = 'test.user'): void {
+  // The mock reads this same hint, so it answers per role the way the server
+  // does — staff IP in the audit log, four-eyes on a ranking config.
   window.localStorage.setItem(HINT_KEY, JSON.stringify({ role, displayName }))
 }
 

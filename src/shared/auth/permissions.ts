@@ -43,6 +43,8 @@ const ROUTE_ROLES = {
   imports: ['editor', 'ops_admin'],
   /** `PlaceImportController#publish` — handler-level @RequireRole('ops_admin') */
   importPublish: ['ops_admin'],
+  /** `CmsAuditController` — @RequireRole('editor'); rank-read opens it to every role. */
+  audit: ['editor'],
   /** `EmergencyController` — @RequireRole('editor', 'moderator', 'ops_admin') */
   emergency: ['editor', 'moderator', 'ops_admin'],
   /** `POST /cms/auth/admins` — @RequireRole('super_admin') */
@@ -100,12 +102,21 @@ const PERMISSIONS = {
 
   // Ops — rank 2 and above, reads included.
   'ops.dashboard': ['ops', 'read'],
+  'searchAnalytics.read': ['ops', 'read'],
   'ranking.read': ['ops', 'read'],
+  'ranking.evaluate': ['ops', 'read'],
   'ranking.draft': ['ops', 'write'],
   'ranking.approve': ['ops', 'write'],
   'ranking.activate': ['ops', 'write'],
   'ranking.rollback': ['ops', 'write'],
+  'flag.read': ['ops', 'read'],
   'flag.manage': ['ops', 'write'],
+  'experiment.read': ['ops', 'read'],
+  'experiment.manage': ['ops', 'write'],
+
+  // Audit — declared on `editor`, so rank-based read opens the log to every
+  // role. It is read-only everywhere: the server serves no write route here.
+  'audit.read': ['audit', 'read'],
 
   // Emergency takedown — anyone on shift can pull content down.
   'emergency.takedown': ['emergency', 'write'],

@@ -56,6 +56,26 @@ describe('read is hierarchical, write is exact', () => {
     }
   })
 
+  it('opens the audit log to every role, because it is declared on editor', () => {
+    // `CmsAuditController` is @RequireRole('editor') (rank 1), so rank-based
+    // read reaches it from every role — an editor needs to know who last
+    // touched a place as much as ops does.
+    for (const role of ['editor', 'moderator', 'ops_admin', 'super_admin'] as const) {
+      expect(roleCan(role, 'audit.read')).toBe(true)
+    }
+  })
+
+  it('keeps experiments and search analytics on the ops controller', () => {
+    expect(roleCan('ops_admin', 'experiment.manage')).toBe(true)
+    expect(roleCan('super_admin', 'experiment.manage')).toBe(true)
+    expect(roleCan('editor', 'experiment.read')).toBe(false)
+    expect(roleCan('moderator', 'searchAnalytics.read')).toBe(false)
+    expect(roleCan('ops_admin', 'searchAnalytics.read')).toBe(true)
+    // Evaluating a config is a GET on the same ops controller.
+    expect(roleCan('editor', 'ranking.evaluate')).toBe(false)
+    expect(roleCan('ops_admin', 'ranking.evaluate')).toBe(true)
+  })
+
   it('reserves admin creation for super admin, reads included', () => {
     expect(roleCan('ops_admin', 'admin.create')).toBe(false)
     expect(canAccess('ops_admin', 'admins', 'read')).toBe(false)

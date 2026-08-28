@@ -2,11 +2,13 @@ import type { ComponentType, SVGProps } from 'react'
 import type { MessageKey } from '@/shared/i18n/vi'
 import type { Permission } from '@/shared/auth/permissions'
 import {
+  AuditIcon,
   CollectionsIcon,
   DashboardIcon,
   ImportIcon,
   ModerationIcon,
   PlacesIcon,
+  SearchIcon,
   SettingsIcon,
   TaxonomyIcon,
 } from '@/shared/ui/icons'
@@ -59,7 +61,7 @@ export const NAV_ITEMS: NavItem[] = [
     to: '/taxonomy',
     labelKey: 'nav.taxonomy',
     icon: TaxonomyIcon,
-    permission: 'taxonomy.manage',
+    permission: 'taxonomy.read',
     match: (p) => p.startsWith('/taxonomy'),
   },
   {
@@ -82,5 +84,21 @@ export const NAV_ITEMS: NavItem[] = [
     icon: SettingsIcon,
     permission: 'ranking.read',
     match: (p) => p.startsWith('/settings'),
+  },
+  {
+    to: '/search-quality',
+    labelKey: 'nav.searchQuality',
+    icon: SearchIcon,
+    permission: 'searchAnalytics.read',
+    match: (p) => p.startsWith('/search-quality'),
+  },
+  {
+    // Declared on `editor`, so rank-based read puts the log in every role's
+    // nav — which is the point: everyone can answer "who changed this".
+    to: '/audit',
+    labelKey: 'nav.audit',
+    icon: AuditIcon,
+    permission: 'audit.read',
+    match: (p) => p.startsWith('/audit'),
   },
 ]

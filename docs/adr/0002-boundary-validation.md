@@ -9,10 +9,15 @@
 Quy tắc workspace: _API client là generated code, không viết tay DTO_. Client
 được sinh từ `openapi/gogo.v1.yaml` bằng `openapi-typescript`.
 
-Tuy nhiên, **26/27** endpoint `/v1/cms/*` trong spec hiện chỉ mô tả response
-bằng `description` dạng văn xuôi, không có `schema`. Ngoại lệ duy nhất là
-`GET /cms/places` (`CmsPlaceListItem`, thêm ở GoGo-BE#141) — đã dùng type
-generated cho phần đó.
+Tuy nhiên phần lớn endpoint `/v1/cms/*` trong spec chỉ mô tả response bằng
+`description` dạng văn xuôi, không có `schema`.
+
+**Cập nhật 2026-08-28 (GoGo-BE#175).** Bảy operation đọc mà console dùng nhiều
+nhất đã có schema thật: `CmsPlaceDetail`, `CmsTaxonomy`, `CmsRankingConfig`,
+`CmsFeatureFlag`, `CmsAuditEntry`/`CmsAuditPage`, `CmsRankingEvaluation`,
+`CmsSearchAnalytics`, `CmsExperiment` — cộng `CmsPlaceListItem` có từ
+GoGo-BE#141. Phần còn thiếu schema là các endpoint như `GET /cms/moderation`,
+`/cms/ops/kpis`, `/cms/collections`, `/cms/places/stale`, `/cms/places/duplicates`.
 
 ```yaml
 /cms/places:
@@ -41,19 +46,33 @@ Kết quả: `openapi-typescript` chỉ có thể suy ra `unknown`. Các nhóm c
 4. `pnpm api:check` chặn CI khi spec vendored lệch version hoặc khi
    `schema.d.ts` cũ so với spec.
 
-## Shape "khát vọng" — đánh dấu riêng
+## Shape "khát vọng" — đã hết
 
-Một số schema mô tả endpoint **chưa tồn tại** (`GET /cms/places/{id}`,
-`/cms/taxonomies`, `/cms/ranking-configs`, `/cms/feature-flags`, audit của
-place). Chúng được đánh dấu `⚠ Aspirational` ngay trong `contracts.ts` và hiện
-chỉ do MSW phục vụ. Không được coi là contract cho tới khi endpoint có thật.
+Trước GoGo-BE#175, năm schema mô tả endpoint **chưa tồn tại** và được đánh dấu
+`⚠ Aspirational`. Cả năm giờ là endpoint thật, và shape thật **khác** shape đã
+đoán ở nhiều chỗ (rating tách hai nguồn, `bounds` đi kèm từng config, admin là
+object chứ không phải chuỗi tên). Đó là lý do quy tắc "đọc từ controller, không
+đoán" tồn tại — và cũng là lý do không được để shape tự chế nằm lại trong
+`contracts.ts`: không còn `⚠ Aspirational` nào trong `src/`.
 
 ## Điều kiện gỡ bỏ
 
-Theo dõi ở [GoGo-BE#163](https://github.com/namnh92/GoGo-BE/issues/163). Khi
-GoGo-BE bổ sung `schema` cho response của các endpoint CMS, thay
-`apiFetchParsed` bằng type generated và xoá schema zod tương ứng. Zod vẫn giữ
-lại cho các boundary không do OpenAPI mô tả (deep-link param, storage).
+Theo dõi ở [GoGo-BE#163](https://github.com/namnh92/GoGo-BE/issues/163) — đã
+đóng cho bảy operation kể trên, phần còn lại vẫn mở dưới dạng các endpoint chưa
+khai báo schema.
+
+Vẫn **chưa** thay `apiFetchParsed` bằng type generated cho nhóm đã có schema, vì
+hai lý do:
+
+1. Nhóm còn lại vẫn cần zod, nên bỏ nó ở vài chỗ chỉ tạo ra hai lối đọc response
+   song song trong cùng một codebase — khó đọc hơn là giữ một lối.
+2. Type generated là kiểm tra lúc biên dịch; nó không bắt được server thật trả
+   thiếu field. `CONTRACT_MISMATCH` tại boundary là thứ duy nhất bắt được lệch
+   thật lúc chạy, và đó chính là loại lỗi vừa xảy ra.
+
+Điều kiện gỡ bỏ vì vậy chặt hơn: **khi toàn bộ `/cms/*` có schema**, đổi cả loạt
+sang type generated và giữ zod ở các boundary không do OpenAPI mô tả (deep-link
+param, storage).
 
 ## Hệ quả
 

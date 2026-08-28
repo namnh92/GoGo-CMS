@@ -25,6 +25,7 @@ export const queryKeys = {
   collections: {
     all: ['collections'] as const,
     list: (status?: string) => ['collections', 'list', status ?? 'all'] as const,
+    items: (id: string) => ['collections', 'items', id] as const,
   },
 
   moderation: {
@@ -49,5 +50,15 @@ export const queryKeys = {
   ranking: {
     configs: ['ranking', 'configs'] as const,
     flags: ['ranking', 'flags'] as const,
+    experiments: ['ranking', 'experiments'] as const,
+    evaluation: (id: string, sampleSize: number) =>
+      ['ranking', 'evaluation', id, sampleSize] as const,
   },
+
+  audit: {
+    all: ['audit'] as const,
+    list: (filters: Record<string, unknown>) => ['audit', 'list', filters] as const,
+  },
+
+  searchAnalytics: (days: number) => ['search-analytics', days] as const,
 } as const

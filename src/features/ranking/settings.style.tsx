@@ -24,4 +24,21 @@ export const styles = {
   providerGrid: 'grid grid-cols-3 gap-2 text-[11px]',
   fourEyes:
     'flex items-start gap-2 rounded-compact border border-amber/45 bg-amber-soft px-3 py-2 text-xs text-text',
+  flagPayload:
+    'mt-1 max-h-24 overflow-auto rounded-compact bg-surface-sunken p-2 font-mono text-[11px] text-text-muted',
+  experimentRow: 'border-b border-line py-4 last:border-b-0',
+  experimentHead: 'flex flex-wrap items-start justify-between gap-3',
+  experimentKey: 'font-mono text-[13px] font-semibold text-text',
+  experimentDesc: 'mt-0.5 max-w-lg text-xs text-text-muted',
+  splitBar: 'mt-3 flex h-3 w-full overflow-hidden rounded-pill bg-surface-sunken',
+  splitSegment: 'h-full',
+  splitLegend: 'mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-text-muted',
+  splitDot: 'mr-1 inline-block h-2 w-2 rounded-full align-middle',
+  variantRow: 'grid grid-cols-[1fr_6rem_auto] items-end gap-2',
+  metricGrid: 'grid gap-3 sm:grid-cols-2 xl:grid-cols-4',
+  metricCard: 'rounded-compact border border-line bg-surface-muted px-3 py-2',
+  metricLabel: 'block text-[11px] text-text-subtle',
+  metricValue: 'block font-display text-xl font-extrabold tabular-nums text-text',
+  metricHint: 'mt-1 block text-[11px] text-text-subtle',
+  skippedList: 'mt-2 max-h-32 overflow-auto text-[11px] text-text-subtle',
 } as const

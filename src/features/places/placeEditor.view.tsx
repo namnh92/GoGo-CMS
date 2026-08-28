@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { useI18n, useT } from '@/shared/i18n/i18n'
+import { useI18n, useLabel, useT } from '@/shared/i18n/i18n'
 import { queryKeys } from '@/shared/api/queryKeys'
 import { useSession } from '@/shared/auth/session'
 import { useOnline } from '@/shared/ui/useOnline'
@@ -12,6 +12,8 @@ import {
   formatDateTime,
   formatMinuteOfDay,
   formatMoneyRange,
+  formatNumber,
+  formatPercent,
   formatRelative,
   parseMinuteOfDay,
 } from '@/shared/format'
@@ -27,7 +29,7 @@ import { useToast } from '@/shared/ui/Toast'
 import { CloseIcon, PlusIcon, ShieldOffIcon } from '@/shared/ui/icons'
 import { TakedownDialog } from '@/features/emergency/takedownDialog.view'
 import { fetchTaxonomies } from '@/features/taxonomy/api'
-import type { PlaceHour, PlaceStatus, PriceUnit } from '@/shared/api/contracts'
+import type { PlaceHourInput, PlaceStatus, PriceUnit } from '@/shared/api/contracts'
 import {
   addPlacePrice,
   fetchPlace,
@@ -62,6 +64,14 @@ type IdentityForm = z.infer<typeof identitySchema>
 
 const PRICE_UNITS: PriceUnit[] = ['per_person', 'per_item', 'per_hour', 'per_night']
 
+/**
+ * What the editor holds while a week is being edited. `source` and `verifiedAt`
+ * are read-only server stamps, so a row typed here has neither until it is
+ * saved — the row says "not saved yet" rather than borrowing a provenance it
+ * does not have.
+ */
+type HourDraft = PlaceHourInput & { source?: string; verifiedAt?: string | null }
+
 export default function PlaceEditorScreen() {
   const t = useT()
   const { locale } = useI18n()
@@ -71,13 +81,14 @@ export default function PlaceEditorScreen() {
   const queryClient = useQueryClient()
   const { can } = useSession()
   const online = useOnline()
+  const label = useLabel()
   const describeError = useErrorMessage()
 
   const canWrite = can('place.write')
   const [auditOpen, setAuditOpen] = useState(false)
   const [takedownOpen, setTakedownOpen] = useState(false)
   const [mergeTarget, setMergeTarget] = useState<{ id: string; name: string } | null>(null)
-  const [hours, setHours] = useState<PlaceHour[]>([])
+  const [hours, setHours] = useState<HourDraft[]>([])
   const [taxonomyIds, setTaxonomyIds] = useState<string[]>([])
   const [newPrice, setNewPrice] = useState({
     priceMin: '',
@@ -92,14 +103,16 @@ export default function PlaceEditorScreen() {
   })
 
   const taxonomyQuery = useQuery({
+    // Only active keys are offered as a choice; a deactivated key already on
+    // the place still resolves below, because the chip reads from this list.
     queryKey: queryKeys.taxonomies.all,
-    queryFn: ({ signal }) => fetchTaxonomies(signal),
+    queryFn: ({ signal }) => fetchTaxonomies({}, signal),
     staleTime: 300_000,
   })
 
   const auditQuery = useQuery({
     queryKey: queryKeys.places.audit(id),
-    queryFn: ({ signal }) => fetchPlaceAudit(id, signal),
+    queryFn: ({ signal }) => fetchPlaceAudit(id, null, signal),
     enabled: auditOpen && Boolean(id),
   })
 
@@ -130,7 +143,7 @@ export default function PlaceEditorScreen() {
 
   const taxonomyById = useMemo(() => {
     const map = new Map<string, { key: string; labels: Record<string, string> }>()
-    for (const item of taxonomyQuery.data?.items ?? []) map.set(item.id, item)
+    for (const item of taxonomyQuery.data ?? []) map.set(item.id, item)
     return map
   }, [taxonomyQuery.data])
 
@@ -324,13 +337,89 @@ export default function PlaceEditorScreen() {
                         />
                         <div className="flex items-end gap-2">
                           <Badge tone="neutral">
-                            {t('placeEditor.sources')}: {detail.sourceCount}
+                            {t('placeEditor.sources')}: {detail.sources.length}
                           </Badge>
                           <Badge tone={detail.freshnessCheckedAt ? 'mint' : 'amber'}>
                             {detail.freshnessCheckedAt
                               ? formatRelative(detail.freshnessCheckedAt, locale)
                               : t('places.freshness.never')}
                           </Badge>
+                        </div>
+                      </div>
+                      {/*
+                        Phone, website and price level are provider facts: the
+                        catalog reads them but `cmsUpdatePlace` does not accept
+                        them, so an editable-looking field here would be a lie.
+                      */}
+                      <dl className={styles.factGrid}>
+                        <div>
+                          <dt className={styles.factLabel}>{t('placeEditor.phone')}</dt>
+                          <dd className={styles.factValue}>{detail.phone ?? '—'}</dd>
+                        </div>
+                        <div>
+                          <dt className={styles.factLabel}>{t('placeEditor.website')}</dt>
+                          <dd className={styles.factValue}>
+                            {detail.website ? (
+                              <a
+                                className={styles.factLink}
+                                href={detail.website}
+                                target="_blank"
+                                rel="noreferrer noopener"
+                              >
+                                {detail.website}
+                              </a>
+                            ) : (
+                              '—'
+                            )}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className={styles.factLabel}>{t('placeEditor.priceLevel')}</dt>
+                          <dd className={styles.factValue}>
+                            {detail.priceLevel == null ? '—' : '₫'.repeat(detail.priceLevel || 1)}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className={styles.factLabel}>{t('placeEditor.confidence')}</dt>
+                          <dd className={styles.factValue}>
+                            {formatPercent(detail.confidence, locale)}
+                          </dd>
+                        </div>
+                      </dl>
+                      {/*
+                        Two ratings, never averaged: they count different
+                        populations (FR-INGEST-006). The composite score the
+                        spec mentions is computed nowhere yet, so there is no
+                        third figure to show.
+                      */}
+                      <div className={styles.ratingRow}>
+                        <div className={styles.ratingCard}>
+                          <span className={styles.factLabel}>
+                            {t('placeEditor.ratingProvider')}
+                          </span>
+                          <span className={styles.ratingValue}>
+                            {detail.ratings.provider.rating == null
+                              ? '—'
+                              : formatNumber(detail.ratings.provider.rating, locale)}
+                          </span>
+                          <span className={styles.factLabel}>
+                            {t('placeEditor.ratingCount', {
+                              count: formatNumber(detail.ratings.provider.count, locale),
+                            })}
+                          </span>
+                        </div>
+                        <div className={styles.ratingCard}>
+                          <span className={styles.factLabel}>{t('placeEditor.ratingGogo')}</span>
+                          <span className={styles.ratingValue}>
+                            {detail.ratings.gogo.rating == null
+                              ? '—'
+                              : formatNumber(detail.ratings.gogo.rating, locale)}
+                          </span>
+                          <span className={styles.factLabel}>
+                            {t('placeEditor.ratingCount', {
+                              count: formatNumber(detail.ratings.gogo.count, locale),
+                            })}
+                          </span>
                         </div>
                       </div>
                     </CardBody>
@@ -377,7 +466,7 @@ export default function PlaceEditorScreen() {
                         }}
                       >
                         <option value="">—</option>
-                        {(taxonomyQuery.data?.items ?? [])
+                        {(taxonomyQuery.data ?? [])
                           .filter(
                             (taxonomy) => taxonomy.isActive && !taxonomyIds.includes(taxonomy.id),
                           )
@@ -415,8 +504,8 @@ export default function PlaceEditorScreen() {
                         <p className="text-xs text-text-subtle">{t('state.emptyHint')}</p>
                       ) : (
                         <ul>
-                          {detail.prices.map((price, index) => (
-                            <li key={price.id ?? index} className={styles.priceRow}>
+                          {detail.prices.map((price) => (
+                            <li key={price.id} className={styles.priceRow}>
                               <span className={styles.priceValue}>
                                 {formatMoneyRange(
                                   price.priceMin,
@@ -425,12 +514,16 @@ export default function PlaceEditorScreen() {
                                   locale,
                                 )}{' '}
                                 <span className="font-normal text-text-muted">
-                                  / {t(`priceUnit.${price.unit}` as const)}
+                                  {/* Unit is free-form on read; an unknown one shows its key. */}/{' '}
+                                  {label(`priceUnit.${price.unit}`, price.unit)}
                                 </span>
                               </span>
                               <span className={styles.priceMeta}>
-                                {price.observedBy ?? '—'} ·{' '}
-                                {formatDateTime(price.observedAt, locale)}
+                                {price.source} · {t('placeEditor.confidenceShort')}{' '}
+                                {formatPercent(price.confidence, locale)} ·{' '}
+                                {price.verifiedAt
+                                  ? formatDateTime(price.verifiedAt, locale)
+                                  : t('placeEditor.unverified')}
                               </span>
                             </li>
                           ))}
@@ -565,6 +658,18 @@ export default function PlaceEditorScreen() {
                                 )
                               }
                             />
+                            {entry ? (
+                              <p className={styles.hourMeta}>
+                                {entry.source
+                                  ? t('placeEditor.hoursSource', {
+                                      source: entry.source,
+                                      time: entry.verifiedAt
+                                        ? formatDateTime(entry.verifiedAt, locale)
+                                        : t('placeEditor.unverified'),
+                                    })
+                                  : t('placeEditor.hoursUnsaved')}
+                              </p>
+                            ) : null}
                           </div>
                         )
                       })}
@@ -574,25 +679,42 @@ export default function PlaceEditorScreen() {
                   <Card>
                     <CardHeader title={t('placeEditor.media')} />
                     <CardBody>
-                      <div className={styles.mediaRow}>
-                        {detail.media.map((media) => (
-                          <img
-                            key={media.id}
-                            src={media.url}
-                            alt=""
-                            className={styles.mediaThumb}
-                            loading="lazy"
-                          />
-                        ))}
-                        <button
-                          type="button"
-                          className={styles.mediaAdd}
-                          aria-label={t('action.add')}
-                          disabled={!canWrite}
-                        >
-                          <PlusIcon size={18} />
-                        </button>
-                      </div>
+                      {/*
+                        The API returns a storage key and a moderation state,
+                        not a display URL, and there is no CMS route that
+                        uploads or attaches one. So this lists what exists and
+                        what state it is in; it does not offer an add button
+                        that could only fail. Tracked in the README.
+                      */}
+                      {detail.media.length === 0 ? (
+                        <p className="text-xs text-text-subtle">{t('placeEditor.mediaEmpty')}</p>
+                      ) : (
+                        <ul className={styles.mediaRow}>
+                          {detail.media.map((media) => (
+                            <li key={media.id} className={styles.mediaItem}>
+                              <span className={styles.mediaKey}>{media.storageKey}</span>
+                              <span className="flex shrink-0 items-center gap-2">
+                                {media.width && media.height ? (
+                                  <span className={styles.mediaDims}>
+                                    {media.width}×{media.height}
+                                  </span>
+                                ) : null}
+                                <Badge
+                                  tone={
+                                    media.moderation === 'approved'
+                                      ? 'mint'
+                                      : media.moderation === 'rejected'
+                                        ? 'danger'
+                                        : 'amber'
+                                  }
+                                >
+                                  {label(`mediaModeration.${media.moderation}`, media.moderation)}
+                                </Badge>
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                       <p className={styles.attribution}>{t('placeEditor.mediaAttribution')}</p>
                     </CardBody>
                   </Card>
@@ -604,16 +726,28 @@ export default function PlaceEditorScreen() {
                         <p className="text-xs text-text-subtle">{t('state.emptyHint')}</p>
                       ) : (
                         <ul>
-                          {detail.sources.map((source, index) => (
-                            <li key={index} className={styles.sourceRow}>
+                          {detail.sources.map((source) => (
+                            <li key={source.id} className={styles.sourceRow}>
                               <span className="min-w-0">
-                                <span className="font-semibold text-text">
-                                  {source.label ?? source.kind}
+                                <span className="font-semibold text-text">{source.provider}</span>
+                                <span className="block font-mono text-[11px] text-text-subtle">
+                                  {source.externalId}
                                 </span>
+                                {/* FR-INGEST-014: provider facts travel with their attribution. */}
                                 {source.attribution ? (
                                   <span className="block text-[11px] text-text-subtle">
                                     {source.attribution}
                                   </span>
+                                ) : null}
+                                {source.url ? (
+                                  <a
+                                    className={styles.sourceLink}
+                                    href={source.url}
+                                    target="_blank"
+                                    rel="noreferrer noopener"
+                                  >
+                                    {source.url}
+                                  </a>
                                 ) : null}
                               </span>
                               <span className="shrink-0 text-[11px] tabular-nums text-text-subtle">
@@ -714,10 +848,10 @@ export default function PlaceEditorScreen() {
 }
 
 function upsertHour(
-  current: PlaceHour[],
+  current: HourDraft[],
   dayOfWeek: number,
-  patch: Partial<PlaceHour>,
-): PlaceHour[] {
+  patch: Partial<HourDraft>,
+): HourDraft[] {
   const existing = current.find((hour) => hour.dayOfWeek === dayOfWeek)
   if (!existing) {
     return [

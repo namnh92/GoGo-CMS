@@ -127,6 +127,31 @@ tags:
     description: Staff-only endpoints — not used by the mobile app.
 
 paths:
+  /metrics:
+    get:
+      operationId: scrapeMetrics
+      tags: [system]
+      summary: Prometheus text exposition for a scraper
+      description: >
+        Guarded by `METRICS_TOKEN` as a bearer token. Series names and label
+        values describe internal structure — which providers are called, which
+        admin actions happen — so this is not public.
+
+
+        With no token configured the route answers **404**, not 401: an
+        unconfigured endpoint should not advertise that it exists and is
+        merely locked.
+      responses:
+        '200':
+          description: Metrics in Prometheus text format
+          content:
+            text/plain:
+              schema: { type: string }
+        '401':
+          description: Missing or wrong token
+        '404':
+          description: No metrics token is configured in this environment
+
   /health:
     get:
       operationId: getHealth
@@ -381,6 +406,46 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
 
   /rooms:
+    get:
+      operationId: listRooms
+      tags: [rooms]
+      summary: Rooms the caller belongs to, most recently active first
+      description: >
+        A room used to be reachable only by id, so a client that lost the id
+        lost the room — closing the app mid-flow was enough. Keyset paging on
+        `(updatedAt, id)` because a room's timestamp moves while the list is
+        being read: one vote is enough. Each row carries the progress needed to
+        draw it, so a "your rooms" screen makes one call, not one per room. The
+        invite code is deliberately absent — a list screen has no reason to hand
+        one out.
+      parameters:
+        - name: status
+          in: query
+          description: Repeatable or comma-separated; unknown values are ignored.
+          schema:
+            type: string
+            example: collecting,matching
+        - {
+            name: limit,
+            in: query,
+            schema: { type: integer, minimum: 1, maximum: 50, default: 20 },
+          }
+        - { name: cursor, in: query, schema: { type: string, maxLength: 512 } }
+      responses:
+        '200':
+          description: One page of room summaries
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, nextCursor]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/RoomListItem' }
+                  nextCursor: { type: string, nullable: true }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
     post:
       operationId: createRoom
       tags: [rooms]
@@ -486,6 +551,72 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/RoomSummary' }
         '409': { $ref: '#/components/responses/Conflict' }
+
+  /rooms/{id}/events:
+    get:
+      operationId: streamRoomEvents
+      tags: [rooms]
+      summary: 'Realtime room stream (SSE)'
+      description: >
+        Server-sent events for one room, authorized exactly like `GET
+        /rooms/{id}`: members only, and a guest token reaches only the room it
+        is bound to.
+
+
+        SSE rather than a WebSocket because every event here is server →
+        client; nothing needs a bidirectional channel, and this keeps the same
+        bearer auth as the rest of the API.
+
+
+        Event types: `room.status_changed`, `participant.joined`,
+        `participant.left`, `participant.selection_changed`,
+        `matching.started`, `matching.completed`, `matching.failed`,
+        `suggestions.generated`, `suggestions.updated`, `vote.changed`,
+        `plan.updated`, plus two stream-level types — `heartbeat`, which keeps
+        idle connections alive through proxies, and `resync`, which says the
+        client's resume point is older than the replay buffer and it must
+        refetch. `resync` exists so a gap is reported rather than silently
+        skipped: a client that is wrong without knowing it is the failure this
+        endpoint is meant to prevent.
+
+
+        Each message's `id` is a per-room sequence number. Send it back as
+        `Last-Event-ID` (or the `lastEventId` query parameter, which browsers
+        need because `EventSource` cannot set headers) to resume.
+
+
+        Payloads carry facts, never composed copy, and never another member's
+        preference selections — `participant.selection_changed` reports
+        progress only (FR-PREF-005).
+
+
+        Polling the underlying endpoints remains a supported fallback; when
+        `REALTIME_SSE_ENABLED` is off, this route answers `503 REALTIME_DISABLED`
+        and clients should poll.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - name: Last-Event-ID
+          in: header
+          required: false
+          schema: { type: string }
+          description: The last sequence number received, to resume after a reconnect.
+        - name: lastEventId
+          in: query
+          required: false
+          schema: { type: string }
+          description: Same as the header, for browser EventSource which cannot set one.
+      responses:
+        '200':
+          description: An event stream
+          content:
+            text/event-stream:
+              schema: { $ref: '#/components/schemas/RoomEvent' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429':
+          description: Too many open streams for this session
+        '503':
+          description: Realtime disabled in this environment; poll instead
 
   /rooms/{id}/members:
     get:
@@ -744,8 +875,83 @@ paths:
                 type: object
                 properties:
                   completed: { type: boolean }
-                  roomReadyForMatching: { type: boolean }
+                  allMembersCompleted:
+                    type: boolean
+                    description: Every member has finished their preferences.
+                  roomStatus:
+                    type: string
+                    enum:
+                      [draft, collecting, matching, ready, active, completed, cancelled, expired]
+                  roomReadyForMatching:
+                    type: boolean
+                    description: >
+                      Everyone has finished **and** the room is in a state the
+                      suggestions endpoint accepts. It used to report member
+                      progress alone, so a client could be told the room was
+                      ready and then get 409 ROOM_NOT_MATCHING.
         '400': { $ref: '#/components/responses/BadRequest' }
+
+  /uploads:
+    post:
+      operationId: createUpload
+      tags: [plans]
+      summary: 'Presigned upload for moderated user media'
+      description: >
+        Check-in accepts `photoKeys` and `billPhotoKey` — keys of already
+        uploaded objects — and until this endpoint existed nothing in the
+        contract could produce one, so the mobile check-in sheet shipped
+        without photos or the verified bill (FR-PLAN-009 was unreachable).
+
+
+        Presigned rather than multipart: the client PUTs the bytes straight to
+        storage with the returned URL and sends only the `key` back. Image
+        bytes never cross the API.
+
+
+        The returned key is bound to the actor that created it. Attaching a key
+        belonging to another actor, an expired one, or one issued for a
+        different purpose is rejected — the server does not distinguish those
+        cases in its answer.
+
+
+        Content type and size are enforced server-side and the content type is
+        part of what is signed, so storage refuses an upload that does not
+        match what was authorized.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [purpose, contentType, contentLength]
+              properties:
+                purpose:
+                  type: string
+                  enum: [checkin_photo, bill_photo, place_photo]
+                contentType:
+                  type: string
+                  enum: [image/jpeg, image/png, image/webp, image/heic]
+                contentLength:
+                  type: integer
+                  description: Declared up front, so an oversized file is refused before a URL exists.
+      responses:
+        '201':
+          description: Upload authorized
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [key, uploadUrl, expiresAt, maxBytes]
+                properties:
+                  key:
+                    type: string
+                    description: Send this back in the check-in; it is only usable by this actor.
+                  uploadUrl: { type: string }
+                  expiresAt: { type: string, format: date-time }
+                  maxBytes: { type: integer }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '503':
+          description: Object storage is not configured in this environment
 
   /taxonomies:
     get:
@@ -757,7 +963,7 @@ paths:
         - name: kinds
           in: query
           schema: { type: string }
-          description: Comma-separated kind filter (mood,category,setting,dietary,accessibility,spending_style,suitability)
+          description: Comma-separated kind filter (mood,category,setting,dietary,accessibility,spending_style,suitability,checkin_tag)
       responses:
         '200':
           description: Taxonomy keys with i18n labels
@@ -1006,6 +1212,29 @@ paths:
       operationId: regeneratePlan
       tags: [plans]
       summary: 'Host-only: regenerate — locked stops are invariant (SG-008)'
+      description: >
+        `feedbackText` (SG-009) is the member's own words. It is turned into
+        structured constraints, validated against the verified candidate set
+        and the room's own constraints, and only then handed to the same
+        deterministic pipeline — which stays the thing making the decision.
+
+
+        Feedback may only **tighten**: it can narrow the budget, shrink the
+        radius, drop stops or avoid a category. It cannot raise the budget the
+        room agreed on, widen the host's radius, add stops, or reference a
+        place that was not already a verified candidate. Anything it proposes
+        outside those bounds is dropped with a reason code.
+
+
+        The response reports what was understood and what was ignored, because
+        feedback that silently changes nothing is indistinguishable from
+        feedback that was never read.
+
+
+        When AI parsing is disabled, times out, runs out of quota, or returns
+        output that fails validation, a deterministic parser produces the
+        result instead. There is no failure path that surfaces a model error
+        to the user.
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
       requestBody:
@@ -1017,12 +1246,21 @@ paths:
                 excludePlaceIds:
                   type: array
                   items: { type: string, format: uuid }
+                feedbackText:
+                  type: string
+                  maxLength: 500
+                  description: Free text, e.g. "rẻ hơn và gần hơn".
       responses:
         '201':
           description: New plan version — every locked stop is preserved verbatim
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Plan' }
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Plan'
+                  - type: object
+                    properties:
+                      feedback: { $ref: '#/components/schemas/FeedbackOutcome' }
         '409': { $ref: '#/components/responses/Conflict' }
 
   /plans/{id}/stops/{stopId}/lock:
@@ -1900,6 +2138,72 @@ paths:
             text/html:
               schema: { type: string }
 
+  /cms/audit:
+    get:
+      operationId: cmsListAudit
+      tags: [cms]
+      summary: 'Admin: read the audit log (filterable, cursor-paged)'
+      description: >
+        Audit is a feature, not a log — ops must be able to answer "who
+        suspended this place and why" without database access. Read-only:
+        FR-CMS-008 makes the log immutable, so there is no update or delete
+        path here by design.
+
+        `breakGlass=true` is the incident-review query: it returns emergency
+        takedowns on their own, with actor, role, reason and request id.
+      parameters:
+        - { name: resourceType, in: query, schema: { type: string } }
+        - name: resourceId
+          in: query
+          schema: { type: string }
+          description: Text, not uuid — flags and ranking configs are audited by key.
+        - { name: actorId, in: query, schema: { type: string, format: uuid } }
+        - { name: action, in: query, schema: { type: string } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - name: breakGlass
+          in: query
+          schema: { type: boolean }
+          description: Emergency takedowns only.
+        - {
+            name: limit,
+            in: query,
+            schema: { type: integer, minimum: 1, maximum: 100, default: 50 },
+          }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Audit entries, newest first
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CmsAuditPage' }
+
+  /cms/places/{id}/audit:
+    get:
+      operationId: cmsListPlaceAudit
+      tags: [cms]
+      summary: "Admin: one place's change history"
+      description: The same query as `cmsListAudit`, scoped to a place for the editor's history drawer.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: action, in: query, schema: { type: string } }
+        - { name: actorId, in: query, schema: { type: string, format: uuid } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { name: breakGlass, in: query, schema: { type: boolean } }
+        - {
+            name: limit,
+            in: query,
+            schema: { type: integer, minimum: 1, maximum: 100, default: 50 },
+          }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Audit entries for this place, newest first
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CmsAuditPage' }
+
   /cms/auth/login:
     post:
       operationId: cmsLogin
@@ -2004,7 +2308,17 @@ paths:
     post:
       operationId: cmsSetupTotp
       tags: [cms]
-      summary: Enroll TOTP (requires a fresh password proof)
+      summary: 'Enroll TOTP, step 1 of 2 (requires a fresh password proof)'
+      description: >
+        Returns the secret and otpauth URI, and does **not** switch MFA on.
+        `cmsConfirmTotp` does that, once a code generated from the secret
+        verifies. Enrolling and activating together locked an admin out of the
+        console whenever the authenticator never actually received the secret,
+        because production requires MFA to log in.
+
+
+        The secret is shown exactly once, here. The stored copy is encrypted at
+        rest and never readable again.
       requestBody:
         required: true
         content:
@@ -2022,8 +2336,47 @@ paths:
               schema:
                 type: object
                 properties:
-                  secret: { type: string }
+                  secret:
+                    type: string
+                    description: Shown once. Not retrievable afterwards.
                   otpauthUri: { type: string }
+                  confirmed:
+                    type: boolean
+                    description: Always false here — enrollment is not active until confirmed.
+
+  /cms/auth/totp/confirm:
+    post:
+      operationId: cmsConfirmTotp
+      tags: [cms]
+      summary: 'Enroll TOTP, step 2 of 2 (proves the authenticator has the secret)'
+      description: >
+        A code from the pending secret activates MFA for this account. The
+        confirming code is spent, so it cannot also be used to log in, and
+        every other session for the admin is revoked — enrolling a second
+        factor is a credential change, and sessions opened before it were
+        opened with less.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string, pattern: '^[0-9]{6}$' }
+      responses:
+        '201':
+          description: MFA is now required for this account
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [confirmed]
+                properties:
+                  confirmed: { type: boolean }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409':
+          description: No enrollment is pending
 
   /cms/auth/admins:
     post:
@@ -2146,6 +2499,23 @@ paths:
         '200': { description: Candidate pairs with similarity + distance }
 
   /cms/places/{id}:
+    get:
+      operationId: cmsGetPlace
+      tags: [cms]
+      summary: 'Editor: the record the place editor loads'
+      description: >
+        Everything `cmsUpdatePlace` accepts, plus the facts rendered around the
+        form. The list endpoint is not a substitute — it is a keyset-paged index
+        and carries none of this on purpose.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Place record
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CmsPlaceDetail' }
+        '404': { $ref: '#/components/responses/NotFound' }
     patch:
       operationId: cmsUpdatePlace
       tags: [cms]
@@ -2284,7 +2654,76 @@ paths:
         '201': { description: Merged; audited }
         '400': { $ref: '#/components/responses/BadRequest' }
 
+  /cms/search-analytics:
+    get:
+      operationId: cmsSearchAnalytics
+      tags: [cms]
+      summary: 'Ops: search quality — zero-result rate and the queries that fail'
+      description: >
+        Zero-result counts were measurable before this; the denominator was
+        not, and "40 zero-results today" says nothing without "out of how many
+        searches".
+
+
+        Built from a daily aggregate, not a per-request search log. There is no
+        request-level search log to drill into — that absence is the privacy
+        design rather than a gap: a daily counter carries no actor, so nothing
+        can join a query back to a person.
+
+
+        A query term is only named once at least 5 searches produced it. Below
+        that floor the rows are still counted, in `hiddenBelowFloor`, but the
+        text is withheld: a query one person typed is effectively that person's
+        query. Hiding the rows entirely would understate how much of search is
+        failing, which is the opposite of the point.
+      parameters:
+        - { name: days, in: query, schema: { type: integer, minimum: 1, maximum: 90, default: 7 } }
+        - {
+            name: limit,
+            in: query,
+            schema: { type: integer, minimum: 1, maximum: 100, default: 20 },
+          }
+      responses:
+        '200':
+          description: Search quality over the window
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CmsSearchAnalytics' }
+
   /cms/taxonomies:
+    get:
+      operationId: cmsListTaxonomies
+      tags: [cms]
+      summary: 'Editor/Ops: taxonomy keys with labels, synonyms and usage'
+      description: >
+        Unfiltered, this returns active **and** inactive keys — the CMS is where
+        a deactivated key is seen and reactivated, so hiding it by default would
+        make it unreachable.
+      parameters:
+        - name: kind
+          in: query
+          schema:
+            type: string
+            enum:
+              [
+                mood,
+                category,
+                setting,
+                dietary,
+                accessibility,
+                spending_style,
+                suitability,
+                checkin_tag,
+              ]
+        - { name: isActive, in: query, schema: { type: boolean } }
+      responses:
+        '200':
+          description: Taxonomy keys
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CmsTaxonomy' }
     post:
       operationId: cmsCreateTaxonomy
       tags: [cms]
@@ -2300,7 +2739,16 @@ paths:
                 kind:
                   type: string
                   enum:
-                    [mood, category, setting, dietary, accessibility, spending_style, suitability]
+                    [
+                      mood,
+                      category,
+                      setting,
+                      dietary,
+                      accessibility,
+                      spending_style,
+                      suitability,
+                      checkin_tag,
+                    ]
                 key: { type: string, pattern: '^[a-z0-9_]{2,40}$' }
                 labels:
                   type: object
@@ -2406,6 +2854,42 @@ paths:
         '200': { description: Status changed }
 
   /cms/collections/{id}/items:
+    get:
+      operationId: cmsListCollectionItems
+      tags: [cms]
+      summary: 'Editor/Ops: the ordered place list, as stored'
+      description: >
+        `cmsSetCollectionItems` replaces the whole list, so an editor must be
+        able to read the current one before writing it back.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Collection items in position order
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [collectionId, items]
+                properties:
+                  collectionId: { type: string, format: uuid }
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [position, placeId, name, status]
+                      properties:
+                        position: { type: integer }
+                        placeId: { type: string, format: uuid }
+                        name: { type: string }
+                        addressText: { type: [string, 'null'] }
+                        status:
+                          type: string
+                          enum: [draft, community_submitted, review, published, suspended, archived]
+                          description: >
+                            Carried so a curator sees that a pinned place has
+                            left publication, instead of a silently empty slot.
+        '404': { $ref: '#/components/responses/NotFound' }
     put:
       operationId: cmsSetCollectionItems
       tags: [cms]
@@ -2484,6 +2968,33 @@ paths:
         '201': { description: Decided }
 
   /cms/ranking-configs:
+    get:
+      operationId: cmsListRankingConfigs
+      tags: [cms]
+      summary: 'Ops: ranking config versions with approver and activation'
+      description: >
+        Approve and activate must be two different accounts, which is only
+        checkable if both names are readable — so each version carries who
+        drafted it and who approved it.
+      parameters:
+        - {
+            name: key,
+            in: query,
+            schema: { type: string, enum: [suggestion.scoring, search.ranking] },
+          }
+        - {
+            name: status,
+            in: query,
+            schema: { type: string, enum: [draft, approved, active, rolled_back] },
+          }
+      responses:
+        '200':
+          description: Config versions, newest first per key
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CmsRankingConfig' }
     post:
       operationId: cmsCreateRankingConfig
       tags: [cms]
@@ -2543,6 +3054,114 @@ paths:
         - { name: key, in: path, required: true, schema: { type: string } }
       responses:
         '201': { description: '{ rolledBack: boolean }' }
+
+  /cms/experiments:
+    get:
+      operationId: cmsListExperiments
+      tags: [cms]
+      summary: 'Ops: experiment definitions and their current split'
+      responses:
+        '200':
+          description: Experiments in key order
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CmsExperiment' }
+
+  /cms/experiments/{key}:
+    put:
+      operationId: cmsUpsertExperiment
+      tags: [cms]
+      summary: 'Ops: define, re-split, or switch off an experiment'
+      description: >
+        `enabled: false` is the kill switch: every subject goes to control on
+        the next request, and the assignment history is not deleted.
+
+
+        Variant names are ranking config versions, and only an **approved**
+        version is honoured — an experiment must not be a way to put unreviewed
+        weights in front of users, and the four-eyes rule stays the gate.
+
+
+        Shares may sum to less than 1; the remainder is control. Summing to
+        more is refused rather than silently dropping a variant.
+      parameters:
+        - { name: key, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled, variants]
+              properties:
+                description: { type: string }
+                enabled: { type: boolean }
+                variants:
+                  type: object
+                  additionalProperties: { type: number, minimum: 0, maximum: 1 }
+      responses:
+        '200':
+          description: Experiment saved
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CmsExperiment' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /cms/ranking-configs/{id}/evaluate:
+    get:
+      operationId: cmsEvaluateRankingConfig
+      tags: [cms]
+      summary: 'Ops: replay a candidate config against stored snapshots'
+      description: >
+        Every suggestion run keeps the immutable snapshot it was computed from,
+        so a candidate config can be scored against real rooms **before**
+        anyone is exposed to it — which is what makes activating a config a
+        decision rather than a hope.
+
+
+        Offline in the strict sense: snapshots are read, scoring happens in
+        memory, and nothing is written. No plan, no run, no user sees any of
+        it.
+
+
+        Runs where no candidate passes the hard filters are skipped rather than
+        counted as agreement, which would flatter every candidate config.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - {
+            name: sampleSize,
+            in: query,
+            schema: { type: integer, minimum: 1, maximum: 500, default: 100 },
+          }
+      responses:
+        '200':
+          description: How the candidate would have ranked
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CmsRankingEvaluation' }
+        '400':
+          description: Config weights are outside the engine's own bounds
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /cms/feature-flags:
+    get:
+      operationId: cmsListFeatureFlags
+      tags: [cms]
+      summary: 'Ops: every flag with its current value and last writer'
+      description: >
+        A kill switch nobody can read is not a kill switch. The AI fallback and
+        the travel-time provider are both flag-gated, so their state has to be
+        visible before an incident, not during one.
+      responses:
+        '200':
+          description: Flags in key order
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CmsFeatureFlag' }
 
   /cms/feature-flags/{key}:
     put:
@@ -2785,6 +3404,7 @@ components:
         name: { type: string }
         addressText: { type: string }
         areaKey: { type: string }
+        primaryPhoto: { $ref: '#/components/schemas/PlacePhoto' }
         lat: { type: number }
         lng: { type: number }
         rating: { type: number }
@@ -2884,21 +3504,32 @@ components:
         name: { type: string }
         description: { type: string }
         status: { type: string }
-        address_text: { type: string }
-        area_key: { type: string }
+        addressText: { type: string }
+        areaKey: { type: string }
         lat: { type: number }
         lng: { type: number }
         phone: { type: string }
         website: { type: string }
-        rating: { type: number }
-        rating_count: { type: integer }
-        avg_visit_minutes: { type: integer }
+        rating:
+          type: number
+          description: >
+            A number, not the string Postgres returns for `numeric`. The
+            endpoint used to pass the row through unmapped, so a client calling
+            `.toFixed` on this crashed (#169).
+        ratingCount: { type: integer }
+        priceLevel: { type: integer }
+        avgVisitMinutes: { type: integer }
         suitability:
           type: object
           additionalProperties: { type: number }
-        is_lodging: { type: boolean }
+        isLodging: { type: boolean }
         confidence: { type: number }
-        freshness_checked_at: { type: string, format: date-time }
+        curatedRank: { type: integer }
+        freshnessCheckedAt: { type: string, format: date-time }
+        photos:
+          type: array
+          description: Ordered gallery; empty when the place has no approved imagery.
+          items: { $ref: '#/components/schemas/PlacePhoto' }
         taxonomies:
           type: array
           items:
@@ -3437,6 +4068,494 @@ components:
         createdAt: { type: string, format: date-time }
         decidedAt: { type: string, format: date-time }
         decisionReason: { type: string }
+    PlacePhoto:
+      type: object
+      required: [id, url, source]
+      properties:
+        id: { type: string, format: uuid }
+        url:
+          type: string
+          description: >
+            Directly loadable. Photos are omitted entirely rather than sent with
+            a URL that will not load — a broken image is worse than the neutral
+            placeholder a client falls back to.
+        width: { type: integer }
+        height: { type: integer }
+        source:
+          type: string
+          enum: [google, community, manual]
+          description: Lets a client tell imported and user-submitted imagery apart.
+        attribution:
+          type: string
+          description: >
+            Present for provider imagery, which must be displayed with it.
+            Community photos are only returned once approved in moderation.
+    RoomListItem:
+      type: object
+      required: [id, type, status, decisionMode, participantCount, updatedAt, myRole, myMemberId]
+      properties:
+        id: { type: string, format: uuid }
+        type: { type: string, enum: [couple, group] }
+        status:
+          type: string
+          enum: [draft, collecting, matching, ready, active, completed, cancelled, expired]
+        decisionMode: { type: string, enum: [match, vote, host] }
+        participantCount: { type: integer }
+        title: { type: string }
+        scheduledDate: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        myRole: { type: string, enum: [host, member, guest] }
+        myMemberId: { type: string, format: uuid }
+        memberCount: { type: integer }
+        completedCount:
+          type: integer
+          description: Members done with preferences — enough to render "2/3" without another call.
+        planId:
+          type: string
+          format: uuid
+          description: The room's current plan, when one exists.
+    CmsPlaceDetail:
+      type: object
+      required:
+        [
+          id,
+          name,
+          status,
+          ratings,
+          taxonomyIds,
+          hours,
+          prices,
+          sources,
+          media,
+          createdAt,
+          updatedAt,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+        status:
+          type: string
+          enum: [draft, community_submitted, review, published, suspended, archived]
+        addressText: { type: [string, 'null'] }
+        areaKey: { type: [string, 'null'] }
+        lat: { type: number }
+        lng: { type: number }
+        phone: { type: [string, 'null'] }
+        website: { type: [string, 'null'] }
+        avgVisitMinutes: { type: [integer, 'null'] }
+        suitability:
+          type: object
+          additionalProperties: { type: number }
+        isLodging: { type: boolean }
+        curatedRank: { type: [integer, 'null'] }
+        confidence: { type: number }
+        priceLevel: { type: [integer, 'null'] }
+        ratings:
+          type: object
+          required: [provider, gogo]
+          description: >
+            Kept apart, never averaged. The provider figure and GoGo's own —
+            derived from published reviews — measure different populations, and
+            a blended number would describe neither (FR-INGEST-006). The
+            composite score that spec also describes is not computed anywhere
+            yet, so it is absent rather than faked.
+          properties:
+            provider:
+              type: object
+              required: [count]
+              properties:
+                rating: { type: number }
+                count: { type: integer }
+            gogo:
+              type: object
+              required: [count]
+              properties:
+                rating: { type: number }
+                count: { type: integer }
+        taxonomyIds:
+          type: array
+          items: { type: string, format: uuid }
+        taxonomyKeys:
+          type: array
+          items: { type: string }
+          description: Alongside the ids so a chip can be labelled without a second call; writes still send ids.
+        hours:
+          type: array
+          items:
+            type: object
+            required: [dayOfWeek, openMinute, closeMinute, isOvernight, source]
+            properties:
+              dayOfWeek: { type: integer, minimum: 0, maximum: 6 }
+              openMinute: { type: integer }
+              closeMinute: { type: integer }
+              isOvernight: { type: boolean }
+              source: { type: string }
+              verifiedAt: { type: [string, 'null'], format: date-time }
+        prices:
+          type: array
+          items:
+            type: object
+            required: [id, priceMin, priceMax, currency, unit, source, confidence]
+            properties:
+              id: { type: string, format: uuid }
+              priceMin: { type: integer, description: Integer minor units. }
+              priceMax: { type: integer, description: Integer minor units. }
+              currency: { type: string }
+              unit: { type: string }
+              source: { type: string }
+              confidence: { type: number }
+              verifiedAt: { type: [string, 'null'], format: date-time }
+              createdAt: { type: string, format: date-time }
+        sources:
+          type: array
+          items:
+            type: object
+            required: [id, provider, externalId]
+            properties:
+              id: { type: string, format: uuid }
+              provider: { type: string }
+              externalId: { type: string }
+              url: { type: [string, 'null'] }
+              attribution:
+                type: [string, 'null']
+                description: Provider facts must be displayed with their attribution (FR-INGEST-014).
+              fetchedAt: { type: [string, 'null'], format: date-time }
+        media:
+          type: array
+          items:
+            type: object
+            required: [id, storageKey, sortOrder, moderation]
+            properties:
+              id: { type: string, format: uuid }
+              storageKey: { type: string }
+              width: { type: [integer, 'null'] }
+              height: { type: [integer, 'null'] }
+              sortOrder: { type: integer }
+              moderation: { type: string }
+        freshnessCheckedAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    CmsTaxonomy:
+      type: object
+      required: [id, kind, key, labels, sortOrder, isActive, usageCount, synonyms]
+      properties:
+        id: { type: string, format: uuid }
+        kind:
+          type: string
+          enum:
+            [
+              mood,
+              category,
+              setting,
+              dietary,
+              accessibility,
+              spending_style,
+              suitability,
+              checkin_tag,
+            ]
+        key: { type: string }
+        labels:
+          type: object
+          additionalProperties: { type: string }
+          description: Locale to label. Business data stores the key; the label is presentation.
+        sortOrder: { type: integer }
+        isActive: { type: boolean }
+        usageCount:
+          type: integer
+          description: Places referencing this key — what makes the delete rule checkable.
+        synonyms:
+          type: array
+          items:
+            type: object
+            required: [id, term, locale]
+            properties:
+              id: { type: string, format: uuid }
+              term: { type: string }
+              locale: { type: string }
+
+    CmsAdminRef:
+      type: object
+      required: [id]
+      properties:
+        id: { type: string, format: uuid }
+        displayName: { type: [string, 'null'] }
+
+    CmsRankingConfig:
+      type: object
+      required: [id, key, version, status, weights, bounds, createdBy, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        key: { type: string, enum: [suggestion.scoring, search.ranking] }
+        version: { type: integer }
+        status: { type: string, enum: [draft, approved, active, rolled_back] }
+        weights:
+          type: object
+          additionalProperties: { type: number }
+        bounds:
+          type: object
+          description: The engine's own limits, sent so a console cannot drift from them.
+        createdBy: { $ref: '#/components/schemas/CmsAdminRef' }
+        approvedBy:
+          oneOf:
+            - { $ref: '#/components/schemas/CmsAdminRef' }
+            - { type: 'null' }
+          description: Null until approved; separation of duties requires it to differ from the activator.
+        activatedAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+
+    CmsFeatureFlag:
+      type: object
+      required: [key, enabled, updatedAt]
+      properties:
+        key: { type: string }
+        enabled: { type: boolean }
+        payload: { description: Free-form flag configuration. }
+        description: { type: [string, 'null'] }
+        updatedBy:
+          oneOf:
+            - { $ref: '#/components/schemas/CmsAdminRef' }
+            - { type: 'null' }
+        updatedAt: { type: string, format: date-time }
+
+    CmsAuditEntry:
+      type: object
+      required: [id, action, actorType, resourceType, resourceId, occurredAt, breakGlass]
+      properties:
+        id: { type: string, format: uuid }
+        action: { type: string }
+        actorType: { type: string, enum: [admin, user, system] }
+        actorId: { type: string, format: uuid }
+        actorRole:
+          type: string
+          enum: [editor, moderator, ops_admin, super_admin]
+          description: >
+            The role at read time, joined for incident review. Nothing else
+            about the account is exposed.
+        resourceType: { type: string }
+        resourceId: { type: string }
+        occurredAt: { type: string, format: date-time }
+        diff:
+          description: Before/after of the sensitive write, PII-minimised at write time.
+        reason:
+          type: string
+          description: Lifted out of the diff for the writes that require one.
+        breakGlass:
+          type: boolean
+          description: True for emergency takedown — the write that bypassed the normal role for this action.
+        requestId: { type: string }
+        ipAddress:
+          type: string
+          description: >
+            Staff IP, recorded for admin actions only and returned only to
+            ops_admin and above. It exists to tell "that admin did it" apart
+            from "that admin's account was taken over"; that justification does
+            not extend to the roles that do not run incident review, so it is
+            omitted for them, and it must not appear in any other response,
+            log line or analytics event.
+        authorizationPath:
+          type: string
+          enum: [exact_role, rank_read, super_admin_bypass]
+          description: Which rule authorized the write. `super_admin_bypass` means every other role would have been refused.
+
+    CmsAuditPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/CmsAuditEntry' }
+        nextCursor:
+          type: [string, 'null']
+          description: Keyset cursor over (occurredAt, id); the log is appended to while it is read.
+
+    RoomEvent:
+      type: object
+      description: >
+        The domain-event envelope from the api-contract rules, unchanged.
+        Field names are snake_case here because that is the event convention,
+        not the REST DTO convention.
+      required:
+        [event_id, event_type, event_version, occurred_at, resource_type, resource_id, payload]
+      properties:
+        event_id: { type: string, format: uuid }
+        event_type:
+          type: string
+          enum:
+            - room.status_changed
+            - participant.joined
+            - participant.left
+            - participant.selection_changed
+            - matching.started
+            - matching.completed
+            - matching.failed
+            - suggestions.generated
+            - suggestions.updated
+            - vote.changed
+            - plan.updated
+            - resync
+            - heartbeat
+        event_version: { type: integer }
+        occurred_at: { type: string, format: date-time }
+        actor_id:
+          type: [string, 'null']
+          description: >
+            Pseudonymous. Where a participant is named it is by room-scoped
+            member id, which does not carry an account across rooms.
+        resource_type: { type: string }
+        resource_id: { type: string }
+        correlation_id: { type: [string, 'null'] }
+        payload_schema_version: { type: integer }
+        payload:
+          type: object
+          description: >
+            Facts, never composed copy. Carries the version a client should
+            compare against — `constraintVersion` for suggestions, `version`
+            for a plan — so a stale event is distinguishable from a fresh one.
+
+    CmsSearchAnalytics:
+      type: object
+      required: [days, totals, trend, worstQueries, hiddenBelowFloor]
+      properties:
+        days: { type: integer }
+        totals:
+          type: object
+          required: [searches, zeroResults, zeroResultRate, avgResults, avgLatencyMs]
+          properties:
+            searches: { type: integer }
+            zeroResults: { type: integer }
+            zeroResultRate: { type: number }
+            avgResults: { type: number }
+            avgLatencyMs: { type: integer }
+        trend:
+          type: array
+          items:
+            type: object
+            required: [day, searches, zeroResults, zeroResultRate]
+            properties:
+              day: { type: string, format: date }
+              searches: { type: integer }
+              zeroResults: { type: integer }
+              zeroResultRate: { type: number }
+        worstQueries:
+          type: array
+          description: Only terms at or above the visibility floor.
+          items:
+            type: object
+            required: [query, searches, zeroResults, zeroResultRate]
+            properties:
+              query: { type: string }
+              searches: { type: integer }
+              zeroResults: { type: integer }
+              zeroResultRate: { type: number }
+        hiddenBelowFloor:
+          type: object
+          description: >
+            Rare terms, counted but not named. Present so the totals stay
+            honest about how much of search is failing.
+          required: [terms, searches, zeroResults]
+          properties:
+            terms: { type: integer }
+            searches: { type: integer }
+            zeroResults: { type: integer }
+
+    FeedbackOutcome:
+      type: object
+      description: >
+        Present only when `feedbackText` was sent. Says what the deterministic
+        pipeline was actually asked to do, so a user can tell "understood and
+        applied" from "not understood".
+      required: [understood, applied, ignoredReasons]
+      properties:
+        understood:
+          type: boolean
+          description: False means nothing in the text survived validation.
+        applied:
+          type: object
+          properties:
+            excludePlaceIds:
+              type: array
+              items: { type: string, format: uuid }
+            avoidCategoryKeys:
+              type: array
+              items: { type: string }
+            requireDietaryKeys:
+              type: array
+              items: { type: string }
+            budgetMaxAmount:
+              type: integer
+              description: Integer minor units, always below the room's own budget.
+            radiusM: { type: integer }
+            maxStops: { type: integer }
+        ignoredReasons:
+          type: array
+          description: >
+            Why parts were dropped. `PLACE_NOT_A_CANDIDATE` is the shape of a
+            hallucinated place id; `BUDGET_NOT_TIGHTENED` means the proposal
+            tried to loosen a constraint rather than narrow it.
+          items:
+            type: string
+            enum:
+              [
+                SCHEMA_INVALID,
+                PLACE_NOT_A_CANDIDATE,
+                CATEGORY_UNKNOWN,
+                DIETARY_UNKNOWN,
+                BUDGET_NOT_TIGHTENED,
+                RADIUS_NOT_REDUCED,
+                STOPS_NOT_REDUCED,
+                NOTHING_UNDERSTOOD,
+              ]
+
+    CmsExperiment:
+      type: object
+      required: [key, enabled, variants]
+      properties:
+        key: { type: string }
+        description: { type: [string, 'null'] }
+        enabled: { type: boolean }
+        variants:
+          type: object
+          additionalProperties: { type: number }
+        controlShare:
+          type: number
+          description: What is left after the named variants.
+        updatedAt: { type: string, format: date-time }
+
+    CmsRankingEvaluation:
+      type: object
+      required: [configVersion, baselineVersion, runsEvaluated, metrics, skipped]
+      properties:
+        configVersion: { type: integer }
+        baselineVersion:
+          type: string
+          description: The active config it was compared against, or "default".
+        runsEvaluated: { type: integer }
+        metrics:
+          type: object
+          required: [top1Agreement, top5Overlap, newZeroResults, meanCandidateCount]
+          properties:
+            top1Agreement:
+              type: number
+              description: Share of runs whose top result is unchanged.
+            top5Overlap:
+              type: number
+              description: Mean overlap of the top 5 — how far the ordering moved.
+            newZeroResults:
+              type: integer
+              description: Runs where the candidate returns nothing and the baseline did not.
+            meanCandidateCount: { type: number }
+        skipped:
+          type: array
+          description: Runs that could not be evaluated, and why. Not counted as agreement.
+          items:
+            type: object
+            required: [runId, reason]
+            properties:
+              runId: { type: string, format: uuid }
+              reason: { type: string }
+
   responses:
     BadRequest:
       description: Validation or business rule failure

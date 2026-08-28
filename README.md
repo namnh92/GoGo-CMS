@@ -92,18 +92,20 @@ Bắt buộc: WCAG 2.2 AA trên mọi luồng chính, thao tác bàn phím đầ
 
 41 path dưới `/v1/cms/*`, đã live và có trong Swagger (`/v1/docs`). Nhóm theo màn hình:
 
-| Nhóm            | Endpoint chính                                                                                                                                                                 |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Auth            | `POST /cms/auth/login` · `POST /cms/auth/totp/setup` · `POST /cms/auth/admins`                                                                                                 |
-| Places          | `GET /cms/places` · `GET/PATCH /cms/places/{id}` · `POST /cms/places/{id}/status` · `PUT .../hours` · `PUT .../prices` · `POST .../verify-freshness` · `GET /cms/places/stale` |
-| Duplicates      | `GET /cms/places/duplicates` · `POST /cms/places/{id}/merge`                                                                                                                   |
-| Bulk import     | `POST /cms/place-imports` (multipart) · `POST .../google-sheet` · `GET /cms/place-imports` · `GET .../{jobId}` · `GET .../{jobId}/rows` · `POST .../start                      | cancel | retry | publish`·`POST .../rows/{rowId}/confirm-candidate | merge | skip`·`GET .../{jobId}/error-report` |
-| Submissions     | `POST /cms/place-submissions/{id}/decide`                                                                                                                                      |
-| Taxonomy        | `GET/POST /cms/taxonomies` · `PATCH /cms/taxonomies/{id}` · `POST /cms/taxonomies/{id}/synonyms`                                                                               |
-| Collections     | `GET/POST /cms/collections` · `PUT /cms/collections/{id}` · `PATCH .../status` · `PATCH .../items`                                                                             |
-| Moderation      | `GET /cms/moderation` · `POST /cms/moderation/reviews\|reports\|checkins/{id}`                                                                                                 |
-| Ranking & flags | `POST /cms/ranking-configs` · `POST .../{id}/approve\|activate` · `POST .../{key}/rollback` · `PATCH /cms/feature-flags/{key}`                                                 |
-| Ops             | `GET /cms/ops/kpis`                                                                                                                                                            |
+| Nhóm            | Endpoint chính                                                                                                                                                         |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Auth            | `POST /cms/auth/login` · `POST /cms/auth/refresh` · `POST /cms/auth/totp/setup\|confirm` · `POST /cms/auth/admins`                                                     |
+| Places          | `GET /cms/places` · `GET/PATCH /cms/places/{id}` · `PATCH .../status` · `PUT .../hours` · `POST .../prices` · `POST .../verify-freshness` · `GET /cms/places/stale`    |
+| Duplicates      | `GET /cms/places/duplicates` · `POST /cms/places/{id}/merge`                                                                                                           |
+| Bulk import     | `POST /cms/place-imports` (multipart) · `POST .../google-sheet` · `GET /cms/place-imports` · `GET .../{jobId}` · `GET .../{jobId}/rows` · `POST .../start              | cancel | retry | publish`·`POST .../rows/{rowId}/confirm-candidate | merge | skip`·`GET .../{jobId}/error-report` |
+| Submissions     | `GET /cms/place-submissions` · `POST /cms/place-submissions/{id}/decide`                                                                                               |
+| Taxonomy        | `GET/POST /cms/taxonomies` · `PATCH /cms/taxonomies/{id}` · `POST /cms/taxonomies/{id}/synonyms`                                                                       |
+| Collections     | `GET/POST /cms/collections` · `PATCH .../status` · `GET/PUT .../{id}/items`                                                                                            |
+| Moderation      | `GET /cms/moderation` · `POST /cms/moderation/reviews\|reports\|checkins/{id}`                                                                                         |
+| Ranking & flags | `GET/POST /cms/ranking-configs` · `GET .../{id}/evaluate` · `POST .../{id}/approve\|activate` · `POST .../{key}/rollback` · `GET /cms/feature-flags` · `PUT .../{key}` |
+| Thử nghiệm A/B  | `GET /cms/experiments` · `PUT /cms/experiments/{key}`                                                                                                                  |
+| Audit           | `GET /cms/audit` · `GET /cms/places/{id}/audit`                                                                                                                        |
+| Ops             | `GET /cms/ops/kpis` · `GET /cms/search-analytics`                                                                                                                      |
 
 Chi tiết từng operation: đọc `openapi/gogo.v1.yaml` hoặc Swagger UI tại `/v1/docs` của môi trường tương ứng. **Không viết tay DTO.**
 
@@ -120,14 +122,16 @@ Bảng đầy đủ, kèm ánh xạ controller → `@RequireRole`, ở
 | Hành động                                                 | editor | moderator | ops_admin | super_admin |
 | --------------------------------------------------------- | :----: | :-------: | :-------: | :---------: |
 | **Xem** catalog, import, hàng chờ kiểm duyệt, collections |   ✅   |    ✅     |    ✅     |     ✅      |
-| **Xem** ops KPI                                           |   ❌   |    ❌     |    ✅     |     ✅      |
+| **Xem** ops KPI, chất lượng tìm kiếm                      |   ❌   |    ❌     |    ✅     |     ✅      |
+| **Xem** nhật ký kiểm toán                                 |   ✅   |    ✅     |    ✅     |     ✅      |
+| **Xem** IP nhân viên trong nhật ký                        |   ❌   |    ❌     |    ✅     |     ✅      |
 | Sửa place, giờ, giá · đổi trạng thái · merge              |   ✅   |    ❌     |    ❌     |     ✅      |
 | Sửa taxonomy, collection                                  |   ✅   |    ❌     |    ✅     |     ✅      |
 | Duyệt review/report/check-in                              |   ❌   |    ✅     |    ❌     |     ✅      |
 | Quyết định đề xuất từ Mobile                              |   ✅   |    ✅     |    ❌     |     ✅      |
 | Tạo/chạy/huỷ/retry import job                             |   ✅   |    ❌     |    ✅     |     ✅      |
 | **Publish import → catalog**                              |   ❌   |    ❌     |    ✅     |     ✅      |
-| Ranking config, feature flag                              |   ❌   |    ❌     |    ✅     |     ✅      |
+| Ranking config, feature flag, thử nghiệm A/B              |   ❌   |    ❌     |    ✅     |     ✅      |
 | Gỡ khẩn cấp                                               |   ✅   |    ✅     |    ✅     |     ✅      |
 | Tạo admin                                                 |   ❌   |    ❌     |    ❌     |     ✅      |
 
@@ -197,45 +201,62 @@ Backend cho toàn bộ nhóm này **đã xong và đang chạy** (GoGo-BE `devel
 | `/imports/:jobId` | Chi tiết phiên: tổng quan, lọc dòng, xác nhận/gộp/bỏ qua, publish                      | PI-CMS-003..006                 |
 | `/moderation`     | Hàng chờ: đánh giá, báo cáo, địa điểm người dùng gửi, check-in                         | CMS-007, PI-CMS-007             |
 | `/taxonomy`       | Khoá phân loại theo nhóm, nhãn vi/en, synonym, bật/tắt                                 | CMS-005                         |
-| `/collections`    | Bộ sưu tập biên tập: form, trạng thái, thứ tự địa điểm                                 | CMS-006                         |
-| `/settings`       | Cờ tính năng, trọng số ranking (bốn mắt + rollback), sức khoẻ nền tảng                 | CMS-008                         |
+| `/collections`    | Bộ sưu tập biên tập: form, trạng thái, đọc/ghi thứ tự địa điểm                         | CMS-006, CMS-012                |
+| `/audit`          | Nhật ký kiểm toán: lọc, rà soát gỡ khẩn cấp, diff before/after                         | CMS-014                         |
+| `/search-quality` | Chất lượng tìm kiếm: tỷ lệ zero-result kèm mẫu số, truy vấn hỏng                       | CMS-015                         |
+| `/settings`       | Cờ tính năng, trọng số ranking (bốn mắt + rollback), thử nghiệm A/B, đánh giá offline  | CMS-008, CMS-013                |
 
 ## Trạng thái
 
-**CMS-001 đã có shell chạy được** cùng lớp UI cho CMS-002..010 và
-PI-CMS-001..007. Toàn bộ đã được đối chiếu lại với GoGo-BE `develop`
-(`5095d0c`) — RBAC, tham số truy vấn và shape response đều đọc từ controller,
-không đoán.
+**CMS-001 đã có shell chạy được** cùng lớp UI cho CMS-002..015 và
+PI-CMS-001..007. Toàn bộ đã được đối chiếu với GoGo-BE `develop` — RBAC, tham số
+truy vấn và shape response đều đọc từ controller và từ
+`openapi/gogo.v1.yaml` vendored, không đoán.
 
-### Chưa có endpoint (UI đã dựng, đang chạy trên MSW)
+### Nối với các endpoint GoGo-BE#175 (CMS-012..015)
 
-Không chặn việc review, nhưng chặn việc ghép backend thật. Đã mở issue phía
-GoGo-BE cho từng cái:
+Sáu thứ CMS cần đọc trước đây chỉ có đường ghi; UI chạy trên shape tự chế và
+MSW. GoGo-BE#175 đã mở hết, và **shape thật khác shape đã đoán ở nhiều chỗ** —
+nên đây là việc đọc lại contract, không phải đổi URL:
 
-| Endpoint                                             | Màn dùng                                                               | Issue                                                        |
-| ---------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------ |
-| `GET /cms/places/{id}`                               | Place Editor (spec chỉ có `PATCH`)                                     | [GoGo-BE#157](https://github.com/namnh92/GoGo-BE/issues/157) |
-| `GET /cms/audit`                                     | Drawer nhật ký thay đổi — audit đã ghi từ GoGo-BE#148, chưa có API đọc | [GoGo-BE#158](https://github.com/namnh92/GoGo-BE/issues/158) |
-| `GET /cms/taxonomies`                                | Taxonomy + picker phân loại — cần `usageCount` và khoá đang tắt        | [GoGo-BE#159](https://github.com/namnh92/GoGo-BE/issues/159) |
-| `GET /cms/ranking-configs`, `GET /cms/feature-flags` | Console ranking, tab cờ tính năng                                      | [GoGo-BE#160](https://github.com/namnh92/GoGo-BE/issues/160) |
-| Đọc lại danh sách địa điểm của collection            | Bộ sưu tập — `PUT .../items` ghi đè toàn bộ mà không xem lại được      | [GoGo-BE#161](https://github.com/namnh92/GoGo-BE/issues/161) |
+| Endpoint                                          | Điều làm UI phải sửa theo                                                                                                                                         |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /cms/places/{id}` → `CmsPlaceDetail`         | Hai rating tách riêng, **không** có điểm tổng hợp; hours/prices mang nguồn + lần xác minh; sources mang attribution; media là storage key + trạng thái kiểm duyệt |
+| `GET /cms/audit`, `GET /cms/places/{id}/audit`    | `actorRole`, `breakGlass`, `authorizationPath`, `requestId`, cursor                                                                                               |
+| `GET /cms/taxonomies` → `CmsTaxonomy[]`           | Trả cả khoá đang tắt, kèm `usageCount`                                                                                                                            |
+| `GET /cms/ranking-configs` → `CmsRankingConfig[]` | `bounds` đi kèm từng version; `createdBy`/`approvedBy` là object                                                                                                  |
+| `GET /cms/feature-flags` → `CmsFeatureFlag[]`     | Có `payload` và người sửa cuối; không có rollout %                                                                                                                |
+| `GET /cms/collections/{id}/items`                 | Đọc được danh sách trước khi `PUT` ghi đè toàn bộ                                                                                                                 |
 
-### Lệch khác đã xử lý ở phía UI
+Không còn schema `⚠ Aspirational` nào trong `src/`.
 
-- Hàng chờ kiểm duyệt trả `communityPlaces` (place ở trạng thái
-  `community_submitted`), còn `POST /cms/place-submissions/{id}/decide` cần
-  **submission id** — chưa API nào trả id đó. Tab này hiện chỉ xem được, và nói
-  rõ lý do thay vì hiện nút không bấm được.
-  → [GoGo-BE#162](https://github.com/namnh92/GoGo-BE/issues/162)
+Ba màn mới mở khoá theo:
+
+- **Nhật ký kiểm toán** (`/audit`) — lọc theo tài nguyên/hành động/actor/thời
+  gian, và nút **Chỉ gỡ khẩn cấp** cho việc rà soát sự cố. Chỉ đọc: FR-CMS-008
+  quy định log bất biến, BE không phục vụ route ghi nào. IP nhân viên chỉ trả
+  cho `ops_admin` trở lên — với vai khác trường **không tồn tại**, nên UI không
+  hiện ô trống.
+- **Thử nghiệm A/B + đánh giá offline** (`/settings`) — chia tỷ lệ theo phiên
+  bản ranking config đã duyệt (bản nháp hiện nhưng không chọn được), và
+  `GET .../{id}/evaluate` chạy lại phiên bản ứng viên trên snapshot đã lưu. Kết
+  quả luôn kèm số lượt bị bỏ và lý do; bỏ mà không nói sẽ đọc thành đồng thuận.
+- **Chất lượng tìm kiếm** (`/search-quality`) — tỷ lệ zero-result kèm mẫu số.
+  Dựng từ tổng hợp theo ngày nên **không có** chi tiết từng request; truy vấn
+  dưới ngưỡng 5 lượt được đếm trong `hiddenBelowFloor` nhưng không nêu tên.
+
+### Lệch còn lại đã xử lý ở phía UI
+
 - `GET /cms/ops/kpis` chỉ có sáu số tổng hợp trên cửa sổ cố định. Dashboard bỏ
   biểu đồ chuỗi thời gian, provider health và activity feed — những thứ không
-  đo được.
+  đo được; ô zero-result trỏ sang `/search-quality`, nơi có mẫu số.
 - Chưa có endpoint sức khoẻ theo từng nhà cung cấp; tab "Sức khoẻ nền tảng"
   hiện đúng một chỉ số contract có (`providerErrorsLast7d`).
-- 26/27 endpoint `/cms/*` chưa khai báo `schema` cho response nên client
-  generate ra `unknown` → đang validate bằng zod ở boundary.
-  → [GoGo-BE#163](https://github.com/namnh92/GoGo-BE/issues/163), điều kiện gỡ ở
-  [`docs/adr/0002-boundary-validation.md`](docs/adr/0002-boundary-validation.md)
+- Các endpoint còn lại (`/cms/moderation`, `/cms/ops/kpis`, `/cms/collections`,
+  `/cms/places/stale`, `/cms/places/duplicates`) vẫn chưa khai báo `schema` cho
+  response nên client generate ra `unknown` → tiếp tục validate bằng zod ở
+  boundary. Điều kiện gỡ ở
+  [`docs/adr/0002-boundary-validation.md`](docs/adr/0002-boundary-validation.md).
 
 ### Gỡ khẩn cấp (break-glass, SEC-001)
 
@@ -255,4 +276,8 @@ nói thẳng rằng thao tác được ghi audit kèm vai/IP/request id và bắ
 ### Chưa dựng UI
 
 - SSO chờ IdP ([GoGo-BE#62](https://github.com/namnh92/GoGo-BE/issues/62)); hiện chỉ mật khẩu + TOTP.
-- Upload ảnh trong Place Editor chờ endpoint tương ứng.
+- **Thêm/sửa ảnh địa điểm.** `CmsPlaceDetail` đọc được media (storage key +
+  trạng thái kiểm duyệt) nhưng không có route CMS nào tải lên hay gắn ảnh vào
+  place: `POST /uploads` là endpoint của người dùng cuối và `PATCH /cms/places/{id}`
+  không nhận media. Place Editor vì thế **liệt kê** media chứ không mời một nút
+  chỉ có thể thất bại. → [GoGo-BE#191](https://github.com/namnh92/GoGo-BE/issues/191)

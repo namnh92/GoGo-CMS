@@ -142,6 +142,24 @@ export const SearchIcon = (p: IconProps) => (
   </Icon>
 )
 
+export const AuditIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path
+      d="M4.5 2.5h6.2L14 5.8v9.7H4.5z"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinejoin="round"
+    />
+    <path d="M10.5 2.5v3.5H14" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+    <path
+      d="M6.8 9h4.4M6.8 11.8h4.4"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+    />
+  </Icon>
+)
+
 export const BellIcon = (p: IconProps) => (
   <Icon {...p}>
     <path

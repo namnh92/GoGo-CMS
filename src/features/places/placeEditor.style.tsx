@@ -10,6 +10,7 @@ export const styles = {
     'inline-flex min-h-11 items-center rounded-pill border border-dashed border-line-strong px-3 text-[11px] font-semibold text-text-subtle hover:border-neutral-500 hover:text-text',
   hoursRow:
     'grid grid-cols-[6rem_1fr_1fr_auto] items-center gap-2 border-b border-line py-2 last:border-b-0',
+  hourMeta: 'col-span-4 -mt-1 text-[11px] text-text-subtle',
   dayLabel: 'text-[13px] font-medium text-text-muted',
   timeInput:
     'min-h-11 w-full rounded-compact border border-line-strong bg-surface px-2 text-[13px] text-text tabular-nums',
@@ -17,10 +18,11 @@ export const styles = {
     'flex items-center justify-between gap-2 border-b border-line py-2 text-[13px] last:border-b-0',
   priceValue: 'font-semibold tabular-nums text-text',
   priceMeta: 'text-[11px] text-text-subtle',
-  mediaRow: 'flex flex-wrap gap-2',
-  mediaThumb: 'h-16 w-16 rounded-compact object-cover',
-  mediaAdd:
-    'flex h-16 w-16 items-center justify-center rounded-compact border-2 border-dashed border-line-strong text-text-subtle hover:border-neutral-500',
+  mediaRow: 'flex flex-col gap-2',
+  mediaItem:
+    'flex items-center justify-between gap-2 rounded-compact border border-line bg-surface-muted px-2.5 py-2',
+  mediaKey: 'min-w-0 truncate font-mono text-[11px] text-text-muted',
+  mediaDims: 'shrink-0 text-[11px] tabular-nums text-text-subtle',
   mapFrame: 'relative mb-3 h-36 overflow-hidden rounded-compact bg-surface-sunken',
   mapPin:
     'absolute left-1/2 top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-neutral-0 bg-coral',
@@ -36,5 +38,13 @@ export const styles = {
   duplicateMeta: 'text-[11px] text-text-subtle',
   sourceRow:
     'flex items-start justify-between gap-2 border-b border-line py-2 text-[12px] last:border-b-0',
+  sourceLink: 'block truncate text-[11px] text-lavender underline underline-offset-2',
   attribution: 'mt-2 text-[11px] text-text-subtle',
+  factGrid: 'grid grid-cols-2 gap-3 sm:grid-cols-4',
+  factLabel: 'block text-[11px] text-text-subtle',
+  factValue: 'block truncate text-[13px] text-text',
+  factLink: 'text-lavender underline underline-offset-2',
+  ratingRow: 'grid gap-3 sm:grid-cols-2',
+  ratingCard: 'rounded-compact border border-line bg-surface-muted px-3 py-2',
+  ratingValue: 'block text-[18px] font-semibold tabular-nums text-text',
 } as const
