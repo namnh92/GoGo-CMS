@@ -2,6 +2,10 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "gogo-cms-dev",
   "main": "worker/index.ts",
+  // Runs before upload, so the deploy does not depend on a build command set
+  // by hand in the Cloudflare dashboard — `dist/` is gitignored and would
+  // otherwise never exist on the build machine.
+  "build": { "command": "pnpm build" },
   "compatibility_date": "2026-08-26",
   "assets": {
     "directory": "./dist",
