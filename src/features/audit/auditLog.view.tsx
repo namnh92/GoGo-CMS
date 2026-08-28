@@ -90,7 +90,7 @@ export default function AuditLogScreen() {
         </p>
 
         <Card>
-          <CardHeader title={t('audit.filter.apply')} hint={t('audit.breakGlassHint')} />
+          <CardHeader title={t('audit.filter.title')} hint={t('audit.breakGlassHint')} />
           <CardBody>
             <div className={styles.filters}>
               <TextInput

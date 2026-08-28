@@ -221,7 +221,8 @@ export const vi = {
   'placeEditor.verifyFreshness': 'Xác minh lại dữ liệu',
   'placeEditor.audit': 'Nhật ký thay đổi',
   'placeEditor.sources': 'Nguồn dữ liệu',
-  'placeEditor.providerNote': 'Xếp hạng Google, xếp hạng GoGo và điểm tổng hợp được lưu tách biệt.',
+  'placeEditor.providerNote':
+    'Xếp hạng provider và xếp hạng GoGo đo hai tập khác nhau nên không bao giờ trộn. Điểm tổng hợp chưa được tính ở đâu cả, nên không hiển thị.',
 
   'placeEditor.phone': 'Điện thoại',
   'placeEditor.website': 'Website',
@@ -640,6 +641,7 @@ export const vi = {
   'audit.filter.action': 'Hành động',
   'audit.filter.from': 'Từ ngày',
   'audit.filter.to': 'Đến ngày',
+  'audit.filter.title': 'Bộ lọc',
   'audit.filter.apply': 'Lọc',
   'audit.filter.reset': 'Xoá lọc',
   'audit.breakGlass': 'Chỉ gỡ khẩn cấp',
