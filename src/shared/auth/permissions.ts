@@ -47,6 +47,8 @@ const ROUTE_ROLES = {
   audit: ['editor'],
   /** `EmergencyController` — @RequireRole('editor', 'moderator', 'ops_admin') */
   emergency: ['editor', 'moderator', 'ops_admin'],
+  /** `CmsSafetyRulesController` — @RequireRole('ops_admin') */
+  safety: ['ops_admin'],
   /** `POST /cms/auth/admins` — @RequireRole('super_admin') */
   admins: ['super_admin'],
 } as const satisfies Record<string, readonly AdminRole[]>
@@ -121,6 +123,13 @@ const PERMISSIONS = {
   'flag.manage': ['ops', 'write'],
   'experiment.read': ['ops', 'read'],
   'experiment.manage': ['ops', 'write'],
+
+  // Trust & Safety — its own controller, `ops_admin` in both directions. A
+  // rule here can suspend an account with no human in the loop, which is
+  // policy rather than day-to-day moderation, so rank-read does not open it
+  // to a moderator: `canAccess` lands on the same answer the server does.
+  'safety.read': ['safety', 'read'],
+  'safety.manage': ['safety', 'write'],
 
   // Audit — declared on `editor`, so rank-based read opens the log to every
   // role. It is read-only everywhere: the server serves no write route here.

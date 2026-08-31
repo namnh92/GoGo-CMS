@@ -14,6 +14,7 @@ import type {
   CmsModerationReport,
   CmsModerationCheckin,
   CmsCommunityPlace,
+  CmsSafetyRule,
 } from '@/shared/api/contracts'
 import type { ImportJob, ImportRow } from '@/shared/api/contracts-import'
 
@@ -1351,3 +1352,134 @@ export const cmsPlanTemplates: PlanTemplateFixture[] = Array.from({ length: 27 }
     stops,
   }
 })
+
+/**
+ * `GET /cms/safety-rules` (GoGo-BE#225).
+ *
+ * Spans every rule type, both ends of the severity scale and all three
+ * statuses, so each server filter is reachable without hand-editing — and
+ * `conditions` carries a real shape per type, including one rule that leaves
+ * an optional field unset so "absent" stays visible in the editor.
+ */
+export const cmsSafetyRules: CmsSafetyRule[] = [
+  {
+    id: 'sr-blocked-words',
+    name: 'Chặn từ ngữ thô tục trong đánh giá',
+    description: 'Danh sách từ khoá dùng chung cho đánh giá và check-in.',
+    ruleType: 'blocked_words',
+    trigger: 'review_created',
+    conditions: {
+      terms: ['lừa đảo', 'rác rưởi', 'đồ ngu'],
+      matchMode: 'substring',
+      caseSensitive: false,
+    },
+    action: 'flag_for_review',
+    severity: 'medium',
+    status: 'active',
+    priority: 10,
+    reasonCode: 'blocked_words_review',
+    createdBy: { id: 'adm-ops', displayName: 'Ngô Ops' },
+    createdAt: iso(60 * 24 * 12),
+    updatedAt: iso(60 * 20),
+  },
+  {
+    id: 'sr-spam-links',
+    name: 'Đánh giá nhồi link',
+    description: null,
+    ruleType: 'spam',
+    // `minAccountAgeHours` is deliberately absent: the editor must show it as
+    // unset rather than as the number the server default happens to be.
+    conditions: { maxLinks: 3, windowHours: 24 },
+    trigger: 'review_created',
+    action: 'auto_hide',
+    severity: 'high',
+    status: 'active',
+    priority: 20,
+    reasonCode: 'spam_links_in_review',
+    createdBy: { id: 'adm-ops', displayName: 'Ngô Ops' },
+    createdAt: iso(60 * 24 * 9),
+    updatedAt: iso(60 * 24 * 2),
+  },
+  {
+    id: 'sr-review-abuse',
+    name: 'Một tài khoản đánh giá quá nhiều',
+    description: 'Chặn hành vi cày đánh giá cho cùng một địa điểm.',
+    ruleType: 'review_abuse',
+    conditions: { maxReviewsPerWindow: 20, windowHours: 24, maxReviewsPerPlace: 2 },
+    trigger: 'review_created',
+    action: 'require_moderation',
+    severity: 'medium',
+    status: 'disabled',
+    priority: 30,
+    reasonCode: 'review_flooding',
+    createdBy: null,
+    createdAt: iso(60 * 24 * 30),
+    updatedAt: iso(60 * 24 * 5),
+  },
+  {
+    id: 'sr-user-abuse',
+    name: 'Tài khoản bị báo cáo nhiều lần',
+    description: 'Chỉ tính báo cáo đã được kiểm duyệt viên chấp nhận.',
+    ruleType: 'user_abuse',
+    conditions: { maxReportsAgainstUser: 5, windowHours: 168, upheldOnly: true },
+    trigger: 'report_created',
+    // The one fixture that suspends: severity is `critical`, which is what
+    // the server requires before it accepts this action at all.
+    action: 'suspend_user',
+    severity: 'critical',
+    status: 'draft',
+    priority: 5,
+    reasonCode: 'repeat_offender_account',
+    createdBy: { id: 'adm-ops', displayName: 'Ngô Ops' },
+    createdAt: iso(60 * 24 * 3),
+    updatedAt: iso(60 * 3),
+  },
+  {
+    id: 'sr-repeated-reports',
+    name: 'Nhiều người cùng báo cáo một nội dung',
+    description: null,
+    ruleType: 'repeated_reports',
+    conditions: { minReports: 3, windowHours: 24, distinctReporters: true },
+    trigger: 'report_created',
+    action: 'auto_hide',
+    severity: 'high',
+    status: 'active',
+    priority: 15,
+    reasonCode: 'crowd_reported_content',
+    createdBy: null,
+    createdAt: iso(60 * 24 * 20),
+    updatedAt: iso(60 * 24),
+  },
+  {
+    id: 'sr-rate-limit-checkin',
+    name: 'Giới hạn tần suất check-in',
+    description: 'Một tài khoản không check-in quá 10 lần mỗi giờ.',
+    ruleType: 'rate_limit',
+    conditions: { action: 'checkin_create', limit: 10, windowSeconds: 3600 },
+    trigger: 'checkin_created',
+    action: 'block_action',
+    severity: 'low',
+    status: 'active',
+    priority: 40,
+    reasonCode: 'checkin_rate_limit',
+    createdBy: { id: 'adm-ops', displayName: 'Ngô Ops' },
+    createdAt: iso(60 * 24 * 15),
+    updatedAt: iso(60 * 24 * 15),
+  },
+  {
+    id: 'sr-abusive-content',
+    name: 'Nội dung công kích cá nhân',
+    description: null,
+    ruleType: 'abusive_content',
+    conditions: { terms: ['xúc phạm'], minReports: 2, windowHours: 48 },
+    trigger: 'review_created',
+    action: 'require_moderation',
+    severity: 'medium',
+    status: 'draft',
+    priority: 25,
+    reasonCode: 'personal_attack_content',
+    createdBy: null,
+    createdAt: iso(60 * 24 * 2),
+    updatedAt: iso(60 * 24 * 2),
+  },
+]

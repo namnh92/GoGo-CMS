@@ -92,6 +92,14 @@ const REVIEW: NavLeaf[] = [
 
 const OPERATIONS: NavLeaf[] = [
   {
+    // `ops_admin` in both directions: reads do not climb into this one, so a
+    // moderator never sees the entry — the queue they work is /moderation.
+    to: '/safety-rules',
+    labelKey: 'nav.safetyRules',
+    permission: 'safety.read',
+    match: (p) => p.startsWith('/safety-rules'),
+  },
+  {
     to: '/settings',
     labelKey: 'nav.settings',
     permission: 'ranking.read',

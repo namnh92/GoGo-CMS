@@ -61,6 +61,23 @@ test('ops admin sees the dashboard and the publish CTA', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Quản lý nhập hàng loạt' })).toBeVisible()
 })
 
+test('safety rules are ops_admin only — a moderator gets neither nav nor screen', async ({
+  page,
+}) => {
+  // Reads do not climb into this resource: a rule here can suspend an account
+  // with no human in the loop, which is policy rather than moderation.
+  await signIn(page, 'moderator@gogo.vn')
+  await expect(page.getByRole('link', { name: 'Luật an toàn' })).toHaveCount(0)
+  await page.goto('/safety-rules')
+  await expect(page.getByText('Không đủ quyền')).toBeVisible()
+
+  await signIn(page, 'ops@gogo.vn')
+  await page.goto('/safety-rules')
+  await expect(page.getByRole('heading', { name: 'Luật Trust & Safety' })).toBeVisible()
+  // The screen says outright that nothing evaluates these yet.
+  await expect(page.getByText(/chưa chạy luật tự động/)).toBeVisible()
+})
+
 test('every role reaches the audit log, and only ops sees the staff IP', async ({ page }) => {
   await signIn(page, 'editor@gogo.vn')
   await page.goto('/audit')

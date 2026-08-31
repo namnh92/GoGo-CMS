@@ -28,6 +28,8 @@ const PlanTemplateDetailScreen = lazy(
 const RecommendationDetailScreen = lazy(
   () => import('@/features/recommendations/recommendationDetail.view'),
 )
+const SafetyRuleListScreen = lazy(() => import('@/features/safety/safetyRuleList.view'))
+const SafetyRuleDetailScreen = lazy(() => import('@/features/safety/safetyRuleDetail.view'))
 const SettingsScreen = lazy(() => import('@/features/ranking/settings.view'))
 const NewAccountScreen = lazy(() => import('@/features/admins/newAccount.view'))
 const AdminListScreen = lazy(() => import('@/features/admins/adminList.view'))
@@ -88,6 +90,8 @@ export const router = createBrowserRouter([
           { path: 'recommendations/:id', element: <RecommendationDetailScreen /> },
           { path: 'plan-templates', element: <PlanTemplateListScreen /> },
           { path: 'plan-templates/:id', element: <PlanTemplateDetailScreen /> },
+          { path: 'safety-rules', element: <SafetyRuleListScreen /> },
+          { path: 'safety-rules/:id', element: <SafetyRuleDetailScreen /> },
           { path: 'settings', element: <SettingsScreen /> },
           { path: 'settings/accounts', element: <AdminListScreen /> },
           { path: 'settings/accounts/new', element: <NewAccountScreen /> },

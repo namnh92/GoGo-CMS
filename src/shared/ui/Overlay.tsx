@@ -23,6 +23,19 @@ function useDialogBehaviour(
   const ref = useRef<HTMLDivElement>(null)
   const restoreTo = useRef<HTMLElement | null>(null)
 
+  /*
+   * The close handler is read through a ref rather than depended on.
+   *
+   * Callers write `onClose={() => setOpen(false)}` inline, which is a new
+   * function on every render. With `onClose` in the dependency list, any
+   * re-render of the parent tore the trap down and rebuilt it — cleanup
+   * restored focus to whatever opened the dialog, and the fresh effect moved
+   * it to the first focusable child. A controlled input inside a drawer
+   * therefore lost focus after a single keystroke.
+   */
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+
   useEffect(() => {
     if (!open) return
     restoreTo.current = document.activeElement as HTMLElement | null
@@ -34,7 +47,7 @@ function useDialogBehaviour(
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.stopPropagation()
-        onClose()
+        onCloseRef.current()
         return
       }
       if (event.key !== 'Tab' || !node) return
@@ -59,7 +72,9 @@ function useDialogBehaviour(
       document.body.style.overflow = previousOverflow
       restoreTo.current?.focus()
     }
-  }, [open, onClose, initialFocusRef])
+    // `open` alone: the trap is armed once per opening. `initialFocusRef` is
+    // a ref, so its identity never changes either.
+  }, [open, initialFocusRef])
 
   return ref
 }
