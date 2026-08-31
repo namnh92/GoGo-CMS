@@ -11,6 +11,7 @@ import { PageBody, PageHeader } from '@/app/PageHeader'
 import { Card, CardBody, CardHeader } from '@/shared/ui/Card'
 import { Button } from '@/shared/ui/Button'
 import { Select, TextInput } from '@/shared/ui/Field'
+import { Stepper } from '@/shared/ui/Stepper'
 import { PermissionDeniedState, useErrorMessage } from '@/shared/ui/State'
 import { useToast } from '@/shared/ui/Toast'
 import { MAPPABLE_FIELDS, type ImportMode } from '@/shared/api/contracts-import'
@@ -120,24 +121,10 @@ export default function ImportWizardScreen() {
         showSearch={false}
       />
       <PageBody>
-        <ol className={styles.steps}>
-          {STEPS.map((id, index) => {
-            const active = step === id
-            const done = STEPS.indexOf(step) > index
-            return (
-              <li
-                key={id}
-                aria-current={active ? 'step' : undefined}
-                className={`${styles.step} ${active ? styles.stepActive : done ? styles.stepDone : styles.stepIdle}`}
-              >
-                <span className={styles.stepIndex} aria-hidden="true">
-                  {done ? '✓' : index + 1}
-                </span>
-                {t(`wizard.step.${id}` as const)}
-              </li>
-            )
-          })}
-        </ol>
+        <Stepper
+          steps={STEPS.map((id) => ({ id, label: t(`wizard.step.${id}` as const) }))}
+          current={step}
+        />
 
         {step === 'source' ? (
           <Card>

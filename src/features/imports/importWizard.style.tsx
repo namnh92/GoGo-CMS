@@ -1,10 +1,4 @@
 export const styles = {
-  steps: 'flex flex-wrap items-center gap-2 text-[12px]',
-  step: 'flex min-h-11 items-center gap-2 rounded-pill border px-3 font-semibold',
-  stepActive: 'border-coral bg-coral-soft text-coral-deep',
-  stepDone: 'border-mint/45 bg-mint-soft text-mint',
-  stepIdle: 'border-line-strong bg-surface text-text-subtle',
-  stepIndex: 'flex h-5 w-5 items-center justify-center rounded-full bg-surface text-[10px]',
   sourceGrid: 'grid gap-3 md:grid-cols-2',
   sourceOption: 'flex flex-col gap-2 rounded-card border-2 p-4 text-left transition-colors',
   sourceOptionActive: 'border-coral bg-coral-soft/40',
