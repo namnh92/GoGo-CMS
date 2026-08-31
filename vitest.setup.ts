@@ -18,6 +18,17 @@ if (!('randomUUID' in crypto)) {
     value: () => `test-${Math.random().toString(16).slice(2)}`,
   })
 }
+// jsdom's Blob has no `text()`, which the CSV preview reads a file slice with.
+if (!Blob.prototype.text) {
+  Blob.prototype.text = function text(this: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(String(reader.result))
+      reader.onerror = () => reject(reader.error)
+      reader.readAsText(this)
+    })
+  }
+}
 if (!window.matchMedia) {
   window.matchMedia = ((query: string) => ({
     matches: false,

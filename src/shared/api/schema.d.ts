@@ -3198,7 +3198,7 @@ export interface paths {
         };
         /**
          * Ops: background queue depth
-         * @description The BullMQ queues plus `outbox_events`, the transactional outbox — a queue in every sense that matters here, living in Postgres where BullMQ cannot see it. Omitting it would hide the backlog that actually delays notifications.
+         * @description `outbox_events`, the transactional outbox — a queue in every sense that matters here, living in Postgres. It is the only row now: the worker stopped using a broker (GoGo-BE#262), so there are no broker queues left to report.
          *
          *     A broker that is unreachable contributes no rows rather than rows of zeros; `/cms/ops/health` is where that is reported.
          */
@@ -3411,7 +3411,7 @@ export interface components {
             /** @description Waiting plus delayed. */
             pending: number;
             running: number;
-            /** @description Failures finished in the last 24 hours — computed from job timestamps, not from BullMQ's retained `failed` count, which answers "how many are still on disk" and moves when retention changes. */
+            /** @description Failures finished in the last 24 hours, computed from timestamps — not from a retained failure count, which answers "how many are still on disk" and moves when retention changes. */
             failed24h: number;
             /** @description True when the scan hit its cap, so `failed24h` is a floor rather than a count. A truncated number that does not say so is what an incident review discovers afterwards. */
             failed24hTruncated: boolean;
@@ -3997,6 +3997,12 @@ export interface components {
             /** Format: date-time */
             completedAt?: string;
         };
+        /**
+         * @description A column an import source can be mapped onto — the vocabulary a client should generate its mapping UI from. Mirrors `CANONICAL_FIELDS` in `libs/modules/ingestion/domain/column-mapping.ts`, which is the single source of truth; `import-parsing.spec.ts` fails if the two drift.
+         *     Request schemas keep `mapping` as a plain string map: narrowing an existing `/v1` request property to an enum is a breaking change (ADR-0005), so the vocabulary is published here and enforced at runtime instead. A value outside this list is rejected with `MAPPING_FIELD_UNKNOWN`, except for the compatibility cases documented on the import endpoints.
+         * @enum {string}
+         */
+        ImportCanonicalField: "source_row_id" | "name" | "city" | "district" | "google_maps_url" | "google_maps_query" | "category" | "category_raw" | "price_min" | "price_max" | "price_unit" | "price_raw" | "audiences" | "audiences_raw" | "vibes" | "vibes_raw" | "highlight" | "note";
         ImportJob: components["schemas"]["ImportJobSummary"] & {
             defaultCity?: string | null;
             rowsByStatus?: {
@@ -4008,7 +4014,10 @@ export interface components {
             cancelledAt?: string;
             /** @description True when identical bytes/mode returned the existing job. */
             reused?: boolean;
+            /** @description Headers the parser recognised no canonical field for, as `tabName:header`. Their cells are dropped, never guessed. */
             unmappedHeaders?: string[];
+            /** @description Required canonical fields no header covers, as `tabName:field`. `source_row_id` here means row identities were derived from position and will not survive a row reorder. */
+            missingRequiredColumns?: string[];
         };
         ImportCandidate: {
             googlePlaceId?: string;
@@ -6995,7 +7004,7 @@ export interface operations {
                      */
                     mode?: "dry_run" | "create_drafts" | "publish_approved" | "update_existing";
                     defaultCity?: string;
-                    /** @description JSON object mapping raw header → canonical field */
+                    /** @description JSON object mapping raw header → `ImportCanonicalField`. Values are validated against that schema at runtime; an unknown one is a 400 `MAPPING_FIELD_UNKNOWN`. A header left out of the object is auto-detected; a header mapped to `""` is ignored. Legacy spellings and retired values behave as described on `POST /cms/place-imports/google-sheet`. */
                     mapping?: string;
                 };
             };
@@ -7036,6 +7045,7 @@ export interface operations {
                     tabCityMapping?: {
                         [key: string]: string;
                     };
+                    /** @description Raw header → canonical field. Supported values are the ones listed by `ImportCanonicalField`; generate against that schema rather than sending free text. The property stays a plain string map because narrowing a `/v1` request to an enum is a breaking change (ADR-0005) — the constraint is enforced at runtime, not in the wire type. A header left out is auto-detected; a header mapped to `""` is ignored. Three legacy spellings (`googleMapsUrl`, `priceMin`, `priceMax`) still normalise, and three retired values (`address`, `phone`, `website`) are still accepted and skipped; anything else is a 400 `MAPPING_FIELD_UNKNOWN`. */
                     mapping?: {
                         [key: string]: string;
                     };

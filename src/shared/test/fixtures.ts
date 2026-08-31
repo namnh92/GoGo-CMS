@@ -793,7 +793,11 @@ export const importJobs: ImportJob[] = [
     startedAt: iso(44),
     cancelledAt: null,
     reused: false,
-    unmappedHeaders: ['ghi_chu_noi_bo'],
+    unmappedHeaders: ['HCM:ghi_chu_noi_bo'],
+    // Sheet has no `category` column at all — the one thing an operator has to
+    // go and add. `source_row_id` is absent too and is not listed: the server
+    // derives it.
+    missingRequiredColumns: ['HCM:category'],
   },
   {
     id: '4f0b8e10-0000-4000-8000-000000000208',
@@ -811,6 +815,7 @@ export const importJobs: ImportJob[] = [
     cancelledAt: null,
     reused: false,
     unmappedHeaders: [],
+    missingRequiredColumns: [],
   },
   {
     id: '4f0b8e10-0000-4000-8000-000000000207',
@@ -828,6 +833,7 @@ export const importJobs: ImportJob[] = [
     cancelledAt: null,
     reused: false,
     unmappedHeaders: [],
+    missingRequiredColumns: [],
   },
 ]
 

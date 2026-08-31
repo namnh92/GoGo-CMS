@@ -6,6 +6,7 @@ import {
   importRowDecisionSchema,
   importRowListSchema,
   type ImportJob,
+  type ImportCanonicalField,
   type ImportMode,
   type ImportRowStatus,
 } from '@/shared/api/contracts-import'
@@ -39,7 +40,7 @@ export type CreateFileImportInput = {
   mode: ImportMode
   defaultCity?: string
   /** Raw header → canonical field. Sent as a JSON string per the spec. */
-  mapping?: Record<string, string>
+  mapping?: Record<string, ImportCanonicalField>
 }
 
 export function createFileImport(input: CreateFileImportInput): Promise<ImportJob> {
@@ -59,7 +60,7 @@ export type CreateSheetImportInput = {
   mode: ImportMode
   defaultCity?: string
   tabCityMapping?: Record<string, string>
-  mapping?: Record<string, string>
+  mapping?: Record<string, ImportCanonicalField>
 }
 
 export function createSheetImport(input: CreateSheetImportInput): Promise<ImportJob> {

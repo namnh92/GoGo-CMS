@@ -661,11 +661,14 @@ export const vi = {
   'wizard.mode': 'Chế độ ghi',
   'wizard.modeHint': 'Chạy thử là mặc định. Chọn chế độ ghi là quyết định có chủ đích.',
   'wizard.mapping': 'Ánh xạ cột nguồn sang trường chuẩn',
-  'wizard.mappingHint': 'Các trường bắt buộc phải được ánh xạ trước khi tiếp tục.',
+  'wizard.mappingHint':
+    'Cột không ánh xạ sẽ bị bỏ qua. Giá trị chọn ở đây là tên trường máy chủ nhận, gửi nguyên vẹn.',
   'wizard.mappingRequired': 'Bắt buộc',
   'wizard.mappingIgnore': 'Bỏ qua cột này',
   'wizard.samplePreview': 'Dòng mẫu',
-  'wizard.unmapped': 'Cột chưa ánh xạ: {headers}',
+  'wizard.unmapped': 'Cột chưa ánh xạ, dữ liệu sẽ bị bỏ qua: {headers}',
+  'wizard.rowIdDerived':
+    'Không cần cột source_row_id: máy chủ suy ra định danh từ vị trí dòng. Định danh này đổi khi chèn hoặc sắp xếp lại dòng — sheet còn định nhập lại nhiều lần nên có cột source_row_id riêng.',
   'wizard.back': 'Quay lại',
   'wizard.continue': 'Tiếp tục',
   'wizard.create': 'Tạo phiên nhập',
@@ -683,6 +686,7 @@ export const vi = {
   'jobDetail.totals.warnings': 'Cảnh báo',
   'jobDetail.totals.failed': 'Lỗi',
   'jobDetail.unmappedHeaders': 'Cột chưa ánh xạ',
+  'jobDetail.missingRequiredColumns': 'Cột bắt buộc còn thiếu',
   'jobDetail.col.row': 'Dòng',
   'jobDetail.col.place': 'Dữ liệu chuẩn hoá',
   'jobDetail.col.status': 'Trạng thái',
@@ -701,7 +705,10 @@ export const vi = {
   'jobDetail.liveHint': 'Tiến trình cập nhật tự động mỗi 3 giây khi phiên đang chạy.',
 
   'rowStatus.pending': 'Chờ xử lý',
-  'rowStatus.validation_failed': 'Sai định dạng',
+  // Not only formatting: an unknown taxonomy key or a missing required column
+  // lands here too, and calling those a format problem sends editors looking
+  // in the wrong place.
+  'rowStatus.validation_failed': 'Không hợp lệ',
   'rowStatus.resolving': 'Đang tra cứu',
   'rowStatus.unresolved': 'Không tìm thấy',
   'rowStatus.needs_confirmation': 'Cần xác nhận',
