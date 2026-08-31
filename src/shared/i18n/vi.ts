@@ -37,6 +37,14 @@ export const vi = {
   'nav.group.review': 'Kiểm duyệt',
   'nav.group.operations': 'Vận hành',
 
+  'moderation.filter.rating': 'Số sao',
+  'moderation.filter.ratingAll': 'Mọi mức sao',
+  'moderation.filter.search': 'Tìm trong nội dung đánh giá',
+  'moderation.filter.count': 'Hiện {shown}/{loaded} mục đã tải',
+  'moderation.filter.noMatch': 'Không mục nào khớp bộ lọc',
+  'moderation.history': 'Lịch sử kiểm duyệt',
+  'moderation.historyEmpty': 'Chưa có quyết định nào được ghi cho mục này.',
+
   'admins.new': 'Tạo tài khoản CMS',
   'admins.formTitle': 'Tài khoản nhân sự mới',
   'admins.formHint':

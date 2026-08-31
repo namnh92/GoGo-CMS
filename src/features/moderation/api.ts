@@ -1,5 +1,7 @@
 import { apiFetch, apiFetchParsed, newIdempotencyKey } from '@/shared/api/client'
 import { moderationQueueSchema, type ModerationQueue } from '@/shared/api/contracts'
+import { fetchAudit } from '@/features/audit/api'
+import type { AuditPage } from '@/shared/api/contracts'
 
 /** Each queue accepts only its own pair; the controller casts per route. */
 export type ReviewDecision = 'published' | 'rejected'
@@ -54,4 +56,17 @@ export function decideSubmission(
     },
     idempotencyKey: newIdempotencyKey(),
   })
+}
+
+/**
+ * What has already been decided about one review.
+ *
+ * Filtered by `resourceId` alone, deliberately. `resourceType` is a free-form
+ * string in the contract (`CmsAuditEntry.resourceType` has no enum), so
+ * guessing the token this server writes for a review would be inventing a
+ * value; the id is unambiguous on its own. Reuses `GET /cms/audit` rather than
+ * adding a second audit reader.
+ */
+export function fetchReviewHistory(reviewId: string, signal?: AbortSignal): Promise<AuditPage> {
+  return fetchAudit({ resourceId: reviewId, limit: 20 }, signal)
 }

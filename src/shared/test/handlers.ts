@@ -67,6 +67,8 @@ const db = {
   decidedSubmissions: decidedSubmissions.map((item) => ({ ...item })),
   /** Counts break-glass calls so the burst limit is reachable in dev. */
   takedowns: 0,
+  /** Audit entries written during this session, newest first. */
+  audit: [] as (typeof auditEntries)[number][],
   /** Emails already taken, so the duplicate branch of admin creation is reachable. */
   adminEmails: ['boss@gogo.vn', 'ops@gogo.vn', 'editor@gogo.vn', 'moderator@gogo.vn'],
 }
@@ -282,14 +284,16 @@ export const handlers = [
     const url = new URL(request.url)
     const breakGlass = url.searchParams.get('breakGlass') === 'true'
     const resourceType = url.searchParams.get('resourceType')
+    const resourceId = url.searchParams.get('resourceId')
     const action = url.searchParams.get('action')
     const actorId = url.searchParams.get('actorId')
     const { role } = currentActor()
     const canSeeIp = role === 'ops_admin' || role === 'super_admin'
 
-    let items = auditEntries
+    let items = [...db.audit, ...auditEntries]
     if (breakGlass) items = items.filter((entry) => entry.breakGlass)
     if (resourceType) items = items.filter((entry) => entry.resourceType === resourceType)
+    if (resourceId) items = items.filter((entry) => entry.resourceId === resourceId)
     if (action) items = items.filter((entry) => entry.action.includes(action))
     if (actorId) items = items.filter((entry) => entry.actorId === actorId)
 
@@ -533,6 +537,20 @@ export const handlers = [
     const key =
       params.kind === 'reviews' ? 'reviews' : params.kind === 'reports' ? 'reports' : 'checkins'
     db.moderation[key] = db.moderation[key].filter((item) => item.id !== params.id) as never
+    const actor = currentActor()
+    db.audit.unshift({
+      id: `audit-${key}-${String(params.id)}`,
+      action: `${key.replace(/s$/, '')}.${body.decision}`,
+      actorType: 'admin',
+      actorId: '00000000-0000-4000-8000-0000000000aa',
+      actorRole: actor.role,
+      resourceType: key.replace(/s$/, ''),
+      resourceId: String(params.id),
+      occurredAt: new Date().toISOString(),
+      diff: { after: { status: body.decision } },
+      reason: body.reason,
+      breakGlass: false,
+    })
     return HttpResponse.json({ decided: true }, { status: 201 })
   }),
 
