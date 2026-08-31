@@ -67,6 +67,8 @@ const db = {
   decidedSubmissions: decidedSubmissions.map((item) => ({ ...item })),
   /** Counts break-glass calls so the burst limit is reachable in dev. */
   takedowns: 0,
+  /** Emails already taken, so the duplicate branch of admin creation is reachable. */
+  adminEmails: ['boss@gogo.vn', 'ops@gogo.vn', 'editor@gogo.vn', 'moderator@gogo.vn'],
 }
 
 /**
@@ -168,6 +170,54 @@ export const handlers = [
   ),
 
   http.get(`${BASE}/cms/ops/kpis`, () => HttpResponse.json(opsKpis)),
+
+  /*
+   * `POST /cms/auth/admins` — super-admin only, and the mock enforces it so the
+   * UI has to survive a demotion mid-session rather than assume the route gate
+   * held. Mirrors the contract's floors: 12-character password, four-value
+   * role, unique email. The password is never echoed back.
+   */
+  http.post(`${BASE}/cms/auth/admins`, async ({ request }) => {
+    if (currentActor().role !== 'super_admin') {
+      return envelope(403, 'FORBIDDEN', 'super admin required')
+    }
+    const body = (await request.json()) as {
+      email?: string
+      password?: string
+      displayName?: string
+      role?: AdminRole
+    }
+    if (!body.password || body.password.length < 12) {
+      return HttpResponse.json(
+        {
+          code: 'VALIDATION_FAILED',
+          message: 'password too short',
+          field_errors: [
+            { field: 'password', code: 'TOO_SHORT', message: 'Mật khẩu phải từ 12 ký tự.' },
+          ],
+          request_id: 'mock-validation-failed',
+          retryable: false,
+        },
+        { status: 400 },
+      )
+    }
+    if (body.email && db.adminEmails.includes(body.email.toLowerCase())) {
+      return HttpResponse.json(
+        {
+          code: 'CONFLICT',
+          message: 'email already registered',
+          field_errors: [
+            { field: 'email', code: 'DUPLICATE', message: 'Email này đã có tài khoản.' },
+          ],
+          request_id: 'mock-conflict',
+          retryable: false,
+        },
+        { status: 409 },
+      )
+    }
+    if (body.email) db.adminEmails.push(body.email.toLowerCase())
+    return HttpResponse.json({ created: true }, { status: 201 })
+  }),
 
   http.get(`${BASE}/cms/places`, ({ request }) => {
     const url = new URL(request.url)

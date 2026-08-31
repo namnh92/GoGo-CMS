@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useI18n, useT } from '@/shared/i18n/i18n'
 import { queryKeys } from '@/shared/api/queryKeys'
@@ -8,6 +9,8 @@ import { formatDateTime, formatNumber, formatPercent } from '@/shared/format'
 import { PageBody, PageHeader } from '@/app/PageHeader'
 import { Card, CardBody, CardHeader } from '@/shared/ui/Card'
 import { Button } from '@/shared/ui/Button'
+import { PlusIcon } from '@/shared/ui/icons'
+import { RoleGate } from '@/app/RequireAuth'
 import { Badge } from '@/shared/ui/Badge'
 import { TextInput, Toggle } from '@/shared/ui/Field'
 import { Tabs, type TabItem } from '@/shared/ui/Tabs'
@@ -152,6 +155,7 @@ export default function SettingsScreen() {
   const online = useOnline()
   const describeError = useErrorMessage()
 
+  const navigate = useNavigate()
   const [tab, setTab] = useState<TabId>('flags')
   const [weights, setWeights] = useState<Record<string, number>>({})
   const [pendingActivate, setPendingActivate] = useState<RankingConfig | null>(null)
@@ -323,6 +327,20 @@ export default function SettingsScreen() {
       <PageHeader
         breadcrumb={[{ label: t('app.suffix') }, { label: t('settings.breadcrumb') }]}
         title={t('settings.title')}
+        actions={
+          // Only a super admin may create staff accounts, so nobody else is
+          // offered the door. The API refuses the call either way.
+          <RoleGate permission="admin.create" fallback={null}>
+            <Button
+              variant="secondary"
+              size="sm"
+              iconLeft={<PlusIcon size={14} />}
+              onClick={() => navigate('/settings/accounts/new')}
+            >
+              {t('admins.new')}
+            </Button>
+          </RoleGate>
+        }
       />
       <PageBody>
         <Tabs items={tabs} value={tab} onChange={setTab} label={t('settings.breadcrumb')} />

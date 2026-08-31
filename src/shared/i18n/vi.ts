@@ -37,6 +37,29 @@ export const vi = {
   'nav.group.review': 'Kiểm duyệt',
   'nav.group.operations': 'Vận hành',
 
+  'admins.new': 'Tạo tài khoản CMS',
+  'admins.formTitle': 'Tài khoản nhân sự mới',
+  'admins.formHint':
+    'Tài khoản có hiệu lực ngay. Vai quyết định quyền ghi; đọc thì phân cấp theo hạng.',
+  'admins.field.displayName': 'Tên hiển thị',
+  'admins.field.email': 'Email công việc',
+  'admins.field.password': 'Mật khẩu khởi tạo',
+  'admins.field.passwordHint': 'Tối thiểu 12 ký tự. Server áp ngưỡng này, không phải form.',
+  'admins.field.role': 'Vai',
+  'admins.field.roleHint': 'Bốn vai server cấp. CMS không tự thêm vai nào khác.',
+  'admins.error.displayName': 'Nhập tên hiển thị.',
+  'admins.error.email': 'Email không hợp lệ.',
+  'admins.error.password': 'Mật khẩu phải từ 12 ký tự.',
+  'admins.error.role': 'Chọn một vai.',
+  'admins.rbacNote':
+    'Quyền được API áp, không phải UI. Ẩn nút không thay cho kiểm tra phía server.',
+  'admins.submit': 'Tạo tài khoản',
+  'admins.created': 'Đã tạo tài khoản cho {name}.',
+  'admins.createdHint':
+    'Chưa có màn danh sách tài khoản: BFF chưa mở GET /v1/cms/auth/admins (GoGo-BE#220).',
+  'admins.createAnother': 'Tạo tài khoản khác',
+  'admins.backToSettings': 'Về Vận hành và cấu hình',
+
   'role.editor': 'Biên tập',
   'role.moderator': 'Kiểm duyệt viên',
   'role.ops_admin': 'Quản trị vận hành',

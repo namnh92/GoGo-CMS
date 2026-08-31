@@ -39,6 +39,29 @@ export const en: Partial<Record<MessageKey, string>> = {
   'nav.group.review': 'Moderation',
   'nav.group.operations': 'Operations',
 
+  'admins.new': 'New CMS account',
+  'admins.formTitle': 'New staff account',
+  'admins.formHint':
+    'The account is live immediately. Role decides writes; reads are hierarchical by rank.',
+  'admins.field.displayName': 'Display name',
+  'admins.field.email': 'Work email',
+  'admins.field.password': 'Initial password',
+  'admins.field.passwordHint': 'At least 12 characters. The server sets this floor, not the form.',
+  'admins.field.role': 'Role',
+  'admins.field.roleHint': 'The four roles the server grants. The CMS invents none.',
+  'admins.error.displayName': 'Enter a display name.',
+  'admins.error.email': 'That email is not valid.',
+  'admins.error.password': 'Password must be at least 12 characters.',
+  'admins.error.role': 'Pick a role.',
+  'admins.rbacNote':
+    'Permissions are enforced by the API, not the UI. Hiding a button is never the check.',
+  'admins.submit': 'Create account',
+  'admins.created': 'Account created for {name}.',
+  'admins.createdHint':
+    'There is no account list yet: the BFF has not shipped GET /v1/cms/auth/admins (GoGo-BE#220).',
+  'admins.createAnother': 'Create another account',
+  'admins.backToSettings': 'Back to operations and configuration',
+
   'role.editor': 'Editor',
   'role.moderator': 'Moderator',
   'role.ops_admin': 'Ops admin',
