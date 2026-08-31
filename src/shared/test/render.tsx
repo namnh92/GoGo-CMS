@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { I18nProvider } from '@/shared/i18n/i18n'
 import { SessionProvider } from '@/shared/auth/session'
 import { ToastProvider } from '@/shared/ui/Toast'
+import { CommandPaletteProvider } from '@/app/CommandPalette'
 import type { AdminRole } from '@/shared/api/contracts'
 const HINT_KEY = 'gogo.cms.session-hint'
 
@@ -32,7 +33,11 @@ export function renderWithProviders(
         <I18nProvider>
           <SessionProvider>
             <ToastProvider>
-              <MemoryRouter initialEntries={[route]}>{children}</MemoryRouter>
+              <MemoryRouter initialEntries={[route]}>
+                {/* The shell always mounts it, so a screen under test gets the
+                    same header affordances it has in the app. */}
+                <CommandPaletteProvider>{children}</CommandPaletteProvider>
+              </MemoryRouter>
             </ToastProvider>
           </SessionProvider>
         </I18nProvider>

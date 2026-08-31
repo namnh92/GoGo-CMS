@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { useT } from '@/shared/i18n/i18n'
 import { Button, IconButton } from './Button'
@@ -8,8 +8,18 @@ import { cn } from './cn'
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
-/** Escape to close + focus trap + focus restore, shared by drawer and modal. */
-function useDialogBehaviour(open: boolean, onClose: () => void) {
+/**
+ * Escape to close + focus trap + focus restore, shared by drawer and modal.
+ *
+ * `initialFocusRef` names the control that should receive focus instead of the
+ * first focusable one. A dialog whose whole purpose is an input — the command
+ * palette — must not open with focus parked on its close button.
+ */
+function useDialogBehaviour(
+  open: boolean,
+  onClose: () => void,
+  initialFocusRef?: RefObject<HTMLElement | null>,
+) {
   const ref = useRef<HTMLDivElement>(null)
   const restoreTo = useRef<HTMLElement | null>(null)
 
@@ -17,7 +27,9 @@ function useDialogBehaviour(open: boolean, onClose: () => void) {
     if (!open) return
     restoreTo.current = document.activeElement as HTMLElement | null
     const node = ref.current
-    node?.querySelector<HTMLElement>(FOCUSABLE)?.focus()
+    const preferred = initialFocusRef?.current
+    if (preferred) preferred.focus()
+    else node?.querySelector<HTMLElement>(FOCUSABLE)?.focus()
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -47,7 +59,7 @@ function useDialogBehaviour(open: boolean, onClose: () => void) {
       document.body.style.overflow = previousOverflow
       restoreTo.current?.focus()
     }
-  }, [open, onClose])
+  }, [open, onClose, initialFocusRef])
 
   return ref
 }
@@ -117,6 +129,8 @@ export function Modal({
   title,
   description,
   footer,
+  initialFocusRef,
+  bodyClassName,
   children,
 }: {
   open: boolean
@@ -124,10 +138,13 @@ export function Modal({
   title: ReactNode
   description?: ReactNode
   footer?: ReactNode
+  /** Control to focus on open, instead of the first focusable descendant. */
+  initialFocusRef?: RefObject<HTMLElement | null>
+  bodyClassName?: string
   children?: ReactNode
 }) {
   const t = useT()
-  const ref = useDialogBehaviour(open, onClose)
+  const ref = useDialogBehaviour(open, onClose, initialFocusRef)
   if (!open) return null
 
   return createPortal(
@@ -153,7 +170,7 @@ export function Modal({
             <CloseIcon />
           </IconButton>
         </header>
-        <div className="flex-1 overflow-auto px-5 py-4">{children}</div>
+        <div className={cn('flex-1 overflow-auto px-5 py-4', bodyClassName)}>{children}</div>
         {footer ? <footer className="border-t border-line px-5 py-4">{footer}</footer> : null}
       </div>
     </div>,
