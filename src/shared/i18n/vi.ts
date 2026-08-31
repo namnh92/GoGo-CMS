@@ -1046,6 +1046,11 @@ export const vi = {
   'error.SHEET_URL_INVALID': 'Đường dẫn Google Sheet không hợp lệ.',
   'error.SHEET_NOT_FOUND': 'Không tìm thấy bảng tính.',
   'error.SHEET_TAB_NOT_FOUND': 'Không tìm thấy tab trong bảng tính.',
+  // PI-CMS-008 — lỗi của GoGo, không phải của bảng tính người dùng gửi. Copy
+  // không được gợi ý sửa quyền chia sẻ: làm vậy là gửi người ta đi sửa một thứ
+  // vốn đã đúng, đúng như chuyện đã xảy ra trên DEV.
+  'error.SHEET_PROVIDER_NOT_CONFIGURED':
+    'GoGo chưa cấu hình kết nối Google Sheets. Liên hệ quản trị hệ thống — bảng tính của bạn không có vấn đề gì.',
   // PI-CMS-007 — địa điểm người dùng gửi từ app.
   'nav.submissions': 'Đề xuất từ app',
   'submissions.title': 'Đề xuất địa điểm từ app',
