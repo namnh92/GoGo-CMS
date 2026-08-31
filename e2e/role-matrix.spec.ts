@@ -79,6 +79,19 @@ test('a campaign mid-send offers no cancel, to anyone', async ({ page }) => {
   await expect(page.getByText('Không đủ quyền')).toBeVisible()
 })
 
+test('the user base opens to ops and never to an editor', async ({ page }) => {
+  // Reads deliberately do not climb into this area: an editor reading the
+  // catalogue is ordinary, an editor reading the user base is not.
+  await signIn(page, 'editor@gogo.vn')
+  await expect(page.getByRole('link', { name: 'Người dùng app' })).toHaveCount(0)
+  await page.goto('/users')
+  await expect(page.getByText('Không đủ quyền')).toBeVisible()
+
+  await signIn(page, 'ops@gogo.vn')
+  await page.goto('/users')
+  await expect(page.getByRole('heading', { name: 'Người dùng ứng dụng' })).toBeVisible()
+})
+
 test('every role reaches the audit log, and only ops sees the staff IP', async ({ page }) => {
   await signIn(page, 'editor@gogo.vn')
   await page.goto('/audit')

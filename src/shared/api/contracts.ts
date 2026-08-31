@@ -1293,3 +1293,123 @@ export const cmsOpsCostsSchema = z.object({
   sourcesConfigured: z.boolean(),
 })
 export type CmsOpsCosts = z.infer<typeof cmsOpsCostsSchema>
+
+/**
+ * App-user management (GoGo-BE#246 §1–§4).
+ *
+ * Minimum PII by construction: no coordinates, no device tokens, no raw
+ * preference selections. A field that is not returned cannot leak from a
+ * console session — so these schemas do not model one.
+ */
+export const appUserStatusSchema = z.enum(['active', 'suspended', 'banned', 'deleted'])
+export type AppUserStatus = z.infer<typeof appUserStatusSchema>
+
+export const cmsAppUserSchema = z.object({
+  id: z.string(),
+  displayName: z.string(),
+  /** Null on a deleted account — the address is freed for re-registration. */
+  email: z.string().nullable(),
+  status: appUserStatusSchema,
+  /**
+   * One real value today (`password`); reported rather than assumed, and
+   * deliberately unfiltered — a control that can only return everything is
+   * not a control.
+   */
+  authMethod: z.enum(['password', 'none']),
+  locale: z.string(),
+  createdAt: z.string(),
+  /** Newest session use. Null for an account that never signed in. */
+  lastActiveAt: z.string().nullish(),
+  counters: z.object({
+    roomsCreated: z.number().int(),
+    roomsJoined: z.number().int(),
+    reviews: z.number().int(),
+    savedPlaces: z.number().int(),
+  }),
+  /** Reports filed against this person, open or decided. */
+  reportCount: z.number().int(),
+})
+export type CmsAppUser = z.infer<typeof cmsAppUserSchema>
+
+export const cmsAppUserPageSchema = z.object({
+  items: z.array(cmsAppUserSchema).default([]),
+  nextCursor: z.string().nullable().default(null),
+  totalCount: z.number().int().default(0),
+})
+export type CmsAppUserPage = z.infer<typeof cmsAppUserPageSchema>
+
+export const cmsAppUserRoomSchema = z.object({
+  id: z.string(),
+  type: z.string(),
+  status: z.string(),
+  decisionMode: z.string(),
+  participantCount: z.number().int(),
+  title: z.string().nullish(),
+  role: z.string(),
+  joinedAt: z.string(),
+  createdAt: z.string(),
+})
+export type CmsAppUserRoom = z.infer<typeof cmsAppUserRoomSchema>
+
+export const cmsAppUserDetailSchema = cmsAppUserSchema.extend({
+  /**
+   * From the audit log, not a column — the reason is already written there
+   * with who set it and when. Absent while the account is active.
+   */
+  statusReason: z.string().nullish(),
+  statusChangedAt: z.string().nullish(),
+  /** The 20 most recently joined. No invite code. */
+  rooms: z.array(cmsAppUserRoomSchema).default([]),
+})
+export type CmsAppUserDetail = z.infer<typeof cmsAppUserDetailSchema>
+
+export const cmsUserStatusResultSchema = z.object({
+  id: z.string(),
+  status: z.enum(['active', 'suspended', 'banned']),
+})
+export type CmsUserStatusResult = z.infer<typeof cmsUserStatusResultSchema>
+
+/**
+ * Ops read of rooms. `code` is never returned — it is a bearer secret, and an
+ * operations list is exactly the kind of place such a value gets copied out
+ * of. The host is an id, not a name: identity lives on the access-controlled
+ * account detail.
+ */
+export const cmsRoomSummarySchema = z.object({
+  id: z.string(),
+  type: z.string(),
+  status: z.string(),
+  decisionMode: z.string(),
+  participantCount: z.number().int(),
+  title: z.string().nullish(),
+  hostUserId: z.string(),
+  memberCount: z.number().int(),
+  planCount: z.number().int(),
+  createdAt: z.string(),
+})
+export type CmsRoomSummary = z.infer<typeof cmsRoomSummarySchema>
+
+export const cmsRoomPageSchema = z.object({
+  items: z.array(cmsRoomSummarySchema).default([]),
+  nextCursor: z.string().nullable().default(null),
+  totalCount: z.number().int().default(0),
+})
+export type CmsRoomPage = z.infer<typeof cmsRoomPageSchema>
+
+export const cmsPlanSummarySchema = z.object({
+  id: z.string(),
+  roomId: z.string(),
+  version: z.number().int(),
+  status: z.string(),
+  isStale: z.boolean(),
+  stopCount: z.number().int(),
+  createdAt: z.string(),
+})
+export type CmsPlanSummary = z.infer<typeof cmsPlanSummarySchema>
+
+export const cmsPlanPageSchema = z.object({
+  items: z.array(cmsPlanSummarySchema).default([]),
+  nextCursor: z.string().nullable().default(null),
+  totalCount: z.number().int().default(0),
+})
+export type CmsPlanPage = z.infer<typeof cmsPlanPageSchema>

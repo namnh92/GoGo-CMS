@@ -41,6 +41,20 @@ export const queryKeys = {
     detail: (id: string) => ['safety-rules', 'detail', id] as const,
   },
 
+  appUsers: {
+    all: ['app-users'] as const,
+    list: (filters: Record<string, unknown>) => ['app-users', 'list', filters] as const,
+    detail: (id: string) => ['app-users', 'detail', id] as const,
+  },
+  rooms: {
+    all: ['cms-rooms'] as const,
+    list: (filters: Record<string, unknown>) => ['cms-rooms', 'list', filters] as const,
+  },
+  plans: {
+    all: ['cms-plans'] as const,
+    list: (filters: Record<string, unknown>) => ['cms-plans', 'list', filters] as const,
+  },
+
   admins: {
     all: ['admins'] as const,
     list: (filters: Record<string, unknown>) => ['admins', 'list', filters] as const,
