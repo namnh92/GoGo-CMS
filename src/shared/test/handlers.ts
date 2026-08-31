@@ -809,6 +809,13 @@ export const handlers = [
     return HttpResponse.json(pageOf(items, limit, cursor))
   }),
 
+  http.get(`${BASE}/cms/moderation/reviews/:id`, ({ params }) => {
+    // Unfiltered on purpose (BE-CMS-G6): a decided review still opens.
+    const row = db.reviewQueue.find((review) => review.id === params.id)
+    if (!row) return envelope(404, 'REVIEW_NOT_FOUND', 'review not found')
+    return HttpResponse.json(row)
+  }),
+
   http.get(`${BASE}/cms/moderation/counts`, () =>
     HttpResponse.json({
       reviews: db.reviewQueue.filter((review) => review.status === 'pending').length,

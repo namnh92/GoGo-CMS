@@ -1636,6 +1636,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/cms/rooms/{id}/guests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ops: the guests of one room
+         * @description BE-CMS-G11. Room-scoped on purpose — there is no global guest directory: no moderation case needs one, and a list of every guest's name and activity would be a new PII surface with no reader. The guest bearer credential (`token_hash`) is never returned.
+         */
+        get: operations["cmsRoomGuests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/rooms/{id}/guests/{memberId}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ops: remove a guest from a room
+         * @description **Not a ban.** A guest has no durable identity — only a session tied to this room through the invite flow — so whoever holds a still-valid invite can join again and receive a fresh session. What this does is exactly "out of the room now": the active session is revoked (denylist included, so an access token already issued dies immediately) and the membership row is marked removed but kept, because votes, reports and moderation history reference it.
+         *
+         *     Preventing a return is a different action — rotating or revoking the room invite — and this endpoint does not pretend to include it.
+         */
+        post: operations["cmsRemoveGuest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/cms/plans": {
         parameters: {
             query?: never;
@@ -2642,7 +2684,13 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Moderator: read one review
+         * @description BE-CMS-G6. **Not filtered by status.** The queue list defaults to `pending`, which is right for a queue and wrong for a link: a shared URL pointing at a review somebody already decided has to open, rather than the console saying "not in the current filter" about a row that plainly exists.
+         *
+         *     Same projection as the list — one definition, so a field cannot appear on one and quietly go missing from the other.
+         */
+        get: operations["cmsGetModerationReview"];
         put?: never;
         /** Moderator: publish or reject a review (reason required, audited) */
         post: operations["cmsDecideReview"];
@@ -7803,6 +7851,89 @@ export interface operations {
             };
         };
     };
+    cmsRoomGuests: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every guest membership of the room, removed ones included */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        guests: {
+                            /** Format: uuid */
+                            memberId: string;
+                            /** Format: uuid */
+                            guestSessionId: string;
+                            displayName: string;
+                            selectionStatus: string;
+                            /** Format: date-time */
+                            joinedAt: string;
+                            /** Format: date-time */
+                            sessionExpiresAt: string;
+                            /** Format: date-time */
+                            sessionRevokedAt?: string;
+                            /** Format: date-time */
+                            removedAt?: string;
+                            /** @description The session was claimed by a registered account. */
+                            claimed: boolean;
+                        }[];
+                    };
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    cmsRemoveGuest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                memberId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminActionReason"];
+            };
+        };
+        responses: {
+            /** @description Removed */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        memberId: string;
+                        removed: boolean;
+                    };
+                };
+            };
+            404: components["responses"]["NotFound"];
+            /** @description `NOT_A_GUEST` — registered members have a different moderation path; or `ALREADY_REMOVED`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     cmsListPlans: {
         parameters: {
             query?: {
@@ -9782,6 +9913,37 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+        };
+    };
+    cmsGetModerationReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The review, whatever its status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsModerationReview"];
+                };
+            };
+            /** @description `REVIEW_NOT_FOUND` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
         };
     };
     cmsDecideReview: {
