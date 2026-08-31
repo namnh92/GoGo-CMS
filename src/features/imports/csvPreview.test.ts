@@ -80,4 +80,20 @@ describe('canonical mapping vocabulary', () => {
       expect(isCanonicalField(field)).toBe(false)
     }
   })
+
+  it('emits no legacy camelCase wire value anywhere', () => {
+    // The server still normalises these for older `/v1` callers, but this
+    // client must never be one of them — compatibility is for clients that
+    // cannot be updated, and this one just was.
+    const legacy = ['googleMapsUrl', 'priceMin', 'priceMax', 'address', 'phone', 'website']
+    for (const value of legacy) {
+      expect(IMPORT_CANONICAL_FIELDS as readonly string[]).not.toContain(value)
+      expect(MAPPABLE_FIELDS as readonly string[]).not.toContain(value)
+    }
+    // Every value this client can put on the wire is canonical snake_case.
+    for (const field of MAPPABLE_FIELDS) {
+      expect(field).toMatch(/^[a-z][a-z0-9_]*$/)
+      expect(isCanonicalField(field)).toBe(true)
+    }
+  })
 })
