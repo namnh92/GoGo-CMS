@@ -12,12 +12,21 @@ export const en: Partial<Record<MessageKey, string>> = {
   'app.notifications': 'Notifications',
   'app.signOut': 'Sign out',
   'app.mainNav': 'Main navigation',
+  'app.shortcut.cmdK': '⌘K',
+  'app.shortcut.ctrlK': 'Ctrl K',
 
   'env.dev': 'DEV',
   'env.staging': 'STAGING',
   'env.production': 'PRODUCTION',
   'env.productionWarning':
     'You are on PRODUCTION — destructive actions take real effect and are audited.',
+
+  'palette.title': 'Quick find',
+  'palette.hint': 'Type to find a screen or a place. Use ↑ ↓ to choose, Enter to open.',
+  'palette.group.navigate': 'Screen',
+  'palette.group.places': 'Place',
+  'palette.empty': 'Type to find a screen or a place.',
+  'palette.noResults': 'No results for “{query}”.',
 
   'nav.dashboard': 'Dashboard',
   'nav.places': 'Places',

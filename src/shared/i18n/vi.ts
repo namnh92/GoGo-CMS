@@ -10,12 +10,21 @@ export const vi = {
   'app.notifications': 'Thông báo',
   'app.signOut': 'Đăng xuất',
   'app.mainNav': 'Điều hướng chính',
+  'app.shortcut.cmdK': '⌘K',
+  'app.shortcut.ctrlK': 'Ctrl K',
 
   'env.dev': 'DEV',
   'env.staging': 'STAGING',
   'env.production': 'PRODUCTION',
   'env.productionWarning':
     'Bạn đang ở PRODUCTION — mọi thao tác phá huỷ có hiệu lực thật và được ghi audit.',
+
+  'palette.title': 'Tìm nhanh',
+  'palette.hint': 'Gõ để tìm màn hình hoặc địa điểm. Dùng ↑ ↓ để chọn, Enter để mở.',
+  'palette.group.navigate': 'Màn hình',
+  'palette.group.places': 'Địa điểm',
+  'palette.empty': 'Gõ để tìm màn hình hoặc địa điểm.',
+  'palette.noResults': 'Không có kết quả cho “{query}”.',
 
   'nav.dashboard': 'Tổng quan',
   'nav.places': 'Địa điểm',
