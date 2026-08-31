@@ -37,6 +37,7 @@ const SafetyRuleDetailScreen = lazy(() => import('@/features/safety/safetyRuleDe
 const SettingsScreen = lazy(() => import('@/features/ranking/settings.view'))
 const NewAccountScreen = lazy(() => import('@/features/admins/newAccount.view'))
 const AdminListScreen = lazy(() => import('@/features/admins/adminList.view'))
+const RolesPermissionsScreen = lazy(() => import('@/features/administration/rolesPermissions.view'))
 const AuditLogScreen = lazy(() => import('@/features/audit/auditLog.view'))
 const SearchQualityScreen = lazy(() => import('@/features/search/searchQuality.view'))
 const ForbiddenScreen = lazy(() => import('@/features/errors/forbidden.view'))
@@ -104,6 +105,7 @@ export const router = createBrowserRouter([
           { path: 'settings/accounts', element: <AdminListScreen /> },
           { path: 'settings/accounts/new', element: <NewAccountScreen /> },
           { path: 'search-quality', element: <SearchQualityScreen /> },
+          { path: 'roles', element: <RolesPermissionsScreen /> },
           { path: 'audit', element: <AuditLogScreen /> },
           { path: '403', element: <ForbiddenScreen /> },
           { path: '*', element: <NotFoundScreen /> },

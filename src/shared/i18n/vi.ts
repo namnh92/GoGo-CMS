@@ -1486,6 +1486,50 @@ export const vi = {
   'dashboard.costs.body':
     'Chưa có nguồn billing nào được nối (Maps, OpenAI, AWS, Cloudflare, OneSignal). Không hiển thị số tiền ước lượng khi chưa có API thật.',
   'dashboard.costs.needCosts': 'chi phí theo ngày/tháng theo provider + hạn mức quota.',
+
+  'nav.group.administration': 'Quản trị',
+  'nav.roles': 'Vai trò & quyền',
+  'nav.accounts': 'Tài khoản CMS',
+
+  'roles.title': 'Vai trò & quyền',
+  'roles.breadcrumb': 'Vai trò & quyền',
+  'roles.fixedNote':
+    'Bốn vai trò là cố định trong code và được GoGo-BE (AdminGuard) cưỡng chế ở API. Màn này mô tả mô hình phân quyền để đọc — không có API nào cho phép sửa vai trò hay quyền, nên ở đây không có nút sửa.',
+  'roles.rankNote':
+    'Đọc theo bậc, ghi đúng vai: một vai bậc cao đọc được khu của bậc thấp hơn, nhưng mọi thao tác ghi đều đòi đúng vai được khai trên controller. Ẩn nút ở UI không bao giờ thay cho kiểm tra ở API.',
+  'roles.permissionCount': 'quyền',
+  'roles.matrixTitle': 'Ma trận quyền theo vai trò',
+  'roles.matrixHint':
+    'Sinh trực tiếp từ bảng roleCan trong client — cùng một bảng UI dùng để ẩn/hiện nút.',
+  'roles.col.permission': 'Quyền',
+  'roles.allowed': 'Được phép',
+  'roles.denied': 'Không được phép',
+  'roles.access.read': 'đọc',
+  'roles.access.write': 'ghi',
+  'roles.scope.editor': 'Danh mục địa điểm, nội dung biên tập, banner, import.',
+  'roles.scope.moderator': 'Hàng chờ kiểm duyệt UGC và đề xuất địa điểm.',
+  'roles.scope.ops_admin': 'Cấu hình vận hành, ranking, cờ ứng dụng, chiến dịch, luật an toàn.',
+  'roles.scope.super_admin': 'Toàn quyền, kể cả tài khoản CMS.',
+  'roles.domain.place': 'Địa điểm',
+  'roles.domain.taxonomy': 'Phân loại',
+  'roles.domain.collection': 'Bộ sưu tập',
+  'roles.domain.recommendation': 'Gợi ý biên tập',
+  'roles.domain.planTemplate': 'Mẫu lịch trình',
+  'roles.domain.banner': 'Banner',
+  'roles.domain.campaign': 'Chiến dịch push',
+  'roles.domain.safety': 'Luật Trust & Safety',
+  'roles.domain.moderation': 'Kiểm duyệt',
+  'roles.domain.submission': 'Đề xuất từ app',
+  'roles.domain.import': 'Nhập liệu',
+  'roles.domain.upload': 'Tải media',
+  'roles.domain.ops': 'Dashboard vận hành',
+  'roles.domain.searchAnalytics': 'Chất lượng tìm kiếm',
+  'roles.domain.ranking': 'Cấu hình ranking',
+  'roles.domain.flag': 'Cờ ứng dụng',
+  'roles.domain.experiment': 'Thử nghiệm A/B',
+  'roles.domain.audit': 'Kiểm toán',
+  'roles.domain.emergency': 'Gỡ khẩn cấp',
+  'roles.domain.admin': 'Tài khoản CMS',
 } as const
 
 export type MessageKey = keyof typeof vi

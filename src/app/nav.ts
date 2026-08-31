@@ -1,7 +1,13 @@
 import type { ComponentType, SVGProps } from 'react'
 import type { MessageKey } from '@/shared/i18n/vi'
 import type { Permission } from '@/shared/auth/permissions'
-import { DashboardIcon, ModerationIcon, PlacesIcon, SettingsIcon } from '@/shared/ui/icons'
+import {
+  AuditIcon,
+  DashboardIcon,
+  ModerationIcon,
+  PlacesIcon,
+  SettingsIcon,
+} from '@/shared/ui/icons'
 
 /**
  * Reads are hierarchical on the server, so an item is offered whenever the
@@ -125,6 +131,25 @@ const OPERATIONS: NavLeaf[] = [
     permission: 'searchAnalytics.read',
     match: (p) => p.startsWith('/search-quality'),
   },
+]
+
+const ADMINISTRATION: NavLeaf[] = [
+  {
+    // Super-admin only in both directions: who holds which role is the shape
+    // of the authorization model itself.
+    to: '/settings/accounts',
+    labelKey: 'nav.accounts',
+    permission: 'admin.read',
+    match: (p) => p.startsWith('/settings/accounts'),
+  },
+  {
+    // Read-only description of the fixed RBAC model; every role may read it —
+    // knowing what one's own role can do is not a privilege.
+    to: '/roles',
+    labelKey: 'nav.roles',
+    permission: 'audit.read',
+    match: (p) => p.startsWith('/roles'),
+  },
   {
     // Declared on `editor`, so rank-based read puts the log in every role's
     // nav — which is the point: everyone can answer "who changed this".
@@ -157,6 +182,13 @@ export const NAV_ENTRIES: NavEntry[] = [
     labelKey: 'nav.group.operations',
     icon: SettingsIcon,
     children: OPERATIONS,
+  },
+  {
+    kind: 'group',
+    id: 'administration',
+    labelKey: 'nav.group.administration',
+    icon: AuditIcon,
+    children: ADMINISTRATION,
   },
 ]
 

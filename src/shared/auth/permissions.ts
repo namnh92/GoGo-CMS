@@ -173,6 +173,23 @@ export function roleCan(role: AdminRole | null | undefined, permission: Permissi
 }
 
 /**
+ * The four roles that exist. The Figma mockup draws seven (Admin, Support,
+ * Viewer…) — those have no server-side counterpart and are deliberately not
+ * listed anywhere in this client.
+ */
+export const ADMIN_ROLES: readonly AdminRole[] = ['editor', 'moderator', 'ops_admin', 'super_admin']
+
+/**
+ * Every named permission with the route group and method class it maps to —
+ * the read-only feed for the Roles & Permissions screen. Derived from the
+ * same table `roleCan` answers from, so the screen cannot drift from the
+ * checks the UI actually runs.
+ */
+export const PERMISSION_ENTRIES = (
+  Object.entries(PERMISSIONS) as [Permission, readonly [RouteGroup, Access]][]
+).map(([permission, [group, access]]) => ({ permission, group, access }))
+
+/**
  * Where a role lands after login — the first screen it can actually act on,
  * not merely read. Reads being hierarchical means everyone can open the
  * catalog now, which would make it a useless landing page for a moderator.
