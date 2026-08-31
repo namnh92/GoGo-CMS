@@ -2,7 +2,6 @@ import { apiFetch, apiFetchParsed, newIdempotencyKey } from '@/shared/api/client
 import {
   experimentListSchema,
   experimentSchema,
-  featureFlagListSchema,
   rankingConfigListSchema,
   rankingEvaluationSchema,
   type RankingConfigStatus,
@@ -19,10 +18,6 @@ export function fetchRankingConfigs(
     query: { key: filters.key, status: filters.status },
     signal,
   })
-}
-
-export function fetchFeatureFlags(signal?: AbortSignal) {
-  return apiFetchParsed(featureFlagListSchema, '/cms/feature-flags', { signal })
 }
 
 /**

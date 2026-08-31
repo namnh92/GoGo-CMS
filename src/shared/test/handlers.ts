@@ -21,6 +21,7 @@ import {
   taxonomies,
   moderationReviewQueue,
   cmsAdmins,
+  featureFlagCatalog,
 } from './fixtures'
 
 const BASE = '/v1'
@@ -773,16 +774,85 @@ export const handlers = [
     return HttpResponse.json({ rolledBack: true }, { status: 201 })
   }),
 
-  http.get(`${BASE}/cms/feature-flags`, () => HttpResponse.json(db.flags)),
+  http.get(`${BASE}/cms/feature-flags/catalog`, () => HttpResponse.json(featureFlagCatalog)),
 
+  http.get(`${BASE}/cms/feature-flags`, ({ request }) => {
+    const url = new URL(request.url)
+    const environment = url.searchParams.get('environment')
+    const platform = url.searchParams.get('platform')
+    let items = db.flags
+    // `all` rows always apply, so a scoped read returns them alongside the
+    // narrower ones — that is what the console resolves over.
+    if (environment && environment !== 'all') {
+      items = items.filter((flag) => flag.environment === 'all' || flag.environment === environment)
+    }
+    if (platform && platform !== 'all') {
+      items = items.filter((flag) => flag.platform === 'all' || flag.platform === platform)
+    }
+    return HttpResponse.json(items)
+  }),
+
+  /*
+   * `PUT /cms/feature-flags/{key}`. The mock enforces what the contract says
+   * the server enforces, so the console cannot pass here and fail in
+   * production: an unknown key is a 404, a value is validated against the
+   * key's declared type, and a per-platform write to a key that is not
+   * platform-scoped is refused rather than stored and ignored.
+   */
   http.put(`${BASE}/cms/feature-flags/:key`, async ({ params, request }) => {
-    const flag = db.flags.find((item) => item.key === params.key)
-    if (!flag) return envelope(404, 'NOT_FOUND', 'flag not found')
-    const body = (await request.json()) as { enabled: boolean }
-    flag.enabled = body.enabled
-    flag.updatedBy = { id: 'ad-me', displayName: currentActor().displayName }
-    flag.updatedAt = new Date().toISOString()
-    return HttpResponse.json(flag)
+    const definition = featureFlagCatalog.find((item) => item.key === params.key)
+    if (!definition) return envelope(404, 'NOT_FOUND', 'flag not found')
+
+    const body = (await request.json()) as {
+      enabled: boolean
+      value?: unknown
+      environment?: string
+      platform?: string
+    }
+    const environment = (body.environment ?? 'all') as (typeof db.flags)[number]['environment']
+    const platform = (body.platform ?? 'all') as (typeof db.flags)[number]['platform']
+
+    if (!definition.platformScoped && platform !== 'all') {
+      return envelope(400, 'VALIDATION_FAILED', 'key is not platform scoped')
+    }
+    if (definition.valueType === 'number' && typeof body.value !== 'number') {
+      return envelope(400, 'VALIDATION_FAILED', 'value must be a number')
+    }
+    if (definition.valueType === 'version' && !/^\d+\.\d+\.\d+$/.test(String(body.value ?? ''))) {
+      return envelope(400, 'VALIDATION_FAILED', 'value must look like 1.2.3')
+    }
+
+    const existing = db.flags.find(
+      (item) =>
+        item.key === params.key && item.environment === environment && item.platform === platform,
+    )
+    const row = existing ?? {
+      key: String(params.key),
+      valueType: definition.valueType,
+      environment,
+      platform,
+      enabled: body.enabled,
+      value: body.value ?? null,
+      payload: null,
+      description: definition.description,
+      known: true,
+      updatedBy: null,
+      updatedAt: new Date().toISOString(),
+    }
+    row.enabled = body.enabled
+    row.value = definition.valueType === 'boolean' ? body.enabled : (body.value ?? null)
+    row.updatedBy = { id: 'ad-me', displayName: currentActor().displayName }
+    row.updatedAt = new Date().toISOString()
+    if (!existing) db.flags.push(row)
+
+    return HttpResponse.json({
+      key: row.key,
+      valueType: row.valueType,
+      environment: row.environment,
+      platform: row.platform,
+      enabled: row.enabled,
+      value: row.value,
+    })
   }),
 
   http.get(`${BASE}/cms/place-imports`, ({ request }) => {

@@ -58,6 +58,12 @@ export const queryKeys = {
       ['submissions', 'list', status, cursor ?? 'first'] as const,
   },
 
+  flags: {
+    all: ['flags'] as const,
+    catalog: ['flags', 'catalog'] as const,
+    overrides: (scope: Record<string, unknown>) => ['flags', 'overrides', scope] as const,
+  },
+
   ranking: {
     configs: ['ranking', 'configs'] as const,
     flags: ['ranking', 'flags'] as const,

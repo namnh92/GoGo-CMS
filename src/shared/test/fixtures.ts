@@ -11,6 +11,7 @@ import type {
   RankingEvaluation,
   SearchAnalytics,
   Taxonomy,
+  FeatureFlagDefinition,
 } from '@/shared/api/contracts'
 import type { ImportJob, ImportRow } from '@/shared/api/contracts-import'
 
@@ -562,31 +563,131 @@ export const experiments: Experiment[] = [
   },
 ]
 
+/**
+ * `GET /cms/feature-flags/catalog` — the registry. Covers all five value types,
+ * and one key that refuses a per-platform override, so both branches of
+ * `platformScoped` are reachable.
+ */
+export const featureFlagCatalog: FeatureFlagDefinition[] = [
+  {
+    key: 'suggestion.ai_refinement',
+    valueType: 'boolean',
+    defaultValue: false,
+    description:
+      'Cho phép AI tinh chỉnh trên tập ứng viên đã hợp lệ. Tắt để quay về kết quả deterministic.',
+    platformScoped: false,
+  },
+  {
+    key: 'ingest.auto_publish_community',
+    valueType: 'boolean',
+    defaultValue: false,
+    description: 'Tự động xuất bản địa điểm do người dùng gửi sau khi verify.',
+    platformScoped: false,
+  },
+  {
+    key: 'app.minimum_version',
+    valueType: 'version',
+    defaultValue: '1.0.0',
+    description: 'Phiên bản tối thiểu còn được phép dùng app.',
+    platformScoped: true,
+  },
+  {
+    key: 'app.maintenance_message',
+    valueType: 'string',
+    defaultValue: '',
+    description: 'Câu hiển thị khi app ở chế độ bảo trì. Rỗng nghĩa là không hiện gì.',
+    platformScoped: true,
+  },
+  {
+    key: 'suggestion.recommendation_limit',
+    valueType: 'number',
+    defaultValue: 0,
+    description: 'Số gợi ý tối đa mỗi phòng. 0 nghĩa là dùng mặc định của engine.',
+    platformScoped: false,
+  },
+  {
+    key: 'search.ranking_overrides',
+    valueType: 'json',
+    defaultValue: {},
+    description: 'Ghi đè trọng số tìm kiếm theo thành phố.',
+    platformScoped: false,
+  },
+]
+
+/**
+ * Stored overrides. One key carries both an unscoped row and a narrower
+ * `(production, ios)` row, and one row is `known: false` — a value left behind
+ * by a feature that has since been removed.
+ */
 export const featureFlags: FeatureFlag[] = [
   {
     key: 'suggestion.ai_refinement',
+    valueType: 'boolean',
+    environment: 'all',
+    platform: 'all',
     enabled: true,
+    value: true,
+    payload: null,
     description:
       'Cho phép AI tinh chỉnh trên tập ứng viên đã hợp lệ. Tắt để quay về kết quả deterministic.',
-    payload: { timeoutMs: 15_000 },
+    known: true,
     updatedBy: { id: 'ad-1', displayName: 'minh.anh' },
     updatedAt: iso(240),
   },
   {
-    key: 'ingest.auto_publish_community',
-    enabled: false,
-    description: 'Tự động xuất bản địa điểm do người dùng gửi sau khi verify.',
+    key: 'app.minimum_version',
+    valueType: 'version',
+    environment: 'all',
+    platform: 'all',
+    enabled: true,
+    value: '2.4.0',
     payload: null,
+    description: 'Phiên bản tối thiểu còn được phép dùng app.',
+    known: true,
     updatedBy: { id: 'ad-2', displayName: 'vy.vo' },
     updatedAt: iso(60 * 24 * 4),
   },
   {
-    key: 'search.vi_synonym_expansion',
+    key: 'app.minimum_version',
+    valueType: 'version',
+    environment: 'production',
+    platform: 'ios',
     enabled: true,
-    description: 'Mở rộng truy vấn tiếng Việt bằng bảng từ đồng nghĩa.',
+    value: '2.6.1',
     payload: null,
+    description: 'Phiên bản tối thiểu còn được phép dùng app.',
+    known: true,
+    updatedBy: { id: 'ad-1', displayName: 'minh.anh' },
+    updatedAt: iso(60 * 8),
+  },
+  {
+    key: 'suggestion.recommendation_limit',
+    valueType: 'number',
+    environment: 'all',
+    platform: 'all',
+    // Explicitly configured to zero — not the same as unconfigured, which is
+    // the distinction the catalog's default exists to make visible.
+    enabled: true,
+    value: 0,
+    payload: null,
+    description: 'Số gợi ý tối đa mỗi phòng. 0 nghĩa là dùng mặc định của engine.',
+    known: true,
     updatedBy: { id: 'ad-2', displayName: 'vy.vo' },
     updatedAt: iso(60 * 24 * 9),
+  },
+  {
+    key: 'legacy.map_provider_fallback',
+    valueType: 'string',
+    environment: 'all',
+    platform: 'all',
+    enabled: true,
+    value: 'mapbox',
+    payload: null,
+    description: null,
+    // The feature that read this is gone; the row is left behind.
+    known: false,
+    updatedBy: { id: 'ad-1', displayName: 'minh.anh' },
+    updatedAt: iso(60 * 24 * 200),
   },
 ]
 
