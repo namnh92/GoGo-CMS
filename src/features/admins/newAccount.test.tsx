@@ -42,8 +42,9 @@ describe('NewAccountScreen (CMS-020)', () => {
 
     // Panel and toast both confirm it, so match all rather than assuming one.
     expect((await screen.findAllByText(/Đã tạo tài khoản cho Vy Vo/)).length).toBeGreaterThan(0)
-    // The success screen is honest about there being nowhere to list them yet.
-    expect(screen.getByText(/GoGo-BE#220/)).toBeInTheDocument()
+    // The account list exists now (CMS-021), so the panel points at it.
+    expect(screen.getByText(/xuất hiện trong danh sách tài khoản/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Xem danh sách tài khoản' })).toBeInTheDocument()
     expect(document.body.textContent).not.toContain('correct-horse-battery')
   })
 
@@ -95,7 +96,9 @@ describe('NewAccountScreen (CMS-020)', () => {
 
     // `loading` disables the button, so a double-click cannot create twice, and
     // the form is replaced outright once the account exists.
-    await waitFor(() => expect(screen.getByText(/GoGo-BE#220/)).toBeInTheDocument())
+    await waitFor(() =>
+      expect(screen.getByText(/xuất hiện trong danh sách tài khoản/)).toBeInTheDocument(),
+    )
     expect(screen.queryByRole('button', { name: 'Tạo tài khoản' })).not.toBeInTheDocument()
     expect(submit).not.toBeInTheDocument()
   })

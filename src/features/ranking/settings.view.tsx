@@ -9,7 +9,6 @@ import { formatDateTime, formatNumber, formatPercent } from '@/shared/format'
 import { PageBody, PageHeader } from '@/app/PageHeader'
 import { Card, CardBody, CardHeader } from '@/shared/ui/Card'
 import { Button } from '@/shared/ui/Button'
-import { PlusIcon } from '@/shared/ui/icons'
 import { RoleGate } from '@/app/RequireAuth'
 import { Badge } from '@/shared/ui/Badge'
 import { TextInput, Toggle } from '@/shared/ui/Field'
@@ -330,14 +329,9 @@ export default function SettingsScreen() {
         actions={
           // Only a super admin may create staff accounts, so nobody else is
           // offered the door. The API refuses the call either way.
-          <RoleGate permission="admin.create" fallback={null}>
-            <Button
-              variant="secondary"
-              size="sm"
-              iconLeft={<PlusIcon size={14} />}
-              onClick={() => navigate('/settings/accounts/new')}
-            >
-              {t('admins.new')}
+          <RoleGate permission="admin.read" fallback={null}>
+            <Button variant="secondary" size="sm" onClick={() => navigate('/settings/accounts')}>
+              {t('admins.listTitle')}
             </Button>
           </RoleGate>
         }

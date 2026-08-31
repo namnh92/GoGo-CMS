@@ -961,3 +961,76 @@ export const moderationReviewQueue = Array.from({ length: 32 }, (_, index) => {
     updatedAt: iso(nth * 30),
   }
 })
+
+/**
+ * `GET /cms/auth/admins` (GoGo-BE#220). Spans two pages, both roles worth
+ * filtering on, and both statuses, so paging and every filter are reachable
+ * without hand-editing. One account has never signed in.
+ */
+type CmsAdminFixture = {
+  id: string
+  email: string
+  displayName: string
+  role: 'editor' | 'moderator' | 'ops_admin' | 'super_admin'
+  status: 'active' | 'suspended'
+  createdAt: string
+  lastLoginAt: string | null
+}
+
+export const cmsAdmins: CmsAdminFixture[] = [
+  {
+    id: '00000000-0000-4000-8000-0000000000aa',
+    email: 'boss@gogo.vn',
+    displayName: 'Minh Anh Ng.',
+    role: 'super_admin',
+    status: 'active',
+    createdAt: iso(60 * 24 * 300),
+    lastLoginAt: iso(2),
+  },
+  {
+    id: '00000000-0000-4000-8000-0000000000bb',
+    email: 'ops@gogo.vn',
+    displayName: 'Vy Vo',
+    role: 'ops_admin',
+    status: 'active',
+    createdAt: iso(60 * 24 * 210),
+    lastLoginAt: iso(30),
+  },
+  {
+    id: '00000000-0000-4000-8000-0000000000cc',
+    email: 'editor@gogo.vn',
+    displayName: 'Huy Nguyen',
+    role: 'editor',
+    status: 'active',
+    createdAt: iso(60 * 24 * 140),
+    lastLoginAt: iso(90),
+  },
+  {
+    id: '00000000-0000-4000-8000-0000000000dd',
+    email: 'moderator@gogo.vn',
+    displayName: 'Lan Tran',
+    role: 'moderator',
+    status: 'active',
+    createdAt: iso(60 * 24 * 90),
+    lastLoginAt: iso(6),
+  },
+  {
+    id: '00000000-0000-4000-8000-0000000000ee',
+    email: 'cuu.nhan.su@gogo.vn',
+    displayName: 'Đặng Quốc',
+    role: 'editor',
+    status: 'suspended',
+    createdAt: iso(60 * 24 * 400),
+    lastLoginAt: iso(60 * 24 * 45),
+  },
+  {
+    id: '00000000-0000-4000-8000-0000000000ff',
+    email: 'moi.tuyen@gogo.vn',
+    displayName: 'Trần Bảo',
+    role: 'moderator',
+    status: 'active',
+    createdAt: iso(30),
+    // Never signed in — absent, not empty.
+    lastLoginAt: null,
+  },
+]
