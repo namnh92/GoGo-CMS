@@ -62,6 +62,12 @@ const CATALOG: NavLeaf[] = [
     match: (p) => p.startsWith('/recommendations'),
   },
   {
+    to: '/banners',
+    labelKey: 'nav.banners',
+    permission: 'banner.read',
+    match: (p) => p.startsWith('/banners'),
+  },
+  {
     to: '/plan-templates',
     labelKey: 'nav.planTemplates',
     permission: 'planTemplate.read',

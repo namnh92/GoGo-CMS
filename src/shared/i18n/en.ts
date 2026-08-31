@@ -620,4 +620,106 @@ export const en: Partial<Record<MessageKey, string>> = {
   'safety.condition.error.terms': 'The term list exceeds what the server accepts.',
   'safety.condition.error.spamNeedsOne':
     'A spam rule needs at least one of max links or max duplicates.',
+
+  'nav.banners': 'Banners',
+
+  'media.hint': 'JPEG, PNG, WebP or HEIC. Bytes go straight to storage, never through the API.',
+  'media.choose': 'Choose image',
+  'media.replace': 'Replace image',
+  'media.noImage': 'No image',
+  'media.noPreview': 'No preview yet',
+  'media.error.contentType': 'Unsupported image format. Use JPEG, PNG, WebP or HEIC.',
+
+  'banners.title': 'Home banners',
+  'banners.breadcrumb': 'Banners',
+  'banners.new': 'New banner',
+  'banners.newHint':
+    'Name and image are required. Copy, destination and schedule live on the detail screen.',
+  'banners.create': 'Create',
+  'banners.created': 'Created banner {name}.',
+  'banners.saved': 'Banner saved.',
+  'banners.statusChanged': 'Banner status changed.',
+  'banners.empty': 'No banners yet',
+  'banners.emptyHint': 'Create the first banner, or clear the filters.',
+  'banners.pageInfo': 'This page {shown} · {total} match the filter',
+  'banners.editTitle': 'Banner content',
+  'banners.editHint':
+    'The image is mandatory. The destination is revalidated by the server on save.',
+  'banners.previewTitle': 'Preview',
+  'banners.previewHint': 'Approximate home layout, not a screenshot.',
+  'banners.lifecycleTitle': 'Status',
+  'banners.lifecycleHint': 'Only the statuses a person sets. "Expired" is computed by the server.',
+  'banners.factsTitle': 'Details',
+  'banners.noPreview': 'No preview image',
+  'banners.noWindow': 'No schedule',
+  'banners.audienceAll': 'All audiences',
+  'banners.createNote':
+    'A banner is created as a draft. The image key is bound to it on save; a key belonging to someone else or an expired one is refused.',
+  'banners.expiredNote':
+    'This banner is past its end time. "Expired" is recomputed on every read — move the end time to run it again.',
+  'banners.effectiveNote':
+    'The effective status is computed by the server from the end time on every read; the lifecycle status is what a person set.',
+
+  'banners.col.image': 'Image',
+  'banners.col.name': 'Banner',
+  'banners.col.placement': 'Placement',
+  'banners.col.audience': 'Audience',
+  'banners.col.window': 'Schedule',
+  'banners.col.priority': 'Priority',
+  'banners.col.status': 'Status',
+  'banners.col.updatedAt': 'Updated',
+
+  'banners.filter.search': 'Search by banner name',
+  'banners.filter.placementAll': 'All placements',
+  'banners.filter.statusAll': 'All statuses',
+  'banners.filter.audienceAll': 'All audiences',
+
+  'banners.field.name': 'Banner name',
+  'banners.field.nameHint': 'Internal name for searching; users never see it.',
+  'banners.field.image': 'Banner image',
+  'banners.field.placement': 'Placement',
+  'banners.field.bannerTitle': 'Title',
+  'banners.field.subtitle': 'Subtitle',
+  'banners.field.ctaLabel': 'CTA label',
+  'banners.field.audience': 'Audience',
+  'banners.field.destinationType': 'Destination type',
+  'banners.field.destinationValue': 'Destination',
+  'banners.field.destinationIdHint':
+    'The id of the matching content. The server checks that it resolves.',
+  'banners.field.destinationUrlHint':
+    'Must be https, carry no credentials and not point inside the network.',
+  'banners.field.startsAt': 'Starts',
+  'banners.field.endsAt': 'Ends',
+  'banners.field.priority': 'Priority',
+  'banners.field.priorityHint': 'Higher first, between banners competing for one placement.',
+  'banners.field.lifecycleStatus': 'Lifecycle status',
+  'banners.field.createdAt': 'Created',
+
+  'banners.error.name': 'A banner name needs at least 3 characters.',
+  'banners.error.image': 'A banner needs an image.',
+  'banners.error.destinationRequired': 'This destination type needs a value.',
+  'banners.error.destinationForbidden': 'This destination type takes no value.',
+  'banners.error.destinationUrl':
+    'The link must be https, carry no credentials and not point inside the network.',
+  'banners.error.window': 'The end time must be after the start time.',
+
+  'banners.placement.home_hero': 'Home — hero',
+  'banners.placement.home_secondary': 'Home — secondary',
+
+  'banners.status.draft': 'Draft',
+  'banners.status.scheduled': 'Scheduled',
+  'banners.status.published': 'Live',
+  'banners.status.archived': 'Archived',
+  'banners.status.expired': 'Expired',
+  'banners.transition.draft': 'Back to draft',
+  'banners.transition.scheduled': 'Schedule',
+  'banners.transition.published': 'Publish now',
+  'banners.transition.archived': 'Archive',
+
+  'banners.destination.none': 'No destination',
+  'banners.destination.place': 'Place',
+  'banners.destination.recommendation': 'Recommendation',
+  'banners.destination.plan_template': 'Plan template',
+  'banners.destination.campaign': 'Campaign',
+  'banners.destination.external_url': 'External link',
 }
