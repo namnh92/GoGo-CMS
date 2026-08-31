@@ -1109,3 +1109,110 @@ export const cmsBannerPageSchema = z.object({
   totalCount: z.number().int().default(0),
 })
 export type CmsBannerPage = z.infer<typeof cmsBannerPageSchema>
+
+/**
+ * Notification campaigns (GoGo-BE#226).
+ *
+ * A campaign is composed here and **sent by the worker**, never from a
+ * request. The API only ever writes a row; a scheduled row is what a worker
+ * tick picks up, resolves an audience for, and hands to the push provider
+ * adapter. There is deliberately no API path that reaches a provider, because
+ * a campaign that has gone out cannot be recalled.
+ */
+export const campaignStatusSchema = z.enum([
+  'draft',
+  'scheduled',
+  'sending',
+  'sent',
+  'cancelled',
+  'failed',
+])
+export type CampaignStatus = z.infer<typeof campaignStatusSchema>
+
+/**
+ * Only what the backend can resolve from data it holds. `city`, `app_version`
+ * and `custom_segment` from the mockup are absent on purpose: nothing stores a
+ * user's city or their app version, and a campaign aimed at a segment the
+ * server has to guess at reaches the wrong people — the one failure with no
+ * undo.
+ */
+export const campaignAudienceSchema = z.enum(['all', 'couple', 'group', 'platform'])
+export type CampaignAudience = z.infer<typeof campaignAudienceSchema>
+
+/** `platform` is the only audience carrying a filter, and this is its shape. */
+export const campaignPlatformSchema = z.enum(['ios', 'android', 'web'])
+export type CampaignPlatform = z.infer<typeof campaignPlatformSchema>
+
+/**
+ * `plan_template` rather than `plan`: a campaign points every recipient at the
+ * same thing, and a plan belongs to one room.
+ */
+export const campaignDestinationSchema = z.enum([
+  'home',
+  'place',
+  'recommendation',
+  'plan_template',
+  'saved',
+  'external_url',
+])
+export type CampaignDestination = z.infer<typeof campaignDestinationSchema>
+
+export const cmsCampaignSchema = z.object({
+  id: z.string(),
+  /** The editorial name. `title` is what lands on a screen. */
+  name: z.string(),
+  title: z.string(),
+  body: z.string(),
+  imageKey: z.string().nullish(),
+  ctaLabel: z.string().nullish(),
+  audienceType: campaignAudienceSchema,
+  audienceFilter: z.record(z.string(), z.unknown()).default({}),
+  destinationType: campaignDestinationSchema,
+  destinationValue: z.string().nullish(),
+  status: campaignStatusSchema,
+  scheduledAt: z.string().nullish(),
+  startedAt: z.string().nullish(),
+  completedAt: z.string().nullish(),
+  /** Resolved at send time, not at schedule time. */
+  recipientCount: z.number().int().nullish(),
+  /**
+   * How many the provider accepted. Not "seen", and not a guarantee of
+   * delivery to a device.
+   */
+  sentCount: z.number().int(),
+  failedCount: z.number().int(),
+  lastError: z.string().nullish(),
+  testSendRequestedAt: z.string().nullish(),
+  testSendCompletedAt: z.string().nullish(),
+  createdByAdminId: z.string().nullish(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+})
+export type CmsCampaign = z.infer<typeof cmsCampaignSchema>
+
+export const cmsCampaignPageSchema = z.object({
+  items: z.array(cmsCampaignSchema).default([]),
+  nextCursor: z.string().nullable().default(null),
+  totalCount: z.number().int().default(0),
+})
+export type CmsCampaignPage = z.infer<typeof cmsCampaignPageSchema>
+
+/**
+ * A read with no side effect. The number is a snapshot: the audience is
+ * resolved again at send time by the same predicate, so it can move between
+ * the estimate and the send. Counts only accounts with a registered device.
+ */
+export const cmsCampaignAudienceEstimateSchema = z.object({
+  campaignId: z.string(),
+  audienceType: campaignAudienceSchema,
+  estimatedRecipients: z.number().int(),
+  estimatedAt: z.string(),
+})
+export type CmsCampaignAudienceEstimate = z.infer<typeof cmsCampaignAudienceEstimateSchema>
+
+export const cmsCampaignTestSendSchema = z.object({
+  campaignId: z.string(),
+  status: campaignStatusSchema,
+  testSendQueued: z.boolean(),
+})
+export type CmsCampaignTestSend = z.infer<typeof cmsCampaignTestSendSchema>

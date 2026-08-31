@@ -28,7 +28,7 @@ import {
   type ContentAudience,
 } from '@/shared/api/contracts'
 import { fetchBanner, setBannerStatus, updateBanner } from './api'
-import { checkDestination, isValidWindow, toIso, toLocalInput } from './destination'
+import { checkDestination, isValidWindow, toIso, toLocalInput } from '@/shared/api/destination'
 import { BannerStatusBadge } from './bannerStatus'
 import { styles } from './banner.style'
 
@@ -86,7 +86,7 @@ export default function BannerDetailScreen() {
   })
   const [errors, setErrors] = useState<{
     name?: boolean
-    destination?: 'required' | 'forbidden' | 'url'
+    destination?: 'required' | 'forbidden' | 'url' | 'id'
     window?: boolean
   }>({})
 

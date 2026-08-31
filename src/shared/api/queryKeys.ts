@@ -19,6 +19,13 @@ export const queryKeys = {
     detail: (id: string) => ['recommendations', 'detail', id] as const,
   },
 
+  campaigns: {
+    all: ['campaigns'] as const,
+    list: (filters: Record<string, unknown>) => ['campaigns', 'list', filters] as const,
+    detail: (id: string) => ['campaigns', 'detail', id] as const,
+    estimate: (id: string) => ['campaigns', 'estimate', id] as const,
+  },
+
   banners: {
     all: ['banners'] as const,
     list: (filters: Record<string, unknown>) => ['banners', 'list', filters] as const,

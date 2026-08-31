@@ -1,6 +1,9 @@
 /**
  * What a banner or campaign may point at.
  *
+ * Shared because both resources answer the same question with the same rules;
+ * a second copy would drift the moment one of them is fixed.
+ *
  * The server cross-checks the destination against the type it names: an id
  * must resolve, and an `external_url` must be https, carry no credentials and
  * not point inside the network. The console cannot resolve an id — that is a
@@ -8,7 +11,8 @@
  * it must refuse the *shape* errors the server refuses: a value where the type
  * takes none, or none where the type requires one.
  */
-export type DestinationCheck = { ok: true } | { ok: false; code: 'required' | 'forbidden' | 'url' }
+export type DestinationCheck =
+  { ok: true } | { ok: false; code: 'required' | 'forbidden' | 'url' | 'id' }
 
 /** Hosts that mean "inside the network"; an https URL to one is still unsafe. */
 const INTERNAL_HOSTS = /^(localhost|127\.|0\.0\.0\.0|10\.|192\.168\.|169\.254\.|\[?::1\]?)/i
@@ -28,21 +32,32 @@ export function isSafeExternalUrl(raw: string): boolean {
   return true
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 /**
  * `takesNoValue` are the destination types that carry nothing — `none` for a
  * banner, `home` and `saved` for a campaign. Everything else needs a value.
+ *
+ * `requireUuid` is the campaign resource's extra rule: it checks the id's
+ * *shape* before the database is asked, so a typo is refused as a typo rather
+ * than as "that content does not exist". Banners do not do this, so it is
+ * opt-in rather than assumed.
  */
 export function checkDestination(
   type: string,
   value: string,
   takesNoValue: readonly string[],
+  requireUuid = false,
 ): DestinationCheck {
   const trimmed = value.trim()
   if (takesNoValue.includes(type)) {
     return trimmed === '' ? { ok: true } : { ok: false, code: 'forbidden' }
   }
   if (trimmed === '') return { ok: false, code: 'required' }
-  if (type === 'external_url' && !isSafeExternalUrl(trimmed)) return { ok: false, code: 'url' }
+  if (type === 'external_url') {
+    return isSafeExternalUrl(trimmed) ? { ok: true } : { ok: false, code: 'url' }
+  }
+  if (requireUuid && !UUID.test(trimmed)) return { ok: false, code: 'id' }
   return { ok: true }
 }
 

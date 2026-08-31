@@ -1320,6 +1320,125 @@ export const vi = {
   'banners.destination.plan_template': 'Mẫu lịch trình',
   'banners.destination.campaign': 'Chiến dịch',
   'banners.destination.external_url': 'Link ngoài',
+
+  'nav.campaigns': 'Chiến dịch push',
+
+  'campaigns.title': 'Chiến dịch thông báo',
+  'campaigns.breadcrumb': 'Chiến dịch',
+  'campaigns.new': 'Tạo chiến dịch',
+  'campaigns.newHint': 'Soạn bản nháp. Không có gì được gửi cho tới khi bạn lên lịch.',
+  'campaigns.create': 'Tạo',
+  'campaigns.created': 'Đã tạo chiến dịch {name}.',
+  'campaigns.saved': 'Đã lưu chiến dịch.',
+  'campaigns.scheduled': 'Đã đưa chiến dịch vào hàng đợi gửi.',
+  'campaigns.cancelled': 'Đã huỷ chiến dịch.',
+  'campaigns.testSent': 'Đã xếp hàng gửi thử tới tài khoản của bạn.',
+  'campaigns.empty': 'Chưa có chiến dịch nào',
+  'campaigns.emptyHint': 'Tạo chiến dịch đầu tiên, hoặc bỏ bớt bộ lọc.',
+  'campaigns.pageInfo': 'Trang này {shown} · tổng {total} khớp bộ lọc',
+  'campaigns.contentTitle': 'Nội dung thông báo',
+  'campaigns.contentHint':
+    'Tiêu đề tối đa 80 ký tự, nội dung tối đa 300 — đúng giới hạn server nhận.',
+  'campaigns.audienceTitle': 'Đối tượng và điểm đến',
+  'campaigns.audienceHint': 'Chỉ những nhóm server tính được từ dữ liệu đang có.',
+  'campaigns.previewTitle': 'Xem trước',
+  'campaigns.previewHint': 'Hình dung thông báo trên máy; không phải ảnh chụp thật.',
+  'campaigns.previewDevice': 'iOS · Android',
+  'campaigns.deliveryTitle': 'Gửi đi',
+  'campaigns.deliveryHint': 'Lên lịch chỉ ghi một dòng dữ liệu. Worker mới là thứ gửi.',
+  'campaigns.deliveryFactsTitle': 'Số liệu gửi',
+  'campaigns.schedule': 'Lên lịch gửi',
+  'campaigns.sendNow': 'Gửi ngay',
+  'campaigns.cancel': 'Huỷ lịch gửi',
+  'campaigns.testSend': 'Gửi thử cho tôi',
+  'campaigns.notScheduled': 'Chưa lên lịch',
+  'campaigns.notSentYet': 'Chưa gửi',
+  'campaigns.resolvedAtSend': 'Tính lại lúc gửi',
+  'campaigns.failedShort': '{count} lỗi',
+  'campaigns.estimate': 'Ước tính {count} người nhận (tại {at}).',
+  'campaigns.estimateShort': 'Ước tính {count} người nhận',
+  'campaigns.lastError': 'Lỗi gần nhất: {message}',
+  'campaigns.confirmSendTitle': 'Gửi chiến dịch ngay?',
+  'campaigns.confirmScheduleTitle': 'Lên lịch gửi chiến dịch?',
+  'campaigns.confirmSendBody':
+    'Thông báo đã gửi thì không thu hồi được. Kiểm tra lại đối tượng và điểm đến trước khi xác nhận.',
+  'campaigns.createNote':
+    'Chiến dịch tạo ra ở trạng thái nháp. Điểm đến và thời điểm gửi đặt ở màn hình chi tiết.',
+  'campaigns.notEditableNote':
+    'Chiến dịch chỉ sửa được khi ở trạng thái nháp, đã huỷ hoặc gửi lỗi. Muốn sửa một chiến dịch đã lên lịch thì huỷ lịch trước.',
+  'campaigns.workerNote':
+    'Lên lịch chỉ đánh dấu chiến dịch đến hạn. Worker ở lượt chạy kế tiếp mới tính đối tượng và đẩy qua provider — API không gọi thẳng provider ở bất kỳ đâu.',
+  'campaigns.audienceOmittedNote':
+    'Không có “thành phố”, “phiên bản app” hay “tệp tuỳ chỉnh”: hệ thống chưa lưu những dữ liệu đó, và nhắm vào một tệp phải đoán thì gửi nhầm người — sai lầm không có đường lùi.',
+  'campaigns.testSendNote':
+    'Gửi thử chỉ tới đúng tài khoản của bạn, khớp bằng email đã xác thực. Nó không đổi trạng thái chiến dịch.',
+  'campaigns.sendingNote':
+    'Worker đang gửi. Một số thông báo đã nằm trên máy người dùng nên không huỷ được nữa.',
+  'campaigns.sentCountNote':
+    '“Đã gửi” là số bản provider nhận, không phải số người đã xem, và cũng không đảm bảo đã tới máy.',
+
+  'campaigns.col.name': 'Chiến dịch',
+  'campaigns.col.audience': 'Đối tượng',
+  'campaigns.col.schedule': 'Lịch gửi',
+  'campaigns.col.sent': 'Đã gửi',
+  'campaigns.col.status': 'Trạng thái',
+  'campaigns.col.updatedAt': 'Cập nhật',
+
+  'campaigns.filter.search': 'Tìm theo tên chiến dịch',
+  'campaigns.filter.statusAll': 'Mọi trạng thái',
+  'campaigns.filter.audienceAll': 'Mọi đối tượng',
+
+  'campaigns.field.name': 'Tên chiến dịch',
+  'campaigns.field.nameHint': 'Tên nội bộ để tìm kiếm. Tiêu đề mới là thứ hiện trên máy.',
+  'campaigns.field.pushTitle': 'Tiêu đề thông báo',
+  'campaigns.field.pushTitleHint': 'Tối đa 80 ký tự.',
+  'campaigns.field.pushBody': 'Nội dung thông báo',
+  'campaigns.field.image': 'Ảnh thông báo',
+  'campaigns.field.ctaLabel': 'Nhãn nút',
+  'campaigns.field.audienceType': 'Đối tượng',
+  'campaigns.field.platform': 'Nền tảng',
+  'campaigns.field.destinationType': 'Loại điểm đến',
+  'campaigns.field.destinationValue': 'Điểm đến',
+  'campaigns.field.destinationIdHint': 'ID dạng UUID. Server kiểm tra ID có tồn tại không.',
+  'campaigns.field.destinationUrlHint':
+    'Bắt buộc https, không chứa tài khoản/mật khẩu, không trỏ vào mạng nội bộ.',
+  'campaigns.field.sendAt': 'Thời điểm gửi',
+  'campaigns.field.sendAtHint': 'Bỏ trống là gửi ngay ở lượt chạy kế tiếp của worker.',
+  'campaigns.field.scheduledAt': 'Đã lên lịch lúc',
+  'campaigns.field.recipientCount': 'Số người nhận',
+  'campaigns.field.sentCount': 'Provider đã nhận',
+  'campaigns.field.failedCount': 'Gửi lỗi',
+
+  'campaigns.error.name': 'Tên chiến dịch cần tối thiểu 3 ký tự.',
+  'campaigns.error.required': 'Trường này bắt buộc.',
+  'campaigns.error.destinationRequired': 'Loại điểm đến này cần một giá trị.',
+  'campaigns.error.destinationForbidden': 'Loại điểm đến này không nhận giá trị.',
+  'campaigns.error.destinationUrl':
+    'Link phải là https, không chứa thông tin đăng nhập và không trỏ vào mạng nội bộ.',
+  'campaigns.error.destinationId': 'Điểm đến phải là ID dạng UUID.',
+
+  'campaigns.status.draft': 'Nháp',
+  'campaigns.status.scheduled': 'Đã lên lịch',
+  'campaigns.status.sending': 'Đang gửi',
+  'campaigns.status.sent': 'Đã gửi',
+  'campaigns.status.cancelled': 'Đã huỷ',
+  'campaigns.status.failed': 'Gửi lỗi',
+
+  'campaigns.audience.all': 'Tất cả người dùng',
+  'campaigns.audience.couple': 'Nhóm đôi',
+  'campaigns.audience.group': 'Nhóm nhiều người',
+  'campaigns.audience.platform': 'Theo nền tảng',
+
+  'campaigns.platform.ios': 'iOS',
+  'campaigns.platform.android': 'Android',
+  'campaigns.platform.web': 'Web',
+
+  'campaigns.destination.home': 'Trang chủ',
+  'campaigns.destination.place': 'Địa điểm',
+  'campaigns.destination.recommendation': 'Gợi ý biên tập',
+  'campaigns.destination.plan_template': 'Mẫu lịch trình',
+  'campaigns.destination.saved': 'Danh sách đã lưu',
+  'campaigns.destination.external_url': 'Link ngoài',
 } as const
 
 export type MessageKey = keyof typeof vi

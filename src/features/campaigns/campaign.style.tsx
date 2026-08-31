@@ -1,0 +1,40 @@
+export const styles = {
+  filterBar: 'flex flex-wrap items-end gap-3 border-b border-line px-4 py-3',
+  search: 'w-64',
+  name: 'text-[13px] font-semibold text-text',
+  sub: 'text-[11px] text-text-subtle',
+  muted: 'text-[12px] text-text-subtle',
+  count: 'tabular-nums text-[13px] text-text',
+  pager: 'flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3',
+  pagerInfo: 'text-xs text-text-subtle',
+  pagerActions: 'flex items-center gap-2',
+
+  layout: 'grid gap-5 xl:grid-cols-5',
+  main: 'xl:col-span-3 flex flex-col gap-5',
+  side: 'xl:col-span-2 flex flex-col gap-5',
+  formGrid: 'grid gap-4 md:grid-cols-2',
+  formFull: 'md:col-span-2',
+  actions: 'flex flex-wrap items-center justify-end gap-2 border-t border-line px-5 py-4',
+  statusRow: 'flex flex-wrap items-center gap-2 px-5 py-4',
+  facts: 'grid gap-3 px-5 py-4 sm:grid-cols-2',
+  factLabel: 'text-[11px] uppercase tracking-wide text-text-subtle',
+  factValue: 'tabular-nums text-[13px] text-text',
+  note: 'mx-5 mb-4 flex items-start gap-2 rounded-compact border border-amber/40 bg-amber-soft px-3 py-2 text-xs text-text',
+  danger:
+    'mx-5 mb-4 flex items-start gap-2 rounded-compact border border-danger/40 bg-danger-soft px-3 py-2 text-xs text-text',
+  formNote:
+    'flex items-start gap-2 rounded-compact border border-amber/40 bg-amber-soft px-3 py-2 text-xs text-text',
+  hint: 'mx-5 mb-4 rounded-compact bg-surface-muted px-3 py-2 text-[11px] leading-relaxed text-text-subtle',
+  deliveryNote:
+    'rounded-compact bg-surface-muted px-3 py-2 text-[11px] leading-relaxed text-text-subtle',
+
+  previewWrap: 'px-5 py-4',
+  phone: 'mx-auto w-full max-w-xs rounded-standard border border-line bg-surface-sunken p-3',
+  phoneLabel: 'mb-2 text-center text-[11px] uppercase tracking-wide text-text-subtle',
+  push: 'flex gap-2 rounded-compact bg-surface px-3 py-2 shadow-sm',
+  pushIcon: 'h-8 w-8 shrink-0 rounded-compact bg-coral',
+  pushBody: 'min-w-0 flex-1',
+  pushTitle: 'truncate text-[12px] font-semibold text-text',
+  pushText: 'line-clamp-2 text-[11px] text-text-muted',
+  pushCta: 'mt-1 inline-flex text-[11px] font-semibold text-coral',
+} as const

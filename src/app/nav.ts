@@ -98,6 +98,14 @@ const REVIEW: NavLeaf[] = [
 
 const OPERATIONS: NavLeaf[] = [
   {
+    // Composed here, sent by the worker. `ops_admin` in both directions: a
+    // campaign that has gone out cannot be recalled.
+    to: '/campaigns',
+    labelKey: 'nav.campaigns',
+    permission: 'campaign.read',
+    match: (p) => p.startsWith('/campaigns'),
+  },
+  {
     // `ops_admin` in both directions: reads do not climb into this one, so a
     // moderator never sees the entry — the queue they work is /moderation.
     to: '/safety-rules',

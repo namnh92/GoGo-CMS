@@ -78,6 +78,21 @@ test('safety rules are ops_admin only — a moderator gets neither nav nor scree
   await expect(page.getByText(/chưa chạy luật tự động/)).toBeVisible()
 })
 
+test('a campaign mid-send offers no cancel, to anyone', async ({ page }) => {
+  await signIn(page, 'ops@gogo.vn')
+  await page.goto('/campaigns/cp-dang-gui')
+  await expect(page.getByText(/Worker đang gửi/)).toBeVisible()
+  // Some messages are already on phones; offering a cancel would be a promise
+  // the backend cannot keep.
+  await expect(page.getByRole('button', { name: 'Huỷ lịch gửi' })).toHaveCount(0)
+
+  // An editor does not see the resource at all — reads do not climb here.
+  await signIn(page, 'editor@gogo.vn')
+  await expect(page.getByRole('link', { name: 'Chiến dịch push' })).toHaveCount(0)
+  await page.goto('/campaigns')
+  await expect(page.getByText('Không đủ quyền')).toBeVisible()
+})
+
 test('every role reaches the audit log, and only ops sees the staff IP', async ({ page }) => {
   await signIn(page, 'editor@gogo.vn')
   await page.goto('/audit')

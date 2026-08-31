@@ -28,6 +28,8 @@ const PlanTemplateDetailScreen = lazy(
 const RecommendationDetailScreen = lazy(
   () => import('@/features/recommendations/recommendationDetail.view'),
 )
+const CampaignListScreen = lazy(() => import('@/features/campaigns/campaignList.view'))
+const CampaignDetailScreen = lazy(() => import('@/features/campaigns/campaignDetail.view'))
 const BannerListScreen = lazy(() => import('@/features/banners/bannerList.view'))
 const BannerDetailScreen = lazy(() => import('@/features/banners/bannerDetail.view'))
 const SafetyRuleListScreen = lazy(() => import('@/features/safety/safetyRuleList.view'))
@@ -92,6 +94,8 @@ export const router = createBrowserRouter([
           { path: 'recommendations/:id', element: <RecommendationDetailScreen /> },
           { path: 'plan-templates', element: <PlanTemplateListScreen /> },
           { path: 'plan-templates/:id', element: <PlanTemplateDetailScreen /> },
+          { path: 'campaigns', element: <CampaignListScreen /> },
+          { path: 'campaigns/:id', element: <CampaignDetailScreen /> },
           { path: 'banners', element: <BannerListScreen /> },
           { path: 'banners/:id', element: <BannerDetailScreen /> },
           { path: 'safety-rules', element: <SafetyRuleListScreen /> },
