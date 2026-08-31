@@ -46,6 +46,26 @@ describe('CMS sign-in (CMS-034, stepped)', () => {
     expect(password.type).toBe('password')
   })
 
+  it('routes into the forced change-password step when a temporary password is outstanding', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<LoginScreen />)
+
+    // The mock flags any "temp*" local part as owing a password change.
+    await user.type(screen.getByLabelText(/Email công việc/), 'temp.ops@gogo.vn')
+    await user.type(screen.getByLabelText(/Mật khẩu/), 'temporary-pass-123')
+    await user.click(screen.getByRole('button', { name: 'Tiếp tục' }))
+    await user.type(await screen.findByLabelText(/Mã xác thực/), '123456')
+    await user.click(screen.getByRole('button', { name: 'Xác thực & đăng nhập' }))
+
+    // Not the console: the obligation screen, server-enforced elsewhere.
+    expect(await screen.findByRole('heading', { name: 'Đặt mật khẩu mới' })).toBeInTheDocument()
+
+    // Too short / mismatched are refused before the round-trip.
+    await user.type(screen.getByLabelText(/^Mật khẩu mới/), 'short')
+    await user.click(screen.getByRole('button', { name: /Đổi mật khẩu/ }))
+    expect(await screen.findByText(/tối thiểu 12 ký tự/)).toBeInTheDocument()
+  })
+
   it('states that no token is kept in localStorage', () => {
     renderWithProviders(<LoginScreen />)
     expect(screen.getByText(/HttpOnly/)).toBeInTheDocument()

@@ -220,8 +220,103 @@ export const handlers = [
         role,
         displayName: body.email.split('@')[0],
         expiresIn: 900,
+        // The forced-change branch (#248): a local part containing "temp"
+        // simulates an account signing in with a temporary password.
+        mustChangePassword: (body.email.split('@')[0] ?? '').includes('temp'),
       },
       { status: 201, headers: sessionCookies() },
+    )
+  }),
+
+  /*
+   * Staff lifecycle (GoGo-BE#248). The mock enforces exactly the refusals the
+   * server declares, so the console's error copy is reachable in dev.
+   */
+  http.post(`${BASE}/cms/auth/change-password`, async ({ request }) => {
+    const body = (await request.json()) as { currentPassword?: string; newPassword?: string }
+    if (!body.currentPassword) return envelope(401, 'INVALID_CREDENTIALS', 'current password wrong')
+    if (body.newPassword === body.currentPassword) {
+      return envelope(400, 'PASSWORD_UNCHANGED', 'the new password must differ')
+    }
+    if ((body.newPassword ?? '').length < 12) {
+      return envelope(400, 'BAD_REQUEST', 'newPassword under 12 chars')
+    }
+    return HttpResponse.json({ changed: true }, { status: 201 })
+  }),
+
+  http.patch(`${BASE}/cms/auth/admins/:id`, async ({ params, request }) => {
+    const row = db.admins.find((admin) => admin.id === params.id)
+    if (!row) return envelope(404, 'NOT_FOUND', 'admin not found')
+    const body = (await request.json()) as { role?: string; displayName?: string; reason?: string }
+    if (!body.reason || body.reason.trim().length < 3) {
+      return envelope(400, 'BAD_REQUEST', 'reason required')
+    }
+    const { displayName } = currentActor()
+    if (body.role && row.displayName === displayName) {
+      return envelope(403, 'SELF_ROLE_CHANGE', 'another super_admin must change your role')
+    }
+    if (
+      body.role &&
+      body.role !== 'super_admin' &&
+      row.role === 'super_admin' &&
+      db.admins.filter((admin) => admin.role === 'super_admin' && admin.status === 'active')
+        .length <= 1
+    ) {
+      return envelope(409, 'LAST_SUPER_ADMIN', 'the console would have no administrator')
+    }
+    if (body.role) row.role = body.role as typeof row.role
+    if (body.displayName) row.displayName = body.displayName
+    return HttpResponse.json(row)
+  }),
+
+  http.post(`${BASE}/cms/auth/admins/:id/suspend`, async ({ params, request }) => {
+    const row = db.admins.find((admin) => admin.id === params.id)
+    if (!row) return envelope(404, 'NOT_FOUND', 'admin not found')
+    const body = (await request.json()) as { reason?: string }
+    if (!body.reason || body.reason.trim().length < 3) {
+      return envelope(400, 'BAD_REQUEST', 'reason required')
+    }
+    const { displayName } = currentActor()
+    if (row.displayName === displayName) {
+      return envelope(403, 'SELF_SUSPEND', 'you cannot suspend your own account')
+    }
+    if (
+      row.role === 'super_admin' &&
+      db.admins.filter((admin) => admin.role === 'super_admin' && admin.status === 'active')
+        .length <= 1
+    ) {
+      return envelope(409, 'LAST_SUPER_ADMIN', 'the only active super_admin cannot be suspended')
+    }
+    row.status = 'suspended'
+    return HttpResponse.json(row, { status: 201 })
+  }),
+
+  http.post(`${BASE}/cms/auth/admins/:id/reactivate`, async ({ params, request }) => {
+    const row = db.admins.find((admin) => admin.id === params.id)
+    if (!row) return envelope(404, 'NOT_FOUND', 'admin not found')
+    const body = (await request.json()) as { reason?: string }
+    if (!body.reason || body.reason.trim().length < 3) {
+      return envelope(400, 'BAD_REQUEST', 'reason required')
+    }
+    row.status = 'active'
+    return HttpResponse.json(row, { status: 201 })
+  }),
+
+  http.post(`${BASE}/cms/auth/admins/:id/reset-password`, async ({ params, request }) => {
+    const row = db.admins.find((admin) => admin.id === params.id)
+    if (!row) return envelope(404, 'NOT_FOUND', 'admin not found')
+    const body = (await request.json()) as { reason?: string }
+    if (!body.reason || body.reason.trim().length < 3) {
+      return envelope(400, 'BAD_REQUEST', 'reason required')
+    }
+    row.mustChangePassword = true
+    // Shown exactly once, exactly like the server: nothing stores it.
+    return HttpResponse.json(
+      {
+        temporaryPassword: `tmp-${row.id.slice(-4)}-${Date.now().toString(36)}`,
+        mustChangePassword: true,
+      },
+      { status: 201 },
     )
   }),
 
@@ -329,6 +424,9 @@ export const handlers = [
         status: 'active',
         createdAt: new Date().toISOString(),
         lastLoginAt: null,
+        // A fresh account has no second factor and owes nothing.
+        mfaEnrolled: false,
+        mustChangePassword: false,
       })
     }
     return HttpResponse.json({ created: true }, { status: 201 })

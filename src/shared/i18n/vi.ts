@@ -290,8 +290,6 @@ export const vi = {
   'admins.openList': 'Xem danh sách tài khoản',
   'admins.deniedHint':
     'Chỉ quản trị tối cao đọc được danh sách tài khoản — ai giữ vai gì chính là hình dạng của mô hình phân quyền.',
-  'admins.readOnlyNote':
-    'Danh sách chỉ đọc: BFF chưa có đường khoá tài khoản, đổi vai hay xoá. Khi cần, thao tác qua quy trình vận hành hiện tại.',
   'admins.col.account': 'Tài khoản',
   'admins.col.role': 'Vai',
   'admins.col.status': 'Trạng thái',
@@ -1588,6 +1586,51 @@ export const vi = {
   'dashboard.costsLive.billed': 'hoá đơn',
   'dashboard.costsLive.estimated': 'ước tính',
   'dashboard.costsLive.mtd': 'tháng này',
+
+  'auth.change.title': 'Đặt mật khẩu mới',
+  'auth.change.subtitle': 'Mật khẩu tạm phải được thay trước khi vào console.',
+  'auth.change.newPassword': 'Mật khẩu mới',
+  'auth.change.confirmPassword': 'Nhập lại mật khẩu mới',
+  'auth.change.hint': 'Tối thiểu 12 ký tự. Mọi phiên khác của tài khoản sẽ bị thu hồi.',
+  'auth.change.submit': 'Đổi mật khẩu & vào console',
+  'auth.change.tooShort': 'Mật khẩu mới cần tối thiểu 12 ký tự.',
+  'auth.change.mismatch': 'Hai lần nhập không khớp.',
+  'auth.change.unchanged': 'Mật khẩu mới phải khác mật khẩu tạm.',
+
+  'admins.col.mfa': 'MFA',
+  'admins.col.obligation': 'Nghĩa vụ',
+  'admins.col.actions': 'Thao tác',
+  'admins.mfa.on': 'Đã bật MFA',
+  'admins.mfa.off': 'Chưa có MFA',
+  'admins.owesPassword': 'Nợ đổi mật khẩu',
+  'admins.action.edit': 'Đổi vai',
+  'admins.action.suspend': 'Đình chỉ',
+  'admins.action.reactivate': 'Kích hoạt lại',
+  'admins.action.reset': 'Reset mật khẩu',
+  'admins.actionHint.edit':
+    'Đổi vai có hiệu lực ngay ở API. Bạn không tự đổi vai mình — server từ chối SELF_ROLE_CHANGE.',
+  'admins.actionHint.suspend': 'Đình chỉ thu hồi toàn bộ phiên đang mở, không chỉ đổi trạng thái.',
+  'admins.actionHint.reactivate': 'Tài khoản đăng nhập lại được ngay sau khi kích hoạt.',
+  'admins.actionHint.reset':
+    'Cấp mật khẩu tạm dùng một lần, thu hồi mọi phiên; tài khoản buộc đổi mật khẩu ở lần đăng nhập sau. MFA giữ nguyên.',
+  'admins.reason': 'Lý do',
+  'admins.reasonHint': 'Bắt buộc, 3–500 ký tự. Ghi vào nhật ký kiểm toán.',
+  'admins.reasonRequired': 'Lý do cần tối thiểu 3 ký tự.',
+  'admins.done.edit': 'Đã đổi vai.',
+  'admins.done.suspend': 'Đã đình chỉ tài khoản và thu hồi phiên.',
+  'admins.done.reactivate': 'Đã kích hoạt lại tài khoản.',
+  'admins.error.selfRole': 'Bạn không tự đổi vai mình — cần một super admin khác thao tác.',
+  'admins.error.selfSuspend': 'Bạn không tự đình chỉ tài khoản của mình.',
+  'admins.error.lastSuperAdmin':
+    'Đây là super admin đang hoạt động cuối cùng — hạ vai hay đình chỉ sẽ khiến console không còn ai quản trị.',
+  'admins.temp.title': 'Mật khẩu tạm — hiện đúng một lần',
+  'admins.temp.warn':
+    'Mật khẩu này không xem lại được và không nằm ở đâu khác. Chuyển cho chủ tài khoản qua kênh an toàn trước khi đóng.',
+  'admins.temp.copy': 'Sao chép',
+  'admins.temp.copied': 'Đã sao chép',
+  'admins.temp.doneButton': 'Tôi đã lưu xong',
+  'admins.lifecycleNote':
+    'Đổi vai, đình chỉ và reset mật khẩu đều đòi lý do và được kiểm toán. Xoá tài khoản CMS chưa có trong contract — nên ở đây không có nút xoá.',
 } as const
 
 export type MessageKey = keyof typeof vi

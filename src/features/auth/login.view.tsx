@@ -7,10 +7,18 @@ import { useI18n, useT } from '@/shared/i18n/i18n'
 import { useSession } from '@/shared/auth/session'
 import { landingPathFor } from '@/shared/auth/permissions'
 import { getAppEnvironment } from '@/shared/config/env'
+import { changeOwnPassword } from '@/features/admins/api'
 import { ApiError } from '@/shared/api/errors'
 import { Button, IconButton } from '@/shared/ui/Button'
 import { TextInput } from '@/shared/ui/Field'
-import { CheckCircleIcon, EyeIcon, EyeOffIcon, LockIcon, LogoMark } from '@/shared/ui/icons'
+import {
+  CheckCircleIcon,
+  ClockIcon,
+  EyeIcon,
+  EyeOffIcon,
+  LockIcon,
+  LogoMark,
+} from '@/shared/ui/icons'
 import { styles } from './login.style'
 
 // One schema, used by the form resolver. Never duplicated for the request.
@@ -34,10 +42,12 @@ type LoginForm = z.infer<typeof loginSchema>
  * account without MFA on a one-step path, and means the form cannot leak
  * which accounts are enrolled before a valid password is proven.
  *
- * The Figma flow also carries a forced password change; the contract has no
- * endpoint for it, so that step is deliberately not built.
+ * A forced password change (#248) is its own step: the server answers login
+ * with `mustChangePassword` when a temporary password is outstanding, and
+ * every other CMS route refuses 403 `PASSWORD_CHANGE_REQUIRED` until it is
+ * replaced — so the console routes here rather than into a dead shell.
  */
-type Step = 'credentials' | 'mfa'
+type Step = 'credentials' | 'mfa' | 'change-password'
 
 const BULLETS = ['places', 'moderation', 'observability', 'rbac'] as const
 
@@ -54,12 +64,18 @@ export default function LoginScreen() {
   const [step, setStep] = useState<Step>('credentials')
   const [formError, setFormError] = useState<string | null>(null)
   const [showPassword, setShowPassword] = useState(false)
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [changing, setChanging] = useState(false)
+  /** Where to land once the obligation is cleared. */
+  const pendingDestination = useRef<string>('/')
   const otpRef = useRef<HTMLInputElement | null>(null)
 
   const {
     register,
     handleSubmit,
     setValue,
+    getValues,
     formState: { errors, isSubmitting },
   } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
@@ -85,7 +101,16 @@ export default function LoginScreen() {
         password: values.password,
         totp: values.totp || undefined,
       })
-      navigate(returnTo ?? landingPathFor(session.role), { replace: true })
+      const destination = returnTo ?? landingPathFor(session.role)
+      if (session.mustChangePassword) {
+        // A temporary password is outstanding: every other CMS route answers
+        // 403 until it is replaced, so the console goes here first.
+        pendingDestination.current = destination
+        setStep('change-password')
+        setFormError(null)
+        return
+      }
+      navigate(destination, { replace: true })
     } catch (error) {
       if (!(error instanceof ApiError)) {
         setFormError(t('error.UNKNOWN'))
@@ -115,6 +140,41 @@ export default function LoginScreen() {
       setFormError(error.message)
     }
   })
+
+  const submitChangePassword = async (event: React.FormEvent) => {
+    event.preventDefault()
+    setFormError(null)
+    if (newPassword.length < 12) {
+      setFormError(t('auth.change.tooShort'))
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setFormError(t('auth.change.mismatch'))
+      return
+    }
+    setChanging(true)
+    try {
+      await changeOwnPassword({
+        // The temporary password the operator just signed in with proves the
+        // caller is the person it was handed to.
+        currentPassword: getValues('password'),
+        newPassword,
+      })
+      navigate(pendingDestination.current, { replace: true })
+    } catch (error) {
+      if (error instanceof ApiError && error.code === 'PASSWORD_UNCHANGED') {
+        setFormError(t('auth.change.unchanged'))
+      } else if (error instanceof ApiError && error.status === 401) {
+        setFormError(t('auth.badCredentials'))
+      } else if (error instanceof ApiError) {
+        setFormError(error.message)
+      } else {
+        setFormError(t('error.UNKNOWN'))
+      }
+    } finally {
+      setChanging(false)
+    }
+  }
 
   const totpField = register('totp')
 
@@ -167,13 +227,21 @@ export default function LoginScreen() {
               <h1 className={styles.title}>{t('auth.title')}</h1>
               <p className={styles.subtitle}>{t('auth.subtitle')}</p>
             </div>
-          ) : (
+          ) : step === 'mfa' ? (
             <div className={styles.stepHead}>
               <div className={styles.stepBadge}>
                 <LockIcon size={22} />
               </div>
               <h1 className={styles.title}>{t('auth.mfaTitle')}</h1>
               <p className={styles.subtitle}>{t('auth.mfaSubtitle')}</p>
+            </div>
+          ) : (
+            <div className={styles.stepHead}>
+              <div className={styles.stepBadge}>
+                <ClockIcon size={22} />
+              </div>
+              <h1 className={styles.title}>{t('auth.change.title')}</h1>
+              <p className={styles.subtitle}>{t('auth.change.subtitle')}</p>
             </div>
           )}
 
@@ -184,78 +252,113 @@ export default function LoginScreen() {
             </p>
           ) : null}
 
-          <form onSubmit={onSubmit} noValidate>
-            {/* Both steps live in one form: fields hide, values persist, and
-                the request always carries everything the server needs. */}
-            <div className={styles.fields} hidden={step !== 'credentials'}>
-              <TextInput
-                label={t('auth.email')}
-                type="email"
-                autoComplete="username"
-                required
-                error={errors.email ? t('auth.badCredentials') : undefined}
-                {...register('email')}
-              />
-              <div className={styles.passwordWrap}>
+          {step === 'change-password' ? (
+            <form onSubmit={submitChangePassword} noValidate>
+              <div className={styles.fields}>
                 <TextInput
-                  label={t('auth.password')}
-                  type={showPassword ? 'text' : 'password'}
-                  autoComplete="current-password"
+                  label={t('auth.change.newPassword')}
+                  type="password"
+                  autoComplete="new-password"
                   required
-                  error={errors.password ? t('auth.badCredentials') : undefined}
-                  {...register('password')}
+                  hint={t('auth.change.hint')}
+                  value={newPassword}
+                  onChange={(event) => setNewPassword(event.target.value)}
                 />
-                <IconButton
-                  label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
-                  className={styles.passwordToggle}
-                  onClick={() => setShowPassword((current) => !current)}
-                >
-                  {showPassword ? <EyeOffIcon size={16} /> : <EyeIcon size={16} />}
-                </IconButton>
+                <TextInput
+                  label={t('auth.change.confirmPassword')}
+                  type="password"
+                  autoComplete="new-password"
+                  required
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                />
               </div>
-            </div>
-
-            <div className={styles.fields} hidden={step !== 'mfa'}>
-              <TextInput
-                label={t('auth.totp')}
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                maxLength={6}
-                placeholder="000000"
-                className="w-full"
-                hint={t('auth.totpHint')}
-                required={step === 'mfa'}
-                error={errors.totp ? t('auth.totpHint') : undefined}
-                {...totpField}
-                ref={(node) => {
-                  totpField.ref(node)
-                  otpRef.current = node
-                }}
-              />
-            </div>
-
-            {formError ? (
-              <p role="alert" className={`${styles.alertDanger} mt-4`}>
-                <span aria-hidden="true">⚠</span>
-                {formError}
-              </p>
-            ) : null}
-
-            <div className="mt-4 flex flex-col gap-2">
-              <Button type="submit" variant="primary" loading={isSubmitting}>
-                {isSubmitting
-                  ? t('auth.submitting')
-                  : step === 'credentials'
-                    ? t('auth.continue')
-                    : t('auth.verifySubmit')}
-              </Button>
-              {step === 'mfa' ? (
-                <button type="button" className={styles.backButton} onClick={backToCredentials}>
-                  {t('auth.backToCredentials')}
-                </button>
+              {formError ? (
+                <p role="alert" className={`${styles.alertDanger} mt-4`}>
+                  <span aria-hidden="true">⚠</span>
+                  {formError}
+                </p>
               ) : null}
-            </div>
-          </form>
+              <div className="mt-4 flex flex-col gap-2">
+                <Button type="submit" variant="primary" loading={changing}>
+                  {t('auth.change.submit')}
+                </Button>
+              </div>
+            </form>
+          ) : (
+            <form onSubmit={onSubmit} noValidate>
+              {/* Both steps live in one form: fields hide, values persist, and
+                the request always carries everything the server needs. */}
+              <div className={styles.fields} hidden={step !== 'credentials'}>
+                <TextInput
+                  label={t('auth.email')}
+                  type="email"
+                  autoComplete="username"
+                  required
+                  error={errors.email ? t('auth.badCredentials') : undefined}
+                  {...register('email')}
+                />
+                <div className={styles.passwordWrap}>
+                  <TextInput
+                    label={t('auth.password')}
+                    type={showPassword ? 'text' : 'password'}
+                    autoComplete="current-password"
+                    required
+                    error={errors.password ? t('auth.badCredentials') : undefined}
+                    {...register('password')}
+                  />
+                  <IconButton
+                    label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
+                    className={styles.passwordToggle}
+                    onClick={() => setShowPassword((current) => !current)}
+                  >
+                    {showPassword ? <EyeOffIcon size={16} /> : <EyeIcon size={16} />}
+                  </IconButton>
+                </div>
+              </div>
+
+              <div className={styles.fields} hidden={step !== 'mfa'}>
+                <TextInput
+                  label={t('auth.totp')}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  placeholder="000000"
+                  className="w-full"
+                  hint={t('auth.totpHint')}
+                  required={step === 'mfa'}
+                  error={errors.totp ? t('auth.totpHint') : undefined}
+                  {...totpField}
+                  ref={(node) => {
+                    totpField.ref(node)
+                    otpRef.current = node
+                  }}
+                />
+              </div>
+
+              {formError ? (
+                <p role="alert" className={`${styles.alertDanger} mt-4`}>
+                  <span aria-hidden="true">⚠</span>
+                  {formError}
+                </p>
+              ) : null}
+
+              <div className="mt-4 flex flex-col gap-2">
+                <Button type="submit" variant="primary" loading={isSubmitting}>
+                  {isSubmitting
+                    ? t('auth.submitting')
+                    : step === 'credentials'
+                      ? t('auth.continue')
+                      : t('auth.verifySubmit')}
+                </Button>
+                {step === 'mfa' ? (
+                  <button type="button" className={styles.backButton} onClick={backToCredentials}>
+                    {t('auth.backToCredentials')}
+                  </button>
+                ) : null}
+              </div>
+            </form>
+          )}
 
           {step === 'mfa' ? <p className={styles.otpCompat}>{t('auth.totpApps')}</p> : null}
 

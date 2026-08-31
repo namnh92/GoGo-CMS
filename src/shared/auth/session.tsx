@@ -19,6 +19,12 @@ const loginResponseSchema = z.object({
   role: adminRoleSchema,
   displayName: z.string().default(''),
   expiresIn: z.number().int().optional(),
+  /**
+   * #248. True while a temporary password is outstanding. The console must
+   * route to the change screen; the server enforces the obligation on every
+   * other CMS route regardless.
+   */
+  mustChangePassword: z.boolean().default(false),
 })
 
 /**
@@ -72,7 +78,7 @@ type SessionValue = {
   idleSecondsLeft: number | null
   /** Any interaction — or the explicit CTA — pushes the deadline back. */
   keepAlive: () => void
-  login: (input: LoginInput) => Promise<SessionHint>
+  login: (input: LoginInput) => Promise<SessionHint & { mustChangePassword: boolean }>
   logout: () => void
   can: (permission: Permission) => boolean
 }
@@ -159,7 +165,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setExpired(null)
     lastActivityAt.current = Date.now()
     setIdleSecondsLeft(null)
-    return hint
+    return { ...hint, mustChangePassword: parsed.mustChangePassword }
   }, [])
 
   const value = useMemo<SessionValue>(

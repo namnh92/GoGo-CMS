@@ -22,6 +22,7 @@ import {
   type CmsAdmin,
 } from '@/shared/api/contracts'
 import { fetchAdmins, type AdminListFilters } from './api'
+import { AdminActionDialog, type AdminAction } from './adminActions.view'
 import { styles } from './adminList.style'
 
 const PAGE_SIZE = 25
@@ -40,6 +41,7 @@ export default function AdminListScreen() {
   // offset the server does not offer.
   const [cursors, setCursors] = useState<(string | null)[]>([null])
   const [pageIndex, setPageIndex] = useState(0)
+  const [dialog, setDialog] = useState<{ action: AdminAction; admin: CmsAdmin } | null>(null)
 
   // Reading who holds which role is super-admin-only on the server; this is the
   // courtesy, the API is the control.
@@ -125,6 +127,29 @@ export default function AdminListScreen() {
         enableSorting: false,
       },
       {
+        id: 'mfa',
+        header: () => t('admins.col.mfa'),
+        cell: ({ row }) => (
+          // Enrollment status only — the point is seeing which accounts are
+          // unprotected, never anything about the secret.
+          <StatusBadge
+            tone={row.original.mfaEnrolled ? 'mint' : 'amber'}
+            shape={row.original.mfaEnrolled ? 'check' : 'alert'}
+            label={row.original.mfaEnrolled ? t('admins.mfa.on') : t('admins.mfa.off')}
+          />
+        ),
+        enableSorting: false,
+      },
+      {
+        id: 'obligation',
+        header: () => <span className="sr-only">{t('admins.col.obligation')}</span>,
+        cell: ({ row }) =>
+          row.original.mustChangePassword ? (
+            <Badge tone="amber">{t('admins.owesPassword')}</Badge>
+          ) : null,
+        enableSorting: false,
+      },
+      {
         id: 'you',
         header: () => <span className="sr-only">{t('admins.col.you')}</span>,
         cell: ({ row }) =>
@@ -136,8 +161,56 @@ export default function AdminListScreen() {
           ),
         enableSorting: false,
       },
+      {
+        id: 'actions',
+        header: () => <span className="sr-only">{t('admins.col.actions')}</span>,
+        cell: ({ row }) => {
+          if (!canCreate) return null
+          const self = row.original.displayName === session?.displayName
+          return (
+            <div className={styles.actions}>
+              <Button
+                size="sm"
+                variant="ghost"
+                // Your own role is changed by another super_admin — the server
+                // refuses SELF_ROLE_CHANGE; the button says so up front.
+                disabled={self}
+                onClick={() => setDialog({ action: 'edit', admin: row.original })}
+              >
+                {t('admins.action.edit')}
+              </Button>
+              {row.original.status === 'active' ? (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={self}
+                  onClick={() => setDialog({ action: 'suspend', admin: row.original })}
+                >
+                  {t('admins.action.suspend')}
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setDialog({ action: 'reactivate', admin: row.original })}
+                >
+                  {t('admins.action.reactivate')}
+                </Button>
+              )}
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setDialog({ action: 'reset', admin: row.original })}
+              >
+                {t('admins.action.reset')}
+              </Button>
+            </div>
+          )
+        },
+        enableSorting: false,
+      },
     ],
-    [t, locale, session?.displayName],
+    [t, locale, session?.displayName, canCreate],
   )
 
   if (!canRead) {
@@ -275,10 +348,18 @@ export default function AdminListScreen() {
           </AsyncBoundary>
         </Card>
 
-        {/* The list is read-only because the contract is: the BFF serves no
-            suspend, no role change and no delete. Saying so beats leaving an
-            operator hunting for a button that was never built. */}
-        <p className={styles.privacyNote}>{t('admins.readOnlyNote')}</p>
+        {/* #248: role change, suspend/reactivate and password reset exist
+            now. Every mutation demands the reason the audit log will carry,
+            and delete stays absent because the contract still has none. */}
+        <p className={styles.privacyNote}>{t('admins.lifecycleNote')}</p>
+
+        {dialog ? (
+          <AdminActionDialog
+            action={dialog.action}
+            admin={dialog.admin}
+            onClose={() => setDialog(null)}
+          />
+        ) : null}
       </PageBody>
     </>
   )
