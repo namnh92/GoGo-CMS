@@ -39,6 +39,14 @@ export const en: Partial<Record<MessageKey, string>> = {
   'nav.group.review': 'Moderation',
   'nav.group.operations': 'Operations',
 
+  'moderation.filter.rating': 'Rating',
+  'moderation.filter.ratingAll': 'Any rating',
+  'moderation.filter.search': 'Search review text',
+  'moderation.filter.count': 'Showing {shown} of {loaded} loaded',
+  'moderation.filter.noMatch': 'Nothing matches this filter',
+  'moderation.history': 'Moderation history',
+  'moderation.historyEmpty': 'No decision has been recorded for this item yet.',
+
   'admins.new': 'New CMS account',
   'admins.formTitle': 'New staff account',
   'admins.formHint':

@@ -24,4 +24,7 @@ export const styles = {
     'rounded-compact bg-surface-muted px-3 py-2 text-[11px] leading-relaxed text-text-subtle',
   contractNote:
     'flex items-start gap-2 rounded-compact border border-amber/45 bg-amber-soft px-3 py-2 text-xs text-text',
+  filterBar: 'flex flex-wrap items-end gap-3 border-b border-line px-4 py-3',
+  filterCount: 'ml-auto text-[11px] text-text-subtle',
+  historyHead: 'mb-1 text-[11px] font-bold uppercase tracking-wide text-text-subtle',
 } as const

@@ -31,6 +31,8 @@ export const queryKeys = {
   moderation: {
     all: ['moderation'] as const,
     queue: (limit: number) => ['moderation', 'queue', limit] as const,
+    /** Decisions already recorded against one review, read from the audit log. */
+    history: (reviewId: string) => ['moderation', 'history', reviewId] as const,
   },
 
   imports: {
