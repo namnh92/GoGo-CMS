@@ -1744,6 +1744,28 @@ export const vi = {
   'plans.col.stops': 'Điểm dừng',
   'plans.col.createdAt': 'Tạo lúc',
   'plans.filter.statusAll': 'Mọi trạng thái',
+
+  'guests.title': 'Khách của phòng',
+  'guests.open': 'Khách',
+  'guests.scopeNote':
+    'Danh sách theo từng phòng có chủ đích — không có danh bạ guest toàn cục, vì không ca kiểm duyệt nào cần và nó sẽ là một bề mặt PII mới không ai đọc. Credential của guest không bao giờ xuất hiện.',
+  'guests.empty': 'Phòng này chưa có khách nào',
+  'guests.emptyHint': 'Khách vào bằng link mời sẽ hiện ở đây, kể cả sau khi bị gỡ.',
+  'guests.joined': 'Vào',
+  'guests.expires': 'phiên hết hạn',
+  'guests.removedAt': 'đã gỡ lúc',
+  'guests.state.active': 'Đang hoạt động',
+  'guests.state.claimed': 'Đã claim thành tài khoản',
+  'guests.state.expired': 'Phiên hết hạn',
+  'guests.state.removed': 'Đã gỡ khỏi phòng',
+  'guests.remove': 'Gỡ khỏi phòng',
+  'guests.removeTitle': 'Gỡ khách khỏi phòng?',
+  'guests.removed': 'Đã gỡ khách và thu hồi phiên.',
+  'guests.notABan':
+    'Đây là "ra khỏi phòng ngay": phiên bị thu hồi lập tức (kể cả token đã cấp). KHÔNG phải chặn — ai còn giữ link mời hợp lệ vẫn vào lại được. Muốn chặn quay lại thì xoay/thu hồi link mời của phòng.',
+  'guests.error.alreadyRemoved': 'Khách này đã bị gỡ trước đó.',
+  'guests.error.notAGuest':
+    'Đây là thành viên có tài khoản — đi theo đường kiểm duyệt người dùng, không phải gỡ guest.',
 } as const
 
 export type MessageKey = keyof typeof vi

@@ -134,3 +134,46 @@ describe('rooms read-only (CMS-040)', () => {
     )
   })
 })
+
+describe('room guests (CMS-042, BE-CMS-G11)', () => {
+  it('lists every guest state and offers removal only on the active one', async () => {
+    signInAs('ops_admin')
+    const user = userEvent.setup()
+    renderWithProviders(<RoomListScreen />)
+
+    const table = await screen.findByRole('table')
+    // The group room carries the guest fixtures.
+    const row = within(table).getAllByText('Khách')[1]!.closest('tr')!
+    await user.click(within(row).getByRole('button', { name: 'Khách' }))
+    const drawer = await screen.findByRole('dialog')
+
+    await within(drawer).findByText('Khách vui vẻ')
+    expect(within(drawer).getByText('Đang hoạt động')).toBeInTheDocument()
+    expect(within(drawer).getByText('Đã claim thành tài khoản')).toBeInTheDocument()
+    expect(within(drawer).getByText('Phiên hết hạn')).toBeInTheDocument()
+    expect(within(drawer).getByText('Đã gỡ khỏi phòng')).toBeInTheDocument()
+    // Exactly one removable guest: active, unclaimed, unexpired.
+    expect(within(drawer).getAllByRole('button', { name: 'Gỡ khỏi phòng' })).toHaveLength(1)
+    // No credential fragment anywhere.
+    expect(within(drawer).queryByText(/token|hash/i)).not.toBeInTheDocument()
+  })
+
+  it('states in the removal dialog that this is not a ban', async () => {
+    signInAs('ops_admin')
+    const user = userEvent.setup()
+    renderWithProviders(<RoomListScreen />)
+
+    const table = await screen.findByRole('table')
+    const row = within(table).getAllByText('Khách')[1]!.closest('tr')!
+    await user.click(within(row).getByRole('button', { name: 'Khách' }))
+    const drawer = await screen.findByRole('dialog')
+    await user.click(await within(drawer).findByRole('button', { name: 'Gỡ khỏi phòng' }))
+
+    const dialogs = await screen.findAllByRole('dialog')
+    const modal = dialogs[dialogs.length - 1]!
+    expect(within(modal).getByText(/KHÔNG phải chặn/)).toBeInTheDocument()
+    // And a reason is demanded before anything is sent.
+    await user.click(within(modal).getAllByRole('button', { name: 'Gỡ khỏi phòng' }).at(-1)!)
+    expect(await within(modal).findByText('Lý do cần tối thiểu 3 ký tự.')).toBeInTheDocument()
+  })
+})

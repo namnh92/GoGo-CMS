@@ -14,6 +14,7 @@ import { Badge } from '@/shared/ui/Badge'
 import { AsyncBoundary, EmptyState, PermissionDeniedState } from '@/shared/ui/State'
 import type { CmsRoomSummary } from '@/shared/api/contracts'
 import { fetchRooms } from './api'
+import { RoomGuestsDrawer } from './roomGuests.view'
 import { styles } from './users.style'
 
 const PAGE_SIZE = 25
@@ -33,6 +34,7 @@ export default function RoomListScreen() {
   const [status, setStatus] = useState('')
   const [cursors, setCursors] = useState<(string | null)[]>([null])
   const [pageIndex, setPageIndex] = useState(0)
+  const [guestsOf, setGuestsOf] = useState<CmsRoomSummary | null>(null)
 
   const canRead = can('user.read')
 
@@ -109,6 +111,16 @@ export default function RoomListScreen() {
         header: () => t('rooms.col.createdAt'),
         cell: ({ row }) => (
           <span className={styles.muted}>{formatDateTime(row.original.createdAt, locale)}</span>
+        ),
+        enableSorting: false,
+      },
+      {
+        id: 'guests',
+        header: () => <span className="sr-only">{t('guests.title')}</span>,
+        cell: ({ row }) => (
+          <Button size="sm" variant="ghost" onClick={() => setGuestsOf(row.original)}>
+            {t('guests.open')}
+          </Button>
         ),
         enableSorting: false,
       },
@@ -212,6 +224,8 @@ export default function RoomListScreen() {
         </Card>
         <p className={styles.privacyNote}>{t('rooms.codeNote')}</p>
       </PageBody>
+
+      {guestsOf ? <RoomGuestsDrawer room={guestsOf} onClose={() => setGuestsOf(null)} /> : null}
     </>
   )
 }

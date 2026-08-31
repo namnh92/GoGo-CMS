@@ -1413,3 +1413,29 @@ export const cmsPlanPageSchema = z.object({
   totalCount: z.number().int().default(0),
 })
 export type CmsPlanPage = z.infer<typeof cmsPlanPageSchema>
+
+/**
+ * Guests of one room (GoGo-BE#257, G11).
+ *
+ * Room-scoped on purpose — there is no global guest directory: no moderation
+ * case needs one, and a list of every guest's name and activity would be a
+ * new PII surface with no reader. The bearer credential never appears.
+ */
+export const cmsRoomGuestSchema = z.object({
+  memberId: z.string(),
+  guestSessionId: z.string(),
+  displayName: z.string(),
+  selectionStatus: z.string(),
+  joinedAt: z.string(),
+  sessionExpiresAt: z.string(),
+  sessionRevokedAt: z.string().nullish(),
+  removedAt: z.string().nullish(),
+  /** The session was claimed by a registered account. */
+  claimed: z.boolean(),
+})
+export type CmsRoomGuest = z.infer<typeof cmsRoomGuestSchema>
+
+export const cmsRoomGuestsSchema = z.object({
+  guests: z.array(cmsRoomGuestSchema).default([]),
+})
+export type CmsRoomGuests = z.infer<typeof cmsRoomGuestsSchema>
