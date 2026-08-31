@@ -10,7 +10,7 @@ import { PageBody, PageHeader } from '@/app/PageHeader'
 import { Card, CardBody, CardHeader, KpiCard } from '@/shared/ui/Card'
 import { Button } from '@/shared/ui/Button'
 import { Tabs, type TabItem } from '@/shared/ui/Tabs'
-import { TextArea } from '@/shared/ui/Field'
+import { InlineSelect, SearchInput, TextArea } from '@/shared/ui/Field'
 import {
   AsyncBoundary,
   EmptyState,
@@ -21,14 +21,29 @@ import { useToast } from '@/shared/ui/Toast'
 import { ShieldOffIcon, StarIcon } from '@/shared/ui/icons'
 import { TakedownDialog } from '@/features/emergency/takedownDialog.view'
 import type { TakedownTarget } from '@/features/emergency/api'
-import type { ModerationQueue } from '@/shared/api/contracts'
-import { decideCheckin, decideReport, fetchModerationQueue } from './api'
+import {
+  checkinModerationStatusSchema,
+  reportStatusSchema,
+  reportTargetTypeSchema,
+  type CheckinModerationStatus,
+  type ReportStatus,
+  type ReportTargetType,
+} from '@/shared/api/contracts'
+import {
+  decideCheckin,
+  decideReport,
+  fetchCommunityPlaces,
+  fetchModerationCheckins,
+  fetchModerationCounts,
+  fetchModerationReports,
+} from './api'
 import { styles } from './moderationQueue.style'
 
 type TabId = 'reports' | 'checkins' | 'community'
 
 const MIN_REASON = 3
 const MAX_REASON = 500
+const PAGE_SIZE = 25
 
 /** Decisions each queue accepts, straight from `CmsModerationController`. */
 const DECISIONS = {
@@ -61,44 +76,6 @@ function takedownFor(targetType: string, targetId: string | null | undefined) {
   return null
 }
 
-function toItems(
-  queue: ModerationQueue | undefined,
-  tab: TabId,
-  t: ReturnType<typeof useT>,
-): QueueItem[] {
-  if (!queue) return []
-  if (tab === 'reports') {
-    return queue.reports.map((report) => ({
-      id: report.id,
-      title: report.reasonCode ?? t('moderation.tab.reports'),
-      meta: report.targetType,
-      // A report carries no prose — the reason code and target ARE the report,
-      // and both are rendered as fields rather than dressed up as content.
-      body: null,
-      takedown: takedownFor(report.targetType, report.targetId),
-    }))
-  }
-  if (tab === 'checkins') {
-    return queue.checkins.map((checkin) => ({
-      id: checkin.id,
-      title:
-        checkin.rating != null
-          ? t('moderation.rating', { value: checkin.rating })
-          : t('moderation.tab.checkins'),
-      meta: `${t('moderation.photoCount', { count: checkin.photoCount })} · ${
-        checkin.hasBill ? t('moderation.hasBill') : t('moderation.noBill')
-      }`,
-      body: checkin.note ?? null,
-    }))
-  }
-  return queue.communityPlaces.map((place) => ({
-    id: place.id,
-    title: place.name,
-    meta: place.createdAt,
-    body: null,
-  }))
-}
-
 export default function ModerationQueueScreen() {
   const t = useT()
   const { locale } = useI18n()
@@ -114,26 +91,112 @@ export default function ModerationQueueScreen() {
   const [reason, setReason] = useState('')
   const [takedownOpen, setTakedownOpen] = useState(false)
 
+  // One filter set per queue: the contracts differ, and flattening them would
+  // mean sending a parameter the endpoint does not accept.
+  const [reportStatus, setReportStatus] = useState<ReportStatus>('open')
+  const [reportTarget, setReportTarget] = useState('')
+  const [checkinStatus, setCheckinStatus] = useState<CheckinModerationStatus>('pending')
+  const [checkinBill, setCheckinBill] = useState('')
+  const [communitySearch, setCommunitySearch] = useState('')
+
+  // Keyset paging: the cursors walked, so "previous" works without an offset
+  // the server does not offer.
+  const [cursors, setCursors] = useState<(string | null)[]>([null])
+  const [pageIndex, setPageIndex] = useState(0)
+  const cursor = cursors[pageIndex] ?? null
+
   // Reads are hierarchical, so any staff role can open the queue. Deciding is
   // exact-match and belongs to the moderator (and super_admin).
   const canRead = can('moderation.read')
   const canDecide = can('moderation.decide')
 
-  const query = useQuery({
-    queryKey: queryKeys.moderation.queue(50),
-    queryFn: ({ signal }) => fetchModerationQueue(50, signal),
-    enabled: canRead,
-  })
-
-  const items = useMemo(() => toItems(query.data, tab, t), [query.data, tab, t])
-
-  const active = items.find((item) => item.id === activeId) ?? items[0] ?? null
+  const resetPaging = () => {
+    setCursors([null])
+    setPageIndex(0)
+    setActiveId(null)
+  }
 
   const changeTab = (next: TabId) => {
     setTab(next)
-    setActiveId(null)
     setReason('')
+    resetPaging()
   }
+
+  /** The backlog behind the KPI row — counted over the queue, not over a page. */
+  const counts = useQuery({
+    queryKey: queryKeys.moderation.counts,
+    queryFn: ({ signal }) => fetchModerationCounts(signal),
+    enabled: canRead,
+    staleTime: 30_000,
+  })
+
+  const reportFilters = {
+    status: reportStatus,
+    ...(reportTarget ? { targetType: reportTarget as ReportTargetType } : {}),
+    limit: PAGE_SIZE,
+    cursor,
+  }
+  const reportsQuery = useQuery({
+    queryKey: queryKeys.moderation.reports(reportFilters),
+    queryFn: ({ signal }) => fetchModerationReports(reportFilters, signal),
+    enabled: canRead && tab === 'reports',
+  })
+
+  const checkinFilters = {
+    status: checkinStatus,
+    ...(checkinBill ? { hasBill: checkinBill === 'true' } : {}),
+    limit: PAGE_SIZE,
+    cursor,
+  }
+  const checkinsQuery = useQuery({
+    queryKey: queryKeys.moderation.checkins(checkinFilters),
+    queryFn: ({ signal }) => fetchModerationCheckins(checkinFilters, signal),
+    enabled: canRead && tab === 'checkins',
+  })
+
+  const communityFilters = { q: communitySearch || undefined, limit: PAGE_SIZE, cursor }
+  const communityQuery = useQuery({
+    queryKey: queryKeys.moderation.community(communityFilters),
+    queryFn: ({ signal }) => fetchCommunityPlaces(communityFilters, signal),
+    enabled: canRead && tab === 'community',
+  })
+
+  const activeQuery =
+    tab === 'reports' ? reportsQuery : tab === 'checkins' ? checkinsQuery : communityQuery
+
+  const items = useMemo<QueueItem[]>(() => {
+    if (tab === 'reports') {
+      return (reportsQuery.data?.items ?? []).map((report) => ({
+        id: report.id,
+        title: report.reasonCode,
+        meta: report.targetType,
+        // The reporter's note is the only prose a report carries.
+        body: report.note ?? null,
+        takedown: takedownFor(report.targetType, report.targetId),
+      }))
+    }
+    if (tab === 'checkins') {
+      return (checkinsQuery.data?.items ?? []).map((checkin) => ({
+        id: checkin.id,
+        title:
+          checkin.rating != null
+            ? t('moderation.rating', { value: checkin.rating })
+            : t('moderation.tab.checkins'),
+        meta: `${t('moderation.photoCount', { count: checkin.photoCount })} · ${
+          checkin.hasBill ? t('moderation.hasBill') : t('moderation.noBill')
+        }`,
+        body: checkin.note ?? null,
+      }))
+    }
+    return (communityQuery.data?.items ?? []).map((place) => ({
+      id: place.id,
+      title: place.name,
+      meta: place.addressText ?? place.createdAt,
+      body: null,
+    }))
+  }, [tab, reportsQuery.data, checkinsQuery.data, communityQuery.data, t])
+
+  const active = items.find((item) => item.id === activeId) ?? items[0] ?? null
 
   const decide = useMutation({
     mutationFn: ({ id, decision }: { id: string; decision: string }) => {
@@ -160,21 +223,17 @@ export default function ModerationQueueScreen() {
     )
   }
 
-  const queue = query.data
+  const backlog = counts.data
   const tabs: TabItem<TabId>[] = [
-    { id: 'reports', label: t('moderation.tab.reports'), count: queue?.reports.length },
-    { id: 'checkins', label: t('moderation.tab.checkins'), count: queue?.checkins.length },
-    { id: 'community', label: t('moderation.tab.community'), count: queue?.communityPlaces.length },
+    { id: 'reports', label: t('moderation.tab.reports'), count: backlog?.reports },
+    { id: 'checkins', label: t('moderation.tab.checkins'), count: backlog?.checkins },
+    { id: 'community', label: t('moderation.tab.community'), count: backlog?.communityPlaces },
   ]
-
-  const pending =
-    (queue?.reviews.length ?? 0) +
-    (queue?.reports.length ?? 0) +
-    (queue?.checkins.length ?? 0) +
-    (queue?.communityPlaces.length ?? 0)
 
   const reasonInvalid = reason.trim().length < MIN_REASON || reason.length > MAX_REASON
   const decisions = tab === 'community' ? [] : DECISIONS[tab]
+  const page = activeQuery.data
+  const nextCursor = page?.nextCursor ?? null
 
   return (
     <>
@@ -182,7 +241,7 @@ export default function ModerationQueueScreen() {
         breadcrumb={[{ label: t('app.suffix') }, { label: t('moderation.breadcrumb') }]}
         title={t('moderation.title')}
         actions={
-          // Reviews have their own filtered, paged queue now; this is the way in.
+          // Reviews have their own filtered, paged queue; this is the way in.
           <Button variant="secondary" size="sm" onClick={() => navigate('/moderation/reviews')}>
             {t('reviews.title')}
           </Button>
@@ -190,15 +249,18 @@ export default function ModerationQueueScreen() {
       />
       <PageBody>
         <div className={styles.kpiGrid}>
-          <KpiCard label={t('moderation.kpi.pending')} value={formatNumber(pending, locale)} />
+          <KpiCard
+            label={t('moderation.kpi.pending')}
+            value={formatNumber(backlog?.total ?? 0, locale)}
+          />
           <KpiCard
             label={t('moderation.kpi.reviews')}
-            value={formatNumber(queue?.reviews.length ?? 0, locale)}
+            value={formatNumber(backlog?.reviews ?? 0, locale)}
             sub={t('moderation.reviewsMoved')}
           />
           <KpiCard
             label={t('moderation.kpi.reports')}
-            value={formatNumber(queue?.reports.length ?? 0, locale)}
+            value={formatNumber(backlog?.reports ?? 0, locale)}
           />
         </div>
 
@@ -210,41 +272,165 @@ export default function ModerationQueueScreen() {
               onChange={changeTab}
               label={t('moderation.breadcrumb')}
             />
+
+            <div className={styles.filterBar}>
+              {tab === 'reports' ? (
+                <>
+                  <InlineSelect
+                    label={t('moderation.filter.status')}
+                    value={reportStatus}
+                    onChange={(event) => {
+                      setReportStatus(event.target.value as ReportStatus)
+                      resetPaging()
+                    }}
+                  >
+                    {reportStatusSchema.options.map((value) => (
+                      <option key={value} value={value}>
+                        {t(`moderation.reportStatus.${value}` as const)}
+                      </option>
+                    ))}
+                  </InlineSelect>
+                  <InlineSelect
+                    label={t('moderation.filter.target')}
+                    value={reportTarget}
+                    onChange={(event) => {
+                      setReportTarget(event.target.value)
+                      resetPaging()
+                    }}
+                  >
+                    <option value="">{t('moderation.filter.targetAll')}</option>
+                    {reportTargetTypeSchema.options.map((value) => (
+                      <option key={value} value={value}>
+                        {t(`moderation.target.${value}` as const)}
+                      </option>
+                    ))}
+                  </InlineSelect>
+                </>
+              ) : null}
+
+              {tab === 'checkins' ? (
+                <>
+                  <InlineSelect
+                    label={t('moderation.filter.status')}
+                    value={checkinStatus}
+                    onChange={(event) => {
+                      setCheckinStatus(event.target.value as CheckinModerationStatus)
+                      resetPaging()
+                    }}
+                  >
+                    {checkinModerationStatusSchema.options.map((value) => (
+                      <option key={value} value={value}>
+                        {t(`moderation.checkinStatus.${value}` as const)}
+                      </option>
+                    ))}
+                  </InlineSelect>
+                  <InlineSelect
+                    label={t('moderation.filter.bill')}
+                    value={checkinBill}
+                    onChange={(event) => {
+                      setCheckinBill(event.target.value)
+                      resetPaging()
+                    }}
+                  >
+                    <option value="">{t('moderation.filter.billAll')}</option>
+                    <option value="true">{t('moderation.hasBill')}</option>
+                    <option value="false">{t('moderation.noBill')}</option>
+                  </InlineSelect>
+                </>
+              ) : null}
+
+              {tab === 'community' ? (
+                <SearchInput
+                  label={t('moderation.filter.place')}
+                  placeholder={t('moderation.filter.place')}
+                  className="w-64"
+                  value={communitySearch}
+                  onChange={(event) => {
+                    setCommunitySearch(event.target.value)
+                    resetPaging()
+                  }}
+                />
+              ) : null}
+
+              <span className={styles.filterCount} role="status" aria-live="polite">
+                {/* `totalCount` describes the filter, not the page. */}
+                {t('moderation.filter.total', {
+                  total: formatNumber(page?.totalCount ?? 0, locale),
+                })}
+              </span>
+            </div>
+
             <AsyncBoundary
-              status={query.status}
-              error={query.error}
+              status={activeQuery.status}
+              error={activeQuery.error}
               data={items}
               isEmpty={(list) => list.length === 0}
-              onRetry={() => void query.refetch()}
+              onRetry={() => void activeQuery.refetch()}
               empty={<EmptyState title={t('moderation.empty')} hint={null} />}
             >
               {(list) => (
-                <ul>
-                  {list.map((item) => (
-                    <li key={item.id}>
-                      <button
-                        type="button"
-                        aria-pressed={active?.id === item.id}
-                        onClick={() => setActiveId(item.id)}
-                        className={`${styles.item} ${
-                          active?.id === item.id ? styles.itemActive : styles.itemIdle
-                        }`}
-                      >
-                        <span className={styles.itemHead}>
-                          <span className={styles.author}>{item.title}</span>
-                          <span className={styles.time}>
-                            {item.meta.includes('T')
-                              ? formatRelative(item.meta, locale)
-                              : item.meta}
+                <>
+                  <ul>
+                    {list.map((item) => (
+                      <li key={item.id}>
+                        <button
+                          type="button"
+                          aria-pressed={active?.id === item.id}
+                          onClick={() => setActiveId(item.id)}
+                          className={`${styles.item} ${
+                            active?.id === item.id ? styles.itemActive : styles.itemIdle
+                          }`}
+                        >
+                          <span className={styles.itemHead}>
+                            <span className={styles.author}>{item.title}</span>
+                            <span className={styles.time}>
+                              {item.meta.includes('T')
+                                ? formatRelative(item.meta, locale)
+                                : item.meta}
+                            </span>
                           </span>
-                        </span>
-                        <span className={`block ${styles.body}`}>
-                          {item.body ?? t('moderation.noText')}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+                          <span className={`block ${styles.body}`}>
+                            {item.body ?? t('moderation.noText')}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className={styles.pager}>
+                    <p className={styles.pagerInfo}>
+                      {t('moderation.pageInfo', { shown: formatNumber(list.length, locale) })}
+                    </p>
+                    <div className={styles.pagerActions}>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={pageIndex === 0}
+                        onClick={() => {
+                          setPageIndex((index) => Math.max(0, index - 1))
+                          setActiveId(null)
+                        }}
+                      >
+                        {t('action.previous')}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={nextCursor === null}
+                        onClick={() => {
+                          setCursors((current) => {
+                            const next = current.slice(0, pageIndex + 1)
+                            next.push(nextCursor)
+                            return next
+                          })
+                          setPageIndex((index) => index + 1)
+                          setActiveId(null)
+                        }}
+                      >
+                        {t('action.next')}
+                      </Button>
+                    </div>
+                  </div>
+                </>
               )}
             </AsyncBoundary>
           </Card>
@@ -257,7 +443,7 @@ export default function ModerationQueueScreen() {
               ) : (
                 <>
                   <div>
-                    <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-text-subtle">
+                    <p className="mb-1 text-[11px] font-bold tracking-wide text-text-subtle uppercase">
                       {t('moderation.content')}
                     </p>
                     <p className={styles.quote}>{active.body ?? t('moderation.noText')}</p>
@@ -282,11 +468,9 @@ export default function ModerationQueueScreen() {
                           <dd className="font-mono text-text">{active.title}</dd>
                         </div>
                       </dl>
-                      {/* The realistic incident path: a report names a
-                          published resource, and break-glass takes it down
-                          while the ordinary decision waits. The pending queue
-                          itself is no use here — these routes act on
-                          `published` content, which the queue never lists. */}
+                      {/* The realistic incident path: a report names a published
+                          resource, and break-glass takes it down while the
+                          ordinary decision waits. */}
                       {active.takedown ? (
                         <Button
                           variant="danger"

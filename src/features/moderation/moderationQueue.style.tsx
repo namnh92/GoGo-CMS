@@ -25,6 +25,9 @@ export const styles = {
   contractNote:
     'flex items-start gap-2 rounded-compact border border-amber/45 bg-amber-soft px-3 py-2 text-xs text-text',
   filterBar: 'flex flex-wrap items-end gap-3 border-b border-line px-4 py-3',
+  pager: 'flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3',
+  pagerInfo: 'text-xs text-text-subtle',
+  pagerActions: 'flex items-center gap-2',
   filterCount: 'ml-auto text-[11px] text-text-subtle',
   historyHead: 'mb-1 text-[11px] font-bold uppercase tracking-wide text-text-subtle',
 } as const

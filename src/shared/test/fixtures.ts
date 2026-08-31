@@ -5,13 +5,15 @@ import type {
   CmsPlaceDetail,
   Experiment,
   FeatureFlag,
-  ModerationQueue,
   OpsKpis,
   RankingConfig,
   RankingEvaluation,
   SearchAnalytics,
   Taxonomy,
   FeatureFlagDefinition,
+  CmsModerationReport,
+  CmsModerationCheckin,
+  CmsCommunityPlace,
 } from '@/shared/api/contracts'
 import type { ImportJob, ImportRow } from '@/shared/api/contracts-import'
 
@@ -413,36 +415,64 @@ export const collections: Collection[] = [
 ]
 
 /** Four independent pending lists, PII-light, exactly as the service builds them. */
-export const moderationQueue: ModerationQueue = {
-  reviews: [
-    {
-      id: 'mr-1',
-      text: 'Check-in view đẹp, hoàng hôn hồ Tây rất đáng đi.',
-      createdAt: iso(34),
-    },
-    { id: 'mr-2', rating: 2, text: 'Nhân viên thái độ, chờ quá lâu.', createdAt: iso(150) },
-  ],
-  reports: [
-    { id: 'rp-1', targetType: 'review', targetId: 'mr-2', reasonCode: 'ABUSIVE_LANGUAGE' },
-    {
-      id: 'rp-2',
-      targetType: 'place',
-      targetId: 'pl-pho-bat-dan',
-      reasonCode: 'PERMANENTLY_CLOSED',
-    },
-  ],
-  checkins: [
-    {
-      id: 'ci-1',
-      note: 'Ảnh hoá đơn và không gian tầng 2.',
-      photoCount: 3,
-      hasBill: true,
-    },
-  ],
-  communityPlaces: [
-    { id: 'pl-com-tam-ba-ghien', name: 'Cơm Tấm Ba Ghiền', createdAt: iso(60 * 5) },
-  ],
-}
+/**
+ * The per-type moderation queues (GoGo-BE#219). Each spans more than one page
+ * and more than one status, so paging and every server filter are reachable
+ * without hand-editing fixtures.
+ */
+export const moderationReportQueue: CmsModerationReport[] = Array.from(
+  { length: 31 },
+  (_, index) => {
+    const nth = index + 1
+    const targetType = (['place', 'review', 'member'] as const)[nth % 3]!
+    return {
+      id: `rep-${String(nth).padStart(3, '0')}`,
+      status: nth % 9 === 0 ? ('actioned' as const) : ('open' as const),
+      targetType,
+      targetId: `4f0b8e10-0000-4000-8000-${String(400 + nth).padStart(12, '0')}`,
+      reasonCode: (['spam', 'offensive', 'wrong_info'] as const)[nth % 3]!,
+      note: nth % 4 === 0 ? null : `Người dùng báo cáo nội dung số ${nth}.`,
+      reporterKind: (['user', 'guest', 'anonymous'] as const)[nth % 3]!,
+      reporterUserId: null,
+      decidedByAdminId: null,
+      decisionReason: null,
+      decidedAt: null,
+      createdAt: iso(nth * 41),
+    }
+  },
+)
+
+export const moderationCheckinQueue: CmsModerationCheckin[] = Array.from(
+  { length: 29 },
+  (_, index) => {
+    const nth = index + 1
+    return {
+      id: `chk-${String(nth).padStart(3, '0')}`,
+      moderation: nth % 8 === 0 ? ('approved' as const) : ('pending' as const),
+      rating: ((nth % 5) + 1) as 1 | 2 | 3 | 4 | 5,
+      note: nth % 3 === 0 ? null : `Check-in thử số ${nth}, quán đúng như mô tả.`,
+      tags: nth % 2 === 0 ? ['checkin_tag.good_value'] : [],
+      photoCount: nth % 4,
+      hasBill: nth % 5 === 0,
+      planStopId: `4f0b8e10-0000-4000-8000-${String(500 + nth).padStart(12, '0')}`,
+      placeId: `4f0b8e10-0000-4000-8000-${String(600 + nth).padStart(12, '0')}`,
+      placeName: nth % 2 === 0 ? 'Chào Bạn Cafe & Space' : 'Lò Bánh Mì Cô Ba',
+      memberId: `4f0b8e10-0000-4000-8000-${String(800 + nth).padStart(12, '0')}`,
+      createdAt: iso(nth * 53),
+    }
+  },
+)
+
+export const communityPlaceQueue: CmsCommunityPlace[] = Array.from({ length: 27 }, (_, index) => {
+  const nth = index + 1
+  return {
+    id: `com-${String(nth).padStart(3, '0')}`,
+    name: nth % 2 === 0 ? `Quán Cà Phê Số ${nth}` : `Tiệm Bánh Số ${nth}`,
+    addressText: `${nth} Nguyễn Huệ, Quận 1`,
+    areaKey: nth % 2 === 0 ? 'hcm.q1' : 'hcm.q3',
+    createdAt: iso(nth * 47),
+  }
+})
 
 /** The six aggregates `CmsOpsService#kpis` returns — nothing more. */
 export const opsKpis: OpsKpis = {
