@@ -32,6 +32,9 @@ import {
   opsHealth,
   opsQueues,
   opsCosts,
+  cmsAppUsers,
+  cmsRooms,
+  cmsPlans,
   cmsPlanTemplates,
 } from './fixtures'
 
@@ -95,6 +98,7 @@ const db = {
   planTemplates: JSON.parse(JSON.stringify(cmsPlanTemplates)) as typeof cmsPlanTemplates,
   safetyRules: JSON.parse(JSON.stringify(cmsSafetyRules)) as typeof cmsSafetyRules,
   banners: JSON.parse(JSON.stringify(cmsBanners)) as typeof cmsBanners,
+  appUsers: JSON.parse(JSON.stringify(cmsAppUsers)) as typeof cmsAppUsers,
   campaigns: JSON.parse(JSON.stringify(cmsCampaigns)) as typeof cmsCampaigns,
 }
 
@@ -199,6 +203,32 @@ function effectiveBannerStatus(row: (typeof cmsBanners)[number]) {
 /** A 1×1 transparent PNG, base64. */
 const TRANSPARENT_PNG =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
+
+/**
+ * Suspend/ban/reactivate share one shape: reason floor, USER_DELETED as the
+ * terminal-state refusal, sessions conceptually revoked with the status.
+ */
+async function userStatusAction(
+  id: string,
+  request: Request,
+  next: 'suspended' | 'banned' | 'active',
+) {
+  const denied = requireOpsAdmin('the user base is ops_admin and above')
+  if (denied) return denied
+  const row = db.appUsers.find((item) => item.id === id)
+  if (!row) return envelope(404, 'NOT_FOUND', 'user not found')
+  const body = (await request.json()) as { reason?: string }
+  if (!body.reason || body.reason.trim().length < 3) {
+    return envelope(400, 'BAD_REQUEST', 'reason required')
+  }
+  if (row.status === 'deleted') {
+    return envelope(409, 'USER_DELETED', 'a deleted account cannot change status')
+  }
+  row.status = next
+  row.statusReason = next === 'active' ? null : body.reason
+  row.statusChangedAt = new Date().toISOString()
+  return HttpResponse.json({ id: row.id, status: row.status }, { status: 201 })
+}
 
 export const handlers = [
   // Runs before every other handler: MSW walks this list in order, and
@@ -1392,6 +1422,119 @@ export const handlers = [
     row.status = effectiveBannerStatus(row)
     row.updatedAt = new Date().toISOString()
     return HttpResponse.json({ id: row.id, status: row.lifecycleStatus })
+  }),
+
+  /*
+   * App users (GoGo-BE#246). ops_admin+ and outside rank-read, like the
+   * server. Suspend/ban/reactivate refuse a deleted account with USER_DELETED
+   * — deleted is terminal.
+   */
+  http.get(`${BASE}/cms/users`, ({ request }) => {
+    const denied = requireOpsAdmin('the user base is ops_admin and above')
+    if (denied) return denied
+    const url = new URL(request.url)
+    const q = url.searchParams.get('q')?.toLowerCase()
+    const status = url.searchParams.get('status')
+    const limit = Number(url.searchParams.get('limit') ?? 25)
+    const cursor = url.searchParams.get('cursor')
+    let items = db.appUsers
+    if (status) items = items.filter((row) => row.status === status)
+    if (q) {
+      items = items.filter(
+        (row) =>
+          row.displayName.toLowerCase().includes(q) || (row.email ?? '').toLowerCase().includes(q),
+      )
+    }
+    const page = pageOf(items, limit, cursor)
+    // The list shape has no rooms/statusReason; only the detail carries them.
+    return HttpResponse.json({
+      ...page,
+      items: page.items.map((item) => {
+        // The list shape omits detail-only fields.
+        const row: Record<string, unknown> = { ...item }
+        delete row.rooms
+        delete row.statusReason
+        delete row.statusChangedAt
+        return row
+      }),
+    })
+  }),
+
+  http.get(`${BASE}/cms/users/:id`, ({ params }) => {
+    const denied = requireOpsAdmin('the user base is ops_admin and above')
+    if (denied) return denied
+    const row = db.appUsers.find((item) => item.id === params.id)
+    if (!row) return envelope(404, 'NOT_FOUND', 'user not found')
+    return HttpResponse.json(row)
+  }),
+
+  http.post(`${BASE}/cms/users/:id/suspend`, async ({ params, request }) =>
+    userStatusAction(params.id as string, request, 'suspended'),
+  ),
+  http.post(`${BASE}/cms/users/:id/ban`, async ({ params, request }) =>
+    userStatusAction(params.id as string, request, 'banned'),
+  ),
+  http.post(`${BASE}/cms/users/:id/reactivate`, async ({ params, request }) =>
+    userStatusAction(params.id as string, request, 'active'),
+  ),
+
+  http.post(`${BASE}/cms/users/:id/delete`, async ({ params, request }) => {
+    const denied = requireOpsAdmin('deletion is super_admin only')
+    if (denied) return denied
+    const { role } = currentActor()
+    if (role !== 'super_admin') return envelope(403, 'FORBIDDEN', 'deletion is super_admin only')
+    const row = db.appUsers.find((item) => item.id === params.id)
+    if (!row) return envelope(404, 'NOT_FOUND', 'user not found')
+    const body = (await request.json()) as { reason?: string }
+    if (!body.reason || body.reason.trim().length < 3) {
+      return envelope(400, 'BAD_REQUEST', 'reason required')
+    }
+    // Same erasure as the consumer flow: PII nulled, address freed. Idempotent.
+    row.status = 'deleted'
+    row.email = null
+    row.lastActiveAt = null
+    row.rooms = []
+    return HttpResponse.json({ deleted: true }, { status: 201 })
+  }),
+
+  http.post(`${BASE}/cms/users/:id/export`, async ({ params, request }) => {
+    const denied = requireOpsAdmin('the user base is ops_admin and above')
+    if (denied) return denied
+    const row = db.appUsers.find((item) => item.id === params.id)
+    if (!row) return envelope(404, 'NOT_FOUND', 'user not found')
+    const body = (await request.json()) as { reason?: string }
+    if (!body.reason || body.reason.trim().length < 3) {
+      return envelope(400, 'BAD_REQUEST', 'reason required')
+    }
+    // Same payload as /me/export; the audit entry is the point.
+    return HttpResponse.json(
+      { profile: { displayName: row.displayName, email: row.email }, reviews: [], savedPlaces: [] },
+      { status: 201 },
+    )
+  }),
+
+  http.get(`${BASE}/cms/rooms`, ({ request }) => {
+    const denied = requireOpsAdmin('the user base is ops_admin and above')
+    if (denied) return denied
+    const url = new URL(request.url)
+    const status = url.searchParams.get('status')
+    const limit = Number(url.searchParams.get('limit') ?? 25)
+    const cursor = url.searchParams.get('cursor')
+    let items = cmsRooms
+    if (status) items = items.filter((row) => row.status === status)
+    return HttpResponse.json(pageOf(items, limit, cursor))
+  }),
+
+  http.get(`${BASE}/cms/plans`, ({ request }) => {
+    const denied = requireOpsAdmin('the user base is ops_admin and above')
+    if (denied) return denied
+    const url = new URL(request.url)
+    const status = url.searchParams.get('status')
+    const limit = Number(url.searchParams.get('limit') ?? 25)
+    const cursor = url.searchParams.get('cursor')
+    let items = cmsPlans
+    if (status) items = items.filter((row) => row.status === status)
+    return HttpResponse.json(pageOf(items, limit, cursor))
   }),
 
   /*

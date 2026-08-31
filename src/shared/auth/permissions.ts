@@ -49,6 +49,13 @@ const ROUTE_ROLES = {
   emergency: ['editor', 'moderator', 'ops_admin'],
   /** `CmsSafetyRulesController` — @RequireRole('ops_admin') */
   safety: ['ops_admin'],
+  /**
+   * `CmsUsersController` — @RequireRole('ops_admin'), deliberately outside
+   * rank-read on the server: an editor reading the catalogue is ordinary, an
+   * editor reading the user base is not. `canAccess` lands on the same
+   * answer here because nothing below rank 2 reaches this group anyway.
+   */
+  users: ['ops_admin'],
   /** `CmsBannersController` — @RequireRole('editor', 'ops_admin') */
   banners: ['editor', 'ops_admin'],
   /** `CmsCampaignsController` — @RequireRole('ops_admin') */
@@ -136,6 +143,12 @@ const PERMISSIONS = {
   // to a moderator: `canAccess` lands on the same answer the server does.
   'safety.read': ['safety', 'read'],
   'safety.manage': ['safety', 'write'],
+
+  // App users — ops support surface. Delete alone is super_admin: it is the
+  // one action with no undo, and the account belongs to someone else.
+  'user.read': ['users', 'read'],
+  'user.manage': ['users', 'write'],
+  'user.delete': ['admins', 'write'],
 
   // Banners — their own controller, editor and ops both write. Uploading the
   // image is the same pair on a separate controller, so it gets its own

@@ -7,6 +7,7 @@ import {
   ModerationIcon,
   PlacesIcon,
   SettingsIcon,
+  UsersIcon,
 } from '@/shared/ui/icons'
 
 /**
@@ -140,6 +141,31 @@ const OPERATIONS: NavLeaf[] = [
   },
 ]
 
+/**
+ * `ops_admin` and above, matching the server's deliberate exclusion of this
+ * area from rank-read: support work on the user base is not catalogue work.
+ */
+const USERS: NavLeaf[] = [
+  {
+    to: '/users',
+    labelKey: 'nav.appUsers',
+    permission: 'user.read',
+    match: (p) => p.startsWith('/users'),
+  },
+  {
+    to: '/rooms',
+    labelKey: 'nav.rooms',
+    permission: 'user.read',
+    match: (p) => p.startsWith('/rooms'),
+  },
+  {
+    to: '/plans',
+    labelKey: 'nav.plans',
+    permission: 'user.read',
+    match: (p) => p.startsWith('/plans'),
+  },
+]
+
 const ADMINISTRATION: NavLeaf[] = [
   {
     // Super-admin only in both directions: who holds which role is the shape
@@ -189,6 +215,13 @@ export const NAV_ENTRIES: NavEntry[] = [
     labelKey: 'nav.group.operations',
     icon: SettingsIcon,
     children: OPERATIONS,
+  },
+  {
+    kind: 'group',
+    id: 'users',
+    labelKey: 'nav.group.users',
+    icon: UsersIcon,
+    children: USERS,
   },
   {
     kind: 'group',

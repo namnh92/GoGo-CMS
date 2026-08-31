@@ -487,3 +487,16 @@ export const CheckCircleIcon = ({
     />
   </svg>
 )
+
+/** Users nav group. */
+export const UsersIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <circle cx="9" cy="6" r="3" stroke="currentColor" strokeWidth="1.5" />
+    <path
+      d="M3 15.5c0-3.314 2.686-6 6-6s6 2.686 6 6"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+    />
+  </Icon>
+)
