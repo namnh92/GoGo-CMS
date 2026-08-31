@@ -496,6 +496,86 @@ export const cmsRecommendationDetailSchema = cmsRecommendationSchema.extend({
 })
 export type CmsRecommendationDetail = z.infer<typeof cmsRecommendationDetailSchema>
 
+/**
+ * Plan templates (GoGo-BE#223).
+ *
+ * **Source material for future plans, not live ones.** Nothing in this resource
+ * references a room, a plan or a plan stop, and editing a template never
+ * reaches a plan somebody already has — a plan is a copy taken at the moment it
+ * was made, not a live view of its template. The separation is in the schema,
+ * so the console cannot break it by accident.
+ */
+export const planTemplateStatusSchema = z.enum(['draft', 'published', 'archived'])
+export type PlanTemplateStatus = z.infer<typeof planTemplateStatusSchema>
+
+/** What an amount is *per*. These are different numbers, so neither is implied. */
+export const budgetScopeSchema = z.enum(['per_person', 'per_group'])
+export type BudgetScope = z.infer<typeof budgetScopeSchema>
+
+/**
+ * Integer minor units with its currency and scope. Present as a whole or absent
+ * as a whole — there is no half of this object, and no amount here whose scope
+ * the client has to assume.
+ */
+export const budgetRangeSchema = z.object({
+  min: z.number().int().min(0),
+  max: z.number().int().min(0),
+  currency: z.string(),
+  scope: budgetScopeSchema,
+})
+export type BudgetRange = z.infer<typeof budgetRangeSchema>
+
+export const cmsPlanTemplateStopSchema = z.object({
+  id: z.string(),
+  position: z.number().int(),
+  /** Taxonomy of kind `category` — what sort of stop this is. */
+  categoryTaxonomyId: z.string().nullish(),
+  /** Stable taxonomy key, never a label. */
+  categoryKey: z.string(),
+  preferredPlaceId: z.string().nullish(),
+  preferredPlaceName: z.string().nullish(),
+  /** A property of the stop, not a convention the reader infers. */
+  isOptional: z.boolean().default(false),
+  expectedDurationMinutes: z.number().int().nullish(),
+  budget: budgetRangeSchema.nullish(),
+  note: z.string().nullish(),
+})
+export type CmsPlanTemplateStop = z.infer<typeof cmsPlanTemplateStopSchema>
+
+export const cmsPlanTemplateSchema = z.object({
+  id: z.string(),
+  /** The template key. Unique per locale. */
+  slug: z.string(),
+  locale: z.string(),
+  internalName: z.string(),
+  title: z.string(),
+  description: z.string().nullish(),
+  audience: contentAudienceSchema.nullish(),
+  areaKey: z.string().nullish(),
+  budget: budgetRangeSchema.nullish(),
+  expectedDurationMinutes: z.number().int().nullish(),
+  status: planTemplateStatusSchema,
+  stopCount: z.number().int(),
+  /** Mood/setting keys for the template as a whole. */
+  taxonomies: z.array(cmsRecommendationTaxonomySchema).default([]),
+  createdByAdminId: z.string().nullish(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+})
+export type CmsPlanTemplate = z.infer<typeof cmsPlanTemplateSchema>
+
+export const cmsPlanTemplateDetailSchema = cmsPlanTemplateSchema.extend({
+  stops: z.array(cmsPlanTemplateStopSchema).default([]),
+})
+export type CmsPlanTemplateDetail = z.infer<typeof cmsPlanTemplateDetailSchema>
+
+export const cmsPlanTemplatePageSchema = z.object({
+  items: z.array(cmsPlanTemplateSchema).default([]),
+  nextCursor: z.string().nullable().default(null),
+  totalCount: z.number().int().default(0),
+})
+export type CmsPlanTemplatePage = z.infer<typeof cmsPlanTemplatePageSchema>
+
 export const cmsRecommendationPageSchema = z.object({
   items: z.array(cmsRecommendationSchema).default([]),
   nextCursor: z.string().nullable().default(null),

@@ -93,6 +93,9 @@ const PERMISSIONS = {
   // the server does not have.
   'recommendation.read': ['content', 'read'],
   'recommendation.manage': ['content', 'write'],
+  // Plan templates are editorial content on the same controller group.
+  'planTemplate.read': ['content', 'read'],
+  'planTemplate.manage': ['content', 'write'],
 
   // Moderation — everyone reads the queue, only the moderator decides.
   'moderation.read': ['moderation', 'read'],

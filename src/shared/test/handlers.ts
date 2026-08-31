@@ -25,6 +25,7 @@ import {
   moderationCheckinQueue,
   communityPlaceQueue,
   cmsRecommendations,
+  cmsPlanTemplates,
 } from './fixtures'
 
 const BASE = '/v1'
@@ -82,6 +83,7 @@ const db = {
   adminEmails: ['boss@gogo.vn', 'ops@gogo.vn', 'editor@gogo.vn', 'moderator@gogo.vn'],
   admins: cmsAdmins.map((admin) => ({ ...admin })),
   recommendations: JSON.parse(JSON.stringify(cmsRecommendations)) as typeof cmsRecommendations,
+  planTemplates: JSON.parse(JSON.stringify(cmsPlanTemplates)) as typeof cmsPlanTemplates,
 }
 
 /**
@@ -758,6 +760,148 @@ export const handlers = [
    * here and fail in production: a duplicate slug is 409, publishing with no
    * places is 400, and `archived` has no way out.
    */
+  /*
+   * Plan templates (GoGo-BE#223). The mock enforces the contract's refusals so
+   * the console cannot pass here and fail in production: duplicate key is 409,
+   * publishing with no stops is 400, `archived` is terminal, and an unknown
+   * category taxonomy is rejected.
+   */
+  http.get(`${BASE}/cms/plan-templates`, ({ request }) => {
+    const url = new URL(request.url)
+    const status = url.searchParams.get('status')
+    const audience = url.searchParams.get('audience')
+    const q = url.searchParams.get('q')?.toLowerCase()
+    const limit = Number(url.searchParams.get('limit') ?? 25)
+    const cursor = url.searchParams.get('cursor')
+
+    let items = db.planTemplates
+    if (status) items = items.filter((row) => row.status === status)
+    if (audience) items = items.filter((row) => row.audience === audience)
+    if (q) {
+      items = items.filter(
+        (row) =>
+          row.internalName.toLowerCase().includes(q) ||
+          row.title.toLowerCase().includes(q) ||
+          row.slug.toLowerCase().includes(q),
+      )
+    }
+    const page = pageOf(items, limit, cursor)
+    return HttpResponse.json({
+      ...page,
+      items: page.items.map(({ stops, ...row }) => ({ ...row, stopCount: stops.length })),
+    })
+  }),
+
+  http.post(`${BASE}/cms/plan-templates`, async ({ request }) => {
+    const body = (await request.json()) as Record<string, unknown>
+    const slug = String(body.slug ?? '')
+    if (db.planTemplates.some((row) => row.slug === slug)) {
+      return envelope(409, 'SLUG_TAKEN', 'template key already used')
+    }
+    const created = {
+      id: `tpl-${db.planTemplates.length + 100}`,
+      slug,
+      locale: String(body.locale ?? 'vi'),
+      internalName: String(body.internalName ?? ''),
+      title: String(body.title ?? ''),
+      description: (body.description as string) ?? null,
+      audience: (body.audience as 'couple') ?? null,
+      areaKey: (body.areaKey as string) ?? null,
+      budget: null,
+      expectedDurationMinutes: null,
+      status: 'draft' as const,
+      stopCount: 0,
+      taxonomies: [],
+      createdByAdminId: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      stops: [],
+    }
+    db.planTemplates.unshift(created)
+    return HttpResponse.json(created, { status: 201 })
+  }),
+
+  http.get(`${BASE}/cms/plan-templates/:id`, ({ params }) => {
+    const row = db.planTemplates.find((item) => item.id === params.id)
+    if (!row) return envelope(404, 'NOT_FOUND', 'template not found')
+    return HttpResponse.json(row)
+  }),
+
+  http.patch(`${BASE}/cms/plan-templates/:id`, async ({ params, request }) => {
+    const row = db.planTemplates.find((item) => item.id === params.id)
+    if (!row) return envelope(404, 'NOT_FOUND', 'template not found')
+    const body = (await request.json()) as Record<string, unknown>
+    for (const key of ['internalName', 'title', 'description', 'areaKey', 'audience'] as const) {
+      if (body[key] !== undefined) (row as Record<string, unknown>)[key] = body[key]
+    }
+    row.updatedAt = new Date().toISOString()
+    return HttpResponse.json(row)
+  }),
+
+  http.patch(`${BASE}/cms/plan-templates/:id/status`, async ({ params, request }) => {
+    const row = db.planTemplates.find((item) => item.id === params.id)
+    if (!row) return envelope(404, 'NOT_FOUND', 'template not found')
+    const body = (await request.json()) as { status: string }
+    if (row.status === 'archived') {
+      return envelope(409, 'INVALID_STATUS_TRANSITION', 'archived is terminal')
+    }
+    if (body.status === 'published' && row.stops.length === 0) {
+      return envelope(400, 'EMPTY_TEMPLATE', 'publishing needs at least one stop')
+    }
+    row.status = body.status as typeof row.status
+    row.updatedAt = new Date().toISOString()
+    return HttpResponse.json({ id: row.id, status: row.status })
+  }),
+
+  http.put(`${BASE}/cms/plan-templates/:id/stops`, async ({ params, request }) => {
+    const row = db.planTemplates.find((item) => item.id === params.id)
+    if (!row) return envelope(404, 'NOT_FOUND', 'template not found')
+    const body = (await request.json()) as {
+      stops: {
+        categoryTaxonomyId: string
+        expectedDurationMinutes: number
+        preferredPlaceId?: string
+        isOptional?: boolean
+        budget?: (typeof row.stops)[number]['budget']
+        note?: string
+      }[]
+    }
+    const stops = body.stops ?? []
+    if (stops.length > 20) return envelope(400, 'TOO_MANY_STOPS', 'at most 20 stops')
+
+    const mapped = stops.map((stop, position) => {
+      const taxonomy = db.taxonomies.find((item) => item.id === stop.categoryTaxonomyId)
+      if (!taxonomy) return null
+      if (taxonomy.kind !== 'category') return 'kind'
+      const place = stop.preferredPlaceId
+        ? db.places.find((item) => item.id === stop.preferredPlaceId)
+        : null
+      if (stop.preferredPlaceId && !place) return null
+      return {
+        id: `stop-${row.id}-${position}`,
+        position,
+        categoryTaxonomyId: taxonomy.id,
+        categoryKey: taxonomy.key,
+        preferredPlaceId: place?.id ?? null,
+        preferredPlaceName: place?.name ?? null,
+        isOptional: stop.isOptional ?? false,
+        expectedDurationMinutes: stop.expectedDurationMinutes,
+        budget: stop.budget ?? null,
+        note: stop.note ?? null,
+      }
+    })
+    if (mapped.some((stop) => stop === 'kind')) {
+      return envelope(400, 'TAXONOMY_KIND_INVALID', 'stop category must be a category taxonomy')
+    }
+    if (mapped.some((stop) => stop === null)) {
+      return envelope(400, 'PLACE_NOT_FOUND', 'unknown place or taxonomy')
+    }
+    row.stops = mapped as typeof row.stops
+    row.stopCount = row.stops.length
+    row.updatedAt = new Date().toISOString()
+    return HttpResponse.json(row)
+  }),
+
   http.get(`${BASE}/cms/recommendations`, ({ request }) => {
     const url = new URL(request.url)
     const status = url.searchParams.get('status')
