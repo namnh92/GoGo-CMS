@@ -1,0 +1,18 @@
+export const styles = {
+  layout: 'grid gap-5 xl:grid-cols-5',
+  main: 'xl:col-span-3',
+  side: 'xl:col-span-2 flex flex-col gap-5',
+  formGrid: 'grid gap-4 md:grid-cols-2',
+  formFull: 'md:col-span-2',
+  actions: 'flex flex-wrap items-center justify-end gap-2 border-t border-line px-5 py-4',
+  placeRow: 'flex items-center gap-3 border-b border-line px-5 py-3 last:border-b-0',
+  placePos: 'w-6 shrink-0 text-center font-mono text-[11px] text-text-subtle',
+  placeName: 'text-[13px] font-semibold text-text',
+  placeMeta: 'text-[11px] text-text-subtle',
+  placeActions: 'ml-auto flex shrink-0 items-center gap-1',
+  searchRow: 'flex flex-wrap items-end gap-2 border-b border-line px-5 py-3',
+  resultRow: 'flex items-center gap-3 border-b border-line px-5 py-2 last:border-b-0',
+  statusRow: 'flex flex-wrap items-center gap-2 px-5 py-4',
+  note: 'mx-5 mb-4 flex items-start gap-2 rounded-compact border border-amber/40 bg-amber-soft px-3 py-2 text-xs text-text',
+  suspended: 'text-[11px] font-semibold text-danger',
+} as const

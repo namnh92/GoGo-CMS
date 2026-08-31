@@ -428,6 +428,81 @@ export const cmsModerationCheckinPageSchema = z.object({
 })
 export type CmsModerationCheckinPage = z.infer<typeof cmsModerationCheckinPageSchema>
 
+/**
+ * Recommendations (GoGo-BE#222).
+ *
+ * A recommendation is a **targeted collection** (BE ADR-0009): the same ordered
+ * place list, schedule and status machine as a curated collection, plus who it
+ * is for. It shares storage with collections rather than forking editorial
+ * content, and `GET /cms/collections` returns only the untargeted ones — so
+ * this is not a second content domain, it is the targeted half of the one
+ * that already exists.
+ */
+export const recommendationStatusSchema = z.enum(['draft', 'scheduled', 'published', 'archived'])
+export type RecommendationStatus = z.infer<typeof recommendationStatusSchema>
+
+/** One vocabulary across content types. Stable key; the label resolves in i18n. */
+export const contentAudienceSchema = z.enum(['couple', 'group', 'family', 'solo'])
+export type ContentAudience = z.infer<typeof contentAudienceSchema>
+
+export const cmsRecommendationTaxonomySchema = z.object({
+  id: z.string(),
+  kind: z.enum(['category', 'mood']),
+  /** Stable taxonomy key, never a display label. */
+  key: z.string(),
+})
+
+export const cmsRecommendationSchema = z.object({
+  id: z.string(),
+  /** The internal key. Unique per locale. */
+  slug: z.string(),
+  locale: z.string(),
+  /** The editorial name — what an editor searches, never what a user reads. */
+  internalName: z.string().nullish(),
+  title: z.string(),
+  subtitle: z.string().nullish(),
+  description: z.string().nullish(),
+  audience: contentAudienceSchema.nullish(),
+  /** Same vocabulary as a place's `areaKey` — "city" is one concept. */
+  areaKey: z.string().nullish(),
+  /** Higher first, between recommendations competing for one surface. */
+  priority: z.number().int(),
+  status: recommendationStatusSchema,
+  startsAt: z.string().nullish(),
+  endsAt: z.string().nullish(),
+  placeCount: z.number().int(),
+  taxonomies: z.array(cmsRecommendationTaxonomySchema).default([]),
+  createdByAdminId: z.string().nullish(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+})
+export type CmsRecommendation = z.infer<typeof cmsRecommendationSchema>
+
+export const cmsRecommendationPlaceSchema = z.object({
+  position: z.number().int(),
+  placeId: z.string(),
+  name: z.string(),
+  addressText: z.string().nullish(),
+  /**
+   * The place's catalog status, so a published recommendation quietly holding
+   * a suspended place is visible rather than silently short.
+   */
+  status: z.string(),
+})
+export type CmsRecommendationPlace = z.infer<typeof cmsRecommendationPlaceSchema>
+
+export const cmsRecommendationDetailSchema = cmsRecommendationSchema.extend({
+  places: z.array(cmsRecommendationPlaceSchema).default([]),
+})
+export type CmsRecommendationDetail = z.infer<typeof cmsRecommendationDetailSchema>
+
+export const cmsRecommendationPageSchema = z.object({
+  items: z.array(cmsRecommendationSchema).default([]),
+  nextCursor: z.string().nullable().default(null),
+  totalCount: z.number().int().default(0),
+})
+export type CmsRecommendationPage = z.infer<typeof cmsRecommendationPageSchema>
+
 export const cmsCommunityPlacePageSchema = z.object({
   items: z.array(cmsCommunityPlaceSchema).default([]),
   ...pageMeta,

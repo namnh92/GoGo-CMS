@@ -88,6 +88,11 @@ const PERMISSIONS = {
   'taxonomy.manage': ['content', 'write'],
   'collection.read': ['content', 'read'],
   'collection.manage': ['content', 'write'],
+  // A recommendation is a targeted collection on the same controller, so it
+  // sits in the same route group rather than inventing a permission boundary
+  // the server does not have.
+  'recommendation.read': ['content', 'read'],
+  'recommendation.manage': ['content', 'write'],
 
   // Moderation — everyone reads the queue, only the moderator decides.
   'moderation.read': ['moderation', 'read'],

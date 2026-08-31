@@ -24,6 +24,7 @@ import {
   moderationReportQueue,
   moderationCheckinQueue,
   communityPlaceQueue,
+  cmsRecommendations,
 } from './fixtures'
 
 const BASE = '/v1'
@@ -80,6 +81,7 @@ const db = {
   /** Emails already taken, so the duplicate branch of admin creation is reachable. */
   adminEmails: ['boss@gogo.vn', 'ops@gogo.vn', 'editor@gogo.vn', 'moderator@gogo.vn'],
   admins: cmsAdmins.map((admin) => ({ ...admin })),
+  recommendations: JSON.parse(JSON.stringify(cmsRecommendations)) as typeof cmsRecommendations,
 }
 
 /**
@@ -748,6 +750,143 @@ export const handlers = [
     db.communityPlaces = db.communityPlaces.filter((item) => item.id !== params.id)
     db.submissions = db.submissions.filter((item: { id: string }) => item.id !== params.id)
     return HttpResponse.json({ decided: true }, { status: 201 })
+  }),
+
+  /*
+   * Recommendations (GoGo-BE#222) — a targeted collection. The mock enforces
+   * what the contract says the server enforces, so the console cannot pass
+   * here and fail in production: a duplicate slug is 409, publishing with no
+   * places is 400, and `archived` has no way out.
+   */
+  http.get(`${BASE}/cms/recommendations`, ({ request }) => {
+    const url = new URL(request.url)
+    const status = url.searchParams.get('status')
+    const audience = url.searchParams.get('audience')
+    const q = url.searchParams.get('q')?.toLowerCase()
+    const limit = Number(url.searchParams.get('limit') ?? 25)
+    const cursor = url.searchParams.get('cursor')
+
+    let items = db.recommendations
+    if (status) items = items.filter((row) => row.status === status)
+    if (audience) items = items.filter((row) => row.audience === audience)
+    if (q) {
+      items = items.filter(
+        (row) =>
+          row.internalName.toLowerCase().includes(q) ||
+          row.title.toLowerCase().includes(q) ||
+          row.slug.toLowerCase().includes(q),
+      )
+    }
+    const page = pageOf(items, limit, cursor)
+    // The list shape omits `places`; only the detail carries them.
+    return HttpResponse.json({
+      ...page,
+      items: page.items.map(({ places, ...row }) => ({ ...row, placeCount: places.length })),
+    })
+  }),
+
+  http.post(`${BASE}/cms/recommendations`, async ({ request }) => {
+    const body = (await request.json()) as Record<string, unknown>
+    const slug = String(body.slug ?? '')
+    if (db.recommendations.some((row) => row.slug === slug)) {
+      return envelope(409, 'SLUG_TAKEN', 'internal key already used')
+    }
+    const created = {
+      id: `rec-${db.recommendations.length + 100}`,
+      slug,
+      locale: String(body.locale ?? 'vi'),
+      internalName: String(body.internalName ?? ''),
+      title: String(body.title ?? ''),
+      subtitle: (body.subtitle as string) ?? null,
+      description: (body.description as string) ?? null,
+      audience: (body.audience as 'couple') ?? 'couple',
+      areaKey: (body.areaKey as string) ?? null,
+      priority: Number(body.priority ?? 0),
+      status: 'draft' as const,
+      startsAt: null,
+      endsAt: null,
+      placeCount: 0,
+      taxonomies: [],
+      createdByAdminId: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      places: [],
+    }
+    db.recommendations.unshift(created)
+    return HttpResponse.json(created, { status: 201 })
+  }),
+
+  http.get(`${BASE}/cms/recommendations/:id`, ({ params }) => {
+    const row = db.recommendations.find((item) => item.id === params.id)
+    if (!row) return envelope(404, 'NOT_FOUND', 'recommendation not found')
+    return HttpResponse.json(row)
+  }),
+
+  http.patch(`${BASE}/cms/recommendations/:id`, async ({ params, request }) => {
+    const row = db.recommendations.find((item) => item.id === params.id)
+    if (!row) return envelope(404, 'NOT_FOUND', 'recommendation not found')
+    const body = (await request.json()) as Record<string, unknown>
+    // Omitted fields are left alone, exactly as the contract states.
+    for (const key of [
+      'internalName',
+      'title',
+      'subtitle',
+      'description',
+      'areaKey',
+      'audience',
+    ] as const) {
+      if (body[key] !== undefined) (row as Record<string, unknown>)[key] = body[key]
+    }
+    if (body.priority !== undefined) row.priority = Number(body.priority)
+    row.updatedAt = new Date().toISOString()
+    return HttpResponse.json(row)
+  }),
+
+  http.patch(`${BASE}/cms/recommendations/:id/status`, async ({ params, request }) => {
+    const row = db.recommendations.find((item) => item.id === params.id)
+    if (!row) return envelope(404, 'NOT_FOUND', 'recommendation not found')
+    const body = (await request.json()) as { status: string }
+    if (row.status === 'archived') {
+      return envelope(409, 'INVALID_STATUS_TRANSITION', 'archived is terminal')
+    }
+    if (body.status === 'published' && row.places.length === 0) {
+      return envelope(400, 'EMPTY_RECOMMENDATION', 'publishing needs at least one place')
+    }
+    if (body.status === 'scheduled' && !row.startsAt) {
+      return envelope(400, 'SCHEDULE_REQUIRED', 'scheduling needs a start time')
+    }
+    row.status = body.status as typeof row.status
+    row.updatedAt = new Date().toISOString()
+    return HttpResponse.json({ id: row.id, status: row.status })
+  }),
+
+  http.put(`${BASE}/cms/recommendations/:id/places`, async ({ params, request }) => {
+    const row = db.recommendations.find((item) => item.id === params.id)
+    if (!row) return envelope(404, 'NOT_FOUND', 'recommendation not found')
+    const body = (await request.json()) as { placeIds: string[] }
+    const ids = body.placeIds ?? []
+    if (new Set(ids).size !== ids.length) {
+      return envelope(400, 'DUPLICATE_PLACE', 'a place appears twice')
+    }
+    row.places = ids
+      .map((placeId, position) => {
+        const known = db.places.find((place) => place.id === placeId)
+        if (!known) return null
+        return {
+          position,
+          placeId,
+          name: known.name,
+          addressText: known.addressText ?? null,
+          status: known.status,
+        }
+      })
+      .filter((place): place is NonNullable<typeof place> => place !== null)
+    if (row.places.length !== ids.length) {
+      return envelope(400, 'PLACE_NOT_FOUND', 'unknown place')
+    }
+    row.placeCount = row.places.length
+    row.updatedAt = new Date().toISOString()
+    return HttpResponse.json(row)
   }),
 
   http.get(`${BASE}/cms/ranking-configs`, ({ request }) => {

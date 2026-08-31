@@ -1165,3 +1165,90 @@ export const cmsAdmins: CmsAdminFixture[] = [
     lastLoginAt: null,
   },
 ]
+
+/**
+ * `GET /cms/recommendations` (GoGo-BE#222). Spans two pages and every status,
+ * so paging and each server filter are reachable without hand-editing.
+ */
+type RecommendationFixture = {
+  id: string
+  slug: string
+  locale: string
+  internalName: string
+  title: string
+  subtitle: string | null
+  description: string | null
+  audience: 'couple' | 'group' | 'family' | 'solo'
+  areaKey: string | null
+  priority: number
+  status: 'draft' | 'scheduled' | 'published' | 'archived'
+  startsAt: string | null
+  endsAt: string | null
+  placeCount: number
+  taxonomies: { id: string; kind: 'category' | 'mood'; key: string }[]
+  createdByAdminId: string | null
+  createdAt: string
+  updatedAt: string
+  places: {
+    position: number
+    placeId: string
+    name: string
+    addressText: string | null
+    status: string
+  }[]
+}
+
+const RECOMMENDATION_STATUSES = ['draft', 'scheduled', 'published', 'archived'] as const
+const RECOMMENDATION_AUDIENCES = ['couple', 'group', 'family', 'solo'] as const
+
+export const cmsRecommendations: RecommendationFixture[] = Array.from(
+  { length: 28 },
+  (_, index) => {
+    const nth = index + 1
+    const status = RECOMMENDATION_STATUSES[nth % 4]!
+    const places =
+      status === 'published'
+        ? [
+            {
+              position: 0,
+              placeId: 'pl-chao-ban',
+              name: 'Chào Bạn Cafe & Space',
+              addressText: '12 Nguyễn Huệ, Quận 1',
+              status: 'published',
+            },
+            {
+              position: 1,
+              placeId: 'pl-pho-bat-dan',
+              name: 'Phở Bát Đàn',
+              addressText: '49 Bát Đàn, Hoàn Kiếm',
+              // A place that is not published sitting inside a published
+              // recommendation is exactly what the contract wants visible
+              // rather than a silently shorter list. The mock resolves the
+              // real catalog status on write.
+              status: 'review',
+            },
+          ]
+        : []
+    return {
+      id: `rec-${String(nth).padStart(3, '0')}`,
+      slug: `goi-y-so-${nth}`,
+      locale: 'vi',
+      internalName: `Gợi ý biên tập số ${nth}`,
+      title: `Đi đâu cuối tuần này ${nth}`,
+      subtitle: nth % 3 === 0 ? null : 'Chọn lọc bởi đội biên tập',
+      description: null,
+      audience: RECOMMENDATION_AUDIENCES[nth % 4]!,
+      areaKey: nth % 2 === 0 ? 'hcm.q1' : 'hcm.q3',
+      priority: (nth * 7) % 100,
+      status,
+      startsAt: null,
+      endsAt: null,
+      placeCount: places.length,
+      taxonomies: [],
+      createdByAdminId: null,
+      createdAt: iso(nth * 61),
+      updatedAt: iso(nth * 43),
+      places,
+    }
+  },
+)

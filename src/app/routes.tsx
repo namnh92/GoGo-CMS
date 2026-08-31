@@ -18,6 +18,12 @@ const ReviewListScreen = lazy(() => import('@/features/moderation/reviewList.vie
 const SubmissionQueueScreen = lazy(() => import('@/features/submissions/submissionQueue.view'))
 const TaxonomyScreen = lazy(() => import('@/features/taxonomy/taxonomy.view'))
 const CollectionsScreen = lazy(() => import('@/features/collections/collections.view'))
+const RecommendationListScreen = lazy(
+  () => import('@/features/recommendations/recommendationList.view'),
+)
+const RecommendationDetailScreen = lazy(
+  () => import('@/features/recommendations/recommendationDetail.view'),
+)
 const SettingsScreen = lazy(() => import('@/features/ranking/settings.view'))
 const NewAccountScreen = lazy(() => import('@/features/admins/newAccount.view'))
 const AdminListScreen = lazy(() => import('@/features/admins/adminList.view'))
@@ -74,6 +80,8 @@ export const router = createBrowserRouter([
           { path: 'submissions', element: <SubmissionQueueScreen /> },
           { path: 'taxonomy', element: <TaxonomyScreen /> },
           { path: 'collections', element: <CollectionsScreen /> },
+          { path: 'recommendations', element: <RecommendationListScreen /> },
+          { path: 'recommendations/:id', element: <RecommendationDetailScreen /> },
           { path: 'settings', element: <SettingsScreen /> },
           { path: 'settings/accounts', element: <AdminListScreen /> },
           { path: 'settings/accounts/new', element: <NewAccountScreen /> },

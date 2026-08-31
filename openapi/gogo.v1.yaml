@@ -2949,6 +2949,857 @@ paths:
       responses:
         '200': { description: Items replaced }
 
+  /cms/plan-templates:
+    get:
+      operationId: cmsListPlanTemplates
+      tags: [cms]
+      summary: 'Editor/ops: plan templates, filtered and cursor-paged'
+      description: >
+        Templates are **source material for future plans, not live ones**.
+        Nothing in this resource references a room, a plan or a plan stop, and
+        editing a template never reaches a plan somebody already has — the
+        separation is in the schema, not in a rule a service has to remember.
+      parameters:
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/PlanTemplateStatus' } }
+        - { name: audience, in: query, schema: { $ref: '#/components/schemas/ContentAudience' } }
+        - { name: areaKey, in: query, schema: { type: string, maxLength: 64 } }
+        - { name: q, in: query, schema: { type: string, maxLength: 120 } }
+        - {
+            name: limit,
+            in: query,
+            schema: { type: integer, minimum: 1, maximum: 100, default: 50 },
+          }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Templates, newest first
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CmsPlanTemplatePage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+    post:
+      operationId: cmsCreatePlanTemplate
+      tags: [cms]
+      summary: 'Editor/ops: create a plan template'
+      description: >
+        `stops` is ordered — the array index becomes the stored position, so a
+        client cannot send two stops claiming the same one or a gap that means
+        nothing.
+
+
+        Every budget is integer minor units and carries its currency and what it
+        is *per*; there is no amount in this contract whose scope a client has
+        to assume.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CmsPlanTemplateCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CmsPlanTemplateDetail' }
+        '400':
+          description: >
+            Unknown preferred place (`PLACE_NOT_FOUND`), unknown or wrong-kind
+            taxonomy (`TAXONOMY_NOT_FOUND`, `TAXONOMY_KIND_INVALID`), or an
+            inverted budget range (`INVALID_BUDGET`).
+        '409': { description: 'Template key already used (`SLUG_TAKEN`)' }
+
+  /cms/plan-templates/{id}:
+    get:
+      operationId: cmsGetPlanTemplate
+      tags: [cms]
+      summary: 'Editor/ops: one template with its ordered stops'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Template
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CmsPlanTemplateDetail' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      operationId: cmsUpdatePlanTemplate
+      tags: [cms]
+      summary: 'Editor/ops: edit a template'
+      description: >
+        Omitted fields are left alone; a sent `stops` or `taxonomyIds` replaces
+        that list wholesale. Editing a template does not touch any plan built
+        from it earlier — a plan is a copy at the moment it was made, not a
+        live view of its template.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CmsPlanTemplatePatch' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CmsPlanTemplateDetail' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /cms/plan-templates/{id}/status:
+    patch:
+      operationId: cmsSetPlanTemplateStatus
+      tags: [cms]
+      summary: 'Editor/ops: move a template along its lifecycle'
+      description: >
+        Declared transitions only; `archived` is terminal. Publishing needs at
+        least one stop — a template with none is not a plan anyone can be given.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { $ref: '#/components/schemas/PlanTemplateStatus' }
+      responses:
+        '200':
+          description: Status changed (audited)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, status]
+                properties:
+                  id: { type: string, format: uuid }
+                  status: { $ref: '#/components/schemas/PlanTemplateStatus' }
+        '400': { description: 'Publishing with no stops (`EMPTY_TEMPLATE`)' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: 'The lifecycle has no such edge (`INVALID_STATUS_TRANSITION`)' }
+
+  /cms/plan-templates/{id}/stops:
+    put:
+      operationId: cmsSetPlanTemplateStops
+      tags: [cms]
+      summary: 'Editor/ops: replace the ordered stop list'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [stops]
+              properties:
+                stops:
+                  type: array
+                  maxItems: 20
+                  items: { $ref: '#/components/schemas/CmsPlanTemplateStopInput' }
+      responses:
+        '200':
+          description: Stops replaced
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CmsPlanTemplateDetail' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /cms/recommendations:
+    get:
+      operationId: cmsListRecommendations
+      tags: [cms]
+      summary: 'Editor/ops: recommendations, filtered and cursor-paged'
+      description: >
+        A recommendation is a targeted collection (ADR-0009): the same ordered
+        list of places, the same schedule and status machine, plus who it is
+        for. It shares `content_collections` with curated collections rather
+        than forking editorial content into a second store, and
+        `GET /cms/collections` returns only the untargeted ones.
+
+
+        Sorted newest first; `priority` orders recommendations competing for one
+        surface and is returned so the console can show it, not used as the
+        pagination key — it is editable, so a row whose priority changed
+        mid-traversal would jump pages.
+      parameters:
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/RecommendationStatus' } }
+        - { name: audience, in: query, schema: { $ref: '#/components/schemas/ContentAudience' } }
+        - { name: areaKey, in: query, schema: { type: string, maxLength: 64 } }
+        - {
+            name: q,
+            in: query,
+            description: Substring of internal name,
+            title or key.,
+            schema: { type: string, maxLength: 120 },
+          }
+        - {
+            name: limit,
+            in: query,
+            schema: { type: integer, minimum: 1, maximum: 100, default: 50 },
+          }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Recommendations, newest first
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CmsRecommendationPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+    post:
+      operationId: cmsCreateRecommendation
+      tags: [cms]
+      summary: 'Editor/ops: create a recommendation'
+      description: >
+        Every referenced place and taxonomy must exist, and a taxonomy must be
+        of a kind that can target content (`category` or `mood`) — a
+        recommendation pointing at an id nothing resolves would render as a
+        shorter list with no explanation.
+
+
+        `placeIds` is ordered: the array index becomes the stored position, and
+        the order round-trips.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CmsRecommendationCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CmsRecommendationDetail' }
+        '400':
+          description: >
+            Unknown place (`PLACE_NOT_FOUND`), duplicate place
+            (`DUPLICATE_PLACE`), unknown or untargetable taxonomy
+            (`TAXONOMY_NOT_FOUND`, `TAXONOMY_KIND_INVALID`), or a window that
+            ends before it starts (`INVALID_SCHEDULE`).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '409': { description: 'Internal key already used (`SLUG_TAKEN`)' }
+
+  /cms/recommendations/{id}:
+    get:
+      operationId: cmsGetRecommendation
+      tags: [cms]
+      summary: 'Editor/ops: one recommendation with its ordered places'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Recommendation
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CmsRecommendationDetail' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      operationId: cmsUpdateRecommendation
+      tags: [cms]
+      summary: 'Editor/ops: edit a recommendation'
+      description: >
+        Omitted fields are left alone. Sending `placeIds` or `taxonomyIds`
+        replaces that list wholesale — a partial reorder is not expressible, and
+        pretending otherwise is how an ordering silently loses a row.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CmsRecommendationPatch' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CmsRecommendationDetail' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /cms/recommendations/{id}/status:
+    patch:
+      operationId: cmsSetRecommendationStatus
+      tags: [cms]
+      summary: 'Editor/ops: move a recommendation along its lifecycle'
+      description: >
+        Declared transitions only. `archived` is terminal: bringing retired
+        content back is a new row, not a resurrection. Scheduling needs a start
+        time, and publishing needs at least one place — an empty published
+        recommendation is a surface with nothing on it.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { $ref: '#/components/schemas/RecommendationStatus' }
+      responses:
+        '200':
+          description: Status changed (audited)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, status]
+                properties:
+                  id: { type: string, format: uuid }
+                  status: { $ref: '#/components/schemas/RecommendationStatus' }
+        '400':
+          description: >
+            Scheduling without a start time (`SCHEDULE_REQUIRED`) or publishing
+            with no places (`EMPTY_RECOMMENDATION`).
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: 'The lifecycle has no such edge (`INVALID_STATUS_TRANSITION`)' }
+
+  /cms/recommendations/{id}/places:
+    put:
+      operationId: cmsSetRecommendationPlaces
+      tags: [cms]
+      summary: 'Editor/ops: replace the ordered place list'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [placeIds]
+              properties:
+                placeIds:
+                  type: array
+                  maxItems: 100
+                  description: Order is meaning — the index becomes the stored position.
+                  items: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Places replaced
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CmsRecommendationDetail' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /cms/safety-rules:
+    get:
+      operationId: cmsListSafetyRules
+      tags: [cms]
+      summary: 'Ops: Trust & Safety rules, filtered and cursor-paged'
+      description: >
+        `ops_admin` only, in both directions — a rule here can suspend an
+        account with no human in the loop, which is policy rather than
+        day-to-day moderation.
+
+
+        Rule **definitions**. Nothing evaluates them yet — the enforcement path
+        is separate work — and when it lands, every automated decision carries
+        the rule's `reasonCode` so a person reviewing it can trace why.
+
+
+        There is no rule builder and no expression language: `conditions` is a
+        closed, typed shape per `ruleType`, validated on write. Nothing here is
+        evaluated as code.
+      parameters:
+        - { name: ruleType, in: query, schema: { $ref: '#/components/schemas/SafetyRuleType' } }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/SafetyRuleStatus' } }
+        - { name: action, in: query, schema: { $ref: '#/components/schemas/SafetyRuleAction' } }
+        - { name: severity, in: query, schema: { $ref: '#/components/schemas/SafetyRuleSeverity' } }
+        - { name: trigger, in: query, schema: { $ref: '#/components/schemas/SafetyRuleTrigger' } }
+        - { name: q, in: query, schema: { type: string, maxLength: 120 } }
+        - {
+            name: limit,
+            in: query,
+            schema: { type: integer, minimum: 1, maximum: 100, default: 50 },
+          }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Rules, newest first
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CmsSafetyRulePage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+    post:
+      operationId: cmsCreateSafetyRule
+      tags: [cms]
+      summary: 'Ops: define a Trust & Safety rule'
+      description: >
+        Three things are checked beyond the shape of `conditions`: the action
+        must be one the rule type can take, the trigger one it can be evaluated
+        on, and `suspend_user` requires severity `high` or `critical` —
+        suspension removes an account from a person with no human in the loop,
+        and a `low` rule doing that at scale is the mistake worth refusing.
+
+
+        `reasonCode` is mandatory and machine-readable (`^[a-z][a-z0-9_]{2,63}$`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CmsSafetyRuleCreate' }
+      responses:
+        '201':
+          description: Created (audited with the whole definition)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CmsSafetyRule' }
+        '400':
+          description: >
+            Conditions do not fit the rule type (`INVALID_RULE_CONDITIONS`), the
+            action or trigger is not available for it (`ACTION_NOT_ALLOWED`,
+            `TRIGGER_NOT_ALLOWED`), or automatic suspension was asked for below
+            `high` severity (`SEVERITY_TOO_LOW`).
+        '409': { description: 'A rule with that name exists (`RULE_NAME_TAKEN`)' }
+
+  /cms/safety-rules/{id}:
+    get:
+      operationId: cmsGetSafetyRule
+      tags: [cms]
+      summary: 'Ops: one rule'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Rule
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CmsSafetyRule' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      operationId: cmsUpdateSafetyRule
+      tags: [cms]
+      summary: 'Ops: edit a rule'
+      description: >
+        `ruleType` is immutable — it decides which condition schema applies, and
+        changing it would reinterpret stored conditions rather than revalidate
+        them. The rule is revalidated as a whole on every edit, because changing
+        the action alone can make an already-stored condition set illegal.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CmsSafetyRulePatch' }
+      responses:
+        '200':
+          description: Updated (audited before/after)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CmsSafetyRule' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /cms/safety-rules/{id}/status:
+    patch:
+      operationId: cmsSetSafetyRuleStatus
+      tags: [cms]
+      summary: 'Ops: activate or disable a rule'
+      description: >
+        Reversible in both directions on purpose — the point of a switch is that
+        it can be thrown back. Activating revalidates the definition first: a
+        rule may have been left in draft precisely because it was unfinished.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { $ref: '#/components/schemas/SafetyRuleStatus' }
+      responses:
+        '200':
+          description: Status changed (audited)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, status]
+                properties:
+                  id: { type: string, format: uuid }
+                  status: { $ref: '#/components/schemas/SafetyRuleStatus' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /cms/banners:
+    get:
+      operationId: cmsListBanners
+      tags: [cms]
+      summary: 'Editor/ops: banners, filtered and cursor-paged'
+      description: >
+        `status` accepts `expired`, which is **computed by the server** from the
+        banner's end time rather than stored — a stored expiry is wrong for as
+        long as it takes something to notice, or forever if nothing runs. Each
+        item carries both: `status` (what it is now) and `lifecycleStatus`
+        (what a person set).
+      parameters:
+        - { name: placement, in: query, schema: { $ref: '#/components/schemas/BannerPlacement' } }
+        - {
+            name: status,
+            in: query,
+            schema: { $ref: '#/components/schemas/BannerEffectiveStatus' },
+          }
+        - { name: audience, in: query, schema: { $ref: '#/components/schemas/ContentAudience' } }
+        - { name: q, in: query, schema: { type: string, maxLength: 120 } }
+        - {
+            name: limit,
+            in: query,
+            schema: { type: integer, minimum: 1, maximum: 100, default: 50 },
+          }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Banners, newest first
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CmsBannerPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+    post:
+      operationId: cmsCreateBanner
+      tags: [cms]
+      summary: 'Editor/ops: create a banner'
+      description: >
+        `imageKey` is mandatory — a banner is an image. The key comes from
+        `POST /cms/uploads` with purpose `banner_image` and is bound to this
+        banner on save, through the same attach path check-in photos use: a key
+        belonging to another actor, an expired one, or one issued for a
+        different purpose is refused rather than becoming a broken image.
+
+
+        The destination is cross-checked against the type it names: a `place`,
+        `recommendation`, `plan_template` or `campaign` id must resolve, and an
+        `external_url` must be https, carry no credentials and not point inside
+        the network.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CmsBannerCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CmsBanner' }
+        '400':
+          description: >
+            Destination is malformed, unsafe or missing (`INVALID_DESTINATION`),
+            points at nothing (`DESTINATION_NOT_FOUND`), the window is inverted
+            (`INVALID_SCHEDULE`), or the image key is not usable
+            (`INVALID_UPLOAD_KEY`).
+        '409': { description: 'A banner with that name exists (`BANNER_NAME_TAKEN`)' }
+
+  /cms/banners/{id}:
+    get:
+      operationId: cmsGetBanner
+      tags: [cms]
+      summary: 'Editor/ops: one banner'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Banner
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CmsBanner' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      operationId: cmsUpdateBanner
+      tags: [cms]
+      summary: 'Editor/ops: edit a banner'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CmsBannerPatch' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CmsBanner' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /cms/banners/{id}/status:
+    patch:
+      operationId: cmsSetBannerStatus
+      tags: [cms]
+      summary: 'Editor/ops: move a banner along its lifecycle'
+      description: >
+        Takes only the statuses a person controls — `expired` is not one of
+        them. Scheduling needs a start time, and publishing a banner whose
+        window has already closed is refused rather than producing something the
+        very next read reports as expired.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { $ref: '#/components/schemas/BannerStatus' }
+      responses:
+        '200':
+          description: Status changed (audited)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, status]
+                properties:
+                  id: { type: string, format: uuid }
+                  status: { $ref: '#/components/schemas/BannerStatus' }
+        '400':
+          description: >
+            Scheduling without a start time (`SCHEDULE_REQUIRED`) or publishing
+            a closed window (`WINDOW_CLOSED`).
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: 'The lifecycle has no such edge (`INVALID_STATUS_TRANSITION`)' }
+
+  /cms/campaigns:
+    get:
+      operationId: cmsListCampaigns
+      tags: [cms]
+      summary: 'Ops: notification campaigns, filtered and cursor-paged'
+      description: >
+        A campaign is composed here and **sent by the worker**, never from a
+        request. The API only ever writes a row; a scheduled row is what a
+        worker tick picks up, resolves an audience for, and hands to the push
+        provider adapter. A campaign that has gone out cannot be recalled, so
+        there is deliberately no API path that reaches a provider.
+      parameters:
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/CampaignStatus' } }
+        - {
+            name: audienceType,
+            in: query,
+            schema: { $ref: '#/components/schemas/CampaignAudience' },
+          }
+        - { name: q, in: query, schema: { type: string, maxLength: 120 } }
+        - {
+            name: limit,
+            in: query,
+            schema: { type: integer, minimum: 1, maximum: 100, default: 50 },
+          }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Campaigns, newest first
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CmsCampaignPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+    post:
+      operationId: cmsCreateCampaign
+      tags: [cms]
+      summary: 'Ops: compose a campaign (draft)'
+      description: >
+        Created as a `draft`; nothing is sent until it is scheduled.
+
+
+        The destination is validated against real data: a `place`,
+        `recommendation` or `plan_template` id must resolve, and an
+        `external_url` must be https, carry no credentials and not point inside
+        the network. A deep link into content that does not exist is a dead
+        notification on every phone that receives it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CmsCampaignCreate' }
+      responses:
+        '201':
+          description: Draft created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CmsCampaign' }
+        '400':
+          description: >
+            Audience filter does not fit the audience type (`INVALID_AUDIENCE`),
+            destination is malformed or unsafe (`INVALID_DESTINATION`), or it
+            points at something that does not exist (`DESTINATION_NOT_FOUND`).
+        '409': { description: 'A campaign with that name exists (`CAMPAIGN_NAME_TAKEN`)' }
+
+  /cms/campaigns/{id}:
+    get:
+      operationId: cmsGetCampaign
+      tags: [cms]
+      summary: 'Ops: one campaign with its delivery counters'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Campaign
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CmsCampaign' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      operationId: cmsUpdateCampaign
+      tags: [cms]
+      summary: 'Ops: edit a campaign that has not been sent'
+      description: >
+        Editable only in `draft`, `cancelled` or `failed`. Editing a scheduled
+        campaign would silently change what is about to go out — unschedule it
+        first, which is a deliberate, audited act.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CmsCampaignPatch' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CmsCampaign' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: 'Not in an editable state (`CAMPAIGN_NOT_EDITABLE`)' }
+
+  /cms/campaigns/{id}/audience-estimate:
+    get:
+      operationId: cmsEstimateCampaignAudience
+      tags: [cms]
+      summary: 'Ops: how many people this would reach, right now'
+      description: >
+        A read with no side effect — nothing is written and nothing is sent. The
+        number is a snapshot: the audience is resolved again at send time by the
+        same predicate, so it can move between the estimate and the send.
+
+
+        Counts only accounts with a registered device: a "recipient" with
+        nothing to receive on inflates the number and makes the delivery
+        counters unreadable.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Estimate
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CmsCampaignAudienceEstimate' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /cms/campaigns/{id}/schedule:
+    post:
+      operationId: cmsScheduleCampaign
+      tags: [cms]
+      summary: 'Ops: make a campaign due (send now, or at a time)'
+      description: >
+        Marks the campaign `scheduled` and returns. **No message exists yet**:
+        the worker picks up what is due on its next tick, resolves the audience
+        then, and dispatches through the provider adapter.
+
+
+        Omitting `sendAt` means now. Scheduling revalidates the destination,
+        because the place or recommendation it points at may have been removed
+        since the draft was written.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                sendAt:
+                  type: string
+                  format: date-time
+                  description: Omit for "send now". A past time is also due immediately.
+      responses:
+        '201':
+          description: Scheduled (audited)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CmsCampaign' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Not schedulable from its current state (`INVALID_STATUS_TRANSITION`)
+
+  /cms/campaigns/{id}/cancel:
+    post:
+      operationId: cmsCancelCampaign
+      tags: [cms]
+      summary: 'Ops: cancel a campaign that has not started'
+      description: >
+        Works while `scheduled`. Once the worker is `sending`, some messages are
+        already on phones and there is nothing to recall — the request is
+        refused with how far the send got, rather than reporting a cancellation
+        the backend cannot perform.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '201':
+          description: Cancelled (audited)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CmsCampaign' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: >
+            Sending has started (`CAMPAIGN_ALREADY_SENDING`) — the message says
+            how many were delivered — or the state is not cancellable
+            (`INVALID_STATUS_TRANSITION`).
+
+  /cms/campaigns/{id}/test-send:
+    post:
+      operationId: cmsTestSendCampaign
+      tags: [cms]
+      summary: 'Ops: send one copy to your own account'
+      description: >
+        Separate from a real send in every way that matters: it never changes
+        `status`, it reaches exactly one account, and that account is the
+        caller's own — matched on a **verified** email between the staff account
+        and a consumer account, so this cannot push a message at somebody else.
+
+
+        Queued like everything else; the worker delivers it. Rate-limited,
+        because it is the one send path a person can trigger repeatedly.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '201':
+          description: Test send queued for the worker
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [campaignId, status, testSendQueued]
+                properties:
+                  campaignId: { type: string, format: uuid }
+                  status: { $ref: '#/components/schemas/CampaignStatus' }
+                  testSendQueued: { type: boolean }
+        '400':
+          description: >
+            The caller has no verified consumer account on the same address
+            (`NO_TEST_RECIPIENT`).
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { description: Too many test sends }
+
   /cms/uploads:
     post:
       operationId: cmsCreateUpload
@@ -4761,6 +5612,691 @@ components:
         platform: { $ref: '#/components/schemas/FlagPlatform' }
         enabled: { type: boolean }
         value: { description: The stored value, as the server now holds it. }
+
+    PlanTemplateStatus:
+      type: string
+      enum: [draft, published, archived]
+      description: '`archived` is terminal — a retired template comes back as a new row.'
+
+    BudgetScope:
+      type: string
+      enum: [per_person, per_group]
+      description: >
+        What an amount is *per*. These are different numbers, so no amount in
+        this contract is returned without one.
+
+    BudgetRange:
+      type: object
+      required: [min, max, currency, scope]
+      description: >
+        Integer minor units with its currency and scope. Present as a whole or
+        absent as a whole — there is no half of this object.
+      properties:
+        min: { type: integer, minimum: 0 }
+        max: { type: integer, minimum: 0 }
+        currency: { type: string, pattern: '^[A-Z]{3}$', description: ISO-4217. }
+        scope: { $ref: '#/components/schemas/BudgetScope' }
+
+    CmsPlanTemplateStopInput:
+      type: object
+      required: [categoryTaxonomyId, expectedDurationMinutes]
+      properties:
+        categoryTaxonomyId:
+          type: string
+          format: uuid
+          description: Taxonomy of kind `category` — what sort of stop this is.
+        preferredPlaceId:
+          type: string
+          format: uuid
+          description: >
+            Optional. A template may name a place or leave the choice to
+            matching.
+        isOptional:
+          type: boolean
+          description: A property of the stop, not a convention the reader infers.
+        expectedDurationMinutes: { type: integer, minimum: 5, maximum: 1440 }
+        budget: { $ref: '#/components/schemas/BudgetRange' }
+        note: { type: string, maxLength: 500 }
+
+    CmsPlanTemplateStop:
+      allOf:
+        - $ref: '#/components/schemas/CmsPlanTemplateStopInput'
+        - type: object
+          required: [id, position, categoryKey, isOptional]
+          properties:
+            id: { type: string, format: uuid }
+            position: { type: integer }
+            categoryKey: { type: string, description: Stable taxonomy key, never a label. }
+            preferredPlaceName: { type: string }
+
+    CmsPlanTemplate:
+      type: object
+      required:
+        [id, slug, locale, internalName, title, status, stopCount, taxonomies, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string, description: The template key. Unique per locale. }
+        locale: { type: string }
+        internalName: { type: string }
+        title: { type: string }
+        description: { type: string }
+        audience: { $ref: '#/components/schemas/ContentAudience' }
+        areaKey: { type: string }
+        budget: { $ref: '#/components/schemas/BudgetRange' }
+        expectedDurationMinutes: { type: integer }
+        status: { $ref: '#/components/schemas/PlanTemplateStatus' }
+        stopCount: { type: integer }
+        taxonomies:
+          type: array
+          description: Mood/setting keys for the template as a whole.
+          items: { $ref: '#/components/schemas/CmsRecommendationTaxonomy' }
+        createdByAdminId: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    CmsPlanTemplateDetail:
+      allOf:
+        - $ref: '#/components/schemas/CmsPlanTemplate'
+        - type: object
+          required: [stops]
+          properties:
+            stops:
+              type: array
+              items: { $ref: '#/components/schemas/CmsPlanTemplateStop' }
+
+    CmsPlanTemplatePage:
+      type: object
+      required: [items, nextCursor, totalCount]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/CmsPlanTemplate' }
+        nextCursor: { type: [string, 'null'] }
+        totalCount: { type: integer }
+
+    CmsPlanTemplateCreate:
+      type: object
+      required: [slug, internalName, title]
+      properties:
+        slug: { type: string, pattern: '^[a-z0-9-]{2,60}$' }
+        internalName: { type: string, maxLength: 120 }
+        title: { type: string, maxLength: 120 }
+        description: { type: string, maxLength: 2000 }
+        locale: { type: string, maxLength: 8 }
+        audience: { $ref: '#/components/schemas/ContentAudience' }
+        areaKey: { type: string, maxLength: 64 }
+        budget: { $ref: '#/components/schemas/BudgetRange' }
+        expectedDurationMinutes: { type: integer, minimum: 15, maximum: 1440 }
+        taxonomyIds:
+          type: array
+          maxItems: 20
+          items: { type: string, format: uuid }
+        stops:
+          type: array
+          maxItems: 20
+          description: Ordered — the index becomes the stored position.
+          items: { $ref: '#/components/schemas/CmsPlanTemplateStopInput' }
+
+    CmsPlanTemplatePatch:
+      type: object
+      description: Omitted fields are left alone; a sent list replaces that list wholesale.
+      properties:
+        internalName: { type: string, maxLength: 120 }
+        title: { type: string, maxLength: 120 }
+        description: { type: string, maxLength: 2000 }
+        locale: { type: string, maxLength: 8 }
+        audience: { $ref: '#/components/schemas/ContentAudience' }
+        areaKey: { type: string, maxLength: 64 }
+        budget: { $ref: '#/components/schemas/BudgetRange' }
+        expectedDurationMinutes: { type: integer, minimum: 15, maximum: 1440 }
+        taxonomyIds:
+          type: array
+          maxItems: 20
+          items: { type: string, format: uuid }
+        stops:
+          type: array
+          maxItems: 20
+          items: { $ref: '#/components/schemas/CmsPlanTemplateStopInput' }
+
+    RecommendationStatus:
+      type: string
+      enum: [draft, scheduled, published, archived]
+      description: >
+        `archived` is terminal — retired content comes back as a new row, not a
+        resurrection.
+
+    ContentAudience:
+      type: string
+      enum: [couple, group, family, solo]
+      description: >
+        Who a piece of editorial content is aimed at. One vocabulary across
+        content types rather than one per resource. Stable key; the label
+        resolves client-side through i18n.
+
+    CmsRecommendationTaxonomy:
+      type: object
+      required: [id, kind, key]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [category, mood] }
+        key:
+          type: string
+          description: Stable taxonomy key, never a display label.
+
+    CmsRecommendation:
+      type: object
+      required:
+        [id, slug, locale, title, priority, status, placeCount, taxonomies, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        slug:
+          type: string
+          description: The internal key. Unique per locale.
+        locale: { type: string }
+        internalName:
+          type: string
+          description: The editorial name. What an editor searches; never what a user reads.
+        title: { type: string }
+        subtitle: { type: string }
+        description: { type: string }
+        audience: { $ref: '#/components/schemas/ContentAudience' }
+        areaKey:
+          type: string
+          description: Same vocabulary as a place's `areaKey` — "city" is one concept.
+        priority:
+          type: integer
+          description: Higher first, between recommendations competing for one surface.
+        status: { $ref: '#/components/schemas/RecommendationStatus' }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
+        placeCount: { type: integer }
+        taxonomies:
+          type: array
+          items: { $ref: '#/components/schemas/CmsRecommendationTaxonomy' }
+        createdByAdminId: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    CmsRecommendationPlace:
+      type: object
+      required: [position, placeId, name, status]
+      properties:
+        position: { type: integer }
+        placeId: { type: string, format: uuid }
+        name: { type: string }
+        addressText: { type: string }
+        status:
+          type: string
+          description: >
+            The place's catalog status, so a published recommendation quietly
+            holding a suspended place is visible rather than silently short.
+
+    CmsRecommendationDetail:
+      allOf:
+        - $ref: '#/components/schemas/CmsRecommendation'
+        - type: object
+          required: [places]
+          properties:
+            places:
+              type: array
+              items: { $ref: '#/components/schemas/CmsRecommendationPlace' }
+
+    CmsRecommendationPage:
+      type: object
+      required: [items, nextCursor, totalCount]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/CmsRecommendation' }
+        nextCursor: { type: [string, 'null'] }
+        totalCount: { type: integer }
+
+    CmsRecommendationCreate:
+      type: object
+      required: [slug, internalName, title, audience]
+      properties:
+        slug: { type: string, pattern: '^[a-z0-9-]{2,60}$' }
+        internalName: { type: string, maxLength: 120 }
+        title: { type: string, maxLength: 120 }
+        subtitle: { type: string, maxLength: 200 }
+        description: { type: string, maxLength: 2000 }
+        locale: { type: string, maxLength: 8 }
+        audience: { $ref: '#/components/schemas/ContentAudience' }
+        areaKey: { type: string, maxLength: 64 }
+        priority: { type: integer, minimum: 0, maximum: 1000 }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
+        taxonomyIds:
+          type: array
+          maxItems: 30
+          items: { type: string, format: uuid }
+        placeIds:
+          type: array
+          maxItems: 100
+          description: Ordered — the index becomes the stored position.
+          items: { type: string, format: uuid }
+
+    CmsRecommendationPatch:
+      type: object
+      description: Omitted fields are left alone; a sent list replaces that list wholesale.
+      properties:
+        internalName: { type: string, maxLength: 120 }
+        title: { type: string, maxLength: 120 }
+        subtitle: { type: string, maxLength: 200 }
+        description: { type: string, maxLength: 2000 }
+        locale: { type: string, maxLength: 8 }
+        audience: { $ref: '#/components/schemas/ContentAudience' }
+        areaKey: { type: string, maxLength: 64 }
+        priority: { type: integer, minimum: 0, maximum: 1000 }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
+        taxonomyIds:
+          type: array
+          maxItems: 30
+          items: { type: string, format: uuid }
+        placeIds:
+          type: array
+          maxItems: 100
+          items: { type: string, format: uuid }
+
+    SafetyRuleType:
+      type: string
+      enum:
+        [
+          spam,
+          abusive_content,
+          blocked_words,
+          review_abuse,
+          user_abuse,
+          repeated_reports,
+          rate_limit,
+        ]
+
+    SafetyRuleTrigger:
+      type: string
+      enum:
+        [
+          review_created,
+          review_updated,
+          report_created,
+          checkin_created,
+          place_submitted,
+          user_registered,
+        ]
+
+    SafetyRuleAction:
+      type: string
+      enum: [flag_for_review, auto_hide, require_moderation, suspend_user, block_action]
+      description: >
+        `suspend_user` acts on a person with no human in the loop, so it is
+        available only to rule types that are about that person's conduct and
+        only at `high` severity or above.
+
+    SafetyRuleSeverity:
+      type: string
+      enum: [low, medium, high, critical]
+
+    SafetyRuleStatus:
+      type: string
+      enum: [draft, active, disabled]
+
+    CmsSafetyRuleConditions:
+      type: object
+      description: >
+        A closed shape chosen by `ruleType`, never an expression. Unknown keys
+        are rejected on write rather than stored and never read.
+
+
+        `blocked_words`: `terms[]`, `matchMode` (exact | substring),
+        `caseSensitive`.
+
+        `spam`: `maxLinks`, `maxDuplicatesPerWindow`, `windowHours`,
+        `minAccountAgeHours` — at least one of the first two.
+
+        `abusive_content`: `terms[]`, `minReports`, `windowHours`.
+
+        `review_abuse`: `maxReviewsPerWindow`, `windowHours`,
+        `maxReviewsPerPlace`.
+
+        `user_abuse`: `maxReportsAgainstUser`, `windowHours`, `upheldOnly`.
+
+        `repeated_reports`: `minReports`, `windowHours`, `distinctReporters`.
+
+        `rate_limit`: `action` (review_create | report_create | checkin_create |
+        place_submit | room_join), `limit`, `windowSeconds`.
+      additionalProperties: true
+
+    CmsSafetyRule:
+      type: object
+      required:
+        [
+          id,
+          name,
+          ruleType,
+          trigger,
+          conditions,
+          action,
+          severity,
+          status,
+          priority,
+          reasonCode,
+          createdAt,
+          updatedAt,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        ruleType: { $ref: '#/components/schemas/SafetyRuleType' }
+        trigger: { $ref: '#/components/schemas/SafetyRuleTrigger' }
+        conditions: { $ref: '#/components/schemas/CmsSafetyRuleConditions' }
+        action: { $ref: '#/components/schemas/SafetyRuleAction' }
+        severity: { $ref: '#/components/schemas/SafetyRuleSeverity' }
+        status: { $ref: '#/components/schemas/SafetyRuleStatus' }
+        priority:
+          type: integer
+          description: >
+            Lower runs first, so two rules matching one event resolve the same
+            way every time rather than by insertion order.
+        reasonCode:
+          type: string
+          description: >
+            Stamped on every decision this rule causes, so an automated action
+            can be traced back by a person reviewing it.
+        createdBy:
+          oneOf:
+            - { $ref: '#/components/schemas/CmsAdminRef' }
+            - { type: 'null' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    CmsSafetyRulePage:
+      type: object
+      required: [items, nextCursor, totalCount]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/CmsSafetyRule' }
+        nextCursor: { type: [string, 'null'] }
+        totalCount: { type: integer }
+
+    CmsSafetyRuleCreate:
+      type: object
+      required: [name, ruleType, trigger, action, reasonCode]
+      properties:
+        name: { type: string, minLength: 3, maxLength: 120 }
+        description: { type: string, maxLength: 1000 }
+        ruleType: { $ref: '#/components/schemas/SafetyRuleType' }
+        trigger: { $ref: '#/components/schemas/SafetyRuleTrigger' }
+        conditions: { $ref: '#/components/schemas/CmsSafetyRuleConditions' }
+        action: { $ref: '#/components/schemas/SafetyRuleAction' }
+        severity: { $ref: '#/components/schemas/SafetyRuleSeverity' }
+        priority: { type: integer, minimum: 0, maximum: 1000 }
+        reasonCode: { type: string, pattern: '^[a-z][a-z0-9_]{2,63}$' }
+
+    CmsSafetyRulePatch:
+      type: object
+      description: '`ruleType` is immutable; it decides which condition schema applies.'
+      properties:
+        name: { type: string, minLength: 3, maxLength: 120 }
+        description: { type: string, maxLength: 1000 }
+        trigger: { $ref: '#/components/schemas/SafetyRuleTrigger' }
+        conditions: { $ref: '#/components/schemas/CmsSafetyRuleConditions' }
+        action: { $ref: '#/components/schemas/SafetyRuleAction' }
+        severity: { $ref: '#/components/schemas/SafetyRuleSeverity' }
+        priority: { type: integer, minimum: 0, maximum: 1000 }
+        reasonCode: { type: string, pattern: '^[a-z][a-z0-9_]{2,63}$' }
+
+    BannerPlacement:
+      type: string
+      enum: [home_hero, home_secondary]
+      description: Stable key; the label resolves client-side.
+
+    BannerStatus:
+      type: string
+      enum: [draft, scheduled, published, archived]
+      description: The lifecycle a person controls. `expired` is not settable.
+
+    BannerEffectiveStatus:
+      type: string
+      enum: [draft, scheduled, published, archived, expired]
+      description: >
+        What the banner is right now. `expired` is computed by the server from
+        the end time on every read, never stored — a stored copy would be wrong
+        between the moment the window closes and whatever noticed.
+
+    BannerDestination:
+      type: string
+      enum: [none, place, recommendation, plan_template, campaign, external_url]
+
+    CmsBanner:
+      type: object
+      required:
+        [
+          id,
+          name,
+          imageKey,
+          imageUrl,
+          destinationType,
+          placement,
+          priority,
+          status,
+          lifecycleStatus,
+          createdAt,
+          updatedAt,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, description: The editorial name. }
+        imageKey: { type: string }
+        imageUrl:
+          type: [string, 'null']
+          description: >
+            Where the image is readable. Null until media hosting is configured,
+            rather than a URL that would 404.
+        title: { type: string }
+        subtitle: { type: string }
+        ctaLabel: { type: string }
+        destinationType: { $ref: '#/components/schemas/BannerDestination' }
+        destinationValue: { type: string }
+        audience: { $ref: '#/components/schemas/ContentAudience' }
+        placement: { $ref: '#/components/schemas/BannerPlacement' }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
+        priority:
+          type: integer
+          description: Higher first, between banners competing for one placement.
+        status: { $ref: '#/components/schemas/BannerEffectiveStatus' }
+        lifecycleStatus:
+          allOf:
+            - $ref: '#/components/schemas/BannerStatus'
+          description: What a person set, as opposed to what the clock made of it.
+        createdByAdminId: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    CmsBannerPage:
+      type: object
+      required: [items, nextCursor, totalCount]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/CmsBanner' }
+        nextCursor: { type: [string, 'null'] }
+        totalCount: { type: integer }
+
+    CmsBannerCreate:
+      type: object
+      required: [name, imageKey, placement]
+      properties:
+        name: { type: string, minLength: 3, maxLength: 120 }
+        imageKey:
+          type: string
+          maxLength: 300
+          description: From `POST /cms/uploads`, purpose `banner_image`.
+        title: { type: string, maxLength: 120 }
+        subtitle: { type: string, maxLength: 200 }
+        ctaLabel: { type: string, maxLength: 40 }
+        destinationType: { $ref: '#/components/schemas/BannerDestination' }
+        destinationValue:
+          type: string
+          maxLength: 2000
+          description: Required unless `destinationType` is `none`, which takes nothing.
+        audience: { $ref: '#/components/schemas/ContentAudience' }
+        placement: { $ref: '#/components/schemas/BannerPlacement' }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
+        priority: { type: integer, minimum: 0, maximum: 1000 }
+
+    CmsBannerPatch:
+      type: object
+      description: Omitted fields are left alone.
+      properties:
+        name: { type: string, minLength: 3, maxLength: 120 }
+        imageKey: { type: string, maxLength: 300 }
+        title: { type: string, maxLength: 120 }
+        subtitle: { type: string, maxLength: 200 }
+        ctaLabel: { type: string, maxLength: 40 }
+        destinationType: { $ref: '#/components/schemas/BannerDestination' }
+        destinationValue: { type: string, maxLength: 2000 }
+        audience: { $ref: '#/components/schemas/ContentAudience' }
+        placement: { $ref: '#/components/schemas/BannerPlacement' }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
+        priority: { type: integer, minimum: 0, maximum: 1000 }
+
+    CampaignStatus:
+      type: string
+      enum: [draft, scheduled, sending, sent, cancelled, failed]
+      description: >
+        `sending` has no way back — once the worker has started handing messages
+        to the provider, some are already delivered.
+
+    CampaignAudience:
+      type: string
+      enum: [all, couple, group, platform]
+      description: >
+        Only what the backend can resolve from data it holds. `city`,
+        `app_version` and `custom_segment` from the mockup are absent on
+        purpose: nothing stores a user's city or their app version, and a
+        campaign aimed at a segment the server has to guess at reaches the wrong
+        people — the one failure with no undo.
+
+    CampaignDestination:
+      type: string
+      enum: [home, place, recommendation, plan_template, saved, external_url]
+      description: >
+        `plan_template` rather than `plan`: a campaign points every recipient at
+        the same thing, and a plan belongs to one room.
+
+    CmsCampaign:
+      type: object
+      required:
+        [
+          id,
+          name,
+          title,
+          body,
+          audienceType,
+          audienceFilter,
+          destinationType,
+          status,
+          sentCount,
+          failedCount,
+          createdAt,
+          updatedAt,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        name:
+          type: string
+          description: The editorial name. `title` is what lands on a screen.
+        title: { type: string }
+        body: { type: string }
+        imageKey:
+          type: string
+          description: Key from `POST /cms/uploads`, purpose `campaign_image`.
+        ctaLabel: { type: string }
+        audienceType: { $ref: '#/components/schemas/CampaignAudience' }
+        audienceFilter:
+          type: object
+          description: 'Closed per audience type. `platform` takes `{ platform }`; the rest take `{}`.'
+          additionalProperties: true
+        destinationType: { $ref: '#/components/schemas/CampaignDestination' }
+        destinationValue: { type: string }
+        status: { $ref: '#/components/schemas/CampaignStatus' }
+        scheduledAt: { type: string, format: date-time }
+        startedAt: { type: string, format: date-time }
+        completedAt: { type: string, format: date-time }
+        recipientCount:
+          type: integer
+          description: Resolved at send time, not at schedule time.
+        sentCount:
+          type: integer
+          description: >
+            How many the provider accepted. Not "seen", and not a guarantee of
+            delivery to a device.
+        failedCount: { type: integer }
+        lastError: { type: string }
+        testSendRequestedAt: { type: string, format: date-time }
+        testSendCompletedAt: { type: string, format: date-time }
+        createdByAdminId: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    CmsCampaignPage:
+      type: object
+      required: [items, nextCursor, totalCount]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/CmsCampaign' }
+        nextCursor: { type: [string, 'null'] }
+        totalCount: { type: integer }
+
+    CmsCampaignAudienceEstimate:
+      type: object
+      required: [campaignId, audienceType, estimatedRecipients, estimatedAt]
+      properties:
+        campaignId: { type: string, format: uuid }
+        audienceType: { $ref: '#/components/schemas/CampaignAudience' }
+        estimatedRecipients:
+          type: integer
+          description: Accounts with a registered device that match right now.
+        estimatedAt: { type: string, format: date-time }
+
+    CmsCampaignCreate:
+      type: object
+      required: [name, title, body, audienceType]
+      properties:
+        name: { type: string, minLength: 3, maxLength: 120 }
+        title: { type: string, maxLength: 80 }
+        body: { type: string, maxLength: 300 }
+        imageKey: { type: string, maxLength: 300 }
+        ctaLabel: { type: string, maxLength: 40 }
+        audienceType: { $ref: '#/components/schemas/CampaignAudience' }
+        audienceFilter: { type: object, additionalProperties: true }
+        destinationType: { $ref: '#/components/schemas/CampaignDestination' }
+        destinationValue:
+          type: string
+          maxLength: 2000
+          description: >
+            Required for `place`, `recommendation`, `plan_template` and
+            `external_url`; forbidden for `home` and `saved`.
+
+    CmsCampaignPatch:
+      type: object
+      description: Editable only while nothing has been sent.
+      properties:
+        name: { type: string, minLength: 3, maxLength: 120 }
+        title: { type: string, maxLength: 80 }
+        body: { type: string, maxLength: 300 }
+        imageKey: { type: string, maxLength: 300 }
+        ctaLabel: { type: string, maxLength: 40 }
+        audienceType: { $ref: '#/components/schemas/CampaignAudience' }
+        audienceFilter: { type: object, additionalProperties: true }
+        destinationType: { $ref: '#/components/schemas/CampaignDestination' }
+        destinationValue: { type: string, maxLength: 2000 }
 
     CmsUpload:
       type: object

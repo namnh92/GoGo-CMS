@@ -56,6 +56,12 @@ const CATALOG: NavLeaf[] = [
     match: (p) => p.startsWith('/collections'),
   },
   {
+    to: '/recommendations',
+    labelKey: 'nav.recommendations',
+    permission: 'recommendation.read',
+    match: (p) => p.startsWith('/recommendations'),
+  },
+  {
     to: '/imports',
     labelKey: 'nav.imports',
     permission: 'import.read',

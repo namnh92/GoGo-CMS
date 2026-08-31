@@ -7,6 +7,12 @@ export const queryKeys = {
 
   opsKpis: ['ops', 'kpis'] as const,
 
+  recommendations: {
+    all: ['recommendations'] as const,
+    list: (filters: Record<string, unknown>) => ['recommendations', 'list', filters] as const,
+    detail: (id: string) => ['recommendations', 'detail', id] as const,
+  },
+
   admins: {
     all: ['admins'] as const,
     list: (filters: Record<string, unknown>) => ['admins', 'list', filters] as const,
