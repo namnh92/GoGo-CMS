@@ -1,5 +1,7 @@
 export const styles = {
   summaryGrid: 'grid gap-4 sm:grid-cols-2 xl:grid-cols-5',
+  validationGrid: 'grid gap-4 p-5 pt-0 sm:grid-cols-2 xl:grid-cols-4',
+  validationFoot: 'border-t border-line px-5 py-3 text-[11px] text-text-subtle',
   quota:
     'flex items-start gap-2 rounded-compact border border-amber/45 bg-amber-soft px-3 py-2 text-xs text-text',
   headerActions: 'flex flex-wrap items-center gap-2',

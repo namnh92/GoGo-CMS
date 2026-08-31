@@ -42,6 +42,7 @@ import {
   startImport,
 } from './api'
 import { JobStatusBadge, RowStatusBadge, ROW_STATUSES } from './status'
+import { bucketCounts, VALIDATION_BUCKETS } from './validation'
 import { CandidateDrawer } from './candidateDrawer.view'
 import { styles } from './jobDetail.style'
 
@@ -413,6 +414,47 @@ export default function ImportJobScreen() {
                   tone={detail.totals.failed > 0 ? 'negative' : 'neutral'}
                 />
               </div>
+
+              {(() => {
+                const { buckets, inFlight, counted } = bucketCounts(detail.rowsByStatus)
+                // Nothing to roll up before the server has classified a row —
+                // four zeroes would read as "clean file", which is a lie.
+                if (counted === 0) return null
+                return (
+                  <Card>
+                    <CardHeader
+                      title={t('jobDetail.validation.title')}
+                      hint={t('jobDetail.validation.hint')}
+                    />
+                    <div className={styles.validationGrid}>
+                      {VALIDATION_BUCKETS.map((bucket) => (
+                        <KpiCard
+                          key={bucket}
+                          label={t(`jobDetail.validation.${bucket}` as const)}
+                          value={formatNumber(buckets[bucket], locale)}
+                          // The label names the bucket and the sub-line names
+                          // the statuses inside it, so the meaning never rests
+                          // on the tone alone.
+                          sub={t(`jobDetail.validation.${bucket}Hint` as const)}
+                          tone={
+                            bucket === 'valid'
+                              ? 'positive'
+                              : bucket === 'error' && buckets.error > 0
+                                ? 'negative'
+                                : 'neutral'
+                          }
+                        />
+                      ))}
+                    </div>
+                    <p className={styles.validationFoot}>
+                      {t('jobDetail.validation.scope', {
+                        counted: formatNumber(counted, locale),
+                        inFlight: formatNumber(inFlight, locale),
+                      })}
+                    </p>
+                  </Card>
+                )
+              })()}
 
               <Card>
                 <CardHeader
