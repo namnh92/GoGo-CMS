@@ -1458,6 +1458,34 @@ export const vi = {
   'auth.totpApps': 'Tương thích Google Authenticator, Microsoft Authenticator, 1Password, Authy.',
   'auth.envNoteDev': 'môi trường thử nghiệm, dữ liệu seed dùng chung.',
   'auth.envNoteProduction': 'mọi tài khoản bắt buộc MFA; thao tác được kiểm toán.',
+
+  'dashboard.satelliteError': 'Không tải được phần này. Các phần khác không bị ảnh hưởng.',
+  'dashboard.queues.title': 'Hàng chờ kiểm duyệt',
+  'dashboard.queues.hint': 'Đếm trên toàn bộ backlog trong database, không theo trang.',
+  'dashboard.queues.reviews': 'Đánh giá chờ duyệt',
+  'dashboard.queues.reports': 'Báo cáo chờ xử lý',
+  'dashboard.queues.checkins': 'Check-in chờ duyệt',
+  'dashboard.queues.community': 'Địa điểm cộng đồng',
+  'dashboard.queues.noPermission': 'Vai của bạn không đọc được phần này.',
+  'dashboard.imports.title': 'Import gần đây',
+  'dashboard.imports.hint': '5 job mới nhất từ /cms/place-imports.',
+  'dashboard.imports.empty': 'Chưa có job import nào.',
+  'dashboard.imports.cta': 'Mở quản lý import',
+  'dashboard.searchTrend.title': 'Tìm kiếm 0 kết quả — 7 ngày',
+  'dashboard.searchTrend.hint':
+    'Tỷ lệ theo ngày từ /cms/search-analytics; thanh chỉ minh hoạ, số nằm cạnh.',
+  'dashboard.observability.title': 'Giám sát & chi phí',
+  'dashboard.notConnected': 'Chưa nối',
+  'dashboard.monitoring.title': 'Sức khoẻ dịch vụ',
+  'dashboard.monitoring.body':
+    'Chưa có endpoint nào trong contract /v1 phục vụ trạng thái dịch vụ, hàng đợi worker hay tài nguyên hạ tầng. Màn này không hiển thị trạng thái "Healthy" tự bịa.',
+  'dashboard.monitoring.needHealth':
+    'trạng thái từng dịch vụ (api, db, redis, worker, provider) + độ trễ.',
+  'dashboard.monitoring.needQueues': 'độ sâu hàng đợi BullMQ, job lỗi, dead letter.',
+  'dashboard.costs.title': 'Chi phí nhà cung cấp',
+  'dashboard.costs.body':
+    'Chưa có nguồn billing nào được nối (Maps, OpenAI, AWS, Cloudflare, OneSignal). Không hiển thị số tiền ước lượng khi chưa có API thật.',
+  'dashboard.costs.needCosts': 'chi phí theo ngày/tháng theo provider + hạn mức quota.',
 } as const
 
 export type MessageKey = keyof typeof vi

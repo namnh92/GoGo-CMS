@@ -860,4 +860,32 @@ export const en: Partial<Record<MessageKey, string>> = {
   'auth.totpApps': 'Works with Google Authenticator, Microsoft Authenticator, 1Password, Authy.',
   'auth.envNoteDev': 'test environment with shared seed data.',
   'auth.envNoteProduction': 'MFA is mandatory for every account; actions are audited.',
+
+  'dashboard.satelliteError': 'This section failed to load. Other sections are unaffected.',
+  'dashboard.queues.title': 'Moderation queues',
+  'dashboard.queues.hint': 'Counted over the whole backlog in the database, not per page.',
+  'dashboard.queues.reviews': 'Reviews pending',
+  'dashboard.queues.reports': 'Reports pending',
+  'dashboard.queues.checkins': 'Check-ins pending',
+  'dashboard.queues.community': 'Community places',
+  'dashboard.queues.noPermission': 'Your role cannot read this section.',
+  'dashboard.imports.title': 'Recent imports',
+  'dashboard.imports.hint': 'Latest 5 jobs from /cms/place-imports.',
+  'dashboard.imports.empty': 'No import jobs yet.',
+  'dashboard.imports.cta': 'Open import manager',
+  'dashboard.searchTrend.title': 'Zero-result searches — 7 days',
+  'dashboard.searchTrend.hint':
+    'Daily rate from /cms/search-analytics; the bar is decoration, the number sits beside it.',
+  'dashboard.observability.title': 'Monitoring & costs',
+  'dashboard.notConnected': 'Not connected',
+  'dashboard.monitoring.title': 'Service health',
+  'dashboard.monitoring.body':
+    'No endpoint in the /v1 contract serves service status, worker queues or infrastructure resources. This screen does not invent a "Healthy" state.',
+  'dashboard.monitoring.needHealth':
+    'per-service status (api, db, redis, worker, providers) + latency.',
+  'dashboard.monitoring.needQueues': 'BullMQ queue depth, failed jobs, dead letters.',
+  'dashboard.costs.title': 'Provider costs',
+  'dashboard.costs.body':
+    'No billing source is connected (Maps, OpenAI, AWS, Cloudflare, OneSignal). No estimated dollar figures are shown without a real API.',
+  'dashboard.costs.needCosts': 'daily/monthly cost per provider + quota headroom.',
 }
