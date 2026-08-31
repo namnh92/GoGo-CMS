@@ -77,9 +77,6 @@ export const en: Partial<Record<MessageKey, string>> = {
 
   'moderation.filter.rating': 'Rating',
   'moderation.filter.ratingAll': 'Any rating',
-  'moderation.filter.search': 'Search review text',
-  'moderation.filter.count': 'Showing {shown} of {loaded} loaded',
-  'moderation.filter.noMatch': 'Nothing matches this filter',
   'moderation.history': 'Moderation history',
   'moderation.historyEmpty': 'No decision has been recorded for this item yet.',
 

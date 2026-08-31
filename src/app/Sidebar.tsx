@@ -7,7 +7,7 @@ import { isLeafActive, NAV_ENTRIES, type NavEntry, type NavLeaf } from './nav'
 import { ChevronRightIcon, LogoMark, LogoutIcon } from '@/shared/ui/icons'
 import { IconButton } from '@/shared/ui/Button'
 import { EnvBadge } from '@/shared/ui/EnvBadge'
-import { fetchModerationQueue } from '@/features/moderation/api'
+import { fetchModerationCounts } from '@/features/moderation/api'
 import { queryKeys } from '@/shared/api/queryKeys'
 import { cn } from '@/shared/ui/cn'
 
@@ -49,22 +49,22 @@ export function Sidebar() {
   const { session, can, logout } = useSession()
   const regionPrefix = useId()
 
-  // Badge count for the moderation entry, exactly like the mockup's "18".
-  const moderation = useQuery({
-    queryKey: queryKeys.moderation.queue(50),
-    queryFn: ({ signal }) => fetchModerationQueue(50, signal),
+  /**
+   * Badge count for the moderation entry.
+   *
+   * Read from `GET /cms/moderation/counts`, which counts the whole backlog in
+   * the database. The previous version summed the four arrays the unified queue
+   * returns — a number that was only correct while every queue fitted inside
+   * one `limit`, and the review backlog no longer does (GoGo-BE#219 shipped the
+   * per-type queues precisely because of that).
+   */
+  const counts = useQuery({
+    queryKey: queryKeys.moderation.counts,
+    queryFn: ({ signal }) => fetchModerationCounts(signal),
     enabled: can('moderation.read'),
     staleTime: 30_000,
   })
-  // The queue returns four independent lists and no total, so the badge sums
-  // what is actually pending rather than reading a stat the API never sends.
-  const queue = moderation.data
-  const pendingCount = queue
-    ? queue.reviews.length +
-      queue.reports.length +
-      queue.checkins.length +
-      queue.communityPlaces.length
-    : 0
+  const pendingCount = counts.data?.total ?? 0
   const badgeFor = (leaf: NavLeaf): number => (leaf.to === '/moderation' ? pendingCount : 0)
 
   // Read once: a group holding the current route is forced open on mount, but

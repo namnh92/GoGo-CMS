@@ -1,7 +1,9 @@
 import { apiFetch, apiFetchParsed, newIdempotencyKey } from '@/shared/api/client'
 import {
+  cmsModerationCountsSchema,
   cmsModerationReviewPageSchema,
   moderationQueueSchema,
+  type CmsModerationCounts,
   type CmsModerationReviewPage,
   type ModerationQueue,
   type ReviewModerationStatus,
@@ -54,6 +56,18 @@ export function fetchModerationReviews(
     },
     signal,
   })
+}
+
+/**
+ * `GET /cms/moderation/counts` — the number behind the sidebar badge.
+ *
+ * Counted in the database over the whole backlog, so it does not change with
+ * the page size the console happens to ask for. Summing the unified queue's
+ * four arrays was only ever correct while every queue fitted in one page, and
+ * the review backlog no longer does.
+ */
+export function fetchModerationCounts(signal?: AbortSignal): Promise<CmsModerationCounts> {
+  return apiFetchParsed(cmsModerationCountsSchema, '/cms/moderation/counts', { signal })
 }
 
 /**

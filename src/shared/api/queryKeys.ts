@@ -36,6 +36,8 @@ export const queryKeys = {
   moderation: {
     all: ['moderation'] as const,
     queue: (limit: number) => ['moderation', 'queue', limit] as const,
+    /** `GET /cms/moderation/counts` — backlog totals, independent of page size. */
+    counts: ['moderation', 'counts'] as const,
     /** Decisions already recorded against one review, read from the audit log. */
     history: (reviewId: string) => ['moderation', 'history', reviewId] as const,
     /** `GET /cms/moderation/reviews` — filters are part of the key. */
