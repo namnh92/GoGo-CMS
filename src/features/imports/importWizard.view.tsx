@@ -14,7 +14,12 @@ import { Select, TextInput } from '@/shared/ui/Field'
 import { Stepper } from '@/shared/ui/Stepper'
 import { PermissionDeniedState, useErrorMessage } from '@/shared/ui/State'
 import { useToast } from '@/shared/ui/Toast'
-import { MAPPABLE_FIELDS, type ImportMode } from '@/shared/api/contracts-import'
+import {
+  MAPPABLE_FIELDS,
+  REQUIRED_MAPPABLE_FIELDS,
+  type ImportCanonicalField,
+  type ImportMode,
+} from '@/shared/api/contracts-import'
 import { createFileImport, createSheetImport } from './api'
 import { guessMapping, readCsvPreview, type CsvPreview } from './csvPreview'
 import { styles } from './importWizard.style'
@@ -39,7 +44,7 @@ export default function ImportWizardScreen() {
   const [sourceKind, setSourceKind] = useState<SourceKind>('file')
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<CsvPreview | null>(null)
-  const [mapping, setMapping] = useState<Record<string, string>>({})
+  const [mapping, setMapping] = useState<Record<string, ImportCanonicalField>>({})
   const [sheetUrl, setSheetUrl] = useState('')
   const [sheetTabs, setSheetTabs] = useState('')
   const [defaultCity, setDefaultCity] = useState('')
@@ -101,9 +106,15 @@ export default function ImportWizardScreen() {
   }
 
   const mappedFields = new Set(Object.values(mapping))
-  const missingRequired = MAPPABLE_FIELDS.filter(
-    (field) => field.required && !mappedFields.has(field.field),
-  ).map((field) => field.field)
+  // Only fields the operator must actually supply. `source_row_id` is not one:
+  // the server derives it from row position, so demanding a column for it
+  // would block a file that imports perfectly well. `city` is not one either —
+  // a default city satisfies it without a column.
+  const missingRequired = REQUIRED_MAPPABLE_FIELDS.filter((field) => !mappedFields.has(field))
+
+  // Headers the operator left unmapped: their cells are dropped, so say which
+  // before the import runs rather than after.
+  const unmappedHeaders = (preview?.headers ?? []).filter((header) => !mapping[header])
 
   // Mapping is only enforceable when the headers are known (CSV preview).
   const mappingBlocked = Boolean(preview) && missingRequired.length > 0
@@ -259,16 +270,16 @@ export default function ImportWizardScreen() {
                                 setMapping((current) => {
                                   const next = { ...current }
                                   if (event.target.value === '') delete next[header]
-                                  else next[header] = event.target.value
+                                  else next[header] = event.target.value as ImportCanonicalField
                                   return next
                                 })
                               }
                             >
                               <option value="">{t('wizard.mappingIgnore')}</option>
                               {MAPPABLE_FIELDS.map((field) => (
-                                <option key={field.field} value={field.field}>
-                                  {field.field}
-                                  {field.required ? ' *' : ''}
+                                <option key={field} value={field}>
+                                  {field}
+                                  {REQUIRED_MAPPABLE_FIELDS.includes(field) ? ' *' : ''}
                                 </option>
                               ))}
                             </select>
@@ -289,6 +300,20 @@ export default function ImportWizardScreen() {
                 <p role="alert" className={styles.warn}>
                   <span aria-hidden="true">⚠</span>
                   {t('wizard.mappingRequired')}: {missingRequired.join(', ')}
+                </p>
+              ) : null}
+
+              {preview ? (
+                <p className={styles.note}>
+                  <span aria-hidden="true">ℹ</span>
+                  {t('wizard.rowIdDerived')}
+                </p>
+              ) : null}
+
+              {unmappedHeaders.length > 0 ? (
+                <p className={styles.note}>
+                  <span aria-hidden="true">ℹ</span>
+                  {t('wizard.unmapped', { headers: unmappedHeaders.join(', ') })}
                 </p>
               ) : null}
 

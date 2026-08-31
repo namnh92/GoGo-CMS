@@ -17,4 +17,8 @@ export const styles = {
   actions: 'flex items-center justify-end gap-1',
   unmapped: 'flex flex-wrap gap-1',
   unmappedChip: 'rounded-pill bg-amber-soft px-2 py-0.5 font-mono text-[10px] text-text',
+  // A missing required column blocked rows; an unmapped header only dropped a
+  // cell. Same shape, different weight, so the two are not read as one thing.
+  missingChip:
+    'rounded-pill bg-danger-soft px-2 py-0.5 font-mono text-[10px] font-semibold text-text',
 } as const

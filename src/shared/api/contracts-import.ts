@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { Schemas } from './generated'
 
 /**
  * Ingestion shapes. These DO exist in `openapi/gogo.v1.yaml`
@@ -54,7 +55,13 @@ export const importJobSchema = importJobSummarySchema.extend({
   startedAt: z.string().nullish(),
   cancelledAt: z.string().nullish(),
   reused: z.boolean().default(false),
+  /**
+   * Parse-time diagnostics, `tabName:value`. Both used to arrive only on the
+   * create response — which the wizard drops when it navigates to the detail
+   * screen — so the chips below rendered an array that was always empty.
+   */
   unmappedHeaders: z.array(z.string()).default([]),
+  missingRequiredColumns: z.array(z.string()).default([]),
   retriedRows: z.number().int().nullish(),
 })
 export type ImportJob = z.infer<typeof importJobSchema>
@@ -139,22 +146,79 @@ export const importPublishResultSchema = z.object({
 })
 export type ImportPublishResult = z.infer<typeof importPublishResultSchema>
 
-/** Canonical fields a source column can be mapped onto (spec §9.2). */
-export const MAPPABLE_FIELDS = [
-  { field: 'name', required: true },
-  { field: 'address', required: true },
-  { field: 'city', required: false },
-  { field: 'district', required: false },
-  { field: 'googleMapsUrl', required: false },
-  { field: 'category', required: false },
-  { field: 'priceMin', required: false },
-  { field: 'priceMax', required: false },
-  { field: 'phone', required: false },
-  { field: 'website', required: false },
-  { field: 'note', required: false },
-] as const
+/**
+ * The canonical vocabulary, owned by GoGo-BE and published as
+ * `ImportCanonicalField`. These are the exact values that go on the wire —
+ * there is no camelCase translation layer, because there is nothing to
+ * translate to: `google_maps_url` is the field's name.
+ *
+ * This replaces a hand-written list that had drifted into a second vocabulary
+ * (`googleMapsUrl`, `priceMin`) plus three fields the server has no column for
+ * (`address`, `phone`, `website`). The server used to discard anything it did
+ * not recognise and auto-detect instead, so the mapping screen silently did
+ * nothing; it now answers 400 `MAPPING_FIELD_UNKNOWN`, which is why this list
+ * can no longer be maintained by hand.
+ */
+export type ImportCanonicalField = Schemas['ImportCanonicalField']
 
-export type MappableField = (typeof MAPPABLE_FIELDS)[number]['field']
+export const IMPORT_CANONICAL_FIELDS = [
+  'source_row_id',
+  'name',
+  'city',
+  'district',
+  'google_maps_url',
+  'google_maps_query',
+  'category',
+  'category_raw',
+  'price_min',
+  'price_max',
+  'price_unit',
+  'price_raw',
+  'audiences',
+  'audiences_raw',
+  'vibes',
+  'vibes_raw',
+  'highlight',
+  'note',
+] as const satisfies readonly ImportCanonicalField[]
+
+/**
+ * Compile-time exhaustiveness: `satisfies` proves every entry above is a real
+ * canonical field, and this proves none is missing. Regenerating a spec that
+ * adds a field breaks the build here rather than quietly leaving it out of the
+ * wizard.
+ */
+type UnlistedCanonicalField = Exclude<
+  ImportCanonicalField,
+  (typeof IMPORT_CANONICAL_FIELDS)[number]
+>
+const _everyFieldIsListed: UnlistedCanonicalField extends never ? true : never = true
+void _everyFieldIsListed
+
+/**
+ * Fields the server fills in by itself, so the wizard must not present them as
+ * something an operator has to map or is missing. `source_row_id` is derived
+ * from row position when a sheet has no column for it (GoGo-BE#274) — it stays
+ * in the canonical vocabulary for API callers that do supply real ids.
+ */
+export const SYSTEM_DERIVED_FIELDS: readonly ImportCanonicalField[] = ['source_row_id']
+
+/** Fields an operator can choose in the mapping step. */
+export const MAPPABLE_FIELDS: readonly ImportCanonicalField[] = IMPORT_CANONICAL_FIELDS.filter(
+  (field) => !SYSTEM_DERIVED_FIELDS.includes(field),
+)
+
+/**
+ * Required columns, mirroring `resolveMapping`'s own list. `source_row_id` is
+ * absent on purpose: the server derives it. `city` is required as a *value*,
+ * not as a column — a default city satisfies it — so the server decides, and
+ * the wizard reads `missingRequiredColumns` rather than guessing.
+ */
+export const REQUIRED_MAPPABLE_FIELDS: readonly ImportCanonicalField[] = ['category']
+
+export function isCanonicalField(value: string): value is ImportCanonicalField {
+  return (IMPORT_CANONICAL_FIELDS as readonly string[]).includes(value)
+}
 
 /** A job is still moving — the detail screen polls while this is true. */
 export function isJobLive(status: ImportJobStatus): boolean {

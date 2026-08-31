@@ -472,6 +472,20 @@ export default function ImportJobScreen() {
                       rows: formatNumber(detail.totals.rows, locale),
                     })}
                   />
+                  {detail.missingRequiredColumns.length > 0 ? (
+                    <div className="mt-3">
+                      <p className="mb-1 text-[11px] font-semibold text-text-muted">
+                        {t('jobDetail.missingRequiredColumns')}
+                      </p>
+                      <div className={styles.unmapped}>
+                        {detail.missingRequiredColumns.map((column) => (
+                          <span key={column} className={styles.missingChip}>
+                            {column}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                   {detail.unmappedHeaders.length > 0 ? (
                     <div className="mt-3">
                       <p className="mb-1 text-[11px] font-semibold text-text-muted">

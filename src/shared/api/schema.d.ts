@@ -3198,7 +3198,7 @@ export interface paths {
         };
         /**
          * Ops: background queue depth
-         * @description The BullMQ queues plus `outbox_events`, the transactional outbox — a queue in every sense that matters here, living in Postgres where BullMQ cannot see it. Omitting it would hide the backlog that actually delays notifications.
+         * @description `outbox_events`, the transactional outbox — a queue in every sense that matters here, living in Postgres. It is the only row now: the worker stopped using a broker (GoGo-BE#262), so there are no broker queues left to report.
          *
          *     A broker that is unreachable contributes no rows rather than rows of zeros; `/cms/ops/health` is where that is reported.
          */
@@ -3411,7 +3411,7 @@ export interface components {
             /** @description Waiting plus delayed. */
             pending: number;
             running: number;
-            /** @description Failures finished in the last 24 hours — computed from job timestamps, not from BullMQ's retained `failed` count, which answers "how many are still on disk" and moves when retention changes. */
+            /** @description Failures finished in the last 24 hours, computed from timestamps — not from a retained failure count, which answers "how many are still on disk" and moves when retention changes. */
             failed24h: number;
             /** @description True when the scan hit its cap, so `failed24h` is a floor rather than a count. A truncated number that does not say so is what an incident review discovers afterwards. */
             failed24hTruncated: boolean;
@@ -3997,6 +3997,11 @@ export interface components {
             /** Format: date-time */
             completedAt?: string;
         };
+        /**
+         * @description A column an import source can be mapped onto. Generated from `CANONICAL_FIELDS` in `libs/modules/ingestion/domain/column-mapping.ts`, which is the single source of truth; `import-parsing.spec.ts` fails if the two drift. A mapping naming anything outside this list is rejected with `MAPPING_FIELD_UNKNOWN` — never silently ignored.
+         * @enum {string}
+         */
+        ImportCanonicalField: "source_row_id" | "name" | "city" | "district" | "google_maps_url" | "google_maps_query" | "category" | "category_raw" | "price_min" | "price_max" | "price_unit" | "price_raw" | "audiences" | "audiences_raw" | "vibes" | "vibes_raw" | "highlight" | "note";
         ImportJob: components["schemas"]["ImportJobSummary"] & {
             defaultCity?: string | null;
             rowsByStatus?: {
@@ -4008,7 +4013,10 @@ export interface components {
             cancelledAt?: string;
             /** @description True when identical bytes/mode returned the existing job. */
             reused?: boolean;
+            /** @description Headers the parser recognised no canonical field for, as `tabName:header`. Their cells are dropped, never guessed. */
             unmappedHeaders?: string[];
+            /** @description Required canonical fields no header covers, as `tabName:field`. `source_row_id` here means row identities were derived from position and will not survive a row reorder. */
+            missingRequiredColumns?: string[];
         };
         ImportCandidate: {
             googlePlaceId?: string;
@@ -6995,7 +7003,7 @@ export interface operations {
                      */
                     mode?: "dry_run" | "create_drafts" | "publish_approved" | "update_existing";
                     defaultCity?: string;
-                    /** @description JSON object mapping raw header → canonical field */
+                    /** @description JSON object mapping raw header → `ImportCanonicalField`. Multipart carries it as a string, so the enum cannot be expressed here; the values are validated against `ImportCanonicalField` all the same, and an unknown one is a 400 `MAPPING_FIELD_UNKNOWN`. A header left out of the object is auto-detected; a header mapped to `""` is ignored. */
                     mapping?: string;
                 };
             };
@@ -7036,8 +7044,9 @@ export interface operations {
                     tabCityMapping?: {
                         [key: string]: string;
                     };
+                    /** @description Raw header → canonical field. A header left out is auto-detected; a header mapped to `""` is ignored. An unknown field is a 400 `MAPPING_FIELD_UNKNOWN`. */
                     mapping?: {
-                        [key: string]: string;
+                        [key: string]: components["schemas"]["ImportCanonicalField"];
                     };
                 };
             };

@@ -1,3 +1,5 @@
+import type { ImportCanonicalField } from '@/shared/api/contracts-import'
+
 /**
  * Minimal RFC-4180 reader used ONLY to preview a CSV's headers and first rows
  * so the operator can map columns before the file is sent. The server is still
@@ -61,27 +63,42 @@ export async function readCsvPreview(file: File): Promise<CsvPreview> {
   return parseCsvPreview(text)
 }
 
-const HEADER_HINTS: Record<string, string[]> = {
-  name: ['name', 'ten', 'tên', 'place', 'địa điểm', 'dia diem'],
-  address: ['address', 'dia chi', 'địa chỉ', 'diachi'],
-  city: ['city', 'thanh pho', 'thành phố', 'tinh', 'tỉnh'],
-  district: ['district', 'quan', 'quận', 'huyen', 'huyện'],
-  googleMapsUrl: ['google', 'maps', 'link', 'url'],
-  category: ['category', 'loai', 'loại', 'nhom', 'nhóm'],
-  priceMin: ['price_min', 'gia_min', 'giá thấp', 'min'],
-  priceMax: ['price_max', 'gia_max', 'giá cao', 'max'],
-  phone: ['phone', 'sdt', 'điện thoại', 'dien thoai'],
-  website: ['website', 'web', 'site'],
-  note: ['note', 'ghi chu', 'ghi chú'],
-}
+/**
+ * Header text → canonical field. The key is always the **wire value** the
+ * server accepts; the hints are only ever local aliases used to guess. Keeping
+ * the two apart is the point: the previous version guessed toward a private
+ * vocabulary (`googleMapsUrl`, `priceMin`) and three fields the server has no
+ * column for, and the server silently dropped every one of them.
+ *
+ * `source_row_id` is not guessed at — the server derives it.
+ */
+const HEADER_HINTS: { field: ImportCanonicalField; hints: string[] }[] = [
+  { field: 'name', hints: ['name', 'ten', 'tên', 'place', 'địa điểm', 'dia diem'] },
+  { field: 'city', hints: ['city', 'thanh pho', 'thành phố', 'tinh', 'tỉnh'] },
+  { field: 'district', hints: ['district', 'quan', 'quận', 'huyen', 'huyện', 'khu vuc'] },
+  { field: 'google_maps_url', hints: ['google', 'maps', 'link', 'url'] },
+  { field: 'category', hints: ['category', 'loai', 'loại', 'nhom', 'nhóm'] },
+  { field: 'price_min', hints: ['price_min', 'gia_min', 'giá thấp', 'min'] },
+  { field: 'price_max', hints: ['price_max', 'gia_max', 'giá cao', 'max'] },
+  { field: 'price_unit', hints: ['price_unit', 'don vi gia', 'đơn vị giá'] },
+  { field: 'price_raw', hints: ['price_raw', 'khoang gia', 'khoảng giá'] },
+  { field: 'audiences', hints: ['audiences', 'doi tuong', 'đối tượng'] },
+  { field: 'audiences_raw', hints: ['di cung ai', 'đi cùng ai'] },
+  { field: 'vibes', hints: ['vibes'] },
+  { field: 'vibes_raw', hints: ['vibe', 'bau khong khi', 'bầu không khí'] },
+  { field: 'highlight', hints: ['highlight', 'mon highlight', 'món highlight'] },
+  // `note`, not `notes` — the singular is the canonical field, and a sheet
+  // column called `notes` was being dropped for want of this alias.
+  { field: 'note', hints: ['note', 'notes', 'ghi chu', 'ghi chú'] },
+]
 
 /** Best-effort first guess. The operator always confirms before submitting. */
-export function guessMapping(headers: string[]): Record<string, string> {
-  const mapping: Record<string, string> = {}
-  const taken = new Set<string>()
+export function guessMapping(headers: string[]): Record<string, ImportCanonicalField> {
+  const mapping: Record<string, ImportCanonicalField> = {}
+  const taken = new Set<ImportCanonicalField>()
   for (const header of headers) {
     const normalized = header.toLowerCase().trim()
-    for (const [field, hints] of Object.entries(HEADER_HINTS)) {
+    for (const { field, hints } of HEADER_HINTS) {
       if (taken.has(field)) continue
       if (hints.some((hint) => normalized.includes(hint))) {
         mapping[header] = field
