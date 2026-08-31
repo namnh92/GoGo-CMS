@@ -1439,6 +1439,25 @@ export const vi = {
   'campaigns.destination.plan_template': 'Mẫu lịch trình',
   'campaigns.destination.saved': 'Danh sách đã lưu',
   'campaigns.destination.external_url': 'Link ngoài',
+
+  'auth.brandHeadline': 'Trung tâm nội dung & vận hành',
+  'auth.brandLede':
+    'Quản lý địa điểm, nội dung, kiểm duyệt và sức khoẻ hệ thống của GoGo — một nơi, đủ quyền hạn, có kiểm toán.',
+  'auth.bullet.places': 'Quản lý địa điểm và nội dung',
+  'auth.bullet.moderation': 'Kiểm duyệt Trust & Safety',
+  'auth.bullet.observability': 'Theo dõi vận hành hệ thống',
+  'auth.bullet.rbac': 'Phân quyền RBAC và nhật ký kiểm toán',
+  'auth.brandFoot': 'cms-dev.gogo.id.vn · môi trường {env}',
+  'auth.continue': 'Tiếp tục',
+  'auth.verifySubmit': 'Xác thực & đăng nhập',
+  'auth.mfaTitle': 'Xác thực hai lớp',
+  'auth.mfaSubtitle': 'Nhập mã 6 số từ ứng dụng xác thực của bạn.',
+  'auth.backToCredentials': 'Quay lại nhập mật khẩu',
+  'auth.showPassword': 'Hiện mật khẩu',
+  'auth.hidePassword': 'Ẩn mật khẩu',
+  'auth.totpApps': 'Tương thích Google Authenticator, Microsoft Authenticator, 1Password, Authy.',
+  'auth.envNoteDev': 'môi trường thử nghiệm, dữ liệu seed dùng chung.',
+  'auth.envNoteProduction': 'mọi tài khoản bắt buộc MFA; thao tác được kiểm toán.',
 } as const
 
 export type MessageKey = keyof typeof vi

@@ -24,6 +24,14 @@ const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 /** The refresh cookie is path-scoped to exactly this endpoint (SEC-003). */
 const REFRESH_PATH = '/cms/auth/refresh'
 
+/**
+ * A 401 from the login endpoint is a credential answer — wrong password,
+ * MFA_REQUIRED — not a dead session. Retrying it through a refresh would be a
+ * wasted round-trip, and announcing "session expired" over it would tell a
+ * person mid-sign-in that something else went wrong.
+ */
+const LOGIN_PATH = '/cms/auth/login'
+
 function readCookie(name: string): string | null {
   const prefix = `${name}=`
   for (const part of document.cookie.split('; ')) {
@@ -187,6 +195,7 @@ export async function apiFetch<T = unknown>(
      * there. Dropping straight to the login screen would throw away work an
      * editor had open.
      */
+    if (path === LOGIN_PATH) throw await readError(response)
     if (allowRefresh && path !== REFRESH_PATH && (await refreshSession())) {
       return apiFetch<T>(path, options, false)
     }

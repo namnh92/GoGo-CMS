@@ -1,19 +1,5 @@
 import { expect, test } from '@playwright/test'
-
-/**
- * Release-gate flow #7 from quality-gates.md: a role must not be able to
- * invoke an action it does not hold. The UI half is checked here; the API
- * half is GoGo-BE's contract test — hiding a button is never the control.
- *
- * The mock login derives the role from the email local part.
- */
-async function signIn(page: import('@playwright/test').Page, email: string) {
-  await page.goto('/login')
-  await page.getByLabel(/Email công việc/).fill(email)
-  await page.getByLabel(/Mật khẩu/).fill('correct-horse-battery')
-  await page.getByLabel(/Mã xác thực/).fill('123456')
-  await page.getByRole('button', { name: 'Đăng nhập' }).click()
-}
+import { signIn } from './helpers'
 
 test('editor lands on the catalog and cannot reach ranking settings', async ({ page }) => {
   await signIn(page, 'editor@gogo.vn')
