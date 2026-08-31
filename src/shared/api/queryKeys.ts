@@ -33,6 +33,8 @@ export const queryKeys = {
     queue: (limit: number) => ['moderation', 'queue', limit] as const,
     /** Decisions already recorded against one review, read from the audit log. */
     history: (reviewId: string) => ['moderation', 'history', reviewId] as const,
+    /** `GET /cms/moderation/reviews` — filters are part of the key. */
+    reviews: (filters: Record<string, unknown>) => ['moderation', 'reviews', filters] as const,
   },
 
   imports: {

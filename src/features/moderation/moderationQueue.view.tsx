@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useI18n, useT } from '@/shared/i18n/i18n'
 import { queryKeys } from '@/shared/api/queryKeys'
@@ -10,7 +10,7 @@ import { PageBody, PageHeader } from '@/app/PageHeader'
 import { Card, CardBody, CardHeader, KpiCard } from '@/shared/ui/Card'
 import { Button } from '@/shared/ui/Button'
 import { Tabs, type TabItem } from '@/shared/ui/Tabs'
-import { InlineSelect, SearchInput, TextArea } from '@/shared/ui/Field'
+import { TextArea } from '@/shared/ui/Field'
 import {
   AsyncBoundary,
   EmptyState,
@@ -19,30 +19,19 @@ import {
 } from '@/shared/ui/State'
 import { useToast } from '@/shared/ui/Toast'
 import { ShieldOffIcon, StarIcon } from '@/shared/ui/icons'
-import { AuditTrail } from '@/shared/ui/AuditTrail'
 import { TakedownDialog } from '@/features/emergency/takedownDialog.view'
 import type { TakedownTarget } from '@/features/emergency/api'
 import type { ModerationQueue } from '@/shared/api/contracts'
-import {
-  decideCheckin,
-  decideReport,
-  decideReview,
-  fetchModerationQueue,
-  fetchReviewHistory,
-} from './api'
+import { decideCheckin, decideReport, fetchModerationQueue } from './api'
 import { styles } from './moderationQueue.style'
 
-type TabId = 'reviews' | 'reports' | 'checkins' | 'community'
+type TabId = 'reports' | 'checkins' | 'community'
 
 const MIN_REASON = 3
 const MAX_REASON = 500
 
 /** Decisions each queue accepts, straight from `CmsModerationController`. */
 const DECISIONS = {
-  reviews: [
-    { key: 'published', variant: 'success' as const },
-    { key: 'rejected', variant: 'danger' as const },
-  ],
   reports: [
     { key: 'actioned', variant: 'success' as const },
     { key: 'dismissed', variant: 'secondary' as const },
@@ -58,8 +47,6 @@ type QueueItem = {
   title: string
   meta: string
   body: string | null
-  /** Reviews only: the star count, kept for the rating filter. */
-  rating?: number | null
   /** Set on reports: what the report points at, so it can be taken down. */
   takedown?: { target: TakedownTarget; id: string } | null
 }
@@ -80,18 +67,6 @@ function toItems(
   t: ReturnType<typeof useT>,
 ): QueueItem[] {
   if (!queue) return []
-  if (tab === 'reviews') {
-    return queue.reviews.map((review) => ({
-      id: review.id,
-      title:
-        review.rating != null
-          ? t('moderation.rating', { value: review.rating })
-          : t('moderation.tab.reviews'),
-      meta: review.createdAt,
-      body: review.text ?? null,
-      rating: review.rating ?? null,
-    }))
-  }
   if (tab === 'reports') {
     return queue.reports.map((report) => ({
       id: report.id,
@@ -134,18 +109,10 @@ export default function ModerationQueueScreen() {
   const online = useOnline()
   const describeError = useErrorMessage()
 
-  // `/moderation/reviews/:reviewId` is a shareable handle on one review — the
-  // "detail view" this queue was missing, without a second screen that would
-  // duplicate the decision form, the takedown path and the privacy rules.
-  const { reviewId } = useParams<{ reviewId?: string }>()
-  const [tab, setTab] = useState<TabId>(reviewId ? 'reviews' : 'reports')
-  const [activeId, setActiveId] = useState<string | null>(reviewId ?? null)
+  const [tab, setTab] = useState<TabId>('reports')
+  const [activeId, setActiveId] = useState<string | null>(null)
   const [reason, setReason] = useState('')
   const [takedownOpen, setTakedownOpen] = useState(false)
-  // Narrowing happens over the page already loaded, because the contract has
-  // no filter or cursor to push it to the server (GoGo-BE#219).
-  const [ratingFilter, setRatingFilter] = useState('all')
-  const [reviewSearch, setReviewSearch] = useState('')
 
   // Reads are hierarchical, so any staff role can open the queue. Deciding is
   // exact-match and belongs to the moderator (and super_admin).
@@ -160,54 +127,16 @@ export default function ModerationQueueScreen() {
 
   const items = useMemo(() => toItems(query.data, tab, t), [query.data, tab, t])
 
-  const visibleItems = useMemo(() => {
-    if (tab !== 'reviews') return items
-    const term = reviewSearch.trim().toLocaleLowerCase()
-    return items.filter((item) => {
-      if (ratingFilter !== 'all' && String(item.rating ?? '') !== ratingFilter) return false
-      if (term && !(item.body ?? '').toLocaleLowerCase().includes(term)) return false
-      return true
-    })
-  }, [items, tab, ratingFilter, reviewSearch])
-
-  const active = visibleItems.find((item) => item.id === activeId) ?? visibleItems[0] ?? null
-
-  // Back/forward and a pasted link both land on the right review.
-  useEffect(() => {
-    if (!reviewId) return
-    setTab('reviews')
-    setActiveId(reviewId)
-  }, [reviewId])
+  const active = items.find((item) => item.id === activeId) ?? items[0] ?? null
 
   const changeTab = (next: TabId) => {
     setTab(next)
     setActiveId(null)
     setReason('')
-    // Leaving the reviews tab drops the review out of the URL, so a reload
-    // does not bounce back to a tab the operator just left.
-    if (next !== 'reviews' && reviewId) navigate('/moderation', { replace: true })
   }
-
-  const selectItem = (id: string) => {
-    setActiveId(id)
-    if (tab === 'reviews') navigate(`/moderation/reviews/${id}`, { replace: true })
-  }
-
-  /**
-   * Who decided what about this review, from `GET /cms/audit`. The queue lists
-   * only pending items, so a trail here means the row was acted on and the
-   * list has not refetched yet — worth seeing before deciding again.
-   */
-  const history = useQuery({
-    queryKey: queryKeys.moderation.history(active?.id ?? ''),
-    queryFn: ({ signal }) => fetchReviewHistory(active?.id ?? '', signal),
-    enabled: canRead && tab === 'reviews' && Boolean(active?.id),
-    staleTime: 30_000,
-  })
 
   const decide = useMutation({
     mutationFn: ({ id, decision }: { id: string; decision: string }) => {
-      if (tab === 'reviews') return decideReview(id, decision as 'published' | 'rejected', reason)
       if (tab === 'reports') return decideReport(id, decision as 'actioned' | 'dismissed', reason)
       return decideCheckin(id, decision as 'approved' | 'rejected', reason)
     },
@@ -233,7 +162,6 @@ export default function ModerationQueueScreen() {
 
   const queue = query.data
   const tabs: TabItem<TabId>[] = [
-    { id: 'reviews', label: t('moderation.tab.reviews'), count: queue?.reviews.length },
     { id: 'reports', label: t('moderation.tab.reports'), count: queue?.reports.length },
     { id: 'checkins', label: t('moderation.tab.checkins'), count: queue?.checkins.length },
     { id: 'community', label: t('moderation.tab.community'), count: queue?.communityPlaces.length },
@@ -253,6 +181,12 @@ export default function ModerationQueueScreen() {
       <PageHeader
         breadcrumb={[{ label: t('app.suffix') }, { label: t('moderation.breadcrumb') }]}
         title={t('moderation.title')}
+        actions={
+          // Reviews have their own filtered, paged queue now; this is the way in.
+          <Button variant="secondary" size="sm" onClick={() => navigate('/moderation/reviews')}>
+            {t('reviews.title')}
+          </Button>
+        }
       />
       <PageBody>
         <div className={styles.kpiGrid}>
@@ -260,6 +194,7 @@ export default function ModerationQueueScreen() {
           <KpiCard
             label={t('moderation.kpi.reviews')}
             value={formatNumber(queue?.reviews.length ?? 0, locale)}
+            sub={t('moderation.reviewsMoved')}
           />
           <KpiCard
             label={t('moderation.kpi.reports')}
@@ -275,53 +210,13 @@ export default function ModerationQueueScreen() {
               onChange={changeTab}
               label={t('moderation.breadcrumb')}
             />
-            {tab === 'reviews' ? (
-              <div className={styles.filterBar}>
-                <InlineSelect
-                  label={t('moderation.filter.rating')}
-                  value={ratingFilter}
-                  onChange={(event) => setRatingFilter(event.target.value)}
-                >
-                  <option value="all">{t('moderation.filter.ratingAll')}</option>
-                  {[5, 4, 3, 2, 1].map((star) => (
-                    <option key={star} value={String(star)}>
-                      {t('moderation.rating', { value: star })}
-                    </option>
-                  ))}
-                </InlineSelect>
-                <SearchInput
-                  label={t('moderation.filter.search')}
-                  placeholder={t('moderation.filter.search')}
-                  className="w-56"
-                  value={reviewSearch}
-                  onChange={(event) => setReviewSearch(event.target.value)}
-                />
-                {/* Says what it is: a narrowing of the page in hand, not a
-                    server-side query with a total behind it. */}
-                <span className={styles.filterCount} role="status" aria-live="polite">
-                  {t('moderation.filter.count', {
-                    shown: formatNumber(visibleItems.length, locale),
-                    loaded: formatNumber(items.length, locale),
-                  })}
-                </span>
-              </div>
-            ) : null}
             <AsyncBoundary
               status={query.status}
               error={query.error}
-              data={visibleItems}
+              data={items}
               isEmpty={(list) => list.length === 0}
               onRetry={() => void query.refetch()}
-              empty={
-                <EmptyState
-                  title={
-                    tab === 'reviews' && items.length > 0
-                      ? t('moderation.filter.noMatch')
-                      : t('moderation.empty')
-                  }
-                  hint={null}
-                />
-              }
+              empty={<EmptyState title={t('moderation.empty')} hint={null} />}
             >
               {(list) => (
                 <ul>
@@ -330,7 +225,7 @@ export default function ModerationQueueScreen() {
                       <button
                         type="button"
                         aria-pressed={active?.id === item.id}
-                        onClick={() => selectItem(item.id)}
+                        onClick={() => setActiveId(item.id)}
                         className={`${styles.item} ${
                           active?.id === item.id ? styles.itemActive : styles.itemIdle
                         }`}
@@ -368,7 +263,7 @@ export default function ModerationQueueScreen() {
                     <p className={styles.quote}>{active.body ?? t('moderation.noText')}</p>
                   </div>
 
-                  {tab === 'checkins' || tab === 'reviews' ? (
+                  {tab === 'checkins' ? (
                     <p className="flex items-center gap-1 text-[13px] text-text-muted">
                       <StarIcon size={13} className="text-amber" />
                       {active.title}
@@ -453,22 +348,6 @@ export default function ModerationQueueScreen() {
                       </div>
                     </>
                   )}
-
-                  {tab === 'reviews' ? (
-                    <div>
-                      <p className={styles.historyHead}>{t('moderation.history')}</p>
-                      <AsyncBoundary
-                        status={history.status}
-                        error={history.error}
-                        data={history.data?.items ?? []}
-                        isEmpty={(entries) => entries.length === 0}
-                        onRetry={() => void history.refetch()}
-                        empty={<EmptyState title={t('moderation.historyEmpty')} hint={null} />}
-                      >
-                        {(entries) => <AuditTrail entries={entries} />}
-                      </AsyncBoundary>
-                    </div>
-                  ) : null}
 
                   <p className={styles.privacyNote}>{t('moderation.privacyNote')}</p>
                 </>

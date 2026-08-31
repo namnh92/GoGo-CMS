@@ -928,3 +928,36 @@ export const decidedSubmissions = [
     decisionReason: 'trùng địa điểm đã có',
   },
 ]
+
+/**
+ * `GET /cms/moderation/reviews` (GoGo-BE#219). Deliberately spans more than one
+ * page and more than one status, so paging, the status filter and the
+ * `reported` filter are all reachable without hand-editing fixtures.
+ */
+type ReviewQueueStatus = 'pending' | 'published' | 'rejected' | 'removed' | 'hidden'
+
+export const moderationReviewQueue = Array.from({ length: 32 }, (_, index) => {
+  const nth = index + 1
+  const published = nth % 7 === 0
+  return {
+    id: `rev-${String(nth).padStart(3, '0')}`,
+    // Widened on purpose: a decision moves a row to `rejected`, and the mock
+    // has to be able to write that back.
+    status: (published ? 'published' : 'pending') as ReviewQueueStatus,
+    rating: ((nth % 5) + 1) as 1 | 2 | 3 | 4 | 5,
+    text:
+      nth % 4 === 0
+        ? null
+        : `Đánh giá thử số ${nth} — quán ổn, nhân viên thân thiện, chỗ ngồi hơi chật.`,
+    placeId: `4f0b8e10-0000-4000-8000-${String(300 + nth).padStart(12, '0')}`,
+    placeName: nth % 2 === 0 ? 'Chào Bạn Cafe & Space' : 'Lò Bánh Mì Cô Ba',
+    planId: null,
+    authorUserId: `4f0b8e10-0000-4000-8000-${String(700 + nth).padStart(12, '0')}`,
+    authorDisplayName: nth % 3 === 0 ? 'Ngọc Anh' : 'Trần Bảo',
+    openReportCount: nth % 6 === 0 ? 2 : 0,
+    moderatedByAdminId: published ? '00000000-0000-4000-8000-0000000000aa' : null,
+    moderationReason: published ? 'Nội dung hợp lệ.' : null,
+    createdAt: iso(nth * 37),
+    updatedAt: iso(nth * 30),
+  }
+})

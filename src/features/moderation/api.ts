@@ -1,5 +1,11 @@
 import { apiFetch, apiFetchParsed, newIdempotencyKey } from '@/shared/api/client'
-import { moderationQueueSchema, type ModerationQueue } from '@/shared/api/contracts'
+import {
+  cmsModerationReviewPageSchema,
+  moderationQueueSchema,
+  type CmsModerationReviewPage,
+  type ModerationQueue,
+  type ReviewModerationStatus,
+} from '@/shared/api/contracts'
 import { fetchAudit } from '@/features/audit/api'
 import type { AuditPage } from '@/shared/api/contracts'
 
@@ -9,6 +15,52 @@ export type ReportDecision = 'actioned' | 'dismissed'
 export type CheckinDecision = 'approved' | 'rejected'
 export type SubmissionDecision = 'approved' | 'rejected' | 'merged'
 
+/**
+ * Every parameter `GET /cms/moderation/reviews` accepts (GoGo-BE#219).
+ *
+ * `status` defaults to `pending` on the server — the work queue — so it is
+ * only sent when the operator picks something else.
+ */
+export type ReviewQueueFilters = {
+  status?: ReviewModerationStatus
+  rating?: number
+  reported?: boolean
+  placeId?: string
+  userId?: string
+  dateFrom?: string
+  /** Exclusive, so consecutive day filters tile without double-counting. */
+  dateTo?: string
+  limit?: number
+  cursor?: string | null
+}
+
+export function fetchModerationReviews(
+  filters: ReviewQueueFilters,
+  signal?: AbortSignal,
+): Promise<CmsModerationReviewPage> {
+  return apiFetchParsed(cmsModerationReviewPageSchema, '/cms/moderation/reviews', {
+    query: {
+      status: filters.status,
+      rating: filters.rating,
+      // `false` is a real filter ("no open report"), so only `undefined` drops.
+      reported: filters.reported === undefined ? undefined : filters.reported,
+      placeId: filters.placeId,
+      userId: filters.userId,
+      dateFrom: filters.dateFrom,
+      dateTo: filters.dateTo,
+      limit: filters.limit ?? 25,
+      // Keyset, not offset: users write to this queue while it is being read.
+      cursor: filters.cursor ?? undefined,
+    },
+    signal,
+  })
+}
+
+/**
+ * The unified queue. Deprecated upstream in favour of the per-type queues, and
+ * still the source for reports, check-ins and community places until those are
+ * migrated too.
+ */
 export function fetchModerationQueue(
   limit: number,
   signal?: AbortSignal,

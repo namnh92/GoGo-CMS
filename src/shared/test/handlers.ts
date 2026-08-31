@@ -19,6 +19,7 @@ import {
   rankingEvaluation,
   searchAnalytics,
   taxonomies,
+  moderationReviewQueue,
 } from './fixtures'
 
 const BASE = '/v1'
@@ -61,6 +62,7 @@ const db = {
   rows: JSON.parse(JSON.stringify(importRows)) as Record<string, ImportRow[]>,
   duplicates: duplicateRows.map((row) => ({ ...row })),
   moderation: JSON.parse(JSON.stringify(moderationQueue)) as typeof moderationQueue,
+  reviewQueue: JSON.parse(JSON.stringify(moderationReviewQueue)) as typeof moderationReviewQueue,
   submissions: placeSubmissions.map((item) => ({ ...item })),
   experiments: experiments.map((item) => ({ ...item })),
   items: JSON.parse(JSON.stringify(collectionItems)) as typeof collectionItems,
@@ -492,6 +494,53 @@ export const handlers = [
 
   http.get(`${BASE}/cms/moderation`, () => HttpResponse.json(db.moderation)),
 
+  /*
+   * `GET /cms/moderation/reviews` (GoGo-BE#219). The mock reproduces what the
+   * console has to handle: server-side filters, keyset paging over
+   * (createdAt, id), and a `totalCount` that describes the FILTERED set rather
+   * than the page — the whole point of the endpoint.
+   */
+  http.get(`${BASE}/cms/moderation/reviews`, ({ request }) => {
+    const url = new URL(request.url)
+    const status = url.searchParams.get('status') ?? 'pending'
+    const rating = url.searchParams.get('rating')
+    const reported = url.searchParams.get('reported')
+    const dateFrom = url.searchParams.get('dateFrom')
+    const dateTo = url.searchParams.get('dateTo')
+    const limit = Number(url.searchParams.get('limit') ?? 25)
+    const cursor = url.searchParams.get('cursor')
+
+    let items = db.reviewQueue.filter((review) => review.status === status)
+    if (rating) items = items.filter((review) => review.rating === Number(rating))
+    if (reported === 'true') items = items.filter((review) => review.openReportCount > 0)
+    if (reported === 'false') items = items.filter((review) => review.openReportCount === 0)
+    if (dateFrom) items = items.filter((review) => review.createdAt >= dateFrom)
+    // Exclusive upper bound, matching the contract.
+    if (dateTo) items = items.filter((review) => review.createdAt < dateTo)
+
+    const totalCount = items.length
+    const start = cursor ? items.findIndex((review) => review.id === cursor) + 1 : 0
+    const page = items.slice(start, start + limit)
+    const last = page[page.length - 1]
+    const nextCursor = start + limit < items.length && last ? last.id : null
+
+    return HttpResponse.json({ items: page, nextCursor, totalCount })
+  }),
+
+  http.get(`${BASE}/cms/moderation/counts`, () =>
+    HttpResponse.json({
+      reviews: db.reviewQueue.filter((review) => review.status === 'pending').length,
+      reports: db.moderation.reports.length,
+      checkins: db.moderation.checkins.length,
+      communityPlaces: db.moderation.communityPlaces.length,
+      total:
+        db.reviewQueue.filter((review) => review.status === 'pending').length +
+        db.moderation.reports.length +
+        db.moderation.checkins.length +
+        db.moderation.communityPlaces.length,
+    }),
+  ),
+
   // SEC-001 break-glass. The mock enforces the two rules the UI has to survive:
   // only the one accepted transition, and the per-actor rate limit.
   ...(['places', 'reviews', 'checkins'] as const).map((kind) =>
@@ -537,6 +586,15 @@ export const handlers = [
     const key =
       params.kind === 'reviews' ? 'reviews' : params.kind === 'reports' ? 'reports' : 'checkins'
     db.moderation[key] = db.moderation[key].filter((item) => item.id !== params.id) as never
+    if (key === 'reviews') {
+      const review = db.reviewQueue.find((item) => item.id === params.id)
+      if (review) {
+        review.status = body.decision === 'published' ? 'published' : 'rejected'
+        review.moderatedByAdminId = '00000000-0000-4000-8000-0000000000aa'
+        review.moderationReason = body.reason
+        review.updatedAt = new Date().toISOString()
+      }
+    }
     const actor = currentActor()
     db.audit.unshift({
       id: `audit-${key}-${String(params.id)}`,
