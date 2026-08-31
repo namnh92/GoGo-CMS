@@ -75,14 +75,57 @@ describe('AdminListScreen (CMS-021)', () => {
     expect(within(table).getByText('Bạn')).toBeInTheDocument()
   })
 
-  it('says the list is read-only, because the contract serves no mutation', async () => {
+  it('offers lifecycle actions (#248) but never a delete — the contract has none', async () => {
     signInAs('super_admin')
     renderWithProviders(<AdminListScreen />)
 
     await screen.findByRole('table')
-    expect(screen.getByText(/BFF chưa có đường khoá tài khoản/)).toBeInTheDocument()
-    // No invented suspend/role-change control anywhere on the screen.
-    expect(screen.queryByRole('button', { name: /Khoá|Đổi vai|Xoá/ })).not.toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Đổi vai' }).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('button', { name: 'Reset mật khẩu' }).length).toBeGreaterThan(0)
+    // Deletion is still not in the contract, so no button pretends it is.
+    expect(screen.queryByRole('button', { name: /Xoá/ })).not.toBeInTheDocument()
+  })
+
+  it('disables role change and suspend on your own row — the server refuses SELF_*', async () => {
+    signInAs('super_admin', 'Minh Anh Ng.')
+    renderWithProviders(<AdminListScreen />)
+
+    const table = await screen.findByRole('table')
+    const selfRow = within(table).getByText('Bạn').closest('tr')!
+    expect(within(selfRow).getByRole('button', { name: 'Đổi vai' })).toBeDisabled()
+    expect(within(selfRow).getByRole('button', { name: 'Đình chỉ' })).toBeDisabled()
+  })
+
+  it('demands a reason before any mutation is sent', async () => {
+    signInAs('super_admin', 'Minh Anh Ng.')
+    const user = userEvent.setup()
+    renderWithProviders(<AdminListScreen />)
+
+    const table = await screen.findByRole('table')
+    const otherRow = within(table).getByText('ops@gogo.vn').closest('tr')!
+    await user.click(within(otherRow).getByRole('button', { name: 'Đổi vai' }))
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getAllByRole('button', { name: 'Đổi vai' }).at(-1)!)
+
+    expect(await within(dialog).findByText('Lý do cần tối thiểu 3 ký tự.')).toBeInTheDocument()
+  })
+
+  it('shows the temporary password exactly once, with the one-time warning', async () => {
+    signInAs('super_admin', 'Minh Anh Ng.')
+    const user = userEvent.setup()
+    renderWithProviders(<AdminListScreen />)
+
+    const table = await screen.findByRole('table')
+    const otherRow = within(table).getByText('ops@gogo.vn').closest('tr')!
+    await user.click(within(otherRow).getByRole('button', { name: 'Reset mật khẩu' }))
+    const dialog = await screen.findByRole('dialog')
+    await user.type(within(dialog).getByLabelText(/Lý do/), 'nghi ngờ lộ mật khẩu')
+    await user.click(within(dialog).getAllByRole('button', { name: 'Reset mật khẩu' }).at(-1)!)
+
+    // The form is replaced wholesale by the one-time showing.
+    expect(await screen.findByText(/hiện đúng một lần/)).toBeInTheDocument()
+    expect(screen.getByText(/^tmp-/)).toBeInTheDocument()
+    expect(screen.getByText(/không xem lại được/)).toBeInTheDocument()
   })
 
   it('refuses every role below super admin, and says why', async () => {

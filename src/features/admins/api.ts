@@ -3,8 +3,10 @@ import { apiFetch, apiFetchParsed } from '@/shared/api/client'
 import {
   adminRoleSchema,
   cmsAdminPageSchema,
+  cmsAdminSchema,
   type AdminRole,
   type AdminStatus,
+  type CmsAdmin,
   type CmsAdminPage,
 } from '@/shared/api/contracts'
 
@@ -59,4 +61,67 @@ export function fetchAdmins(
     },
     signal,
   })
+}
+
+/*
+ * Staff-account lifecycle (GoGo-BE#248). Every mutation carries a mandatory
+ * reason (3–500 chars) that lands in the audit log — a row that records what
+ * changed but not why answers the easy half of the reviewer's question.
+ */
+
+export type AdminUpdateInput = {
+  role?: AdminRole
+  displayName?: string
+  reason: string
+}
+
+/**
+ * The server refuses `SELF_ROLE_CHANGE` (another super_admin must change
+ * yours) and `LAST_SUPER_ADMIN` (demoting the only active one would leave a
+ * console nobody can administer). The UI mirrors the first check but the API
+ * is the control.
+ */
+export function updateAdmin(id: string, input: AdminUpdateInput): Promise<CmsAdmin> {
+  return apiFetchParsed(cmsAdminSchema, `/cms/auth/admins/${id}`, { method: 'PATCH', body: input })
+}
+
+/** Revokes every session as well as flipping the status. `SELF_SUSPEND` refused. */
+export function suspendAdmin(id: string, reason: string): Promise<CmsAdmin> {
+  return apiFetchParsed(cmsAdminSchema, `/cms/auth/admins/${id}/suspend`, {
+    method: 'POST',
+    body: { reason },
+  })
+}
+
+export function reactivateAdmin(id: string, reason: string): Promise<CmsAdmin> {
+  return apiFetchParsed(cmsAdminSchema, `/cms/auth/admins/${id}/reactivate`, {
+    method: 'POST',
+    body: { reason },
+  })
+}
+
+export const resetPasswordResultSchema = z.object({
+  /** In this response and nowhere else — not logged, not readable again. */
+  temporaryPassword: z.string(),
+  mustChangePassword: z.literal(true),
+})
+export type ResetPasswordResult = z.infer<typeof resetPasswordResultSchema>
+
+export function resetAdminPassword(id: string, reason: string): Promise<ResetPasswordResult> {
+  return apiFetchParsed(resetPasswordResultSchema, `/cms/auth/admins/${id}/reset-password`, {
+    method: 'POST',
+    body: { reason },
+  })
+}
+
+/**
+ * The only route reachable while a password change is owed. The current
+ * password is still required — it proves the caller is the person the
+ * temporary password was handed to.
+ */
+export function changeOwnPassword(input: {
+  currentPassword: string
+  newPassword: string
+}): Promise<unknown> {
+  return apiFetch('/cms/auth/change-password', { method: 'POST', body: input })
 }

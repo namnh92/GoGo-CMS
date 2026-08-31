@@ -48,6 +48,13 @@ export const cmsAdminSchema = z.object({
   createdAt: z.string(),
   /** Absent on an account that has never signed in. */
   lastLoginAt: z.string().nullish(),
+  /**
+   * #248. Whether a second factor is enrolled — the status, never anything
+   * about the secret. Defaulted for resilience against an older payload.
+   */
+  mfaEnrolled: z.boolean().default(false),
+  /** A temporary password is outstanding on this account. */
+  mustChangePassword: z.boolean().default(false),
 })
 export type CmsAdmin = z.infer<typeof cmsAdminSchema>
 

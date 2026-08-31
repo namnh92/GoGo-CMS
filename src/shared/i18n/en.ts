@@ -308,8 +308,6 @@ export const en: Partial<Record<MessageKey, string>> = {
   'admins.openList': 'Open the account list',
   'admins.deniedHint':
     'Only a super admin can read the account list — who holds which role is the shape of the authorization model.',
-  'admins.readOnlyNote':
-    'Read-only: the BFF serves no suspend, role change or delete for staff accounts. Use the existing operational process when one is needed.',
   'admins.col.account': 'Account',
   'admins.col.role': 'Role',
   'admins.col.status': 'Status',
@@ -991,4 +989,49 @@ export const en: Partial<Record<MessageKey, string>> = {
   'dashboard.costsLive.billed': 'billed',
   'dashboard.costsLive.estimated': 'estimated',
   'dashboard.costsLive.mtd': 'MTD',
+
+  'auth.change.title': 'Set a new password',
+  'auth.change.subtitle': 'The temporary password must be replaced before entering the console.',
+  'auth.change.newPassword': 'New password',
+  'auth.change.confirmPassword': 'Repeat new password',
+  'auth.change.hint': 'At least 12 characters. Every other session of this account is revoked.',
+  'auth.change.submit': 'Change password & enter console',
+  'auth.change.tooShort': 'The new password needs at least 12 characters.',
+  'auth.change.mismatch': 'The two entries do not match.',
+  'auth.change.unchanged': 'The new password must differ from the temporary one.',
+
+  'admins.col.mfa': 'MFA',
+  'admins.col.obligation': 'Obligation',
+  'admins.col.actions': 'Actions',
+  'admins.mfa.on': 'MFA on',
+  'admins.mfa.off': 'No MFA',
+  'admins.owesPassword': 'Owes password change',
+  'admins.action.edit': 'Change role',
+  'admins.action.suspend': 'Suspend',
+  'admins.action.reactivate': 'Reactivate',
+  'admins.action.reset': 'Reset password',
+  'admins.actionHint.edit':
+    'Takes effect at the API immediately. You cannot change your own role — the server refuses SELF_ROLE_CHANGE.',
+  'admins.actionHint.suspend': 'Suspending revokes every open session, not just the status.',
+  'admins.actionHint.reactivate': 'The account can sign in again right after reactivation.',
+  'admins.actionHint.reset':
+    'Issues a one-time temporary password, revokes every session; the account must change it at next sign-in. MFA is left alone.',
+  'admins.reason': 'Reason',
+  'admins.reasonHint': 'Required, 3–500 characters. Recorded in the audit log.',
+  'admins.reasonRequired': 'The reason needs at least 3 characters.',
+  'admins.done.edit': 'Role changed.',
+  'admins.done.suspend': 'Account suspended, sessions revoked.',
+  'admins.done.reactivate': 'Account reactivated.',
+  'admins.error.selfRole': 'You cannot change your own role — another super admin must.',
+  'admins.error.selfSuspend': 'You cannot suspend your own account.',
+  'admins.error.lastSuperAdmin':
+    'This is the last active super admin — demoting or suspending them leaves the console with no administrator.',
+  'admins.temp.title': 'Temporary password — shown exactly once',
+  'admins.temp.warn':
+    'This password cannot be viewed again and exists nowhere else. Hand it to the account holder over a secure channel before closing.',
+  'admins.temp.copy': 'Copy',
+  'admins.temp.copied': 'Copied',
+  'admins.temp.doneButton': 'I have saved it',
+  'admins.lifecycleNote':
+    'Role change, suspension and password reset all require a reason and are audited. CMS account deletion is not in the contract — so there is no delete button here.',
 }
