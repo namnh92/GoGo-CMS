@@ -201,11 +201,11 @@ cùng origin và cookie phiên. Trỏ `BE_ORIGIN` vào `http://localhost:3000` c
 
 **Ba thứ phải set ngoài repo** — thiếu thứ nào thì bản deploy chạy nhưng sai:
 
-| Ở đâu                 | Việc                                                                                                                             |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| Cloudflare project    | Build command `pnpm build`, deploy command `npx wrangler versions upload`                                                        |
+| Ở đâu                 | Việc                                                                                                                                                                                    |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cloudflare project    | Build command `pnpm build`, deploy command `npx wrangler versions upload`                                                                                                               |
 | Cloudflare project    | Biến `BE_ORIGIN` = origin GoGo-BE của môi trường đó — dev đã set `https://api-dev.gogo.id.vn` (31/08/2026). Chưa set thì `/v1/*` trả `503 BACKEND_NOT_CONFIGURED` chứ không im lặng 404 |
-| Cloudflare Zero Trust | **Access** trước hostname. Bản deploy không tự xác thực; để trang đăng nhập admin công khai là mở sẵn bề mặt credential stuffing |
+| Cloudflare Zero Trust | **Access** trước hostname. Bản deploy không tự xác thực; để trang đăng nhập admin công khai là mở sẵn bề mặt credential stuffing                                                        |
 
 Và ở GoGo-BE của môi trường đó: `COOKIE_SECURE=true`, `TRUST_PROXY` tin đúng hop
 Cloudflare. Không thì BE bỏ qua `x-forwarded-for` và **cột IP nhân viên trong
