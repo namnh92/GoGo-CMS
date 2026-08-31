@@ -4,6 +4,9 @@ import { AlertIcon, CheckIcon, ClockIcon, InfoIcon } from './icons'
 
 export type Tone = 'neutral' | 'coral' | 'lavender' | 'mint' | 'amber' | 'danger'
 
+/** Glyph paired with every tone so state survives greyscale. */
+export type BadgeShape = 'dot' | 'check' | 'alert' | 'clock' | 'info'
+
 const TONE: Record<Tone, string> = {
   neutral: 'bg-surface-sunken text-text-muted border-line-strong',
   coral: 'bg-coral-soft text-coral-deep border-coral/35',
@@ -49,7 +52,7 @@ export function StatusBadge({
 }: {
   tone: Tone
   label: string
-  shape?: 'dot' | 'check' | 'alert' | 'clock' | 'info'
+  shape?: BadgeShape
 }) {
   const glyph =
     shape === 'check' ? (

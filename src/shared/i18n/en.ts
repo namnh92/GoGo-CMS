@@ -13,6 +13,12 @@ export const en: Partial<Record<MessageKey, string>> = {
   'app.signOut': 'Sign out',
   'app.mainNav': 'Main navigation',
 
+  'env.dev': 'DEV',
+  'env.staging': 'STAGING',
+  'env.production': 'PRODUCTION',
+  'env.productionWarning':
+    'You are on PRODUCTION — destructive actions take real effect and are audited.',
+
   'nav.dashboard': 'Dashboard',
   'nav.places': 'Places',
   'nav.moderation': 'Moderation',
