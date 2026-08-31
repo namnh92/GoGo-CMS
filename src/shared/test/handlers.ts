@@ -36,6 +36,7 @@ import {
   cmsRooms,
   cmsPlans,
   cmsRoomGuests,
+  privacyRequests,
   cmsPlanTemplates,
 } from './fixtures'
 
@@ -101,6 +102,7 @@ const db = {
   banners: JSON.parse(JSON.stringify(cmsBanners)) as typeof cmsBanners,
   appUsers: JSON.parse(JSON.stringify(cmsAppUsers)) as typeof cmsAppUsers,
   roomGuests: JSON.parse(JSON.stringify(cmsRoomGuests)) as typeof cmsRoomGuests,
+  privacy: JSON.parse(JSON.stringify(privacyRequests)) as typeof privacyRequests,
   campaigns: JSON.parse(JSON.stringify(cmsCampaigns)) as typeof cmsCampaigns,
 }
 
@@ -1533,6 +1535,170 @@ export const handlers = [
     if (status) items = items.filter((row) => row.status === status)
     return HttpResponse.json(pageOf(items, limit, cursor))
   }),
+
+  /*
+   * Privacy-request ledger (GoGo-BE#255). The mock enforces the refusals the
+   * contract names, so the console's explanations are reachable in dev:
+   * correction cannot execute, delete needs super_admin, a hold needs a
+   * closed row and a future review date.
+   */
+  http.get(`${BASE}/cms/privacy-requests`, ({ request }) => {
+    const denied = requireOpsAdmin('the privacy ledger is ops_admin and above')
+    if (denied) return denied
+    const url = new URL(request.url)
+    const status = url.searchParams.get('status')
+    const type = url.searchParams.get('type')
+    const sla = url.searchParams.get('sla')
+    const limit = Number(url.searchParams.get('limit') ?? 25)
+    const cursor = url.searchParams.get('cursor')
+    let items = db.privacy
+    if (status) items = items.filter((row) => row.status === status)
+    if (type) items = items.filter((row) => row.type === type)
+    // Filtered against the same stored `sla` the badge renders.
+    if (sla === 'overdue') items = items.filter((row) => row.sla === 'OVERDUE')
+    if (sla === 'due_soon') items = items.filter((row) => row.sla === 'DUE_SOON')
+    return HttpResponse.json(pageOf(items, limit, cursor))
+  }),
+
+  http.post(`${BASE}/cms/privacy-requests`, async ({ request }) => {
+    const denied = requireOpsAdmin('the privacy ledger is ops_admin and above')
+    if (denied) return denied
+    const body = (await request.json()) as Record<string, unknown>
+    const created = {
+      ...db.privacy[0]!,
+      id: `66666666-0000-4000-8000-00000000${String(db.privacy.length + 10).padStart(4, '0')}`,
+      type: (body.type as 'export') ?? 'export',
+      source: 'support' as const,
+      status: 'open' as const,
+      outcome: null,
+      subject: {
+        subjectType: (body.subjectType as 'email') ?? 'email',
+        userId: (body.userId as string) ?? null,
+        contactEmail: (body.contactEmail as string) ?? null,
+        externalReference: (body.externalReference as string) ?? null,
+        identityStatus: body.userId ? ('matched' as const) : ('unverified' as const),
+      },
+      receivedAt: new Date().toISOString(),
+      acknowledgedAt: null,
+      closedAt: null,
+      executedAt: null,
+      retentionHold: null,
+      operatorNote: (body.operatorNote as string) ?? null,
+      sla: 'ON_TRACK' as const,
+    }
+    db.privacy.unshift(created)
+    return HttpResponse.json(created, { status: 201 })
+  }),
+
+  http.get(`${BASE}/cms/privacy-requests/:id`, ({ params }) => {
+    const denied = requireOpsAdmin('the privacy ledger is ops_admin and above')
+    if (denied) return denied
+    const row = db.privacy.find((item) => item.id === params.id)
+    if (!row) return envelope(404, 'NOT_FOUND', 'privacy request not found')
+    return HttpResponse.json(row)
+  }),
+
+  http.post(`${BASE}/cms/privacy-requests/:id/acknowledge`, ({ params }) => {
+    const row = db.privacy.find((item) => item.id === params.id)
+    if (!row) return envelope(404, 'NOT_FOUND', 'privacy request not found')
+    if (row.status === 'closed') return envelope(409, 'ALREADY_CLOSED', 'already closed')
+    row.status = 'acknowledged'
+    row.acknowledgedAt = new Date().toISOString()
+    return HttpResponse.json(row, { status: 201 })
+  }),
+
+  http.post(`${BASE}/cms/privacy-requests/:id/execute`, ({ params }) => {
+    const row = db.privacy.find((item) => item.id === params.id)
+    if (!row) return envelope(404, 'NOT_FOUND', 'privacy request not found')
+    if (row.status === 'closed') return envelope(409, 'ALREADY_CLOSED', 'already closed')
+    if (row.type === 'correction') {
+      return envelope(409, 'NOT_EXECUTABLE', 'correction requests are worked by hand')
+    }
+    if (row.subject.identityStatus !== 'matched') {
+      return envelope(409, 'IDENTITY_NOT_MATCHED', 'match the request to an account first')
+    }
+    const { role } = currentActor()
+    if (row.type === 'delete' && role !== 'super_admin') {
+      return envelope(403, 'ROLE_DENIED', 'a delete request needs super_admin')
+    }
+    row.status = 'closed'
+    row.outcome = 'completed'
+    row.executedAt = new Date().toISOString()
+    row.completedAt = row.executedAt
+    row.closedAt = row.executedAt
+    return HttpResponse.json(
+      row.type === 'export'
+        ? { request: row, data: { profile: {}, reviews: [], savedPlaces: [] } }
+        : { request: row },
+      { status: 201 },
+    )
+  }),
+
+  http.post(`${BASE}/cms/privacy-requests/:id/close`, async ({ params, request }) => {
+    const row = db.privacy.find((item) => item.id === params.id)
+    if (!row) return envelope(404, 'NOT_FOUND', 'privacy request not found')
+    if (row.status === 'closed') return envelope(409, 'ALREADY_CLOSED', 'already closed')
+    const body = (await request.json()) as { outcome?: string; operatorNote?: string }
+    row.status = 'closed'
+    row.outcome = (body.outcome as 'rejected') ?? 'rejected'
+    row.closedAt = new Date().toISOString()
+    if (body.operatorNote) row.operatorNote = body.operatorNote
+    return HttpResponse.json(row, { status: 201 })
+  }),
+
+  http.post(`${BASE}/cms/privacy-requests/:id/delivered`, async ({ params, request }) => {
+    const row = db.privacy.find((item) => item.id === params.id)
+    if (!row) return envelope(404, 'NOT_FOUND', 'privacy request not found')
+    if (row.type !== 'export') return envelope(409, 'NOT_AN_EXPORT', 'not an export')
+    const body = (await request.json()) as { deliveryMethod?: string }
+    row.deliveryMethod = (body.deliveryMethod as 'secure_download') ?? 'secure_download'
+    row.deliveredAt = new Date().toISOString()
+    return HttpResponse.json(row, { status: 201 })
+  }),
+
+  http.post(`${BASE}/cms/privacy-requests/:id/retention-hold`, async ({ params, request }) => {
+    const { role } = currentActor()
+    if (role !== 'super_admin') return envelope(403, 'FORBIDDEN', 'holds are super_admin only')
+    const row = db.privacy.find((item) => item.id === params.id)
+    if (!row) return envelope(404, 'NOT_FOUND', 'privacy request not found')
+    if (row.status !== 'closed') return envelope(409, 'NOT_CLOSED', 'only a closed request')
+    if (row.retentionHold) return envelope(409, 'ALREADY_HELD', 'already held')
+    const body = (await request.json()) as {
+      reason?: string
+      legalBasis?: string
+      reviewAt?: string
+    }
+    if (!body.reviewAt || new Date(body.reviewAt).getTime() <= Date.now()) {
+      return envelope(400, 'REVIEW_IN_PAST', 'review date must be in the future')
+    }
+    row.retentionHold = {
+      heldAt: new Date().toISOString(),
+      heldBy: '00000000-0000-4000-8000-0000000000aa',
+      reason: body.reason ?? '',
+      legalBasis: body.legalBasis ?? '',
+      reviewAt: body.reviewAt,
+      holdUntil: null,
+      reviewOverdue: false,
+    }
+    return HttpResponse.json(row, { status: 201 })
+  }),
+
+  http.post(
+    `${BASE}/cms/privacy-requests/:id/retention-hold/release`,
+    async ({ params, request }) => {
+      const { role } = currentActor()
+      if (role !== 'super_admin') return envelope(403, 'FORBIDDEN', 'holds are super_admin only')
+      const row = db.privacy.find((item) => item.id === params.id)
+      if (!row) return envelope(404, 'NOT_FOUND', 'privacy request not found')
+      if (!row.retentionHold) return envelope(409, 'NOT_HELD', 'no hold on this request')
+      const body = (await request.json()) as { reason?: string }
+      if (!body.reason || body.reason.trim().length < 3) {
+        return envelope(400, 'BAD_REQUEST', 'reason required')
+      }
+      row.retentionHold = null
+      return HttpResponse.json(row, { status: 201 })
+    },
+  ),
 
   http.get(`${BASE}/cms/rooms/:id/guests`, ({ params }) => {
     const denied = requireOpsAdmin('the user base is ops_admin and above')

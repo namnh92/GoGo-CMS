@@ -150,6 +150,12 @@ const PERMISSIONS = {
   'user.manage': ['users', 'write'],
   'user.delete': ['admins', 'write'],
 
+  // Privacy ledger — ops support surface; retention holds are a legal
+  // instrument and stay at the super-admin bar, like erasure.
+  'privacy.read': ['users', 'read'],
+  'privacy.manage': ['users', 'write'],
+  'privacy.hold': ['admins', 'write'],
+
   // Banners — their own controller, editor and ops both write. Uploading the
   // image is the same pair on a separate controller, so it gets its own
   // permission rather than being assumed from `banner.manage`.
