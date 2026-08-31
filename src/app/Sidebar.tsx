@@ -5,6 +5,7 @@ import { useSession } from '@/shared/auth/session'
 import { NAV_ITEMS } from './nav'
 import { LogoMark, LogoutIcon } from '@/shared/ui/icons'
 import { IconButton } from '@/shared/ui/Button'
+import { EnvBadge } from '@/shared/ui/EnvBadge'
 import { fetchModerationQueue } from '@/features/moderation/api'
 import { queryKeys } from '@/shared/api/queryKeys'
 import { cn } from '@/shared/ui/cn'
@@ -35,12 +36,14 @@ export function Sidebar() {
 
   return (
     <aside className="flex h-full w-48 shrink-0 flex-col border-r border-line bg-surface">
-      <div className="flex items-center gap-2 px-4 py-5">
+      <div className="flex flex-wrap items-center gap-2 px-4 py-5">
         <LogoMark size={30} />
         <span className="font-display text-base font-extrabold text-text">{t('app.name')}</span>
         <span className="rounded bg-coral-soft px-1.5 py-0.5 text-[10px] font-bold text-coral-deep">
           {t('app.suffix')}
         </span>
+        {/* One instance, always on screen: which deployment is this? */}
+        <EnvBadge />
       </div>
 
       <nav aria-label={t('app.mainNav')} className="flex-1 space-y-0.5 overflow-y-auto px-2 py-2">

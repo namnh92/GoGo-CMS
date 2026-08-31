@@ -11,6 +11,12 @@ export const vi = {
   'app.signOut': 'Đăng xuất',
   'app.mainNav': 'Điều hướng chính',
 
+  'env.dev': 'DEV',
+  'env.staging': 'STAGING',
+  'env.production': 'PRODUCTION',
+  'env.productionWarning':
+    'Bạn đang ở PRODUCTION — mọi thao tác phá huỷ có hiệu lực thật và được ghi audit.',
+
   'nav.dashboard': 'Tổng quan',
   'nav.places': 'Địa điểm',
   'nav.moderation': 'Kiểm duyệt',
