@@ -335,6 +335,8 @@ export const vi = {
   'imports.col.mode': 'Chế độ',
   'imports.col.status': 'Trạng thái',
   'imports.col.progress': 'Tiến trình',
+  'imports.col.createdBy': 'Người tạo',
+  'imports.col.completedAt': 'Hoàn tất lúc',
   'imports.col.createdAt': 'Bắt đầu',
   'imports.col.actions': 'Thao tác',
   'imports.rowsProgress': '{processed}/{rows} dòng',

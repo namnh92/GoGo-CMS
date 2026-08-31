@@ -47,6 +47,9 @@ export const en: Partial<Record<MessageKey, string>> = {
   'moderation.history': 'Moderation history',
   'moderation.historyEmpty': 'No decision has been recorded for this item yet.',
 
+  'imports.col.createdBy': 'Created by',
+  'imports.col.completedAt': 'Completed at',
+
   'admins.new': 'New CMS account',
   'admins.formTitle': 'New staff account',
   'admins.formHint':
