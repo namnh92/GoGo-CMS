@@ -501,16 +501,65 @@ export const rankingEvaluationSchema = z.object({
 export type RankingEvaluation = z.infer<typeof rankingEvaluationSchema>
 
 /** `GET /cms/feature-flags` (GoGo-BE#160) — a kill switch nobody can read is not a kill switch. */
+export const flagValueTypeSchema = z.enum(['boolean', 'string', 'number', 'json', 'version'])
+export type FlagValueType = z.infer<typeof flagValueTypeSchema>
+
+/** `all` is the unscoped row every resolution falls back to. */
+export const flagEnvironmentSchema = z.enum(['all', 'dev', 'staging', 'production'])
+export type FlagEnvironment = z.infer<typeof flagEnvironmentSchema>
+
+export const flagPlatformSchema = z.enum(['all', 'ios', 'android', 'web'])
+export type FlagPlatform = z.infer<typeof flagPlatformSchema>
+
+/**
+ * `GET /cms/feature-flags` — one entry per **stored override**, not per key.
+ *
+ * A key can have several: `(all, all)` is the unscoped row and a more specific
+ * `(production, ios)` row wins over it for that scope. Keys with no row at all
+ * are absent here — the catalog below is what says which keys exist.
+ */
 export const featureFlagSchema = z.object({
   key: z.string(),
+  valueType: flagValueTypeSchema,
+  environment: flagEnvironmentSchema,
+  platform: flagPlatformSchema,
+  /**
+   * The value itself for a boolean flag; for any other type, whether this
+   * override applies at all — switching it off returns the key to its default.
+   */
   enabled: z.boolean(),
+  /** Typed per `valueType`. For a boolean flag this equals `enabled`. */
+  value: z.unknown().nullish(),
+  /** Old name for `value`, same content. Still returned by the server. */
   payload: z.unknown().nullish(),
   description: z.string().nullish(),
+  /** False when the key left the registry: a value nothing reads any more. */
+  known: z.boolean().default(true),
   updatedBy: adminRefSchema.nullish(),
   updatedAt: z.string(),
 })
 export type FeatureFlag = z.infer<typeof featureFlagSchema>
 export const featureFlagListSchema = z.array(featureFlagSchema)
+
+/**
+ * `GET /cms/feature-flags/catalog` — every key something in the backend
+ * actually reads, with its declared type and its fallback.
+ *
+ * Without `defaultValue`, "not configured" and "configured to zero" look
+ * identical on screen. That distinction is the whole reason this endpoint
+ * exists, so the console reads it rather than inferring.
+ */
+export const featureFlagDefinitionSchema = z.object({
+  key: z.string(),
+  valueType: flagValueTypeSchema,
+  /** What the backend uses when no override matches. Never null. */
+  defaultValue: z.unknown(),
+  description: z.string(),
+  /** False means a per-platform override is refused, not stored and ignored. */
+  platformScoped: z.boolean(),
+})
+export type FeatureFlagDefinition = z.infer<typeof featureFlagDefinitionSchema>
+export const featureFlagCatalogSchema = z.array(featureFlagDefinitionSchema)
 
 /**
  * `GET /cms/experiments` / `PUT /cms/experiments/{key}`.

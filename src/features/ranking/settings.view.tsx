@@ -7,11 +7,12 @@ import { useSession } from '@/shared/auth/session'
 import { useOnline } from '@/shared/ui/useOnline'
 import { formatDateTime, formatNumber, formatPercent } from '@/shared/format'
 import { PageBody, PageHeader } from '@/app/PageHeader'
+import { FlagsPanel } from '@/features/flags/flagsPanel.view'
 import { Card, CardBody, CardHeader } from '@/shared/ui/Card'
 import { Button } from '@/shared/ui/Button'
 import { RoleGate } from '@/app/RequireAuth'
 import { Badge } from '@/shared/ui/Badge'
-import { TextInput, Toggle } from '@/shared/ui/Field'
+import { TextInput } from '@/shared/ui/Field'
 import { Tabs, type TabItem } from '@/shared/ui/Tabs'
 import { ConfirmDialog } from '@/shared/ui/Overlay'
 import {
@@ -29,10 +30,8 @@ import {
   createRankingConfig,
   evaluateRankingConfig,
   fetchExperiments,
-  fetchFeatureFlags,
   fetchRankingConfigs,
   rollbackRankingConfig,
-  setFeatureFlag,
   upsertExperiment,
   type RankingKey,
 } from './api'
@@ -168,7 +167,6 @@ export default function SettingsScreen() {
   // Reads are rank-based, so ops_admin and above land here; every write below
   // still asks separately, and the API remains the decision either way.
   const canRead = can('ranking.read')
-  const canManageFlags = can('flag.manage')
   const canManageRanking = can('ranking.draft')
   const canManageExperiments = can('experiment.manage')
 
@@ -176,11 +174,6 @@ export default function SettingsScreen() {
     queryKey: queryKeys.ranking.configs,
     queryFn: ({ signal }) => fetchRankingConfigs({}, signal),
     enabled: canRead,
-  })
-  const flagsQuery = useQuery({
-    queryKey: queryKeys.ranking.flags,
-    queryFn: ({ signal }) => fetchFeatureFlags(signal),
-    enabled: canRead && tab === 'flags',
   })
   const experimentsQuery = useQuery({
     queryKey: queryKeys.ranking.experiments,
@@ -266,13 +259,6 @@ export default function SettingsScreen() {
     onError: (error) => toast.error(describeError(error)),
   })
 
-  const toggleFlag = useMutation({
-    mutationFn: ({ key, enabled }: { key: string; enabled: boolean }) =>
-      setFeatureFlag(key, enabled),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.ranking.flags }),
-    onError: (error) => toast.error(describeError(error)),
-  })
-
   const saveExperiment = useMutation({
     mutationFn: ({
       key,
@@ -341,57 +327,7 @@ export default function SettingsScreen() {
 
         <div className={styles.layout}>
           <div className={styles.main}>
-            {tab === 'flags' ? (
-              <Card>
-                <CardHeader title={t('settings.flags.title')} hint={t('settings.flags.hint')} />
-                <CardBody>
-                  <AsyncBoundary
-                    status={flagsQuery.status}
-                    error={flagsQuery.error}
-                    data={flagsQuery.data ?? []}
-                    isEmpty={(items) => items.length === 0}
-                    onRetry={() => void flagsQuery.refetch()}
-                    empty={<EmptyState />}
-                  >
-                    {(flags) =>
-                      flags.map((flag) => (
-                        <div key={flag.key} className={styles.flagRow}>
-                          <div className="min-w-0">
-                            <p className={styles.flagKey}>{flag.key}</p>
-                            {flag.description ? (
-                              <p className={styles.flagDesc}>{flag.description}</p>
-                            ) : null}
-                            <p className={styles.flagMeta}>
-                              {flag.updatedBy?.displayName ?? flag.updatedBy?.id ?? '—'} ·{' '}
-                              {formatDateTime(flag.updatedAt, locale)}
-                            </p>
-                            {/* Payload is free-form config; shown raw rather than guessed at. */}
-                            {flag.payload != null ? (
-                              <pre className={styles.flagPayload}>
-                                {JSON.stringify(flag.payload, null, 2)}
-                              </pre>
-                            ) : null}
-                          </div>
-                          <div className="flex shrink-0 items-center gap-2">
-                            <span className="text-[11px] font-semibold text-text-muted">
-                              {flag.enabled
-                                ? t('settings.flags.enabled')
-                                : t('settings.flags.disabled')}
-                            </span>
-                            <Toggle
-                              label={flag.key}
-                              checked={flag.enabled}
-                              disabled={!canManageFlags || !online}
-                              onChange={(enabled) => toggleFlag.mutate({ key: flag.key, enabled })}
-                            />
-                          </div>
-                        </div>
-                      ))
-                    }
-                  </AsyncBoundary>
-                </CardBody>
-              </Card>
-            ) : null}
+            {tab === 'flags' ? <FlagsPanel /> : null}
 
             {tab === 'ranking' ? (
               <Card>
