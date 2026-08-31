@@ -1750,6 +1750,444 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/cms/plan-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Editor/ops: plan templates, filtered and cursor-paged
+         * @description Templates are **source material for future plans, not live ones**. Nothing in this resource references a room, a plan or a plan stop, and editing a template never reaches a plan somebody already has — the separation is in the schema, not in a rule a service has to remember.
+         */
+        get: operations["cmsListPlanTemplates"];
+        put?: never;
+        /**
+         * Editor/ops: create a plan template
+         * @description `stops` is ordered — the array index becomes the stored position, so a client cannot send two stops claiming the same one or a gap that means nothing.
+         *
+         *     Every budget is integer minor units and carries its currency and what it is *per*; there is no amount in this contract whose scope a client has to assume.
+         */
+        post: operations["cmsCreatePlanTemplate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/plan-templates/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Editor/ops: one template with its ordered stops */
+        get: operations["cmsGetPlanTemplate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Editor/ops: edit a template
+         * @description Omitted fields are left alone; a sent `stops` or `taxonomyIds` replaces that list wholesale. Editing a template does not touch any plan built from it earlier — a plan is a copy at the moment it was made, not a live view of its template.
+         */
+        patch: operations["cmsUpdatePlanTemplate"];
+        trace?: never;
+    };
+    "/cms/plan-templates/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Editor/ops: move a template along its lifecycle
+         * @description Declared transitions only; `archived` is terminal. Publishing needs at least one stop — a template with none is not a plan anyone can be given.
+         */
+        patch: operations["cmsSetPlanTemplateStatus"];
+        trace?: never;
+    };
+    "/cms/plan-templates/{id}/stops": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Editor/ops: replace the ordered stop list */
+        put: operations["cmsSetPlanTemplateStops"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/recommendations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Editor/ops: recommendations, filtered and cursor-paged
+         * @description A recommendation is a targeted collection (ADR-0009): the same ordered list of places, the same schedule and status machine, plus who it is for. It shares `content_collections` with curated collections rather than forking editorial content into a second store, and `GET /cms/collections` returns only the untargeted ones.
+         *
+         *     Sorted newest first; `priority` orders recommendations competing for one surface and is returned so the console can show it, not used as the pagination key — it is editable, so a row whose priority changed mid-traversal would jump pages.
+         */
+        get: operations["cmsListRecommendations"];
+        put?: never;
+        /**
+         * Editor/ops: create a recommendation
+         * @description Every referenced place and taxonomy must exist, and a taxonomy must be of a kind that can target content (`category` or `mood`) — a recommendation pointing at an id nothing resolves would render as a shorter list with no explanation.
+         *
+         *     `placeIds` is ordered: the array index becomes the stored position, and the order round-trips.
+         */
+        post: operations["cmsCreateRecommendation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/recommendations/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Editor/ops: one recommendation with its ordered places */
+        get: operations["cmsGetRecommendation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Editor/ops: edit a recommendation
+         * @description Omitted fields are left alone. Sending `placeIds` or `taxonomyIds` replaces that list wholesale — a partial reorder is not expressible, and pretending otherwise is how an ordering silently loses a row.
+         */
+        patch: operations["cmsUpdateRecommendation"];
+        trace?: never;
+    };
+    "/cms/recommendations/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Editor/ops: move a recommendation along its lifecycle
+         * @description Declared transitions only. `archived` is terminal: bringing retired content back is a new row, not a resurrection. Scheduling needs a start time, and publishing needs at least one place — an empty published recommendation is a surface with nothing on it.
+         */
+        patch: operations["cmsSetRecommendationStatus"];
+        trace?: never;
+    };
+    "/cms/recommendations/{id}/places": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Editor/ops: replace the ordered place list */
+        put: operations["cmsSetRecommendationPlaces"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/safety-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ops: Trust & Safety rules, filtered and cursor-paged
+         * @description `ops_admin` only, in both directions — a rule here can suspend an account with no human in the loop, which is policy rather than day-to-day moderation.
+         *
+         *     Rule **definitions**. Nothing evaluates them yet — the enforcement path is separate work — and when it lands, every automated decision carries the rule's `reasonCode` so a person reviewing it can trace why.
+         *
+         *     There is no rule builder and no expression language: `conditions` is a closed, typed shape per `ruleType`, validated on write. Nothing here is evaluated as code.
+         */
+        get: operations["cmsListSafetyRules"];
+        put?: never;
+        /**
+         * Ops: define a Trust & Safety rule
+         * @description Three things are checked beyond the shape of `conditions`: the action must be one the rule type can take, the trigger one it can be evaluated on, and `suspend_user` requires severity `high` or `critical` — suspension removes an account from a person with no human in the loop, and a `low` rule doing that at scale is the mistake worth refusing.
+         *
+         *     `reasonCode` is mandatory and machine-readable (`^[a-z][a-z0-9_]{2,63}$`).
+         */
+        post: operations["cmsCreateSafetyRule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/safety-rules/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ops: one rule */
+        get: operations["cmsGetSafetyRule"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Ops: edit a rule
+         * @description `ruleType` is immutable — it decides which condition schema applies, and changing it would reinterpret stored conditions rather than revalidate them. The rule is revalidated as a whole on every edit, because changing the action alone can make an already-stored condition set illegal.
+         */
+        patch: operations["cmsUpdateSafetyRule"];
+        trace?: never;
+    };
+    "/cms/safety-rules/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Ops: activate or disable a rule
+         * @description Reversible in both directions on purpose — the point of a switch is that it can be thrown back. Activating revalidates the definition first: a rule may have been left in draft precisely because it was unfinished.
+         */
+        patch: operations["cmsSetSafetyRuleStatus"];
+        trace?: never;
+    };
+    "/cms/banners": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Editor/ops: banners, filtered and cursor-paged
+         * @description `status` accepts `expired`, which is **computed by the server** from the banner's end time rather than stored — a stored expiry is wrong for as long as it takes something to notice, or forever if nothing runs. Each item carries both: `status` (what it is now) and `lifecycleStatus` (what a person set).
+         */
+        get: operations["cmsListBanners"];
+        put?: never;
+        /**
+         * Editor/ops: create a banner
+         * @description `imageKey` is mandatory — a banner is an image. The key comes from `POST /cms/uploads` with purpose `banner_image` and is bound to this banner on save, through the same attach path check-in photos use: a key belonging to another actor, an expired one, or one issued for a different purpose is refused rather than becoming a broken image.
+         *
+         *     The destination is cross-checked against the type it names: a `place`, `recommendation`, `plan_template` or `campaign` id must resolve, and an `external_url` must be https, carry no credentials and not point inside the network.
+         */
+        post: operations["cmsCreateBanner"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/banners/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Editor/ops: one banner */
+        get: operations["cmsGetBanner"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Editor/ops: edit a banner */
+        patch: operations["cmsUpdateBanner"];
+        trace?: never;
+    };
+    "/cms/banners/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Editor/ops: move a banner along its lifecycle
+         * @description Takes only the statuses a person controls — `expired` is not one of them. Scheduling needs a start time, and publishing a banner whose window has already closed is refused rather than producing something the very next read reports as expired.
+         */
+        patch: operations["cmsSetBannerStatus"];
+        trace?: never;
+    };
+    "/cms/campaigns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ops: notification campaigns, filtered and cursor-paged
+         * @description A campaign is composed here and **sent by the worker**, never from a request. The API only ever writes a row; a scheduled row is what a worker tick picks up, resolves an audience for, and hands to the push provider adapter. A campaign that has gone out cannot be recalled, so there is deliberately no API path that reaches a provider.
+         */
+        get: operations["cmsListCampaigns"];
+        put?: never;
+        /**
+         * Ops: compose a campaign (draft)
+         * @description Created as a `draft`; nothing is sent until it is scheduled.
+         *
+         *     The destination is validated against real data: a `place`, `recommendation` or `plan_template` id must resolve, and an `external_url` must be https, carry no credentials and not point inside the network. A deep link into content that does not exist is a dead notification on every phone that receives it.
+         */
+        post: operations["cmsCreateCampaign"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/campaigns/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ops: one campaign with its delivery counters */
+        get: operations["cmsGetCampaign"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Ops: edit a campaign that has not been sent
+         * @description Editable only in `draft`, `cancelled` or `failed`. Editing a scheduled campaign would silently change what is about to go out — unschedule it first, which is a deliberate, audited act.
+         */
+        patch: operations["cmsUpdateCampaign"];
+        trace?: never;
+    };
+    "/cms/campaigns/{id}/audience-estimate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ops: how many people this would reach, right now
+         * @description A read with no side effect — nothing is written and nothing is sent. The number is a snapshot: the audience is resolved again at send time by the same predicate, so it can move between the estimate and the send.
+         *
+         *     Counts only accounts with a registered device: a "recipient" with nothing to receive on inflates the number and makes the delivery counters unreadable.
+         */
+        get: operations["cmsEstimateCampaignAudience"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/campaigns/{id}/schedule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ops: make a campaign due (send now, or at a time)
+         * @description Marks the campaign `scheduled` and returns. **No message exists yet**: the worker picks up what is due on its next tick, resolves the audience then, and dispatches through the provider adapter.
+         *
+         *     Omitting `sendAt` means now. Scheduling revalidates the destination, because the place or recommendation it points at may have been removed since the draft was written.
+         */
+        post: operations["cmsScheduleCampaign"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/campaigns/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ops: cancel a campaign that has not started
+         * @description Works while `scheduled`. Once the worker is `sending`, some messages are already on phones and there is nothing to recall — the request is refused with how far the send got, rather than reporting a cancellation the backend cannot perform.
+         */
+        post: operations["cmsCancelCampaign"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/campaigns/{id}/test-send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ops: send one copy to your own account
+         * @description Separate from a real send in every way that matters: it never changes `status`, it reaches exactly one account, and that account is the caller's own — matched on a **verified** email between the staff account and a consumer account, so this cannot push a message at somebody else.
+         *
+         *     Queued like everything else; the worker delivers it. Rate-limited, because it is the one send path a person can trigger repeatedly.
+         */
+        post: operations["cmsTestSendCampaign"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/cms/uploads": {
         parameters: {
             query?: never;
@@ -3078,6 +3516,469 @@ export interface components {
             enabled: boolean;
             /** @description The stored value */
             value?: unknown;
+        };
+        /**
+         * @description `archived` is terminal — a retired template comes back as a new row.
+         * @enum {string}
+         */
+        PlanTemplateStatus: "draft" | "published" | "archived";
+        /**
+         * @description What an amount is *per*. These are different numbers, so no amount in this contract is returned without one.
+         * @enum {string}
+         */
+        BudgetScope: "per_person" | "per_group";
+        /** @description Integer minor units with its currency and scope. Present as a whole or absent as a whole — there is no half of this object. */
+        BudgetRange: {
+            min: number;
+            max: number;
+            /** @description ISO-4217. */
+            currency: string;
+            scope: components["schemas"]["BudgetScope"];
+        };
+        CmsPlanTemplateStopInput: {
+            /**
+             * Format: uuid
+             * @description Taxonomy of kind `category` — what sort of stop this is.
+             */
+            categoryTaxonomyId: string;
+            /**
+             * Format: uuid
+             * @description Optional. A template may name a place or leave the choice to matching.
+             */
+            preferredPlaceId?: string;
+            /** @description A property of the stop, not a convention the reader infers. */
+            isOptional?: boolean;
+            expectedDurationMinutes: number;
+            budget?: components["schemas"]["BudgetRange"];
+            note?: string;
+        };
+        CmsPlanTemplateStop: components["schemas"]["CmsPlanTemplateStopInput"] & {
+            /** Format: uuid */
+            id: string;
+            position: number;
+            /** @description Stable taxonomy key */
+            categoryKey: string;
+            preferredPlaceName?: string;
+        };
+        CmsPlanTemplate: {
+            /** Format: uuid */
+            id: string;
+            /** @description The template key. Unique per locale. */
+            slug: string;
+            locale: string;
+            internalName: string;
+            title: string;
+            description?: string;
+            audience?: components["schemas"]["ContentAudience"];
+            areaKey?: string;
+            budget?: components["schemas"]["BudgetRange"];
+            expectedDurationMinutes?: number;
+            status: components["schemas"]["PlanTemplateStatus"];
+            stopCount: number;
+            /** @description Mood/setting keys for the template as a whole. */
+            taxonomies: components["schemas"]["CmsRecommendationTaxonomy"][];
+            /** Format: uuid */
+            createdByAdminId?: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        CmsPlanTemplateDetail: components["schemas"]["CmsPlanTemplate"] & {
+            stops: components["schemas"]["CmsPlanTemplateStop"][];
+        };
+        CmsPlanTemplatePage: {
+            items: components["schemas"]["CmsPlanTemplate"][];
+            nextCursor: string | null;
+            totalCount: number;
+        };
+        CmsPlanTemplateCreate: {
+            slug: string;
+            internalName: string;
+            title: string;
+            description?: string;
+            locale?: string;
+            audience?: components["schemas"]["ContentAudience"];
+            areaKey?: string;
+            budget?: components["schemas"]["BudgetRange"];
+            expectedDurationMinutes?: number;
+            taxonomyIds?: string[];
+            /** @description Ordered — the index becomes the stored position. */
+            stops?: components["schemas"]["CmsPlanTemplateStopInput"][];
+        };
+        /** @description Omitted fields are left alone; a sent list replaces that list wholesale. */
+        CmsPlanTemplatePatch: {
+            internalName?: string;
+            title?: string;
+            description?: string;
+            locale?: string;
+            audience?: components["schemas"]["ContentAudience"];
+            areaKey?: string;
+            budget?: components["schemas"]["BudgetRange"];
+            expectedDurationMinutes?: number;
+            taxonomyIds?: string[];
+            stops?: components["schemas"]["CmsPlanTemplateStopInput"][];
+        };
+        /**
+         * @description `archived` is terminal — retired content comes back as a new row, not a resurrection.
+         * @enum {string}
+         */
+        RecommendationStatus: "draft" | "scheduled" | "published" | "archived";
+        /**
+         * @description Who a piece of editorial content is aimed at. One vocabulary across content types rather than one per resource. Stable key; the label resolves client-side through i18n.
+         * @enum {string}
+         */
+        ContentAudience: "couple" | "group" | "family" | "solo";
+        CmsRecommendationTaxonomy: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: "category" | "mood";
+            /** @description Stable taxonomy key, never a display label. */
+            key: string;
+        };
+        CmsRecommendation: {
+            /** Format: uuid */
+            id: string;
+            /** @description The internal key. Unique per locale. */
+            slug: string;
+            locale: string;
+            /** @description The editorial name. What an editor searches; never what a user reads. */
+            internalName?: string;
+            title: string;
+            subtitle?: string;
+            description?: string;
+            audience?: components["schemas"]["ContentAudience"];
+            /** @description Same vocabulary as a place's `areaKey` — "city" is one concept. */
+            areaKey?: string;
+            /** @description Higher first, between recommendations competing for one surface. */
+            priority: number;
+            status: components["schemas"]["RecommendationStatus"];
+            /** Format: date-time */
+            startsAt?: string;
+            /** Format: date-time */
+            endsAt?: string;
+            placeCount: number;
+            taxonomies: components["schemas"]["CmsRecommendationTaxonomy"][];
+            /** Format: uuid */
+            createdByAdminId?: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        CmsRecommendationPlace: {
+            position: number;
+            /** Format: uuid */
+            placeId: string;
+            name: string;
+            addressText?: string;
+            /** @description The place's catalog status, so a published recommendation quietly holding a suspended place is visible rather than silently short. */
+            status: string;
+        };
+        CmsRecommendationDetail: components["schemas"]["CmsRecommendation"] & {
+            places: components["schemas"]["CmsRecommendationPlace"][];
+        };
+        CmsRecommendationPage: {
+            items: components["schemas"]["CmsRecommendation"][];
+            nextCursor: string | null;
+            totalCount: number;
+        };
+        CmsRecommendationCreate: {
+            slug: string;
+            internalName: string;
+            title: string;
+            subtitle?: string;
+            description?: string;
+            locale?: string;
+            audience: components["schemas"]["ContentAudience"];
+            areaKey?: string;
+            priority?: number;
+            /** Format: date-time */
+            startsAt?: string;
+            /** Format: date-time */
+            endsAt?: string;
+            taxonomyIds?: string[];
+            /** @description Ordered — the index becomes the stored position. */
+            placeIds?: string[];
+        };
+        /** @description Omitted fields are left alone; a sent list replaces that list wholesale. */
+        CmsRecommendationPatch: {
+            internalName?: string;
+            title?: string;
+            subtitle?: string;
+            description?: string;
+            locale?: string;
+            audience?: components["schemas"]["ContentAudience"];
+            areaKey?: string;
+            priority?: number;
+            /** Format: date-time */
+            startsAt?: string;
+            /** Format: date-time */
+            endsAt?: string;
+            taxonomyIds?: string[];
+            placeIds?: string[];
+        };
+        /** @enum {string} */
+        SafetyRuleType: "spam" | "abusive_content" | "blocked_words" | "review_abuse" | "user_abuse" | "repeated_reports" | "rate_limit";
+        /** @enum {string} */
+        SafetyRuleTrigger: "review_created" | "review_updated" | "report_created" | "checkin_created" | "place_submitted" | "user_registered";
+        /**
+         * @description `suspend_user` acts on a person with no human in the loop, so it is available only to rule types that are about that person's conduct and only at `high` severity or above.
+         * @enum {string}
+         */
+        SafetyRuleAction: "flag_for_review" | "auto_hide" | "require_moderation" | "suspend_user" | "block_action";
+        /** @enum {string} */
+        SafetyRuleSeverity: "low" | "medium" | "high" | "critical";
+        /** @enum {string} */
+        SafetyRuleStatus: "draft" | "active" | "disabled";
+        /**
+         * @description A closed shape chosen by `ruleType`, never an expression. Unknown keys are rejected on write rather than stored and never read.
+         *
+         *     `blocked_words`: `terms[]`, `matchMode` (exact | substring), `caseSensitive`.
+         *     `spam`: `maxLinks`, `maxDuplicatesPerWindow`, `windowHours`, `minAccountAgeHours` — at least one of the first two.
+         *     `abusive_content`: `terms[]`, `minReports`, `windowHours`.
+         *     `review_abuse`: `maxReviewsPerWindow`, `windowHours`, `maxReviewsPerPlace`.
+         *     `user_abuse`: `maxReportsAgainstUser`, `windowHours`, `upheldOnly`.
+         *     `repeated_reports`: `minReports`, `windowHours`, `distinctReporters`.
+         *     `rate_limit`: `action` (review_create | report_create | checkin_create | place_submit | room_join), `limit`, `windowSeconds`.
+         */
+        CmsSafetyRuleConditions: {
+            [key: string]: unknown;
+        };
+        CmsSafetyRule: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            description?: string;
+            ruleType: components["schemas"]["SafetyRuleType"];
+            trigger: components["schemas"]["SafetyRuleTrigger"];
+            conditions: components["schemas"]["CmsSafetyRuleConditions"];
+            action: components["schemas"]["SafetyRuleAction"];
+            severity: components["schemas"]["SafetyRuleSeverity"];
+            status: components["schemas"]["SafetyRuleStatus"];
+            /** @description Lower runs first, so two rules matching one event resolve the same way every time rather than by insertion order. */
+            priority: number;
+            /** @description Stamped on every decision this rule causes, so an automated action can be traced back by a person reviewing it. */
+            reasonCode: string;
+            createdBy?: components["schemas"]["CmsAdminRef"] | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        CmsSafetyRulePage: {
+            items: components["schemas"]["CmsSafetyRule"][];
+            nextCursor: string | null;
+            totalCount: number;
+        };
+        CmsSafetyRuleCreate: {
+            name: string;
+            description?: string;
+            ruleType: components["schemas"]["SafetyRuleType"];
+            trigger: components["schemas"]["SafetyRuleTrigger"];
+            conditions?: components["schemas"]["CmsSafetyRuleConditions"];
+            action: components["schemas"]["SafetyRuleAction"];
+            severity?: components["schemas"]["SafetyRuleSeverity"];
+            priority?: number;
+            reasonCode: string;
+        };
+        /** @description `ruleType` is immutable; it decides which condition schema applies. */
+        CmsSafetyRulePatch: {
+            name?: string;
+            description?: string;
+            trigger?: components["schemas"]["SafetyRuleTrigger"];
+            conditions?: components["schemas"]["CmsSafetyRuleConditions"];
+            action?: components["schemas"]["SafetyRuleAction"];
+            severity?: components["schemas"]["SafetyRuleSeverity"];
+            priority?: number;
+            reasonCode?: string;
+        };
+        /**
+         * @description Stable key; the label resolves client-side.
+         * @enum {string}
+         */
+        BannerPlacement: "home_hero" | "home_secondary";
+        /**
+         * @description The lifecycle a person controls. `expired` is not settable.
+         * @enum {string}
+         */
+        BannerStatus: "draft" | "scheduled" | "published" | "archived";
+        /**
+         * @description What the banner is right now. `expired` is computed by the server from the end time on every read, never stored — a stored copy would be wrong between the moment the window closes and whatever noticed.
+         * @enum {string}
+         */
+        BannerEffectiveStatus: "draft" | "scheduled" | "published" | "archived" | "expired";
+        /** @enum {string} */
+        BannerDestination: "none" | "place" | "recommendation" | "plan_template" | "campaign" | "external_url";
+        CmsBanner: {
+            /** Format: uuid */
+            id: string;
+            /** @description The editorial name. */
+            name: string;
+            imageKey: string;
+            /** @description Where the image is readable. Null until media hosting is configured, rather than a URL that would 404. */
+            imageUrl: string | null;
+            title?: string;
+            subtitle?: string;
+            ctaLabel?: string;
+            destinationType: components["schemas"]["BannerDestination"];
+            destinationValue?: string;
+            audience?: components["schemas"]["ContentAudience"];
+            placement: components["schemas"]["BannerPlacement"];
+            /** Format: date-time */
+            startsAt?: string;
+            /** Format: date-time */
+            endsAt?: string;
+            /** @description Higher first, between banners competing for one placement. */
+            priority: number;
+            status: components["schemas"]["BannerEffectiveStatus"];
+            /** @description What a person set, as opposed to what the clock made of it. */
+            lifecycleStatus: components["schemas"]["BannerStatus"];
+            /** Format: uuid */
+            createdByAdminId?: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        CmsBannerPage: {
+            items: components["schemas"]["CmsBanner"][];
+            nextCursor: string | null;
+            totalCount: number;
+        };
+        CmsBannerCreate: {
+            name: string;
+            /** @description From `POST /cms/uploads`, purpose `banner_image`. */
+            imageKey: string;
+            title?: string;
+            subtitle?: string;
+            ctaLabel?: string;
+            destinationType?: components["schemas"]["BannerDestination"];
+            /** @description Required unless `destinationType` is `none`, which takes nothing. */
+            destinationValue?: string;
+            audience?: components["schemas"]["ContentAudience"];
+            placement: components["schemas"]["BannerPlacement"];
+            /** Format: date-time */
+            startsAt?: string;
+            /** Format: date-time */
+            endsAt?: string;
+            priority?: number;
+        };
+        /** @description Omitted fields are left alone. */
+        CmsBannerPatch: {
+            name?: string;
+            imageKey?: string;
+            title?: string;
+            subtitle?: string;
+            ctaLabel?: string;
+            destinationType?: components["schemas"]["BannerDestination"];
+            destinationValue?: string;
+            audience?: components["schemas"]["ContentAudience"];
+            placement?: components["schemas"]["BannerPlacement"];
+            /** Format: date-time */
+            startsAt?: string;
+            /** Format: date-time */
+            endsAt?: string;
+            priority?: number;
+        };
+        /**
+         * @description `sending` has no way back — once the worker has started handing messages to the provider, some are already delivered.
+         * @enum {string}
+         */
+        CampaignStatus: "draft" | "scheduled" | "sending" | "sent" | "cancelled" | "failed";
+        /**
+         * @description Only what the backend can resolve from data it holds. `city`, `app_version` and `custom_segment` from the mockup are absent on purpose: nothing stores a user's city or their app version, and a campaign aimed at a segment the server has to guess at reaches the wrong people — the one failure with no undo.
+         * @enum {string}
+         */
+        CampaignAudience: "all" | "couple" | "group" | "platform";
+        /**
+         * @description `plan_template` rather than `plan`: a campaign points every recipient at the same thing, and a plan belongs to one room.
+         * @enum {string}
+         */
+        CampaignDestination: "home" | "place" | "recommendation" | "plan_template" | "saved" | "external_url";
+        CmsCampaign: {
+            /** Format: uuid */
+            id: string;
+            /** @description The editorial name. `title` is what lands on a screen. */
+            name: string;
+            title: string;
+            body: string;
+            /** @description Key from `POST /cms/uploads`, purpose `campaign_image`. */
+            imageKey?: string;
+            ctaLabel?: string;
+            audienceType: components["schemas"]["CampaignAudience"];
+            /** @description Closed per audience type. `platform` takes `{ platform }`; the rest take `{}`. */
+            audienceFilter: {
+                [key: string]: unknown;
+            };
+            destinationType: components["schemas"]["CampaignDestination"];
+            destinationValue?: string;
+            status: components["schemas"]["CampaignStatus"];
+            /** Format: date-time */
+            scheduledAt?: string;
+            /** Format: date-time */
+            startedAt?: string;
+            /** Format: date-time */
+            completedAt?: string;
+            /** @description Resolved at send time, not at schedule time. */
+            recipientCount?: number;
+            /** @description How many the provider accepted. Not "seen", and not a guarantee of delivery to a device. */
+            sentCount: number;
+            failedCount: number;
+            lastError?: string;
+            /** Format: date-time */
+            testSendRequestedAt?: string;
+            /** Format: date-time */
+            testSendCompletedAt?: string;
+            /** Format: uuid */
+            createdByAdminId?: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        CmsCampaignPage: {
+            items: components["schemas"]["CmsCampaign"][];
+            nextCursor: string | null;
+            totalCount: number;
+        };
+        CmsCampaignAudienceEstimate: {
+            /** Format: uuid */
+            campaignId: string;
+            audienceType: components["schemas"]["CampaignAudience"];
+            /** @description Accounts with a registered device that match right now. */
+            estimatedRecipients: number;
+            /** Format: date-time */
+            estimatedAt: string;
+        };
+        CmsCampaignCreate: {
+            name: string;
+            title: string;
+            body: string;
+            imageKey?: string;
+            ctaLabel?: string;
+            audienceType: components["schemas"]["CampaignAudience"];
+            audienceFilter?: {
+                [key: string]: unknown;
+            };
+            destinationType?: components["schemas"]["CampaignDestination"];
+            /** @description Required for `place`, `recommendation`, `plan_template` and `external_url`; forbidden for `home` and `saved`. */
+            destinationValue?: string;
+        };
+        /** @description Editable only while nothing has been sent. */
+        CmsCampaignPatch: {
+            name?: string;
+            title?: string;
+            body?: string;
+            imageKey?: string;
+            ctaLabel?: string;
+            audienceType?: components["schemas"]["CampaignAudience"];
+            audienceFilter?: {
+                [key: string]: unknown;
+            };
+            destinationType?: components["schemas"]["CampaignDestination"];
+            destinationValue?: string;
         };
         CmsUpload: {
             /** Format: uuid */
@@ -6644,6 +7545,974 @@ export interface operations {
         responses: {
             /** @description Items replaced */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    cmsListPlanTemplates: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["PlanTemplateStatus"];
+                audience?: components["schemas"]["ContentAudience"];
+                areaKey?: string;
+                q?: string;
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Templates, newest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsPlanTemplatePage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+        };
+    };
+    cmsCreatePlanTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CmsPlanTemplateCreate"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsPlanTemplateDetail"];
+                };
+            };
+            /** @description Unknown preferred place (`PLACE_NOT_FOUND`), unknown or wrong-kind taxonomy (`TAXONOMY_NOT_FOUND`, `TAXONOMY_KIND_INVALID`), or an inverted budget range (`INVALID_BUDGET`). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Template key already used (`SLUG_TAKEN`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    cmsGetPlanTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Template */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsPlanTemplateDetail"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    cmsUpdatePlanTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CmsPlanTemplatePatch"];
+            };
+        };
+        responses: {
+            /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsPlanTemplateDetail"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    cmsSetPlanTemplateStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    status: components["schemas"]["PlanTemplateStatus"];
+                };
+            };
+        };
+        responses: {
+            /** @description Status changed (audited) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        id: string;
+                        status: components["schemas"]["PlanTemplateStatus"];
+                    };
+                };
+            };
+            /** @description Publishing with no stops (`EMPTY_TEMPLATE`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+            /** @description The lifecycle has no such edge (`INVALID_STATUS_TRANSITION`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    cmsSetPlanTemplateStops: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    stops: components["schemas"]["CmsPlanTemplateStopInput"][];
+                };
+            };
+        };
+        responses: {
+            /** @description Stops replaced */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsPlanTemplateDetail"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    cmsListRecommendations: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["RecommendationStatus"];
+                audience?: components["schemas"]["ContentAudience"];
+                areaKey?: string;
+                /** @description Substring of internal name */
+                q?: string;
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Recommendations, newest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsRecommendationPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+        };
+    };
+    cmsCreateRecommendation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CmsRecommendationCreate"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsRecommendationDetail"];
+                };
+            };
+            /** @description Unknown place (`PLACE_NOT_FOUND`), duplicate place (`DUPLICATE_PLACE`), unknown or untargetable taxonomy (`TAXONOMY_NOT_FOUND`, `TAXONOMY_KIND_INVALID`), or a window that ends before it starts (`INVALID_SCHEDULE`). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Internal key already used (`SLUG_TAKEN`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    cmsGetRecommendation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Recommendation */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsRecommendationDetail"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    cmsUpdateRecommendation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CmsRecommendationPatch"];
+            };
+        };
+        responses: {
+            /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsRecommendationDetail"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    cmsSetRecommendationStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    status: components["schemas"]["RecommendationStatus"];
+                };
+            };
+        };
+        responses: {
+            /** @description Status changed (audited) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        id: string;
+                        status: components["schemas"]["RecommendationStatus"];
+                    };
+                };
+            };
+            /** @description Scheduling without a start time (`SCHEDULE_REQUIRED`) or publishing with no places (`EMPTY_RECOMMENDATION`). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+            /** @description The lifecycle has no such edge (`INVALID_STATUS_TRANSITION`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    cmsSetRecommendationPlaces: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Order is meaning — the index becomes the stored position. */
+                    placeIds: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description Places replaced */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsRecommendationDetail"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    cmsListSafetyRules: {
+        parameters: {
+            query?: {
+                ruleType?: components["schemas"]["SafetyRuleType"];
+                status?: components["schemas"]["SafetyRuleStatus"];
+                action?: components["schemas"]["SafetyRuleAction"];
+                severity?: components["schemas"]["SafetyRuleSeverity"];
+                trigger?: components["schemas"]["SafetyRuleTrigger"];
+                q?: string;
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rules, newest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsSafetyRulePage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+        };
+    };
+    cmsCreateSafetyRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CmsSafetyRuleCreate"];
+            };
+        };
+        responses: {
+            /** @description Created (audited with the whole definition) */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsSafetyRule"];
+                };
+            };
+            /** @description Conditions do not fit the rule type (`INVALID_RULE_CONDITIONS`), the action or trigger is not available for it (`ACTION_NOT_ALLOWED`, `TRIGGER_NOT_ALLOWED`), or automatic suspension was asked for below `high` severity (`SEVERITY_TOO_LOW`). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A rule with that name exists (`RULE_NAME_TAKEN`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    cmsGetSafetyRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rule */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsSafetyRule"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    cmsUpdateSafetyRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CmsSafetyRulePatch"];
+            };
+        };
+        responses: {
+            /** @description Updated (audited before/after) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsSafetyRule"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    cmsSetSafetyRuleStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    status: components["schemas"]["SafetyRuleStatus"];
+                };
+            };
+        };
+        responses: {
+            /** @description Status changed (audited) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        id: string;
+                        status: components["schemas"]["SafetyRuleStatus"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    cmsListBanners: {
+        parameters: {
+            query?: {
+                placement?: components["schemas"]["BannerPlacement"];
+                status?: components["schemas"]["BannerEffectiveStatus"];
+                audience?: components["schemas"]["ContentAudience"];
+                q?: string;
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Banners, newest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsBannerPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+        };
+    };
+    cmsCreateBanner: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CmsBannerCreate"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsBanner"];
+                };
+            };
+            /** @description Destination is malformed, unsafe or missing (`INVALID_DESTINATION`), points at nothing (`DESTINATION_NOT_FOUND`), the window is inverted (`INVALID_SCHEDULE`), or the image key is not usable (`INVALID_UPLOAD_KEY`). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A banner with that name exists (`BANNER_NAME_TAKEN`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    cmsGetBanner: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Banner */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsBanner"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    cmsUpdateBanner: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CmsBannerPatch"];
+            };
+        };
+        responses: {
+            /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsBanner"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    cmsSetBannerStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    status: components["schemas"]["BannerStatus"];
+                };
+            };
+        };
+        responses: {
+            /** @description Status changed (audited) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        id: string;
+                        status: components["schemas"]["BannerStatus"];
+                    };
+                };
+            };
+            /** @description Scheduling without a start time (`SCHEDULE_REQUIRED`) or publishing a closed window (`WINDOW_CLOSED`). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+            /** @description The lifecycle has no such edge (`INVALID_STATUS_TRANSITION`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    cmsListCampaigns: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["CampaignStatus"];
+                audienceType?: components["schemas"]["CampaignAudience"];
+                q?: string;
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Campaigns, newest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsCampaignPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+        };
+    };
+    cmsCreateCampaign: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CmsCampaignCreate"];
+            };
+        };
+        responses: {
+            /** @description Draft created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsCampaign"];
+                };
+            };
+            /** @description Audience filter does not fit the audience type (`INVALID_AUDIENCE`), destination is malformed or unsafe (`INVALID_DESTINATION`), or it points at something that does not exist (`DESTINATION_NOT_FOUND`). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A campaign with that name exists (`CAMPAIGN_NAME_TAKEN`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    cmsGetCampaign: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Campaign */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsCampaign"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    cmsUpdateCampaign: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CmsCampaignPatch"];
+            };
+        };
+        responses: {
+            /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsCampaign"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            /** @description Not in an editable state (`CAMPAIGN_NOT_EDITABLE`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    cmsEstimateCampaignAudience: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Estimate */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsCampaignAudienceEstimate"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    cmsScheduleCampaign: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /**
+                     * Format: date-time
+                     * @description Omit for "send now". A past time is also due immediately.
+                     */
+                    sendAt?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Scheduled (audited) */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsCampaign"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            /** @description Not schedulable from its current state (`INVALID_STATUS_TRANSITION`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    cmsCancelCampaign: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cancelled (audited) */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsCampaign"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            /** @description Sending has started (`CAMPAIGN_ALREADY_SENDING`) — the message says how many were delivered — or the state is not cancellable (`INVALID_STATUS_TRANSITION`). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    cmsTestSendCampaign: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Test send queued for the worker */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        campaignId: string;
+                        status: components["schemas"]["CampaignStatus"];
+                        testSendQueued: boolean;
+                    };
+                };
+            };
+            /** @description The caller has no verified consumer account on the same address (`NO_TEST_RECIPIENT`). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+            /** @description Too many test sends */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -20,6 +20,7 @@ const SCREENS: [string, RegExp][] = [
   ['/submissions', /Đề xuất địa điểm từ app/],
   ['/taxonomy', /Hệ thống phân loại/],
   ['/collections', /Bộ sưu tập/],
+  ['/recommendations', /Gợi ý biên tập/],
   ['/settings', /Vận hành và cấu hình/],
   ['/settings/accounts', /Tài khoản CMS/],
   ['/audit', /Nhật ký kiểm toán/],
