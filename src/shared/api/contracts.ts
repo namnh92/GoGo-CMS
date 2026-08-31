@@ -341,50 +341,98 @@ export const collectionItemsSchema = z.object({
  * author on any of them, so the UI must not pretend otherwise: the queue is
  * deliberately PII-light and shows only what the decision needs.
  */
-export const moderationReviewSchema = z.object({
+/**
+ * The per-type moderation queues (GoGo-BE#219). `GET /cms/moderation` — four
+ * unfiltered arrays sharing one `limit` and carrying no totals — is deprecated
+ * upstream and no longer read here.
+ *
+ * Each queue is filtered, keyset-paged over `(createdAt, id)` and reports a
+ * `totalCount` for the filter rather than for the page.
+ */
+export const reportStatusSchema = z.enum(['open', 'actioned', 'dismissed'])
+export type ReportStatus = z.infer<typeof reportStatusSchema>
+
+export const reportTargetTypeSchema = z.enum(['place', 'review', 'member'])
+export type ReportTargetType = z.infer<typeof reportTargetTypeSchema>
+
+export const cmsModerationReportSchema = z.object({
   id: z.string(),
-  rating: z.number().nullish(),
-  text: z.string().nullish(),
+  status: reportStatusSchema,
+  targetType: reportTargetTypeSchema,
+  targetId: z.string(),
+  reasonCode: z.string(),
+  note: z.string().nullish(),
+  /**
+   * Whether the report came from a signed-in user, a guest or neither. The
+   * guest session id is an internal handle and is never returned — that a
+   * guest reported is the whole of the fact a moderator needs.
+   */
+  reporterKind: z.enum(['user', 'guest', 'anonymous']),
+  reporterUserId: z.string().nullish(),
+  decidedByAdminId: z.string().nullish(),
+  decisionReason: z.string().nullish(),
+  decidedAt: z.string().nullish(),
   createdAt: z.string(),
 })
-export type ModerationReview = z.infer<typeof moderationReviewSchema>
+export type CmsModerationReport = z.infer<typeof cmsModerationReportSchema>
 
-export const moderationReportSchema = z.object({
-  id: z.string(),
-  targetType: z.string(),
-  targetId: z.string().nullish(),
-  reasonCode: z.string().nullish(),
-})
-export type ModerationReport = z.infer<typeof moderationReportSchema>
+export const checkinModerationStatusSchema = z.enum(['pending', 'approved', 'rejected'])
+export type CheckinModerationStatus = z.infer<typeof checkinModerationStatusSchema>
 
-export const moderationCheckinSchema = z.object({
+export const cmsModerationCheckinSchema = z.object({
   id: z.string(),
-  rating: z.number().nullish(),
+  moderation: checkinModerationStatusSchema,
+  rating: z.number().int().nullish(),
   note: z.string().nullish(),
+  /** Stable `checkin_tag` taxonomy keys; labels resolve client-side. */
+  tags: z.array(z.string()).default([]),
   photoCount: z.number().int().default(0),
+  /** A bill total is present, which FR-PLAN-009 only allows with its photo. */
   hasBill: z.boolean().default(false),
+  planStopId: z.string(),
+  placeId: z.string().nullish(),
+  placeName: z.string().nullish(),
+  memberId: z.string(),
+  createdAt: z.string(),
 })
-export type ModerationCheckin = z.infer<typeof moderationCheckinSchema>
+export type CmsModerationCheckin = z.infer<typeof cmsModerationCheckinSchema>
 
 /**
- * The community tab lists PLACES in `community_submitted`, not submissions —
- * deciding one needs a submission id, which `GET /cms/place-submissions`
- * hands out (PI-CMS-007, `features/submissions`). This tab links there.
+ * The community queue lists PLACES in `community_submitted`, not submissions —
+ * deciding one needs a submission id, which `GET /cms/place-submissions` hands
+ * out (PI-CMS-007, `features/submissions`). This queue links there.
  */
-export const moderationCommunityPlaceSchema = z.object({
+export const cmsCommunityPlaceSchema = z.object({
   id: z.string(),
   name: z.string(),
+  addressText: z.string().nullish(),
+  areaKey: z.string().nullish(),
   createdAt: z.string(),
 })
-export type ModerationCommunityPlace = z.infer<typeof moderationCommunityPlaceSchema>
+export type CmsCommunityPlace = z.infer<typeof cmsCommunityPlaceSchema>
 
-export const moderationQueueSchema = z.object({
-  reviews: z.array(moderationReviewSchema).default([]),
-  reports: z.array(moderationReportSchema).default([]),
-  checkins: z.array(moderationCheckinSchema).default([]),
-  communityPlaces: z.array(moderationCommunityPlaceSchema).default([]),
+const pageMeta = {
+  nextCursor: z.string().nullable().default(null),
+  totalCount: z.number().int().default(0),
+}
+
+export const cmsModerationReportPageSchema = z.object({
+  items: z.array(cmsModerationReportSchema).default([]),
+  ...pageMeta,
 })
-export type ModerationQueue = z.infer<typeof moderationQueueSchema>
+export type CmsModerationReportPage = z.infer<typeof cmsModerationReportPageSchema>
+
+export const cmsModerationCheckinPageSchema = z.object({
+  items: z.array(cmsModerationCheckinSchema).default([]),
+  ...pageMeta,
+})
+export type CmsModerationCheckinPage = z.infer<typeof cmsModerationCheckinPageSchema>
+
+export const cmsCommunityPlacePageSchema = z.object({
+  items: z.array(cmsCommunityPlaceSchema).default([]),
+  ...pageMeta,
+})
+export type CmsCommunityPlacePage = z.infer<typeof cmsCommunityPlacePageSchema>
 
 export type ModerationKind = 'review' | 'report' | 'checkin' | 'community'
 

@@ -10,7 +10,6 @@ import {
   featureFlags,
   importJobs,
   importRows,
-  moderationQueue,
   opsKpis,
   experiments,
   placeSubmissions,
@@ -22,6 +21,9 @@ import {
   moderationReviewQueue,
   cmsAdmins,
   featureFlagCatalog,
+  moderationReportQueue,
+  moderationCheckinQueue,
+  communityPlaceQueue,
 } from './fixtures'
 
 const BASE = '/v1'
@@ -63,7 +65,9 @@ const db = {
   jobs: importJobs.map((job) => ({ ...job })),
   rows: JSON.parse(JSON.stringify(importRows)) as Record<string, ImportRow[]>,
   duplicates: duplicateRows.map((row) => ({ ...row })),
-  moderation: JSON.parse(JSON.stringify(moderationQueue)) as typeof moderationQueue,
+  reports: moderationReportQueue.map((row) => ({ ...row })),
+  checkins: moderationCheckinQueue.map((row) => ({ ...row })),
+  communityPlaces: communityPlaceQueue.map((row) => ({ ...row })),
   reviewQueue: JSON.parse(JSON.stringify(moderationReviewQueue)) as typeof moderationReviewQueue,
   submissions: placeSubmissions.map((item) => ({ ...item })),
   experiments: experiments.map((item) => ({ ...item })),
@@ -137,6 +141,18 @@ function roleFromEmail(email: string): AdminRole {
   if (local.includes('editor')) return 'editor'
   if (local.includes('ops')) return 'ops_admin'
   return 'super_admin'
+}
+
+/** Keyset page over `(createdAt, id)`, mirroring the per-type queue contracts. */
+function pageOf<T extends { id: string }>(items: T[], limit: number, cursor: string | null) {
+  const start = cursor ? items.findIndex((item) => item.id === cursor) + 1 : 0
+  const page = items.slice(start, start + limit)
+  const last = page[page.length - 1]
+  return {
+    items: page,
+    nextCursor: start + limit < items.length && last ? last.id : null,
+    totalCount: items.length,
+  }
 }
 
 export const handlers = [
@@ -542,8 +558,6 @@ export const handlers = [
     return HttpResponse.json({ count: body.placeIds.length })
   }),
 
-  http.get(`${BASE}/cms/moderation`, () => HttpResponse.json(db.moderation)),
-
   /*
    * `GET /cms/moderation/reviews` (GoGo-BE#219). The mock reproduces what the
    * console has to handle: server-side filters, keyset paging over
@@ -577,17 +591,62 @@ export const handlers = [
     return HttpResponse.json({ items: page, nextCursor, totalCount })
   }),
 
+  /*
+   * The per-type moderation queues (GoGo-BE#219), replacing the deprecated
+   * unified read. Each filters and keyset-pages server-side and reports a
+   * `totalCount` for the FILTERED set, not for the page.
+   */
+  http.get(`${BASE}/cms/moderation/reports`, ({ request }) => {
+    const url = new URL(request.url)
+    const status = url.searchParams.get('status') ?? 'open'
+    const targetType = url.searchParams.get('targetType')
+    const limit = Number(url.searchParams.get('limit') ?? 25)
+    const cursor = url.searchParams.get('cursor')
+
+    let items = db.reports.filter((report) => report.status === status)
+    if (targetType) items = items.filter((report) => report.targetType === targetType)
+    return HttpResponse.json(pageOf(items, limit, cursor))
+  }),
+
+  http.get(`${BASE}/cms/moderation/checkins`, ({ request }) => {
+    const url = new URL(request.url)
+    const status = url.searchParams.get('status') ?? 'pending'
+    const rating = url.searchParams.get('rating')
+    const hasBill = url.searchParams.get('hasBill')
+    const limit = Number(url.searchParams.get('limit') ?? 25)
+    const cursor = url.searchParams.get('cursor')
+
+    let items = db.checkins.filter((checkin) => checkin.moderation === status)
+    if (rating) items = items.filter((checkin) => checkin.rating === Number(rating))
+    if (hasBill === 'true') items = items.filter((checkin) => checkin.hasBill)
+    if (hasBill === 'false') items = items.filter((checkin) => !checkin.hasBill)
+    return HttpResponse.json(pageOf(items, limit, cursor))
+  }),
+
+  http.get(`${BASE}/cms/moderation/community-places`, ({ request }) => {
+    const url = new URL(request.url)
+    const q = url.searchParams.get('q')?.toLowerCase()
+    const areaKey = url.searchParams.get('areaKey')
+    const limit = Number(url.searchParams.get('limit') ?? 25)
+    const cursor = url.searchParams.get('cursor')
+
+    let items = db.communityPlaces
+    if (q) items = items.filter((place) => place.name.toLowerCase().includes(q))
+    if (areaKey) items = items.filter((place) => place.areaKey === areaKey)
+    return HttpResponse.json(pageOf(items, limit, cursor))
+  }),
+
   http.get(`${BASE}/cms/moderation/counts`, () =>
     HttpResponse.json({
       reviews: db.reviewQueue.filter((review) => review.status === 'pending').length,
-      reports: db.moderation.reports.length,
-      checkins: db.moderation.checkins.length,
-      communityPlaces: db.moderation.communityPlaces.length,
+      reports: db.reports.filter((report) => report.status === 'open').length,
+      checkins: db.checkins.filter((checkin) => checkin.moderation === 'pending').length,
+      communityPlaces: db.communityPlaces.length,
       total:
         db.reviewQueue.filter((review) => review.status === 'pending').length +
-        db.moderation.reports.length +
-        db.moderation.checkins.length +
-        db.moderation.communityPlaces.length,
+        db.reports.filter((report) => report.status === 'open').length +
+        db.checkins.filter((checkin) => checkin.moderation === 'pending').length +
+        db.communityPlaces.length,
     }),
   ),
 
@@ -619,10 +678,10 @@ export const handlers = [
           return HttpResponse.json({ id: place.id, status: 'suspended' }, { status: 201 })
         }
         if (kind === 'reviews') {
-          db.moderation.reviews = db.moderation.reviews.filter((item) => item.id !== params.id)
+          db.reviewQueue = db.reviewQueue.filter((item) => item.id !== params.id)
           return HttpResponse.json({ id: params.id, status: 'hidden' }, { status: 201 })
         }
-        db.moderation.checkins = db.moderation.checkins.filter((item) => item.id !== params.id)
+        db.checkins = db.checkins.filter((item) => item.id !== params.id)
         return HttpResponse.json({ id: params.id, moderation: 'hidden' }, { status: 201 })
       },
     ),
@@ -635,7 +694,20 @@ export const handlers = [
     }
     const key =
       params.kind === 'reviews' ? 'reviews' : params.kind === 'reports' ? 'reports' : 'checkins'
-    db.moderation[key] = db.moderation[key].filter((item) => item.id !== params.id) as never
+    if (key === 'reports') {
+      const report = db.reports.find((item) => item.id === params.id)
+      if (report) {
+        report.status = body.decision === 'actioned' ? 'actioned' : 'dismissed'
+        report.decisionReason = body.reason
+        report.decidedAt = new Date().toISOString()
+      }
+    }
+    if (key === 'checkins') {
+      const checkin = db.checkins.find((item) => item.id === params.id)
+      if (checkin) {
+        checkin.moderation = body.decision === 'approved' ? 'approved' : 'rejected'
+      }
+    }
     if (key === 'reviews') {
       const review = db.reviewQueue.find((item) => item.id === params.id)
       if (review) {
@@ -673,9 +745,7 @@ export const handlers = [
     if (!body.reason || body.reason.trim().length < 3) {
       return envelope(400, 'REASON_REQUIRED', 'reason is mandatory')
     }
-    db.moderation.communityPlaces = db.moderation.communityPlaces.filter(
-      (item) => item.id !== params.id,
-    )
+    db.communityPlaces = db.communityPlaces.filter((item) => item.id !== params.id)
     db.submissions = db.submissions.filter((item: { id: string }) => item.id !== params.id)
     return HttpResponse.json({ decided: true }, { status: 201 })
   }),

@@ -1,11 +1,18 @@
 import { apiFetch, apiFetchParsed, newIdempotencyKey } from '@/shared/api/client'
 import {
+  cmsCommunityPlacePageSchema,
+  cmsModerationCheckinPageSchema,
   cmsModerationCountsSchema,
+  cmsModerationReportPageSchema,
   cmsModerationReviewPageSchema,
-  moderationQueueSchema,
+  type CheckinModerationStatus,
+  type CmsCommunityPlacePage,
+  type CmsModerationCheckinPage,
   type CmsModerationCounts,
+  type CmsModerationReportPage,
   type CmsModerationReviewPage,
-  type ModerationQueue,
+  type ReportStatus,
+  type ReportTargetType,
   type ReviewModerationStatus,
 } from '@/shared/api/contracts'
 import { fetchAudit } from '@/features/audit/api'
@@ -70,18 +77,6 @@ export function fetchModerationCounts(signal?: AbortSignal): Promise<CmsModerati
   return apiFetchParsed(cmsModerationCountsSchema, '/cms/moderation/counts', { signal })
 }
 
-/**
- * The unified queue. Deprecated upstream in favour of the per-type queues, and
- * still the source for reports, check-ins and community places until those are
- * migrated too.
- */
-export function fetchModerationQueue(
-  limit: number,
-  signal?: AbortSignal,
-): Promise<ModerationQueue> {
-  return apiFetchParsed(moderationQueueSchema, '/cms/moderation', { query: { limit }, signal })
-}
-
 /** The reason is mandatory (3–500 chars) and lands in the audit log. */
 export function decideReview(id: string, decision: ReviewDecision, reason: string) {
   return apiFetch(`/cms/moderation/reviews/${id}`, {
@@ -135,4 +130,91 @@ export function decideSubmission(
  */
 export function fetchReviewHistory(reviewId: string, signal?: AbortSignal): Promise<AuditPage> {
   return fetchAudit({ resourceId: reviewId, limit: 20 }, signal)
+}
+
+/** Shared paging shape for every per-type queue. */
+type Paging = { limit?: number; cursor?: string | null }
+
+export type ReportQueueFilters = Paging & {
+  /** Defaults to `open` on the server — the work queue. */
+  status?: ReportStatus
+  targetType?: ReportTargetType
+  targetId?: string
+  reasonCode?: string
+  dateFrom?: string
+  dateTo?: string
+}
+
+export function fetchModerationReports(
+  filters: ReportQueueFilters,
+  signal?: AbortSignal,
+): Promise<CmsModerationReportPage> {
+  return apiFetchParsed(cmsModerationReportPageSchema, '/cms/moderation/reports', {
+    query: {
+      status: filters.status,
+      targetType: filters.targetType,
+      targetId: filters.targetId,
+      reasonCode: filters.reasonCode,
+      dateFrom: filters.dateFrom,
+      dateTo: filters.dateTo,
+      limit: filters.limit ?? 25,
+      cursor: filters.cursor ?? undefined,
+    },
+    signal,
+  })
+}
+
+export type CheckinQueueFilters = Paging & {
+  /** Defaults to `pending` on the server. */
+  status?: CheckinModerationStatus
+  rating?: number
+  hasBill?: boolean
+  placeId?: string
+  dateFrom?: string
+  dateTo?: string
+}
+
+export function fetchModerationCheckins(
+  filters: CheckinQueueFilters,
+  signal?: AbortSignal,
+): Promise<CmsModerationCheckinPage> {
+  return apiFetchParsed(cmsModerationCheckinPageSchema, '/cms/moderation/checkins', {
+    query: {
+      status: filters.status,
+      rating: filters.rating,
+      // `false` is a real filter ("no bill"), so only `undefined` drops.
+      hasBill: filters.hasBill === undefined ? undefined : filters.hasBill,
+      placeId: filters.placeId,
+      dateFrom: filters.dateFrom,
+      dateTo: filters.dateTo,
+      limit: filters.limit ?? 25,
+      cursor: filters.cursor ?? undefined,
+    },
+    signal,
+  })
+}
+
+export type CommunityPlaceFilters = Paging & {
+  /** Accent-insensitive name search, same normalization as consumer search. */
+  q?: string
+  areaKey?: string
+  dateFrom?: string
+  dateTo?: string
+}
+
+export function fetchCommunityPlaces(
+  filters: CommunityPlaceFilters,
+  signal?: AbortSignal,
+): Promise<CmsCommunityPlacePage> {
+  return apiFetchParsed(cmsCommunityPlacePageSchema, '/cms/moderation/community-places', {
+    query: {
+      q: filters.q || undefined,
+      areaKey: filters.areaKey,
+      dateFrom: filters.dateFrom,
+      dateTo: filters.dateTo,
+      limit: filters.limit ?? 25,
+      cursor: filters.cursor ?? undefined,
+    },
+    signal,
+  })
 }
