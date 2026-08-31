@@ -28,6 +28,7 @@ import {
   cmsRecommendations,
   cmsSafetyRules,
   cmsBanners,
+  cmsCampaigns,
   cmsPlanTemplates,
 } from './fixtures'
 
@@ -91,6 +92,7 @@ const db = {
   planTemplates: JSON.parse(JSON.stringify(cmsPlanTemplates)) as typeof cmsPlanTemplates,
   safetyRules: JSON.parse(JSON.stringify(cmsSafetyRules)) as typeof cmsSafetyRules,
   banners: JSON.parse(JSON.stringify(cmsBanners)) as typeof cmsBanners,
+  campaigns: JSON.parse(JSON.stringify(cmsCampaigns)) as typeof cmsCampaigns,
 }
 
 /**
@@ -171,11 +173,14 @@ function pageOf<T extends { id: string }>(items: T[], limit: number, cursor: str
  * rule. Reads do not climb into this resource (BE-IMP-008), and the mock says
  * so rather than letting the console look more permissive than the server.
  */
-function requireOpsAdmin() {
+function requireOpsAdmin(message = 'safety rules are ops_admin only') {
   const { role } = currentActor()
   if (role === 'ops_admin' || role === 'super_admin') return null
-  return envelope(403, 'FORBIDDEN', 'safety rules are ops_admin only')
+  return envelope(403, 'FORBIDDEN', message)
 }
+
+/** Editing is only meaningful while nothing has been sent. */
+const EDITABLE_CAMPAIGN_STATUSES: string[] = ['draft', 'cancelled', 'failed']
 
 /**
  * `expired` is computed from the end time on every read, never stored — a
@@ -942,6 +947,173 @@ export const handlers = [
    * gets a 403 from the mock exactly as they would from the server, and the
    * console's permission-denied state is reachable in dev.
    */
+  /*
+   * Notification campaigns (GoGo-BE#226). `ops_admin` in both directions.
+   *
+   * Nothing here reaches a provider: `schedule` writes a row and returns, the
+   * way the real API does. There is deliberately no mock "send" either — the
+   * worker is what sends, and pretending otherwise in dev would teach the
+   * console the wrong shape.
+   */
+  http.get(`${BASE}/cms/campaigns`, ({ request }) => {
+    const denied = requireOpsAdmin('campaigns are ops_admin only')
+    if (denied) return denied
+    const url = new URL(request.url)
+    const status = url.searchParams.get('status')
+    const audienceType = url.searchParams.get('audienceType')
+    const q = url.searchParams.get('q')?.toLowerCase()
+    const limit = Number(url.searchParams.get('limit') ?? 25)
+    const cursor = url.searchParams.get('cursor')
+
+    let items = db.campaigns
+    if (status) items = items.filter((row) => row.status === status)
+    if (audienceType) items = items.filter((row) => row.audienceType === audienceType)
+    if (q) items = items.filter((row) => row.name.toLowerCase().includes(q))
+    return HttpResponse.json(pageOf(items, limit, cursor))
+  }),
+
+  http.post(`${BASE}/cms/campaigns`, async ({ request }) => {
+    const denied = requireOpsAdmin('campaigns are ops_admin only')
+    if (denied) return denied
+    const body = (await request.json()) as Record<string, unknown>
+    const name = String(body.name ?? '')
+    if (db.campaigns.some((row) => row.name === name)) {
+      return envelope(409, 'CAMPAIGN_NAME_TAKEN', 'a campaign with that name exists')
+    }
+    const created = {
+      id: `cp-${db.campaigns.length + 100}`,
+      name,
+      title: String(body.title ?? ''),
+      body: String(body.body ?? ''),
+      imageKey: (body.imageKey as string) ?? null,
+      ctaLabel: (body.ctaLabel as string) ?? null,
+      audienceType: (body.audienceType as 'all') ?? 'all',
+      audienceFilter: (body.audienceFilter as Record<string, unknown>) ?? {},
+      destinationType: (body.destinationType as 'home') ?? 'home',
+      destinationValue: (body.destinationValue as string) ?? null,
+      // Always a draft: nothing is sent until it is scheduled.
+      status: 'draft' as const,
+      scheduledAt: null,
+      startedAt: null,
+      completedAt: null,
+      recipientCount: null,
+      sentCount: 0,
+      failedCount: 0,
+      lastError: null,
+      testSendRequestedAt: null,
+      testSendCompletedAt: null,
+      createdByAdminId: 'adm-mock',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+    db.campaigns.unshift(created)
+    return HttpResponse.json(created, { status: 201 })
+  }),
+
+  http.get(`${BASE}/cms/campaigns/:id`, ({ params }) => {
+    const denied = requireOpsAdmin('campaigns are ops_admin only')
+    if (denied) return denied
+    const row = db.campaigns.find((item) => item.id === params.id)
+    if (!row) return envelope(404, 'NOT_FOUND', 'campaign not found')
+    return HttpResponse.json(row)
+  }),
+
+  http.patch(`${BASE}/cms/campaigns/:id`, async ({ params, request }) => {
+    const denied = requireOpsAdmin('campaigns are ops_admin only')
+    if (denied) return denied
+    const row = db.campaigns.find((item) => item.id === params.id)
+    if (!row) return envelope(404, 'NOT_FOUND', 'campaign not found')
+    // Editing a scheduled campaign would silently change what is about to go
+    // out; it has to be unscheduled first.
+    if (!EDITABLE_CAMPAIGN_STATUSES.includes(row.status)) {
+      return envelope(409, 'CAMPAIGN_NOT_EDITABLE', 'not in an editable state')
+    }
+    const body = (await request.json()) as Record<string, unknown>
+    for (const key of [
+      'name',
+      'title',
+      'body',
+      'imageKey',
+      'ctaLabel',
+      'audienceType',
+      'audienceFilter',
+      'destinationType',
+      'destinationValue',
+    ] as const) {
+      if (body[key] !== undefined) (row as Record<string, unknown>)[key] = body[key]
+    }
+    row.updatedAt = new Date().toISOString()
+    return HttpResponse.json(row)
+  }),
+
+  http.get(`${BASE}/cms/campaigns/:id/audience-estimate`, ({ params }) => {
+    const denied = requireOpsAdmin('campaigns are ops_admin only')
+    if (denied) return denied
+    const row = db.campaigns.find((item) => item.id === params.id)
+    if (!row) return envelope(404, 'NOT_FOUND', 'campaign not found')
+    // A read with no side effect. Counts only accounts with a registered
+    // device, which is why it is smaller than any "total users" number.
+    const base = { all: 21480, couple: 9260, group: 6140, platform: 11890 }
+    return HttpResponse.json({
+      campaignId: row.id,
+      audienceType: row.audienceType,
+      estimatedRecipients: base[row.audienceType],
+      estimatedAt: new Date().toISOString(),
+    })
+  }),
+
+  http.post(`${BASE}/cms/campaigns/:id/schedule`, async ({ params, request }) => {
+    const denied = requireOpsAdmin('campaigns are ops_admin only')
+    if (denied) return denied
+    const row = db.campaigns.find((item) => item.id === params.id)
+    if (!row) return envelope(404, 'NOT_FOUND', 'campaign not found')
+    if (!EDITABLE_CAMPAIGN_STATUSES.includes(row.status)) {
+      return envelope(409, 'INVALID_STATUS_TRANSITION', 'not schedulable from here')
+    }
+    const body = (await request.json().catch(() => ({}))) as { sendAt?: string }
+    row.status = 'scheduled'
+    // Omitting `sendAt` means now; the worker picks it up on its next tick.
+    row.scheduledAt = body.sendAt ?? new Date().toISOString()
+    row.updatedAt = new Date().toISOString()
+    return HttpResponse.json(row, { status: 201 })
+  }),
+
+  http.post(`${BASE}/cms/campaigns/:id/cancel`, ({ params }) => {
+    const denied = requireOpsAdmin('campaigns are ops_admin only')
+    if (denied) return denied
+    const row = db.campaigns.find((item) => item.id === params.id)
+    if (!row) return envelope(404, 'NOT_FOUND', 'campaign not found')
+    if (row.status === 'sending') {
+      return envelope(
+        409,
+        'CAMPAIGN_ALREADY_SENDING',
+        `sending has started; ${row.sentCount} already delivered`,
+      )
+    }
+    if (row.status !== 'scheduled') {
+      return envelope(409, 'INVALID_STATUS_TRANSITION', 'not cancellable from here')
+    }
+    row.status = 'cancelled'
+    row.scheduledAt = null
+    row.updatedAt = new Date().toISOString()
+    return HttpResponse.json(row, { status: 201 })
+  }),
+
+  http.post(`${BASE}/cms/campaigns/:id/test-send`, ({ params }) => {
+    const denied = requireOpsAdmin('campaigns are ops_admin only')
+    if (denied) return denied
+    const row = db.campaigns.find((item) => item.id === params.id)
+    if (!row) return envelope(404, 'NOT_FOUND', 'campaign not found')
+    // Never changes `status`: a test reaches exactly one account, the
+    // caller's own.
+    row.testSendRequestedAt = new Date().toISOString()
+    row.updatedAt = new Date().toISOString()
+    return HttpResponse.json(
+      { campaignId: row.id, status: row.status, testSendQueued: true },
+      { status: 201 },
+    )
+  }),
+
   /*
    * CMS-scoped presigned upload (GoGo-BE#227).
    *

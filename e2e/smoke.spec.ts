@@ -25,6 +25,8 @@ const SCREENS: [string, RegExp][] = [
   ['/banners', /Banner trang chủ/],
   ['/banners/bn-tet-hero', /Hero Tết 2026/],
   ['/safety-rules', /Luật Trust & Safety/],
+  ['/campaigns', /Chiến dịch thông báo/],
+  ['/campaigns/cp-dang-gui', /Khảo sát trải nghiệm/],
   ['/settings', /Vận hành và cấu hình/],
   ['/settings/accounts', /Tài khoản CMS/],
   ['/audit', /Nhật ký kiểm toán/],

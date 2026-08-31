@@ -6,7 +6,12 @@ import { renderWithProviders, signInAs } from '@/shared/test/render'
 import { cmsBanners } from '@/shared/test/fixtures'
 import BannerListScreen from './bannerList.view'
 import BannerDetailScreen from './bannerDetail.view'
-import { checkDestination, isSafeExternalUrl, isValidWindow, toLocalInput } from './destination'
+import {
+  checkDestination,
+  isSafeExternalUrl,
+  isValidWindow,
+  toLocalInput,
+} from '@/shared/api/destination'
 
 /** The fixture whose window has closed while a person left it published. */
 const expired = cmsBanners.find((banner) => banner.id === 'bn-noel-cu')!

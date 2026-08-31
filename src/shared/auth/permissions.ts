@@ -51,6 +51,8 @@ const ROUTE_ROLES = {
   safety: ['ops_admin'],
   /** `CmsBannersController` — @RequireRole('editor', 'ops_admin') */
   banners: ['editor', 'ops_admin'],
+  /** `CmsCampaignsController` — @RequireRole('ops_admin') */
+  campaigns: ['ops_admin'],
   /** `CmsUploadsController` — @RequireRole('editor', 'ops_admin') */
   uploads: ['editor', 'ops_admin'],
   /** `POST /cms/auth/admins` — @RequireRole('super_admin') */
@@ -140,6 +142,12 @@ const PERMISSIONS = {
   // permission rather than being assumed from `banner.manage`.
   'banner.read': ['banners', 'read'],
   'banner.manage': ['banners', 'write'],
+
+  // Campaigns — `ops_admin` in both directions. A campaign that has gone out
+  // cannot be recalled, so reading who is about to be pushed at is not opened
+  // to rank-read either.
+  'campaign.read': ['campaigns', 'read'],
+  'campaign.manage': ['campaigns', 'write'],
   'upload.create': ['uploads', 'write'],
 
   // Audit — declared on `editor`, so rank-based read opens the log to every
