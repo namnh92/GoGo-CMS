@@ -121,6 +121,11 @@ const PERMISSIONS = {
   // Emergency takedown — anyone on shift can pull content down.
   'emergency.takedown': ['emergency', 'write'],
 
+  // Reading who holds which role is the shape of the authorization model, so
+  // the server keeps it super-admin-only rather than opening it to rank-read.
+  // `canAccess` lands on the same answer: 'admins' asks for super_admin, whose
+  // rank nothing else reaches.
+  'admin.read': ['admins', 'read'],
   'admin.create': ['admins', 'write'],
 } as const satisfies Record<string, readonly [RouteGroup, Access]>
 

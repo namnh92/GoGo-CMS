@@ -2379,6 +2379,44 @@ paths:
           description: No enrollment is pending
 
   /cms/auth/admins:
+    get:
+      operationId: cmsListAdmins
+      tags: [cms]
+      summary: 'Super admin: staff accounts, filtered and cursor-paged'
+      description: >
+        The read that was missing beside `cmsCreateAdmin`: the console could
+        create a staff account and then never show it again.
+
+
+        `super_admin` only, matching the write — who holds which role is the
+        shape of the authorization model itself, so it is not a rank-read for
+        lower roles.
+
+
+        Never returns the password hash, the TOTP secret (enrolled or pending),
+        or any session material. `email` is returned because it is how a staff
+        account is identified; nothing beyond it is.
+      parameters:
+        - name: q
+          in: query
+          description: Substring of email or display name, case-insensitive.
+          schema: { type: string, maxLength: 120 }
+        - { name: role, in: query, schema: { $ref: '#/components/schemas/AdminRole' } }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/AdminStatus' } }
+        - {
+            name: limit,
+            in: query,
+            schema: { type: integer, minimum: 1, maximum: 100, default: 50 },
+          }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Staff accounts, newest first
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CmsAdminPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
     post:
       operationId: cmsCreateAdmin
       tags: [cms]
@@ -2911,6 +2949,70 @@ paths:
       responses:
         '200': { description: Items replaced }
 
+  /cms/uploads:
+    post:
+      operationId: cmsCreateUpload
+      tags: [cms]
+      summary: 'Editor/ops: presigned upload for CMS-managed media'
+      description: >
+        `/v1/uploads` authorizes a presigned PUT for the **calling consumer** —
+        the key it returns is bound to that actor and to a purpose a mobile
+        client writes — so an admin had no way to produce a key, and a banner,
+        where the image is mandatory, had nothing to bind to.
+
+
+        The same pipeline, not a second one: the same presigner, the same
+        content-type allowlist, the same size ceiling, the same
+        `media_uploads` row that makes a key mean something. What differs is
+        who may ask, what for, and that the authorization is audited.
+
+
+        The client PUTs the bytes straight to storage with `uploadUrl` and
+        sends only `key` back to whichever resource references it. Image bytes
+        never cross the API, so the server cannot report the image's pixel
+        dimensions here — they are not known until something reads the object.
+
+
+        Authentication is the ordinary CMS session: the admin cookie plus the
+        CSRF double-submit header on this mutation, or a bearer token. No
+        second credential path is opened, and no storage credential is ever
+        returned — only a URL that expires and is signed for one key and one
+        content type.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [purpose, contentType, contentLength]
+              properties:
+                purpose:
+                  type: string
+                  enum: [banner_image, campaign_image]
+                  description: >
+                    Staff-only purposes. Deliberately disjoint from the consumer
+                    set, so a phone cannot authorize a banner image and an
+                    editor's key is not accepted by the check-in flow.
+                contentType:
+                  type: string
+                  enum: [image/jpeg, image/png, image/webp, image/heic]
+                contentLength:
+                  type: integer
+                  description: Declared up front, so an oversized file is refused before a URL exists.
+      responses:
+        '201':
+          description: Upload authorized (audited)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CmsUpload' }
+        '400':
+          description: >
+            Unsupported content type (`UNSUPPORTED_CONTENT_TYPE`) or over the
+            size ceiling (`FILE_TOO_LARGE`).
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503':
+          description: Object storage is not configured in this environment (`UPLOAD_NOT_CONFIGURED`)
+
   /cms/moderation:
     get:
       operationId: cmsModerationQueue
@@ -3322,25 +3424,73 @@ paths:
     get:
       operationId: cmsListFeatureFlags
       tags: [cms]
-      summary: 'Ops: every flag with its current value and last writer'
+      summary: 'Ops: every stored flag override with its value and last writer'
       description: >
         A kill switch nobody can read is not a kill switch. The AI fallback and
         the travel-time provider are both flag-gated, so their state has to be
         visible before an incident, not during one.
+
+
+        One entry per stored override. A key can have several — `(all, all)` is
+        the unscoped row, and a more specific `(production, ios)` row wins over
+        it for that environment and platform. Keys with no row at all are not
+        listed here; `cmsFeatureFlagCatalog` is what says which keys exist and
+        what they fall back to.
+      parameters:
+        - { name: environment, in: query, schema: { $ref: '#/components/schemas/FlagEnvironment' } }
+        - { name: platform, in: query, schema: { $ref: '#/components/schemas/FlagPlatform' } }
       responses:
         '200':
-          description: Flags in key order
+          description: Overrides in key, environment, platform order
           content:
             application/json:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/CmsFeatureFlag' }
 
+  /cms/feature-flags/catalog:
+    get:
+      operationId: cmsFeatureFlagCatalog
+      tags: [cms]
+      summary: 'Ops: every configurable key, its type and its default'
+      description: >
+        The registry of keys something in the backend actually reads. A key is
+        added by shipping the code that reads it, so the console can never
+        write a value nothing consumes.
+
+
+        Needed to edit safely: without the default, "not configured" and
+        "configured to zero" look identical, and a `version` field has no way
+        to show what it falls back to.
+      responses:
+        '200':
+          description: Flag definitions in registry order
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CmsFeatureFlagDefinition' }
+
   /cms/feature-flags/{key}:
     put:
       operationId: cmsSetFeatureFlag
       tags: [cms]
-      summary: 'Ops: toggle a feature flag / kill switch'
+      summary: 'Ops: set a flag for an environment and platform (audited)'
+      description: >
+        Validated against the key's declared type: a `version` that is not
+        `1.2.3` is refused here rather than tolerated by one client and crashed
+        on by another, and an unknown key is a 404 rather than a row nothing
+        reads.
+
+
+        A boolean flag's value is `enabled` — that is the column the kill
+        switches read, and an incident is the wrong moment to discover it moved.
+        For every other type the value goes in `value`; `payload` is the old
+        name for the same field and still accepted.
+
+
+        Omitting `environment` / `platform` writes the unscoped `(all, all)`
+        row, which is what every resolution falls back to.
       parameters:
         - { name: key, in: path, required: true, schema: { type: string } }
       requestBody:
@@ -3351,10 +3501,32 @@ paths:
               type: object
               required: [enabled]
               properties:
-                enabled: { type: boolean }
-                payload: {}
+                enabled:
+                  type: boolean
+                  description: >
+                    For a boolean flag this is the value. For any other type it
+                    is whether the override applies at all — switching it off
+                    returns the key to its registry default.
+                value:
+                  description: Typed per the key's `valueType`. Absent for boolean flags.
+                payload:
+                  deprecated: true
+                  description: Old name for `value`. Sending both with different values is a 400.
+                environment: { $ref: '#/components/schemas/FlagEnvironment' }
+                platform: { $ref: '#/components/schemas/FlagPlatform' }
       responses:
-        '200': { description: Flag updated (audited) }
+        '200':
+          description: Flag updated (audited with before/after)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CmsFeatureFlagWriteResult' }
+        '400':
+          description: >
+            Value does not match the declared type (`INVALID_FLAG_VALUE`), or a
+            platform override was asked for on a key that has no per-platform
+            form (`FLAG_NOT_PLATFORM_SCOPED`).
+        '404':
+          description: No such key in the registry (`FLAG_UNKNOWN`)
 
   /cms/emergency/places/{id}/suspend:
     post:
@@ -3612,6 +3784,47 @@ components:
     AdminRole:
       type: string
       enum: [editor, moderator, ops_admin, super_admin]
+    AdminStatus:
+      type: string
+      enum: [active, suspended]
+      description: >
+        The two states the server actually enforces: `suspended` loses access on
+        the next request, whatever token the account still holds. There is no
+        third "disabled" state — a status the guard does not act on would be a
+        claim in the data that nothing backs.
+
+    CmsAdmin:
+      type: object
+      required: [id, email, displayName, role, status, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        email:
+          type: string
+          format: email
+          description: How a staff account is identified. No other contact detail is returned.
+        displayName: { type: string }
+        role: { $ref: '#/components/schemas/AdminRole' }
+        status: { $ref: '#/components/schemas/AdminStatus' }
+        createdAt: { type: string, format: date-time }
+        lastLoginAt:
+          type: string
+          format: date-time
+          description: Absent on an account that has never signed in.
+
+    CmsAdminPage:
+      type: object
+      required: [items, nextCursor, totalCount]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/CmsAdmin' }
+        nextCursor:
+          type: [string, 'null']
+          description: Keyset cursor over (createdAt, id).
+        totalCount:
+          type: integer
+          description: Accounts matching the filter, not accounts in this page.
+
     ModerationDecision:
       type: object
       required: [decision, reason]
@@ -4478,19 +4691,99 @@ components:
         activatedAt: { type: [string, 'null'], format: date-time }
         createdAt: { type: string, format: date-time }
 
+    FlagValueType:
+      type: string
+      enum: [boolean, string, number, json, version]
+
+    FlagEnvironment:
+      type: string
+      enum: [all, dev, staging, production]
+      description: >
+        `all` is the unscoped row every resolution falls back to; a named
+        environment overrides it for that deployment only.
+
+    FlagPlatform:
+      type: string
+      enum: [all, ios, android, web]
+
     CmsFeatureFlag:
       type: object
-      required: [key, enabled, updatedAt]
+      required: [key, valueType, environment, platform, enabled, known, updatedAt]
       properties:
         key: { type: string }
-        enabled: { type: boolean }
-        payload: { description: Free-form flag configuration. }
+        valueType: { $ref: '#/components/schemas/FlagValueType' }
+        environment: { $ref: '#/components/schemas/FlagEnvironment' }
+        platform: { $ref: '#/components/schemas/FlagPlatform' }
+        enabled:
+          type: boolean
+          description: >
+            The value itself for a boolean flag; for any other type, whether
+            this override applies at all.
+        value:
+          description: Typed per `valueType`. For a boolean flag this equals `enabled`.
+        payload:
+          deprecated: true
+          description: Old name for `value`, same content.
         description: { type: [string, 'null'] }
+        known:
+          type: boolean
+          description: >
+            False when the row's key is no longer in the registry — a value left
+            behind by a removed feature, which nothing reads any more.
         updatedBy:
           oneOf:
             - { $ref: '#/components/schemas/CmsAdminRef' }
             - { type: 'null' }
         updatedAt: { type: string, format: date-time }
+
+    CmsFeatureFlagDefinition:
+      type: object
+      required: [key, valueType, defaultValue, description, platformScoped]
+      properties:
+        key: { type: string }
+        valueType: { $ref: '#/components/schemas/FlagValueType' }
+        defaultValue:
+          description: What the backend uses when no override matches. Never null.
+        description: { type: string }
+        platformScoped:
+          type: boolean
+          description: >
+            False means a per-platform override is refused for this key rather
+            than stored and ignored.
+
+    CmsFeatureFlagWriteResult:
+      type: object
+      required: [key, valueType, environment, platform, enabled]
+      properties:
+        key: { type: string }
+        valueType: { $ref: '#/components/schemas/FlagValueType' }
+        environment: { $ref: '#/components/schemas/FlagEnvironment' }
+        platform: { $ref: '#/components/schemas/FlagPlatform' }
+        enabled: { type: boolean }
+        value: { description: The stored value, as the server now holds it. }
+
+    CmsUpload:
+      type: object
+      required: [id, key, uploadUrl, expiresAt, maxBytes, contentType, readUrl]
+      properties:
+        id: { type: string, format: uuid }
+        key:
+          type: string
+          description: >
+            Server-generated — actor and a UUID, never anything the client
+            supplied — so a key cannot be steered at another object.
+        uploadUrl:
+          type: string
+          description: Presigned PUT. Signed for this key and this content type, and it expires.
+        expiresAt: { type: string, format: date-time }
+        maxBytes: { type: integer }
+        contentType: { type: string }
+        readUrl:
+          type: [string, 'null']
+          description: >
+            Where the object will be readable once uploaded. Null until media
+            hosting is configured — an honest absence rather than a URL that
+            would 404.
 
     CmsAuditEntry:
       type: object

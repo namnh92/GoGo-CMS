@@ -21,6 +21,7 @@ const SCREENS: [string, RegExp][] = [
   ['/taxonomy', /Hệ thống phân loại/],
   ['/collections', /Bộ sưu tập/],
   ['/settings', /Vận hành và cấu hình/],
+  ['/settings/accounts', /Tài khoản CMS/],
   ['/audit', /Nhật ký kiểm toán/],
   ['/search-quality', /Chất lượng tìm kiếm/],
 ]

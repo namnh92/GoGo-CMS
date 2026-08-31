@@ -45,15 +45,13 @@ function CreatedPanel({ displayName, onAnother }: { displayName: string; onAnoth
         <span aria-hidden="true">✓ </span>
         {t('admins.created', { name: displayName })}
       </p>
-      {/* There is no account list to send anyone to: `GET /cms/auth/admins`
-          does not exist yet (GoGo-BE#220). Saying so beats a dead link. */}
       <p className={styles.successBody}>{t('admins.createdHint')}</p>
       <div className={styles.successActions}>
-        <Button variant="primary" onClick={onAnother}>
-          {t('admins.createAnother')}
+        <Button variant="primary" onClick={() => navigate('/settings/accounts')}>
+          {t('admins.openList')}
         </Button>
-        <Button variant="secondary" onClick={() => navigate('/settings')}>
-          {t('admins.backToSettings')}
+        <Button variant="secondary" onClick={onAnother}>
+          {t('admins.createAnother')}
         </Button>
       </div>
     </div>
@@ -212,6 +210,7 @@ export default function NewAccountScreen() {
         breadcrumb={[
           { label: t('app.suffix') },
           { label: t('settings.breadcrumb'), to: '/settings' },
+          { label: t('admins.breadcrumb'), to: '/settings/accounts' },
           { label: t('admins.new') },
         ]}
         title={t('admins.new')}

@@ -20,6 +20,7 @@ import {
   searchAnalytics,
   taxonomies,
   moderationReviewQueue,
+  cmsAdmins,
 } from './fixtures'
 
 const BASE = '/v1'
@@ -73,6 +74,7 @@ const db = {
   audit: [] as (typeof auditEntries)[number][],
   /** Emails already taken, so the duplicate branch of admin creation is reachable. */
   adminEmails: ['boss@gogo.vn', 'ops@gogo.vn', 'editor@gogo.vn', 'moderator@gogo.vn'],
+  admins: cmsAdmins.map((admin) => ({ ...admin })),
 }
 
 /**
@@ -181,6 +183,42 @@ export const handlers = [
    * held. Mirrors the contract's floors: 12-character password, four-value
    * role, unique email. The password is never echoed back.
    */
+  /*
+   * `GET /cms/auth/admins` (GoGo-BE#220). Super-admin only, like the write —
+   * the mock enforces it so the console has to survive a demotion rather than
+   * assume the route gate held. Keyset-paged, and `totalCount` describes the
+   * FILTERED set, not the page.
+   */
+  http.get(`${BASE}/cms/auth/admins`, ({ request }) => {
+    if (currentActor().role !== 'super_admin') {
+      return envelope(403, 'FORBIDDEN', 'super admin required')
+    }
+    const url = new URL(request.url)
+    const q = url.searchParams.get('q')?.toLowerCase()
+    const role = url.searchParams.get('role')
+    const status = url.searchParams.get('status')
+    const limit = Number(url.searchParams.get('limit') ?? 25)
+    const cursor = url.searchParams.get('cursor')
+
+    let items = db.admins
+    if (q) {
+      items = items.filter(
+        (admin) =>
+          admin.email.toLowerCase().includes(q) || admin.displayName.toLowerCase().includes(q),
+      )
+    }
+    if (role) items = items.filter((admin) => admin.role === role)
+    if (status) items = items.filter((admin) => admin.status === status)
+
+    const totalCount = items.length
+    const start = cursor ? items.findIndex((admin) => admin.id === cursor) + 1 : 0
+    const page = items.slice(start, start + limit)
+    const last = page[page.length - 1]
+    const nextCursor = start + limit < items.length && last ? last.id : null
+
+    return HttpResponse.json({ items: page, nextCursor, totalCount })
+  }),
+
   http.post(`${BASE}/cms/auth/admins`, async ({ request }) => {
     if (currentActor().role !== 'super_admin') {
       return envelope(403, 'FORBIDDEN', 'super admin required')
@@ -219,7 +257,18 @@ export const handlers = [
         { status: 409 },
       )
     }
-    if (body.email) db.adminEmails.push(body.email.toLowerCase())
+    if (body.email) {
+      db.adminEmails.push(body.email.toLowerCase())
+      db.admins.unshift({
+        id: `admin-${db.admins.length + 1}`,
+        email: body.email,
+        displayName: body.displayName ?? body.email,
+        role: body.role ?? 'editor',
+        status: 'active',
+        createdAt: new Date().toISOString(),
+        lastLoginAt: null,
+      })
+    }
     return HttpResponse.json({ created: true }, { status: 201 })
   }),
 

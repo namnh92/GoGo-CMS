@@ -22,6 +22,44 @@ import { z } from 'zod'
 export const adminRoleSchema = z.enum(['editor', 'moderator', 'ops_admin', 'super_admin'])
 export type AdminRole = z.infer<typeof adminRoleSchema>
 
+/**
+ * `GET /cms/auth/admins` (GoGo-BE#220).
+ *
+ * Two states, because two is what the guard enforces: a `suspended` account
+ * loses access on its next request whatever token it still holds. There is no
+ * third "disabled" state to render — a status nothing acts on would be a claim
+ * in the data with nothing behind it.
+ */
+export const adminStatusSchema = z.enum(['active', 'suspended'])
+export type AdminStatus = z.infer<typeof adminStatusSchema>
+
+/**
+ * `email` is here because it is how a staff account is identified. Nothing
+ * else about the person is: no phone, no password hash, no TOTP secret, no
+ * session material — the server does not select them, so there is nothing to
+ * leak by accident.
+ */
+export const cmsAdminSchema = z.object({
+  id: z.string(),
+  email: z.string(),
+  displayName: z.string(),
+  role: adminRoleSchema,
+  status: adminStatusSchema,
+  createdAt: z.string(),
+  /** Absent on an account that has never signed in. */
+  lastLoginAt: z.string().nullish(),
+})
+export type CmsAdmin = z.infer<typeof cmsAdminSchema>
+
+export const cmsAdminPageSchema = z.object({
+  items: z.array(cmsAdminSchema).default([]),
+  /** Keyset cursor over (createdAt, id). */
+  nextCursor: z.string().nullable().default(null),
+  /** Accounts matching the filter, not accounts in this page. */
+  totalCount: z.number().int().default(0),
+})
+export type CmsAdminPage = z.infer<typeof cmsAdminPageSchema>
+
 export const placeStatusSchema = z.enum([
   'draft',
   'community_submitted',

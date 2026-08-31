@@ -99,6 +99,29 @@ export const en: Partial<Record<MessageKey, string>> = {
   'imports.col.createdBy': 'Created by',
   'imports.col.completedAt': 'Completed at',
 
+  'admins.listTitle': 'CMS accounts',
+  'admins.breadcrumb': 'Accounts',
+  'admins.empty': 'No account matches this filter',
+  'admins.emptyHint': 'Loosen the filter or clear the search term.',
+  'admins.pageInfo': '{shown} on this page · {total} match the filter',
+  'admins.neverSignedIn': 'Never signed in',
+  'admins.you': 'You',
+  'admins.openList': 'Open the account list',
+  'admins.deniedHint':
+    'Only a super admin can read the account list — who holds which role is the shape of the authorization model.',
+  'admins.readOnlyNote':
+    'Read-only: the BFF serves no suspend, role change or delete for staff accounts. Use the existing operational process when one is needed.',
+  'admins.col.account': 'Account',
+  'admins.col.role': 'Role',
+  'admins.col.status': 'Status',
+  'admins.col.lastLogin': 'Last sign-in',
+  'admins.col.createdAt': 'Created',
+  'admins.col.you': 'Your own account',
+  'admins.status.active': 'Active',
+  'admins.status.suspended': 'Suspended',
+  'admins.filter.search': 'Search by email or name',
+  'admins.filter.roleAll': 'All roles',
+  'admins.filter.statusAll': 'All statuses',
   'admins.new': 'New CMS account',
   'admins.formTitle': 'New staff account',
   'admins.formHint':
@@ -117,8 +140,7 @@ export const en: Partial<Record<MessageKey, string>> = {
     'Permissions are enforced by the API, not the UI. Hiding a button is never the check.',
   'admins.submit': 'Create account',
   'admins.created': 'Account created for {name}.',
-  'admins.createdHint':
-    'There is no account list yet: the BFF has not shipped GET /v1/cms/auth/admins (GoGo-BE#220).',
+  'admins.createdHint': 'The account is live and now appears in the account list.',
   'admins.createAnother': 'Create another account',
   'admins.backToSettings': 'Back to operations and configuration',
 

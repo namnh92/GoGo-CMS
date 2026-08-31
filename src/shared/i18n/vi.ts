@@ -81,6 +81,29 @@ export const vi = {
   'moderation.history': 'Lịch sử kiểm duyệt',
   'moderation.historyEmpty': 'Chưa có quyết định nào được ghi cho mục này.',
 
+  'admins.listTitle': 'Tài khoản CMS',
+  'admins.breadcrumb': 'Tài khoản',
+  'admins.empty': 'Không có tài khoản nào khớp bộ lọc',
+  'admins.emptyHint': 'Nới bộ lọc hoặc xoá từ khoá tìm kiếm.',
+  'admins.pageInfo': 'Trang này {shown} · tổng {total} khớp bộ lọc',
+  'admins.neverSignedIn': 'Chưa đăng nhập lần nào',
+  'admins.you': 'Bạn',
+  'admins.openList': 'Xem danh sách tài khoản',
+  'admins.deniedHint':
+    'Chỉ quản trị tối cao đọc được danh sách tài khoản — ai giữ vai gì chính là hình dạng của mô hình phân quyền.',
+  'admins.readOnlyNote':
+    'Danh sách chỉ đọc: BFF chưa có đường khoá tài khoản, đổi vai hay xoá. Khi cần, thao tác qua quy trình vận hành hiện tại.',
+  'admins.col.account': 'Tài khoản',
+  'admins.col.role': 'Vai',
+  'admins.col.status': 'Trạng thái',
+  'admins.col.lastLogin': 'Đăng nhập gần nhất',
+  'admins.col.createdAt': 'Tạo lúc',
+  'admins.col.you': 'Tài khoản của bạn',
+  'admins.status.active': 'Đang hoạt động',
+  'admins.status.suspended': 'Đã khoá',
+  'admins.filter.search': 'Tìm theo email hoặc tên',
+  'admins.filter.roleAll': 'Mọi vai',
+  'admins.filter.statusAll': 'Mọi trạng thái',
   'admins.new': 'Tạo tài khoản CMS',
   'admins.formTitle': 'Tài khoản nhân sự mới',
   'admins.formHint':
@@ -99,8 +122,7 @@ export const vi = {
     'Quyền được API áp, không phải UI. Ẩn nút không thay cho kiểm tra phía server.',
   'admins.submit': 'Tạo tài khoản',
   'admins.created': 'Đã tạo tài khoản cho {name}.',
-  'admins.createdHint':
-    'Chưa có màn danh sách tài khoản: BFF chưa mở GET /v1/cms/auth/admins (GoGo-BE#220).',
+  'admins.createdHint': 'Tài khoản đã có hiệu lực và xuất hiện trong danh sách tài khoản.',
   'admins.createAnother': 'Tạo tài khoản khác',
   'admins.backToSettings': 'Về Vận hành và cấu hình',
 
