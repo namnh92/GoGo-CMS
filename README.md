@@ -157,8 +157,15 @@ trò suy ra từ phần local của email — `editor@…`, `moderator@…`, `op
 lại là `super_admin`.
 
 Chạy với backend thật: đặt `VITE_USE_MOCK=false` và `VITE_API_ORIGIN` trỏ tới
-GoGo-BE (xem `README.md` của GoGo-BE cho Docker stack một lệnh; tài khoản CMS
-seed nằm trong seed data của BE).
+**DEV remote** — `https://api-dev.gogo.id.vn`. Không cần clone GoGo-BE, không
+cần PostgreSQL/Redis trên máy: DEV là môi trường được deploy, không phải thứ
+mỗi người tự dựng (GoGo-Infra INF-038/INF-042). Tài khoản CMS ở đó là dữ liệu
+seed của môi trường DEV, dùng chung.
+
+Dựng GoGo-BE tại chỗ vẫn được, nhưng là **chế độ gỡ lỗi tuỳ chọn** — khi cần
+sửa BE cùng lúc, hoặc cần một database bỏ đi được. Hệ quả phải biết trước: đó
+là một database khác, seed khác, migration có thể khác — UI chạy đúng ở đó
+không nói được gì về DEV. Cách dựng nằm trong `README.md` của GoGo-BE.
 
 | Lệnh             | Việc                                                |
 | ---------------- | --------------------------------------------------- |
@@ -185,16 +192,20 @@ Chạy thử Worker tại chỗ (cần `pnpm build` trước):
 
 ```bash
 pnpm build
-pnpm cf:dev --var BE_ORIGIN:http://localhost:3000
+pnpm cf:dev --var BE_ORIGIN:https://api-dev.gogo.id.vn
 ```
+
+Worker chạy tại chỗ, backend thì không — đó là thứ đang được kiểm: proxy `/v1`
+cùng origin và cookie phiên. Trỏ `BE_ORIGIN` vào `http://localhost:3000` chỉ
+đúng khi đang chủ ý gỡ lỗi GoGo-BE tại chỗ.
 
 **Ba thứ phải set ngoài repo** — thiếu thứ nào thì bản deploy chạy nhưng sai:
 
-| Ở đâu                 | Việc                                                                                                                             |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| Cloudflare project    | Build command `pnpm build`, deploy command `npx wrangler versions upload`                                                        |
-| Cloudflare project    | Biến `BE_ORIGIN` = origin GoGo-BE của môi trường đó. Chưa set thì `/v1/*` trả `503 BACKEND_NOT_CONFIGURED` chứ không im lặng 404 |
-| Cloudflare Zero Trust | **Access** trước hostname. Bản deploy không tự xác thực; để trang đăng nhập admin công khai là mở sẵn bề mặt credential stuffing |
+| Ở đâu                 | Việc                                                                                                                                                                                    |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cloudflare project    | Build command `pnpm build`, deploy command `npx wrangler versions upload`                                                                                                               |
+| Cloudflare project    | Biến `BE_ORIGIN` = origin GoGo-BE của môi trường đó — dev đã set `https://api-dev.gogo.id.vn` (31/08/2026). Chưa set thì `/v1/*` trả `503 BACKEND_NOT_CONFIGURED` chứ không im lặng 404 |
+| Cloudflare Zero Trust | **Access** trước hostname. Bản deploy không tự xác thực; để trang đăng nhập admin công khai là mở sẵn bề mặt credential stuffing                                                        |
 
 Và ở GoGo-BE của môi trường đó: `COOKIE_SECURE=true`, `TRUST_PROXY` tin đúng hop
 Cloudflare. Không thì BE bỏ qua `x-forwarded-for` và **cột IP nhân viên trong
