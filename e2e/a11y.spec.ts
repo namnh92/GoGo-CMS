@@ -1,15 +1,12 @@
 import { expect, test } from '@playwright/test'
+import { signIn } from './helpers'
 
 /**
  * Keyboard operation is a hard requirement — the CMS is mouse-first but must
  * never be mouse-only.
  */
 test('the shell exposes a skip link as the first tab stop', async ({ page }) => {
-  await page.goto('/login')
-  await page.getByLabel(/Email công việc/).fill('ops@gogo.vn')
-  await page.getByLabel(/Mật khẩu/).fill('correct-horse-battery')
-  await page.getByLabel(/Mã xác thực/).fill('123456')
-  await page.getByRole('button', { name: 'Đăng nhập' }).click()
+  await signIn(page, 'ops@gogo.vn')
   await expect(page.getByRole('heading', { name: 'Sức khoẻ hệ thống' })).toBeVisible()
 
   await page.keyboard.press('Tab')
@@ -17,11 +14,7 @@ test('the shell exposes a skip link as the first tab stop', async ({ page }) => 
 })
 
 test('a drawer traps focus and closes on Escape', async ({ page }) => {
-  await page.goto('/login')
-  await page.getByLabel(/Email công việc/).fill('ops@gogo.vn')
-  await page.getByLabel(/Mật khẩu/).fill('correct-horse-battery')
-  await page.getByLabel(/Mã xác thực/).fill('123456')
-  await page.getByRole('button', { name: 'Đăng nhập' }).click()
+  await signIn(page, 'ops@gogo.vn')
 
   await page.goto('/places/pl-chao-ban')
   await page.getByRole('button', { name: 'Xem nhật ký thay đổi' }).click()
@@ -34,11 +27,7 @@ test('a drawer traps focus and closes on Escape', async ({ page }) => {
 test('the command palette opens on the shortcut and gives focus back on Escape', async ({
   page,
 }) => {
-  await page.goto('/login')
-  await page.getByLabel(/Email công việc/).fill('ops@gogo.vn')
-  await page.getByLabel(/Mật khẩu/).fill('correct-horse-battery')
-  await page.getByLabel(/Mã xác thực/).fill('123456')
-  await page.getByRole('button', { name: 'Đăng nhập' }).click()
+  await signIn(page, 'ops@gogo.vn')
   await expect(page.getByRole('heading', { name: 'Sức khoẻ hệ thống' })).toBeVisible()
 
   // The shortcut hint is part of the button's label, so match on the action.
@@ -58,11 +47,7 @@ test('the command palette opens on the shortcut and gives focus back on Escape',
 })
 
 test('the palette navigates to the screen chosen with the keyboard', async ({ page }) => {
-  await page.goto('/login')
-  await page.getByLabel(/Email công việc/).fill('ops@gogo.vn')
-  await page.getByLabel(/Mật khẩu/).fill('correct-horse-battery')
-  await page.getByLabel(/Mã xác thực/).fill('123456')
-  await page.getByRole('button', { name: 'Đăng nhập' }).click()
+  await signIn(page, 'ops@gogo.vn')
   await expect(page.getByRole('heading', { name: 'Sức khoẻ hệ thống' })).toBeVisible()
 
   await page.keyboard.press('ControlOrMeta+k')

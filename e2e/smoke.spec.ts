@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { signIn } from './helpers'
 
 /**
  * Render smoke over every route.
@@ -35,16 +36,16 @@ const SCREENS: [string, RegExp][] = [
 
 test('every screen renders for a super admin with no console error', async ({ page }) => {
   const problems: string[] = []
+
+  // Listeners attach after sign-in: the stepped flow (CMS-034) answers the
+  // first credentials POST with 401 MFA_REQUIRED by design, and the browser
+  // logs every 401 as a console error. That 401 is the contract working, not
+  // a defect — the screens after it still must produce none.
+  await signIn(page, 'boss@gogo.vn')
   page.on('console', (message) => {
     if (message.type() === 'error') problems.push(`console: ${message.text()}`)
   })
   page.on('pageerror', (error) => problems.push(`pageerror: ${error.message}`))
-
-  await page.goto('/login')
-  await page.getByLabel(/Email công việc/).fill('boss@gogo.vn')
-  await page.getByLabel(/Mật khẩu/).fill('correct-horse-battery')
-  await page.getByLabel(/Mã xác thực/).fill('123456')
-  await page.getByRole('button', { name: 'Đăng nhập' }).click()
   await expect(page.getByRole('heading', { level: 1, name: /Sức khoẻ hệ thống/ })).toBeVisible()
 
   for (const [path, marker] of SCREENS) {
@@ -63,11 +64,7 @@ test('every screen renders for a super admin with no console error', async ({ pa
 })
 
 test('settings A/B tab and config evaluation render live', async ({ page }) => {
-  await page.goto('/login')
-  await page.getByLabel(/Email công việc/).fill('ops@gogo.vn')
-  await page.getByLabel(/Mật khẩu/).fill('correct-horse-battery')
-  await page.getByLabel(/Mã xác thực/).fill('123456')
-  await page.getByRole('button', { name: 'Đăng nhập' }).click()
+  await signIn(page, 'ops@gogo.vn')
 
   await page.goto('/settings')
   await page.getByRole('tab', { name: /Thử nghiệm A\/B/ }).click()
@@ -80,11 +77,7 @@ test('settings A/B tab and config evaluation render live', async ({ page }) => {
 })
 
 test('place editor shows the two ratings apart and media provenance', async ({ page }) => {
-  await page.goto('/login')
-  await page.getByLabel(/Email công việc/).fill('editor@gogo.vn')
-  await page.getByLabel(/Mật khẩu/).fill('correct-horse-battery')
-  await page.getByLabel(/Mã xác thực/).fill('123456')
-  await page.getByRole('button', { name: 'Đăng nhập' }).click()
+  await signIn(page, 'editor@gogo.vn')
 
   await page.goto('/places/pl-chao-ban')
   await expect(page.getByText('Xếp hạng provider', { exact: true })).toBeVisible()

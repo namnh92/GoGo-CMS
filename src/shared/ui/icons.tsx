@@ -441,3 +441,49 @@ export const ClockIcon = (p: IconProps) => (
     />
   </Icon>
 )
+
+/** Password visibility — open eye. */
+export const EyeIcon = ({ size = 16, ...props }: SVGProps<SVGSVGElement> & { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true" {...props}>
+    <path d="M2 8s2.5-5 6-5 6 5 6 5-2.5 5-6 5-6-5-6-5z" stroke="currentColor" strokeWidth="1.4" />
+    <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.4" />
+  </svg>
+)
+
+/** Password visibility — crossed eye. */
+export const EyeOffIcon = ({
+  size = 16,
+  ...props
+}: SVGProps<SVGSVGElement> & { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true" {...props}>
+    <path d="M2 8s2.5-5 6-5 6 5 6 5-2.5 5-6 5-6-5-6-5z" stroke="currentColor" strokeWidth="1.4" />
+    <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.4" />
+    <path d="M2.5 2.5l11 11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+  </svg>
+)
+
+/** MFA lock badge on the two-factor step. */
+export const LockIcon = ({ size = 22, ...props }: SVGProps<SVGSVGElement> & { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 22 22" fill="none" aria-hidden="true" {...props}>
+    <rect x="4" y="9" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.5" />
+    <path d="M8 9V7a3 3 0 016 0v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    <circle cx="11" cy="14" r="1.5" fill="currentColor" />
+  </svg>
+)
+
+/** Brand-panel bullet check. */
+export const CheckCircleIcon = ({
+  size = 16,
+  ...props
+}: SVGProps<SVGSVGElement> & { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true" {...props}>
+    <circle cx="8" cy="8" r="7" fill="currentColor" opacity="0.2" />
+    <path
+      d="M5 8l2 2 4-4"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+)

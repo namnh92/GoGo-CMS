@@ -1,15 +1,12 @@
 import { expect, test } from '@playwright/test'
+import { signIn } from './helpers'
 
 /**
  * PI-CMS-001..006 walked end to end against the mock: history → wizard →
  * job detail → candidate confirmation → publish.
  */
 test.beforeEach(async ({ page }) => {
-  await page.goto('/login')
-  await page.getByLabel(/Email công việc/).fill('ops@gogo.vn')
-  await page.getByLabel(/Mật khẩu/).fill('correct-horse-battery')
-  await page.getByLabel(/Mã xác thực/).fill('123456')
-  await page.getByRole('button', { name: 'Đăng nhập' }).click()
+  await signIn(page, 'ops@gogo.vn')
 })
 
 test('a quota-paused job reads as an interruption, not a data error', async ({ page }) => {

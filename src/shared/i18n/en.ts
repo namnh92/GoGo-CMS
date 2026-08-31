@@ -841,4 +841,23 @@ export const en: Partial<Record<MessageKey, string>> = {
   'campaigns.destination.plan_template': 'Plan template',
   'campaigns.destination.saved': 'Saved list',
   'campaigns.destination.external_url': 'External link',
+
+  'auth.brandHeadline': 'Content & Operations Center',
+  'auth.brandLede':
+    'Manage GoGo places, content, moderation and system health — one place, right permissions, fully audited.',
+  'auth.bullet.places': 'Places & content management',
+  'auth.bullet.moderation': 'Trust & Safety moderation',
+  'auth.bullet.observability': 'System monitoring & observability',
+  'auth.bullet.rbac': 'RBAC & audit logs',
+  'auth.brandFoot': 'cms-dev.gogo.id.vn · {env} environment',
+  'auth.continue': 'Continue',
+  'auth.verifySubmit': 'Verify & sign in',
+  'auth.mfaTitle': 'Two-factor authentication',
+  'auth.mfaSubtitle': 'Enter the 6-digit code from your authenticator app.',
+  'auth.backToCredentials': 'Back to password',
+  'auth.showPassword': 'Show password',
+  'auth.hidePassword': 'Hide password',
+  'auth.totpApps': 'Works with Google Authenticator, Microsoft Authenticator, 1Password, Authy.',
+  'auth.envNoteDev': 'test environment with shared seed data.',
+  'auth.envNoteProduction': 'MFA is mandatory for every account; actions are audited.',
 }

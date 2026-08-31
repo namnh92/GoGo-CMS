@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -6,10 +6,11 @@ import { z } from 'zod'
 import { useI18n, useT } from '@/shared/i18n/i18n'
 import { useSession } from '@/shared/auth/session'
 import { landingPathFor } from '@/shared/auth/permissions'
+import { getAppEnvironment } from '@/shared/config/env'
 import { ApiError } from '@/shared/api/errors'
-import { Button } from '@/shared/ui/Button'
+import { Button, IconButton } from '@/shared/ui/Button'
 import { TextInput } from '@/shared/ui/Field'
-import { LogoMark } from '@/shared/ui/icons'
+import { CheckCircleIcon, EyeIcon, EyeOffIcon, LockIcon, LogoMark } from '@/shared/ui/icons'
 import { styles } from './login.style'
 
 // One schema, used by the form resolver. Never duplicated for the request.
@@ -25,25 +26,56 @@ const loginSchema = z.object({
 
 type LoginForm = z.infer<typeof loginSchema>
 
+/**
+ * Credentials first, MFA second — the server drives the second step.
+ *
+ * The client never guesses whether an account has MFA: it submits email and
+ * password, and only `MFA_REQUIRED` opens the code step. That keeps a DEV
+ * account without MFA on a one-step path, and means the form cannot leak
+ * which accounts are enrolled before a valid password is proven.
+ *
+ * The Figma flow also carries a forced password change; the contract has no
+ * endpoint for it, so that step is deliberately not built.
+ */
+type Step = 'credentials' | 'mfa'
+
+const BULLETS = ['places', 'moderation', 'observability', 'rbac'] as const
+
 export default function LoginScreen() {
   const t = useT()
   const { locale, setLocale } = useI18n()
   const navigate = useNavigate()
   const location = useLocation()
   const { login, expired } = useSession()
+  const environment = getAppEnvironment()
   // Set by RequireAuth when it bounced an authenticated route.
   const returnTo = (location.state as { from?: string } | null)?.from
+
+  const [step, setStep] = useState<Step>('credentials')
   const [formError, setFormError] = useState<string | null>(null)
-  const [mfaRequired, setMfaRequired] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const otpRef = useRef<HTMLInputElement | null>(null)
 
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
     defaultValues: { email: '', password: '', totp: '' },
   })
+
+  // The whole point of the step is the code, so focus lands on it.
+  useEffect(() => {
+    if (step === 'mfa') otpRef.current?.focus()
+  }, [step])
+
+  const backToCredentials = () => {
+    setStep('credentials')
+    setValue('totp', '')
+    setFormError(null)
+  }
 
   const onSubmit = handleSubmit(async (values) => {
     setFormError(null)
@@ -60,8 +92,10 @@ export default function LoginScreen() {
         return
       }
       if (error.code === 'MFA_REQUIRED') {
-        setMfaRequired(true)
-        setFormError(t('auth.mfaRequired'))
+        // The password checked out; only the second factor is missing. A wrong
+        // code lands here again, which is the correct place to say so.
+        if (step === 'credentials') setStep('mfa')
+        else setFormError(t('auth.totpHint'))
         return
       }
       if (error.code === 'MFA_SETUP_REQUIRED') {
@@ -73,6 +107,8 @@ export default function LoginScreen() {
         return
       }
       if (error.status === 401) {
+        // Never trapped behind a code prompt for a password problem.
+        setStep('credentials')
         setFormError(t('auth.badCredentials'))
         return
       }
@@ -80,80 +116,180 @@ export default function LoginScreen() {
     }
   })
 
+  const totpField = register('totp')
+
   return (
     <div className={styles.root}>
-      <div className={styles.panel}>
-        <div className={styles.brand}>
-          <LogoMark size={30} />
-          <span className={styles.brandName}>{t('app.name')}</span>
-          <span className={styles.brandTag}>{t('app.suffix')}</span>
+      {/* Brand panel — decorative for a screen reader; the form is the page. */}
+      <aside className={styles.brand} aria-hidden="true">
+        <div className={styles.brandTop}>
+          {/* Solid ivory plate: the coral brandmark is invisible on the coral
+              gradient without it. */}
+          <div className={styles.brandLogoBox}>
+            <LogoMark size={34} />
+          </div>
+          <div>
+            <div className={styles.brandWordmark}>{t('app.name')}</div>
+            <div className={styles.brandSuffix}>{t('app.suffix')}</div>
+          </div>
         </div>
 
-        <h1 className={styles.title}>{t('auth.title')}</h1>
-        <p className={styles.subtitle}>{t('auth.subtitle')}</p>
+        <div>
+          <h2 className={styles.brandHeadline}>{t('auth.brandHeadline')}</h2>
+          <p className={styles.brandLede}>{t('auth.brandLede')}</p>
+        </div>
 
-        {expired ? (
-          <p role="status" className={`${styles.alert} mt-4`}>
-            <span aria-hidden="true">⚠</span>
-            {expired === 'idle' ? t('auth.idleTimeout') : t('auth.sessionExpired')}
-          </p>
-        ) : null}
+        <div className={styles.brandBullets}>
+          {BULLETS.map((key) => (
+            <div key={key} className={styles.brandBullet}>
+              <CheckCircleIcon size={16} />
+              {t(`auth.bullet.${key}` as const)}
+            </div>
+          ))}
+        </div>
 
-        <form className={styles.form} onSubmit={onSubmit} noValidate>
-          <TextInput
-            label={t('auth.email')}
-            type="email"
-            autoComplete="username"
-            required
-            error={errors.email ? t('auth.badCredentials') : undefined}
-            {...register('email')}
-          />
-          <TextInput
-            label={t('auth.password')}
-            type="password"
-            autoComplete="current-password"
-            required
-            error={errors.password ? t('auth.badCredentials') : undefined}
-            {...register('password')}
-          />
-          <TextInput
-            label={t('auth.totp')}
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            maxLength={6}
-            hint={t('auth.totpHint')}
-            required={mfaRequired}
-            error={errors.totp ? t('auth.totpHint') : undefined}
-            {...register('totp')}
-          />
+        <p className={styles.brandFoot}>
+          {t('auth.brandFoot', { env: t(`env.${environment}` as const) })}
+        </p>
+      </aside>
 
-          {formError ? (
-            <p role="alert" className={styles.alertDanger}>
+      <div className={styles.form}>
+        <main className={styles.formInner}>
+          {/* The panel carries the brand on wide screens; below lg it moves here. */}
+          <div className={styles.mobileBrand}>
+            <LogoMark size={26} />
+            <span className={styles.mobileWordmark}>{t('app.name')}</span>
+            <span className={styles.mobileSuffix}>{t('app.suffix')}</span>
+          </div>
+
+          {step === 'credentials' ? (
+            <div className={styles.stepHead}>
+              <h1 className={styles.title}>{t('auth.title')}</h1>
+              <p className={styles.subtitle}>{t('auth.subtitle')}</p>
+            </div>
+          ) : (
+            <div className={styles.stepHead}>
+              <div className={styles.stepBadge}>
+                <LockIcon size={22} />
+              </div>
+              <h1 className={styles.title}>{t('auth.mfaTitle')}</h1>
+              <p className={styles.subtitle}>{t('auth.mfaSubtitle')}</p>
+            </div>
+          )}
+
+          {expired ? (
+            <p role="status" className={`${styles.alert} mb-4`}>
               <span aria-hidden="true">⚠</span>
-              {formError}
+              {expired === 'idle' ? t('auth.idleTimeout') : t('auth.sessionExpired')}
             </p>
           ) : null}
 
-          <Button type="submit" variant="primary" loading={isSubmitting}>
-            {isSubmitting ? t('auth.submitting') : t('auth.submit')}
-          </Button>
-        </form>
+          <form onSubmit={onSubmit} noValidate>
+            {/* Both steps live in one form: fields hide, values persist, and
+                the request always carries everything the server needs. */}
+            <div className={styles.fields} hidden={step !== 'credentials'}>
+              <TextInput
+                label={t('auth.email')}
+                type="email"
+                autoComplete="username"
+                required
+                error={errors.email ? t('auth.badCredentials') : undefined}
+                {...register('email')}
+              />
+              <div className={styles.passwordWrap}>
+                <TextInput
+                  label={t('auth.password')}
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="current-password"
+                  required
+                  error={errors.password ? t('auth.badCredentials') : undefined}
+                  {...register('password')}
+                />
+                <IconButton
+                  label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
+                  className={styles.passwordToggle}
+                  onClick={() => setShowPassword((current) => !current)}
+                >
+                  {showPassword ? <EyeOffIcon size={16} /> : <EyeIcon size={16} />}
+                </IconButton>
+              </div>
+            </div>
 
-        <p className={styles.footNote}>{t('auth.securityNote')}</p>
+            <div className={styles.fields} hidden={step !== 'mfa'}>
+              <TextInput
+                label={t('auth.totp')}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                placeholder="000000"
+                className="w-full"
+                hint={t('auth.totpHint')}
+                required={step === 'mfa'}
+                error={errors.totp ? t('auth.totpHint') : undefined}
+                {...totpField}
+                ref={(node) => {
+                  totpField.ref(node)
+                  otpRef.current = node
+                }}
+              />
+            </div>
 
-        <div className={styles.localeRow}>
-          {(['vi', 'en'] as const).map((code) => (
-            <button
-              key={code}
-              type="button"
-              onClick={() => setLocale(code)}
-              aria-pressed={locale === code}
-              className={`${styles.localeButton} ${locale === code ? styles.localeActive : ''}`}
+            {formError ? (
+              <p role="alert" className={`${styles.alertDanger} mt-4`}>
+                <span aria-hidden="true">⚠</span>
+                {formError}
+              </p>
+            ) : null}
+
+            <div className="mt-4 flex flex-col gap-2">
+              <Button type="submit" variant="primary" loading={isSubmitting}>
+                {isSubmitting
+                  ? t('auth.submitting')
+                  : step === 'credentials'
+                    ? t('auth.continue')
+                    : t('auth.verifySubmit')}
+              </Button>
+              {step === 'mfa' ? (
+                <button type="button" className={styles.backButton} onClick={backToCredentials}>
+                  {t('auth.backToCredentials')}
+                </button>
+              ) : null}
+            </div>
+          </form>
+
+          {step === 'mfa' ? <p className={styles.otpCompat}>{t('auth.totpApps')}</p> : null}
+
+          {step === 'credentials' ? (
+            <p
+              className={`${styles.envNote} ${
+                environment === 'production' ? styles.envProduction : styles.envDev
+              }`}
             >
-              {code.toUpperCase()}
-            </button>
-          ))}
-        </div>
+              <span aria-hidden="true">ℹ</span>
+              <span>
+                <strong>{t(`env.${environment}` as const)}</strong>
+                {' — '}
+                {environment === 'production' ? t('auth.envNoteProduction') : t('auth.envNoteDev')}
+              </span>
+            </p>
+          ) : null}
+
+          <p className={styles.footNote}>{t('auth.securityNote')}</p>
+
+          <div className={styles.localeRow}>
+            {(['vi', 'en'] as const).map((code) => (
+              <button
+                key={code}
+                type="button"
+                onClick={() => setLocale(code)}
+                aria-pressed={locale === code}
+                className={`${styles.localeButton} ${locale === code ? styles.localeActive : ''}`}
+              >
+                {code.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        </main>
       </div>
     </div>
   )
