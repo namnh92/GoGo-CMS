@@ -164,6 +164,12 @@ const USERS: NavLeaf[] = [
     permission: 'user.read',
     match: (p) => p.startsWith('/plans'),
   },
+  {
+    to: '/privacy-requests',
+    labelKey: 'nav.privacy',
+    permission: 'privacy.read',
+    match: (p) => p.startsWith('/privacy-requests'),
+  },
 ]
 
 const ADMINISTRATION: NavLeaf[] = [

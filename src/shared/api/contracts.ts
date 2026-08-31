@@ -1360,6 +1360,11 @@ export const cmsAppUserDetailSchema = cmsAppUserSchema.extend({
   statusChangedAt: z.string().nullish(),
   /** The 20 most recently joined. No invite code. */
   rooms: z.array(cmsAppUserRoomSchema).default([]),
+  /**
+   * #255. A direct delete outside the privacy workflow never touches the
+   * ledger — so the console warns before an operator takes that path.
+   */
+  openPrivacyRequestCount: z.number().int().default(0),
 })
 export type CmsAppUserDetail = z.infer<typeof cmsAppUserDetailSchema>
 
@@ -1439,3 +1444,93 @@ export const cmsRoomGuestsSchema = z.object({
   guests: z.array(cmsRoomGuestSchema).default([]),
 })
 export type CmsRoomGuests = z.infer<typeof cmsRoomGuestsSchema>
+
+/**
+ * Privacy-request ledger (GoGo-BE#255 / ADR-0011).
+ *
+ * The ledger, not the audit log: the audit log says who did what, this says
+ * what was received, where it stands, what the deadline is and how it ended.
+ * `sla` is computed server-side from the stored dates — the console renders
+ * it, never recomputes the rule.
+ */
+export const privacyRequestTypeSchema = z.enum(['export', 'delete', 'correction'])
+export type PrivacyRequestType = z.infer<typeof privacyRequestTypeSchema>
+
+export const privacyRequestStatusSchema = z.enum(['open', 'acknowledged', 'in_progress', 'closed'])
+export type PrivacyRequestStatus = z.infer<typeof privacyRequestStatusSchema>
+
+/** Separate from `status` on purpose: "how it ended" is not "where it is". */
+export const privacyRequestOutcomeSchema = z.enum([
+  'completed',
+  'no_account_found',
+  'identity_not_verified',
+  'rejected',
+  'failed',
+])
+export type PrivacyRequestOutcome = z.infer<typeof privacyRequestOutcomeSchema>
+
+export const privacySlaSchema = z.enum(['ON_TRACK', 'DUE_SOON', 'OVERDUE', 'COMPLETED'])
+export type PrivacySla = z.infer<typeof privacySlaSchema>
+
+export const privacyDeliveryMethodSchema = z.enum(['in_app', 'secure_download', 'other'])
+export type PrivacyDeliveryMethod = z.infer<typeof privacyDeliveryMethodSchema>
+
+export const privacyRequestSchema = z.object({
+  id: z.string(),
+  type: privacyRequestTypeSchema,
+  source: z.enum(['self_service', 'support', 'cms']),
+  status: privacyRequestStatusSchema,
+  outcome: privacyRequestOutcomeSchema.nullish(),
+  /** Structured — never one free-text field that becomes a PII dumping ground. */
+  subject: z.object({
+    subjectType: z.enum(['user', 'email', 'external']),
+    userId: z.string().nullish(),
+    contactEmail: z.string().nullish(),
+    externalReference: z.string().nullish(),
+    identityStatus: z.enum(['matched', 'no_account_found', 'unverified']),
+  }),
+  receivedAt: z.string(),
+  ackDueAt: z.string(),
+  acknowledgedAt: z.string().nullish(),
+  fulfillmentDueAt: z.string(),
+  extendedDueAt: z.string().nullish(),
+  extensionReason: z.string().nullish(),
+  executedAt: z.string().nullish(),
+  completedAt: z.string().nullish(),
+  closedAt: z.string().nullish(),
+  deliveryMethod: privacyDeliveryMethodSchema.nullish(),
+  deliveredAt: z.string().nullish(),
+  /** Stamped at closure; the retention job deletes the row then, unless held. */
+  retentionAt: z.string().nullish(),
+  retentionHold: z
+    .object({
+      heldAt: z.string(),
+      heldBy: z.string(),
+      reason: z.string(),
+      legalBasis: z.string(),
+      reviewAt: z.string(),
+      holdUntil: z.string().nullish(),
+      /** Nothing auto-releases and nothing auto-deletes — a person must look. */
+      reviewOverdue: z.boolean(),
+    })
+    .nullish(),
+  reasonCode: z.string().nullish(),
+  ticketReference: z.string().nullish(),
+  operatorNote: z.string().nullish(),
+  sla: privacySlaSchema,
+})
+export type PrivacyRequest = z.infer<typeof privacyRequestSchema>
+
+export const privacyRequestPageSchema = z.object({
+  items: z.array(privacyRequestSchema).default([]),
+  nextCursor: z.string().nullable().default(null),
+  totalCount: z.number().int().default(0),
+})
+export type PrivacyRequestPage = z.infer<typeof privacyRequestPageSchema>
+
+export const privacyExecuteResultSchema = z.object({
+  request: privacyRequestSchema,
+  /** Present for an export — the same payload `/me/export` returns. */
+  data: z.record(z.string(), z.unknown()).nullish(),
+})
+export type PrivacyExecuteResult = z.infer<typeof privacyExecuteResultSchema>

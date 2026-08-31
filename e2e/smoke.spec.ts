@@ -31,6 +31,7 @@ const SCREENS: [string, RegExp][] = [
   ['/users', /Người dùng ứng dụng/],
   ['/rooms', /Phòng/],
   ['/plans', /Kế hoạch/],
+  ['/privacy-requests', /Yêu cầu riêng tư/],
   ['/app-control', /Điều khiển ứng dụng/],
   ['/settings', /Vận hành và cấu hình/],
   ['/settings/accounts', /Tài khoản CMS/],

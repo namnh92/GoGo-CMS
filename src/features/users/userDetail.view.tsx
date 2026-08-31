@@ -167,6 +167,16 @@ export function UserDetailDrawer({ user, onClose }: { user: CmsAppUser; onClose:
                       {t('users.action.reactivate')}
                     </Button>
                   ) : null}
+                  {/* A direct delete never touches the privacy ledger — warn
+                      before the operator takes that path (#255). */}
+                  {detail!.openPrivacyRequestCount > 0 ? (
+                    <p className={styles.dangerBox}>
+                      <span aria-hidden="true">⚠</span>
+                      {t('users.openPrivacyWarn', {
+                        count: formatNumber(detail!.openPrivacyRequestCount, locale),
+                      })}
+                    </p>
+                  ) : null}
                   {detail!.status !== 'deleted' ? (
                     <>
                       <Button

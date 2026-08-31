@@ -46,6 +46,12 @@ export const queryKeys = {
     list: (filters: Record<string, unknown>) => ['app-users', 'list', filters] as const,
     detail: (id: string) => ['app-users', 'detail', id] as const,
   },
+  privacy: {
+    all: ['privacy-requests'] as const,
+    list: (filters: Record<string, unknown>) => ['privacy-requests', 'list', filters] as const,
+    detail: (id: string) => ['privacy-requests', 'detail', id] as const,
+  },
+
   rooms: {
     all: ['cms-rooms'] as const,
     list: (filters: Record<string, unknown>) => ['cms-rooms', 'list', filters] as const,
