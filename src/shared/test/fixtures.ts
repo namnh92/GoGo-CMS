@@ -17,6 +17,9 @@ import type {
   CmsSafetyRule,
   CmsBanner,
   CmsCampaign,
+  CmsOpsHealth,
+  CmsOpsQueues,
+  CmsOpsCosts,
 } from '@/shared/api/contracts'
 import type { ImportJob, ImportRow } from '@/shared/api/contracts-import'
 
@@ -1760,3 +1763,84 @@ export const cmsCampaigns: CmsCampaign[] = [
     updatedAt: iso(60 * 24 * 5),
   },
 ]
+
+/**
+ * `GET /cms/ops/health|queues|costs` (GoGo-BE#247).
+ *
+ * Health carries all four statuses — `unknown` included, because the console
+ * must render "not measured" as its own state, never as healthy. One queue is
+ * the Postgres outbox and one failed count is truncated, so both honesty
+ * markers are reachable. Costs default to the truthful DEV shape: no source
+ * connected — an empty list that must never render as zero.
+ */
+export const opsHealth: CmsOpsHealth = {
+  services: [
+    { key: 'api', status: 'healthy', latencyMs: 12, checkedAt: iso(1), detail: null },
+    { key: 'db', status: 'healthy', latencyMs: 4, checkedAt: iso(1), detail: null },
+    {
+      key: 'redis',
+      status: 'degraded',
+      latencyMs: 210,
+      checkedAt: iso(1),
+      detail: 'chậm hơn ngưỡng 50ms trong 5 phút gần nhất',
+    },
+    {
+      key: 'worker',
+      status: 'down',
+      latencyMs: null,
+      checkedAt: iso(3),
+      detail: 'heartbeat quá hạn 4 phút',
+    },
+    {
+      key: 'google_places',
+      status: 'unknown',
+      latencyMs: null,
+      checkedAt: iso(1),
+      detail: 'chưa có lời gọi nào trong process này',
+    },
+  ],
+}
+
+export const opsQueues: CmsOpsQueues = {
+  queues: [
+    {
+      name: 'place-import',
+      source: 'bullmq',
+      pending: 82,
+      running: 3,
+      failed24h: 2,
+      failed24hTruncated: false,
+      deadLetter: 0,
+      oldestPendingSeconds: 480,
+      workers: 3,
+    },
+    {
+      name: 'image-processing',
+      source: 'bullmq',
+      pending: 18,
+      running: 2,
+      failed24h: 500,
+      // The scan hit its cap: 500 is a floor, and the console must say ≥.
+      failed24hTruncated: true,
+      deadLetter: 3,
+      oldestPendingSeconds: 4_440,
+      workers: 2,
+    },
+    {
+      name: 'outbox_events',
+      source: 'database',
+      pending: 12,
+      running: 0,
+      failed24h: 0,
+      failed24hTruncated: false,
+      deadLetter: 0,
+      oldestPendingSeconds: null,
+      workers: null,
+    },
+  ],
+}
+
+export const opsCosts: CmsOpsCosts = {
+  providers: [],
+  sourcesConfigured: false,
+}

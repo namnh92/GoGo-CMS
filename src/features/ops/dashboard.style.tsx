@@ -31,11 +31,34 @@ export const styles = {
   trendValue: 'w-32 shrink-0 text-right text-[12px] tabular-nums text-text',
 
   sectionTitle: 'mt-2 text-xs font-bold uppercase tracking-widest text-text-subtle',
-  gapGrid: 'grid gap-4 xl:grid-cols-2',
-  gapCard: 'flex flex-col gap-2',
-  gapBadge:
-    'inline-flex w-fit items-center gap-1.5 rounded-pill bg-surface-sunken px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-text-subtle',
-  gapList: 'flex flex-col gap-1.5 text-xs text-text-muted',
-  gapItem: 'flex items-start gap-2',
-  gapMono: 'font-mono text-[11px] text-text-subtle',
+
+  healthRow: 'flex items-center gap-3 border-b border-line py-2 last:border-b-0',
+  healthKey: 'w-36 shrink-0 font-mono text-[12px] font-semibold text-text',
+  healthStatus: 'flex w-28 shrink-0 items-center gap-1.5 text-[12px] font-semibold',
+  healthHealthy: 'text-mint',
+  healthDegraded: 'text-amber',
+  healthDown: 'text-danger',
+  healthUnknown: 'text-text-subtle',
+  healthDot: 'inline-block h-2 w-2 rounded-full bg-current',
+  healthLatency: 'w-16 shrink-0 text-right text-[12px] tabular-nums text-text-muted',
+  healthDetail: 'min-w-0 flex-1 truncate text-[11px] text-text-subtle',
+
+  queueTableWrap: 'overflow-x-auto',
+  queueTable: 'w-full min-w-[520px] text-sm',
+  queueHead:
+    'border-b border-line text-left text-[11px] font-semibold uppercase tracking-wide text-text-subtle',
+  queueHeadCell: 'px-2 py-2',
+  queueCellName: 'px-2 py-2 font-mono text-[12px] text-text',
+  queueCell: 'px-2 py-2 text-right tabular-nums text-[13px] text-text',
+  queueCellMuted: 'px-2 py-2 text-right tabular-nums text-[13px] text-text-subtle',
+  queueCellBad: 'px-2 py-2 text-right tabular-nums text-[13px] font-semibold text-danger',
+  queueRowLine: 'border-b border-line last:border-b-0',
+
+  costRow: 'flex items-center gap-3 border-b border-line py-2.5 last:border-b-0',
+  costKey: 'w-36 shrink-0 text-[13px] font-medium text-text',
+  costBasis: 'shrink-0',
+  costQuota: 'min-w-0 flex-1',
+  costValue: 'w-40 shrink-0 text-right text-[12px] tabular-nums text-text-muted',
+  costEmpty:
+    'flex items-start gap-2 rounded-compact border border-line bg-surface-muted px-3 py-2 text-xs text-text-muted',
 } as const

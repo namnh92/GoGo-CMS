@@ -1475,17 +1475,8 @@ export const vi = {
   'dashboard.searchTrend.hint':
     'Tỷ lệ theo ngày từ /cms/search-analytics; thanh chỉ minh hoạ, số nằm cạnh.',
   'dashboard.observability.title': 'Giám sát & chi phí',
-  'dashboard.notConnected': 'Chưa nối',
   'dashboard.monitoring.title': 'Sức khoẻ dịch vụ',
-  'dashboard.monitoring.body':
-    'Chưa có endpoint nào trong contract /v1 phục vụ trạng thái dịch vụ, hàng đợi worker hay tài nguyên hạ tầng. Màn này không hiển thị trạng thái "Healthy" tự bịa.',
-  'dashboard.monitoring.needHealth':
-    'trạng thái từng dịch vụ (api, db, redis, worker, provider) + độ trễ.',
-  'dashboard.monitoring.needQueues': 'độ sâu hàng đợi BullMQ, job lỗi, dead letter.',
   'dashboard.costs.title': 'Chi phí nhà cung cấp',
-  'dashboard.costs.body':
-    'Chưa có nguồn billing nào được nối (Maps, OpenAI, AWS, Cloudflare, OneSignal). Không hiển thị số tiền ước lượng khi chưa có API thật.',
-  'dashboard.costs.needCosts': 'chi phí theo ngày/tháng theo provider + hạn mức quota.',
 
   'nav.group.administration': 'Quản trị',
   'nav.roles': 'Vai trò & quyền',
@@ -1568,6 +1559,35 @@ export const vi = {
   'appControl.switches.hint':
     'Các key boolean feature_* từ catalog — tắt là đường tắt khẩn cấp, hệ deterministic vẫn là nguồn chân lý.',
   'appControl.switches.none': 'Catalog hiện không có key feature_* nào.',
+
+  'dashboard.health.hint':
+    'Từ /cms/ops/health — cache ~20s; provider chưa có traffic thì vắng mặt, không xanh bừa.',
+  'dashboard.health.empty': 'Deployment này chưa đo được dependency nào.',
+  'dashboard.health.healthy': 'Khoẻ',
+  'dashboard.health.degraded': 'Suy giảm',
+  'dashboard.health.down': 'Sập',
+  'dashboard.health.unknown': 'Chưa đo',
+  'dashboard.queuesOps.title': 'Hàng đợi nền',
+  'dashboard.queuesOps.hint':
+    'BullMQ + outbox Postgres. Broker không nối được thì không có dòng — xem Sức khoẻ dịch vụ.',
+  'dashboard.queuesOps.empty':
+    'Không đọc được hàng đợi nào — kiểm tra dòng redis ở Sức khoẻ dịch vụ.',
+  'dashboard.queuesOps.col.name': 'Hàng đợi',
+  'dashboard.queuesOps.col.pending': 'Chờ',
+  'dashboard.queuesOps.col.running': 'Chạy',
+  'dashboard.queuesOps.col.failed': 'Lỗi 24h',
+  'dashboard.queuesOps.col.dead': 'Dead letter',
+  'dashboard.queuesOps.col.oldest': 'Chờ lâu nhất',
+  'dashboard.queuesOps.outbox': 'outbox',
+  'dashboard.queuesOps.age': '{minutes} phút',
+  'dashboard.costsLive.hint':
+    'Chỉ provider có nguồn số thật; mỗi dòng ghi rõ là hoá đơn hay ước tính.',
+  'dashboard.costsLive.noSource':
+    'Chưa có nguồn chi phí nào được nối. Đây không phải 0 đồng — là chưa đo được.',
+  'dashboard.costsLive.empty': 'Nguồn đã nối nhưng chưa có dòng chi phí nào trong kỳ.',
+  'dashboard.costsLive.billed': 'hoá đơn',
+  'dashboard.costsLive.estimated': 'ước tính',
+  'dashboard.costsLive.mtd': 'tháng này',
 } as const
 
 export type MessageKey = keyof typeof vi

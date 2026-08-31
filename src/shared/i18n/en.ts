@@ -877,17 +877,8 @@ export const en: Partial<Record<MessageKey, string>> = {
   'dashboard.searchTrend.hint':
     'Daily rate from /cms/search-analytics; the bar is decoration, the number sits beside it.',
   'dashboard.observability.title': 'Monitoring & costs',
-  'dashboard.notConnected': 'Not connected',
   'dashboard.monitoring.title': 'Service health',
-  'dashboard.monitoring.body':
-    'No endpoint in the /v1 contract serves service status, worker queues or infrastructure resources. This screen does not invent a "Healthy" state.',
-  'dashboard.monitoring.needHealth':
-    'per-service status (api, db, redis, worker, providers) + latency.',
-  'dashboard.monitoring.needQueues': 'BullMQ queue depth, failed jobs, dead letters.',
   'dashboard.costs.title': 'Provider costs',
-  'dashboard.costs.body':
-    'No billing source is connected (Maps, OpenAI, AWS, Cloudflare, OneSignal). No estimated dollar figures are shown without a real API.',
-  'dashboard.costs.needCosts': 'daily/monthly cost per provider + quota headroom.',
 
   'nav.group.administration': 'Administration',
   'nav.roles': 'Roles & permissions',
@@ -971,4 +962,33 @@ export const en: Partial<Record<MessageKey, string>> = {
   'appControl.switches.hint':
     'Boolean feature_* keys from the catalog — off is the emergency path; the deterministic pipeline stays the source of truth.',
   'appControl.switches.none': 'The catalog currently has no feature_* keys.',
+
+  'dashboard.health.hint':
+    'From /cms/ops/health — cached ~20s; a provider with no traffic is absent, never painted green.',
+  'dashboard.health.empty': 'This deployment has not measured any dependency yet.',
+  'dashboard.health.healthy': 'Healthy',
+  'dashboard.health.degraded': 'Degraded',
+  'dashboard.health.down': 'Down',
+  'dashboard.health.unknown': 'Not measured',
+  'dashboard.queuesOps.title': 'Background queues',
+  'dashboard.queuesOps.hint':
+    'BullMQ + the Postgres outbox. An unreachable broker contributes no rows — see Service health.',
+  'dashboard.queuesOps.empty':
+    'No queues could be read — check the redis row under Service health.',
+  'dashboard.queuesOps.col.name': 'Queue',
+  'dashboard.queuesOps.col.pending': 'Pending',
+  'dashboard.queuesOps.col.running': 'Running',
+  'dashboard.queuesOps.col.failed': 'Failed 24h',
+  'dashboard.queuesOps.col.dead': 'Dead letter',
+  'dashboard.queuesOps.col.oldest': 'Oldest wait',
+  'dashboard.queuesOps.outbox': 'outbox',
+  'dashboard.queuesOps.age': '{minutes} min',
+  'dashboard.costsLive.hint':
+    'Only providers with a real source; every line says whether it is billed or estimated.',
+  'dashboard.costsLive.noSource':
+    'No cost source is connected. This is not zero spend — it is unmeasured.',
+  'dashboard.costsLive.empty': 'Sources are connected but no cost lines exist for the period.',
+  'dashboard.costsLive.billed': 'billed',
+  'dashboard.costsLive.estimated': 'estimated',
+  'dashboard.costsLive.mtd': 'MTD',
 }

@@ -1,7 +1,13 @@
 import { apiFetchParsed } from '@/shared/api/client'
 import {
+  cmsOpsCostsSchema,
+  cmsOpsHealthSchema,
+  cmsOpsQueuesSchema,
   opsKpisSchema,
   searchAnalyticsSchema,
+  type CmsOpsCosts,
+  type CmsOpsHealth,
+  type CmsOpsQueues,
   type OpsKpis,
   type SearchAnalytics,
 } from '@/shared/api/contracts'
@@ -28,4 +34,27 @@ export function fetchSearchAnalytics(
     query: { days, limit },
     signal,
   })
+}
+
+/**
+ * BE-CMS-G8 (#247). Cached ~20s server-side — a screen, not an alerting path.
+ * Provider rows come from the circuit breaker, so a provider with no traffic
+ * yet is absent rather than green.
+ */
+export function fetchOpsHealth(signal?: AbortSignal): Promise<CmsOpsHealth> {
+  return apiFetchParsed(cmsOpsHealthSchema, '/cms/ops/health', { signal })
+}
+
+/** BullMQ queues plus the Postgres outbox. An unreachable broker contributes no rows. */
+export function fetchOpsQueues(signal?: AbortSignal): Promise<CmsOpsQueues> {
+  return apiFetchParsed(cmsOpsQueuesSchema, '/cms/ops/queues', { signal })
+}
+
+/**
+ * Only providers with a real source appear. `sourcesConfigured: false` with an
+ * empty list means "nothing is connected", and the caller must not render it
+ * as a zero amount.
+ */
+export function fetchOpsCosts(signal?: AbortSignal): Promise<CmsOpsCosts> {
+  return apiFetchParsed(cmsOpsCostsSchema, '/cms/ops/costs', { signal })
 }
