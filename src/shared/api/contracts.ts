@@ -927,3 +927,80 @@ export const placeSubmissionListSchema = z.object({
   nextCursor: z.string().nullable(),
 })
 export type PlaceSubmissionList = z.infer<typeof placeSubmissionListSchema>
+
+/**
+ * Trust & Safety rules (GoGo-BE#225).
+ *
+ * Rule **definitions**. Nothing evaluates them yet — the enforcement path is
+ * separate work — but a rule here can suspend an account with no human in the
+ * loop, which is why the resource is `ops_admin` in both directions and why
+ * every decision it eventually causes carries `reasonCode`.
+ *
+ * `conditions` is a closed shape chosen by `ruleType`, never an expression
+ * language. The per-type shapes live in `features/safety/conditions.ts`, which
+ * mirrors the server's domain module; this schema keeps the field as an object
+ * so an unknown key survives a round-trip to the editor instead of being
+ * dropped on read.
+ */
+export const safetyRuleTypeSchema = z.enum([
+  'spam',
+  'abusive_content',
+  'blocked_words',
+  'review_abuse',
+  'user_abuse',
+  'repeated_reports',
+  'rate_limit',
+])
+export type SafetyRuleType = z.infer<typeof safetyRuleTypeSchema>
+
+export const safetyRuleTriggerSchema = z.enum([
+  'review_created',
+  'review_updated',
+  'report_created',
+  'checkin_created',
+  'place_submitted',
+  'user_registered',
+])
+export type SafetyRuleTrigger = z.infer<typeof safetyRuleTriggerSchema>
+
+export const safetyRuleActionSchema = z.enum([
+  'flag_for_review',
+  'auto_hide',
+  'require_moderation',
+  'suspend_user',
+  'block_action',
+])
+export type SafetyRuleAction = z.infer<typeof safetyRuleActionSchema>
+
+export const safetyRuleSeveritySchema = z.enum(['low', 'medium', 'high', 'critical'])
+export type SafetyRuleSeverity = z.infer<typeof safetyRuleSeveritySchema>
+
+export const safetyRuleStatusSchema = z.enum(['draft', 'active', 'disabled'])
+export type SafetyRuleStatus = z.infer<typeof safetyRuleStatusSchema>
+
+export const cmsSafetyRuleSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().nullish(),
+  ruleType: safetyRuleTypeSchema,
+  trigger: safetyRuleTriggerSchema,
+  conditions: z.record(z.string(), z.unknown()).default({}),
+  action: safetyRuleActionSchema,
+  severity: safetyRuleSeveritySchema,
+  status: safetyRuleStatusSchema,
+  /** Lower runs first, so two rules matching one event resolve the same way. */
+  priority: z.number().int(),
+  /** Stamped on every decision this rule causes, so it can be traced back. */
+  reasonCode: z.string(),
+  createdBy: adminRefSchema.nullish(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+})
+export type CmsSafetyRule = z.infer<typeof cmsSafetyRuleSchema>
+
+export const cmsSafetyRulePageSchema = z.object({
+  items: z.array(cmsSafetyRuleSchema).default([]),
+  nextCursor: z.string().nullable().default(null),
+  totalCount: z.number().int().default(0),
+})
+export type CmsSafetyRulePage = z.infer<typeof cmsSafetyRulePageSchema>

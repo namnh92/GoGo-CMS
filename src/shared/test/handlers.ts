@@ -1,5 +1,6 @@
 import { http, HttpResponse } from 'msw'
 import type { AdminRole, CollectionStatus, PlaceStatus } from '@/shared/api/contracts'
+import { ALLOWED_ACTIONS, ALLOWED_TRIGGERS } from '@/features/safety/conditions'
 import type { ImportRow } from '@/shared/api/contracts-import'
 import {
   auditEntries,
@@ -25,6 +26,7 @@ import {
   moderationCheckinQueue,
   communityPlaceQueue,
   cmsRecommendations,
+  cmsSafetyRules,
   cmsPlanTemplates,
 } from './fixtures'
 
@@ -84,6 +86,7 @@ const db = {
   admins: cmsAdmins.map((admin) => ({ ...admin })),
   recommendations: JSON.parse(JSON.stringify(cmsRecommendations)) as typeof cmsRecommendations,
   planTemplates: JSON.parse(JSON.stringify(cmsPlanTemplates)) as typeof cmsPlanTemplates,
+  safetyRules: JSON.parse(JSON.stringify(cmsSafetyRules)) as typeof cmsSafetyRules,
 }
 
 /**
@@ -157,6 +160,17 @@ function pageOf<T extends { id: string }>(items: T[], limit: number, cursor: str
     nextCursor: start + limit < items.length && last ? last.id : null,
     totalCount: items.length,
   }
+}
+
+/**
+ * `ops_admin` in both directions, so a moderator sees neither the list nor a
+ * rule. Reads do not climb into this resource (BE-IMP-008), and the mock says
+ * so rather than letting the console look more permissive than the server.
+ */
+function requireOpsAdmin() {
+  const { role } = currentActor()
+  if (role === 'ops_admin' || role === 'super_admin') return null
+  return envelope(403, 'FORBIDDEN', 'safety rules are ops_admin only')
 }
 
 export const handlers = [
@@ -900,6 +914,135 @@ export const handlers = [
     row.stopCount = row.stops.length
     row.updatedAt = new Date().toISOString()
     return HttpResponse.json(row)
+  }),
+
+  /*
+   * Trust & Safety rules (GoGo-BE#225).
+   *
+   * `ops_admin` in both directions — reads do not climb here, so a moderator
+   * gets a 403 from the mock exactly as they would from the server, and the
+   * console's permission-denied state is reachable in dev.
+   */
+  http.get(`${BASE}/cms/safety-rules`, ({ request }) => {
+    const denied = requireOpsAdmin()
+    if (denied) return denied
+    const url = new URL(request.url)
+    const ruleType = url.searchParams.get('ruleType')
+    const status = url.searchParams.get('status')
+    const action = url.searchParams.get('action')
+    const severity = url.searchParams.get('severity')
+    const trigger = url.searchParams.get('trigger')
+    const q = url.searchParams.get('q')?.toLowerCase()
+    const limit = Number(url.searchParams.get('limit') ?? 25)
+    const cursor = url.searchParams.get('cursor')
+
+    let items = db.safetyRules
+    if (ruleType) items = items.filter((row) => row.ruleType === ruleType)
+    if (status) items = items.filter((row) => row.status === status)
+    if (action) items = items.filter((row) => row.action === action)
+    if (severity) items = items.filter((row) => row.severity === severity)
+    if (trigger) items = items.filter((row) => row.trigger === trigger)
+    if (q) {
+      items = items.filter(
+        (row) => row.name.toLowerCase().includes(q) || row.reasonCode.toLowerCase().includes(q),
+      )
+    }
+    return HttpResponse.json(pageOf(items, limit, cursor))
+  }),
+
+  http.post(`${BASE}/cms/safety-rules`, async ({ request }) => {
+    const denied = requireOpsAdmin()
+    if (denied) return denied
+    const body = (await request.json()) as Record<string, unknown>
+    const name = String(body.name ?? '')
+    if (db.safetyRules.some((row) => row.name === name)) {
+      return envelope(409, 'RULE_NAME_TAKEN', 'a rule with that name exists')
+    }
+    const ruleType = body.ruleType as (typeof cmsSafetyRules)[number]['ruleType']
+    const action = body.action as (typeof cmsSafetyRules)[number]['action']
+    const severity = (body.severity as (typeof cmsSafetyRules)[number]['severity']) ?? 'medium'
+    // The three checks the contract names, so the console cannot ship a form
+    // that only discovers them in production.
+    if (!ALLOWED_ACTIONS[ruleType]?.includes(action)) {
+      return envelope(400, 'ACTION_NOT_ALLOWED', 'action not available for this rule type')
+    }
+    const triggers: readonly string[] = ALLOWED_TRIGGERS[ruleType] ?? []
+    if (!triggers.includes(String(body.trigger))) {
+      return envelope(400, 'TRIGGER_NOT_ALLOWED', 'trigger not available for this rule type')
+    }
+    if (action === 'suspend_user' && severity !== 'high' && severity !== 'critical') {
+      return envelope(400, 'SEVERITY_TOO_LOW', 'automatic suspension needs high severity')
+    }
+    const created = {
+      id: `sr-${db.safetyRules.length + 100}`,
+      name,
+      description: (body.description as string) ?? null,
+      ruleType,
+      trigger: body.trigger as (typeof cmsSafetyRules)[number]['trigger'],
+      conditions: (body.conditions as Record<string, unknown>) ?? {},
+      action,
+      severity,
+      // Always a draft: arming a rule is a separate, deliberate act.
+      status: 'draft' as const,
+      priority: Number(body.priority ?? 0),
+      reasonCode: String(body.reasonCode ?? ''),
+      createdBy: { id: 'adm-ops', displayName: 'Ngô Ops' },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+    db.safetyRules.unshift(created)
+    return HttpResponse.json(created, { status: 201 })
+  }),
+
+  http.get(`${BASE}/cms/safety-rules/:id`, ({ params }) => {
+    const denied = requireOpsAdmin()
+    if (denied) return denied
+    const row = db.safetyRules.find((item) => item.id === params.id)
+    if (!row) return envelope(404, 'NOT_FOUND', 'safety rule not found')
+    return HttpResponse.json(row)
+  }),
+
+  http.patch(`${BASE}/cms/safety-rules/:id`, async ({ params, request }) => {
+    const denied = requireOpsAdmin()
+    if (denied) return denied
+    const row = db.safetyRules.find((item) => item.id === params.id)
+    if (!row) return envelope(404, 'NOT_FOUND', 'safety rule not found')
+    const body = (await request.json()) as Record<string, unknown>
+    // `ruleType` is immutable — it decides how the stored conditions read.
+    if (body.ruleType !== undefined && body.ruleType !== row.ruleType) {
+      return envelope(400, 'BAD_REQUEST', 'ruleType is immutable')
+    }
+    const action = (body.action as typeof row.action) ?? row.action
+    const severity = (body.severity as typeof row.severity) ?? row.severity
+    if (!ALLOWED_ACTIONS[row.ruleType]?.includes(action)) {
+      return envelope(400, 'ACTION_NOT_ALLOWED', 'action not available for this rule type')
+    }
+    if (action === 'suspend_user' && severity !== 'high' && severity !== 'critical') {
+      return envelope(400, 'SEVERITY_TOO_LOW', 'automatic suspension needs high severity')
+    }
+    for (const key of ['name', 'description', 'trigger', 'reasonCode'] as const) {
+      if (body[key] !== undefined) (row as Record<string, unknown>)[key] = body[key]
+    }
+    if (body.conditions !== undefined) {
+      row.conditions = body.conditions as typeof row.conditions
+    }
+    if (body.priority !== undefined) row.priority = Number(body.priority)
+    row.action = action
+    row.severity = severity
+    row.updatedAt = new Date().toISOString()
+    return HttpResponse.json(row)
+  }),
+
+  http.patch(`${BASE}/cms/safety-rules/:id/status`, async ({ params, request }) => {
+    const denied = requireOpsAdmin()
+    if (denied) return denied
+    const row = db.safetyRules.find((item) => item.id === params.id)
+    if (!row) return envelope(404, 'NOT_FOUND', 'safety rule not found')
+    const body = (await request.json()) as { status: string }
+    // Nothing here is terminal: the point of a switch is that it goes back.
+    row.status = body.status as typeof row.status
+    row.updatedAt = new Date().toISOString()
+    return HttpResponse.json({ id: row.id, status: row.status })
   }),
 
   http.get(`${BASE}/cms/recommendations`, ({ request }) => {
