@@ -1216,3 +1216,73 @@ export const cmsCampaignTestSendSchema = z.object({
   testSendQueued: z.boolean(),
 })
 export type CmsCampaignTestSend = z.infer<typeof cmsCampaignTestSendSchema>
+
+/**
+ * Ops observability (GoGo-BE#247).
+ *
+ * Three reads, each honest about what it does not know:
+ * - health: `unknown` is a first-class answer — nothing measured, not healthy.
+ * - queues: `failed24hTruncated` marks a floor, not a count.
+ * - costs: `providers: []` with `sourcesConfigured: false` means "no source
+ *   connected", never "nothing was spent" — the console must render those as
+ *   different claims.
+ */
+export const serviceHealthStatusSchema = z.enum(['healthy', 'degraded', 'down', 'unknown'])
+export type ServiceHealthStatus = z.infer<typeof serviceHealthStatusSchema>
+
+export const cmsServiceHealthSchema = z.object({
+  /** Open set: a provider appears once the circuit breaker has seen it. */
+  key: z.string(),
+  status: serviceHealthStatusSchema,
+  /** Present only where the check actually timed something. */
+  latencyMs: z.number().int().nullish(),
+  checkedAt: z.string(),
+  /** Why it is degraded or unknown, in words the console can show. */
+  detail: z.string().nullish(),
+})
+export type CmsServiceHealth = z.infer<typeof cmsServiceHealthSchema>
+
+export const cmsOpsHealthSchema = z.object({
+  services: z.array(cmsServiceHealthSchema).default([]),
+})
+export type CmsOpsHealth = z.infer<typeof cmsOpsHealthSchema>
+
+export const cmsQueueStatsSchema = z.object({
+  name: z.string(),
+  /** Where the numbers came from — BullMQ, or the Postgres outbox. */
+  source: z.enum(['bullmq', 'database']),
+  pending: z.number().int(),
+  running: z.number().int(),
+  failed24h: z.number().int(),
+  /** True when the scan hit its cap: `failed24h` is a floor, not a count. */
+  failed24hTruncated: z.boolean(),
+  deadLetter: z.number().int(),
+  oldestPendingSeconds: z.number().int().nullish(),
+  workers: z.number().int().nullish(),
+})
+export type CmsQueueStats = z.infer<typeof cmsQueueStatsSchema>
+
+export const cmsOpsQueuesSchema = z.object({
+  queues: z.array(cmsQueueStatsSchema).default([]),
+})
+export type CmsOpsQueues = z.infer<typeof cmsOpsQueuesSchema>
+
+export const cmsCostLineSchema = z.object({
+  key: z.string(),
+  /** Minor units. */
+  today: z.number().int(),
+  monthToDate: z.number().int(),
+  currency: z.string(),
+  /** An estimate and an invoice are different claims about the same provider. */
+  basis: z.enum(['billed', 'estimated']),
+  /** 0–1, present only where the provider reports a quota. */
+  quotaUsedRatio: z.number().nullish(),
+})
+export type CmsCostLine = z.infer<typeof cmsCostLineSchema>
+
+export const cmsOpsCostsSchema = z.object({
+  providers: z.array(cmsCostLineSchema).default([]),
+  /** False = no cost source connected. An empty list must not render as zero. */
+  sourcesConfigured: z.boolean(),
+})
+export type CmsOpsCosts = z.infer<typeof cmsOpsCostsSchema>

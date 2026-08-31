@@ -2,16 +2,23 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { useI18n, useT } from '@/shared/i18n/i18n'
 import { queryKeys } from '@/shared/api/queryKeys'
-import { formatDateTime, formatNumber, formatPercent } from '@/shared/format'
+import { formatDateTime, formatMoney, formatNumber, formatPercent } from '@/shared/format'
 import { PageBody, PageHeader } from '@/app/PageHeader'
 import { Card, CardBody, CardHeader, KpiCard } from '@/shared/ui/Card'
+import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
 import { AsyncBoundary, PermissionDeniedState } from '@/shared/ui/State'
 import { useSession } from '@/shared/auth/session'
 import { fetchModerationCounts } from '@/features/moderation/api'
 import { fetchImportJobs } from '@/features/imports/api'
 import { JobStatusBadge } from '@/features/imports/status'
-import { fetchOpsKpis, fetchSearchAnalytics } from './api'
+import {
+  fetchOpsCosts,
+  fetchOpsHealth,
+  fetchOpsKpis,
+  fetchOpsQueues,
+  fetchSearchAnalytics,
+} from './api'
 import { styles } from './dashboard.style'
 
 /**
@@ -55,6 +62,26 @@ export default function DashboardScreen() {
     queryFn: ({ signal }) => fetchSearchAnalytics(7, 5, signal),
     staleTime: 60_000,
     enabled: can('searchAnalytics.read'),
+  })
+  // BE-CMS-G8: cached ~20s server-side, refetched at the same cadence here —
+  // a screen, not an alerting path.
+  const health = useQuery({
+    queryKey: queryKeys.opsHealth,
+    queryFn: ({ signal }) => fetchOpsHealth(signal),
+    refetchInterval: 30_000,
+    enabled: can('ops.dashboard'),
+  })
+  const opsQueues = useQuery({
+    queryKey: queryKeys.opsQueues,
+    queryFn: ({ signal }) => fetchOpsQueues(signal),
+    refetchInterval: 30_000,
+    enabled: can('ops.dashboard'),
+  })
+  const costs = useQuery({
+    queryKey: queryKeys.opsCosts,
+    queryFn: ({ signal }) => fetchOpsCosts(signal),
+    staleTime: 5 * 60_000,
+    enabled: can('ops.dashboard'),
   })
 
   /**
@@ -370,49 +397,198 @@ export default function DashboardScreen() {
                   </Card>
                 </div>
 
-                {/*
-                 * The Figma dashboard also draws service health, infra gauges
-                 * and cost budgets. No endpoint serves any of it, and a
-                 * hard-coded "Healthy" would be worse than nothing — so the
-                 * section exists, says it is not connected, and names exactly
-                 * what the backend would have to expose.
-                 */}
+                {/* BE-CMS-G8 shipped: the sections below read the real
+                    endpoints. `unknown` renders as unknown — it is not a
+                    synonym for healthy — and "no cost source" is a different
+                    claim from "zero spend". */}
                 <h2 className={styles.sectionTitle}>{t('dashboard.observability.title')}</h2>
-                <div className={styles.gapGrid}>
+                <div className={styles.splitGrid}>
                   <Card>
-                    <CardHeader title={t('dashboard.monitoring.title')} />
-                    <CardBody className={styles.gapCard}>
-                      <span className={styles.gapBadge}>
-                        <span aria-hidden="true">○</span>
-                        {t('dashboard.notConnected')}
-                      </span>
-                      <p className="text-xs text-text-muted">{t('dashboard.monitoring.body')}</p>
-                      <div className={styles.gapList}>
-                        <p className={styles.gapItem}>
-                          <span className={styles.gapMono}>GET /v1/cms/ops/health</span>
-                          {t('dashboard.monitoring.needHealth')}
-                        </p>
-                        <p className={styles.gapItem}>
-                          <span className={styles.gapMono}>GET /v1/cms/ops/queues</span>
-                          {t('dashboard.monitoring.needQueues')}
-                        </p>
-                      </div>
+                    <CardHeader
+                      title={t('dashboard.monitoring.title')}
+                      hint={t('dashboard.health.hint')}
+                    />
+                    <CardBody>
+                      {health.isError ? (
+                        <p className={styles.note}>{t('dashboard.satelliteError')}</p>
+                      ) : (health.data?.services.length ?? 0) === 0 ? (
+                        <p className={styles.note}>{t('dashboard.health.empty')}</p>
+                      ) : (
+                        health.data?.services.map((service) => (
+                          <div key={service.key} className={styles.healthRow}>
+                            <span className={styles.healthKey}>{service.key}</span>
+                            <span
+                              className={`${styles.healthStatus} ${
+                                service.status === 'healthy'
+                                  ? styles.healthHealthy
+                                  : service.status === 'degraded'
+                                    ? styles.healthDegraded
+                                    : service.status === 'down'
+                                      ? styles.healthDown
+                                      : styles.healthUnknown
+                              }`}
+                            >
+                              <span className={styles.healthDot} aria-hidden="true" />
+                              {t(`dashboard.health.${service.status}` as const)}
+                            </span>
+                            <span className={styles.healthLatency}>
+                              {service.latencyMs != null
+                                ? `${formatNumber(service.latencyMs, locale)}ms`
+                                : ''}
+                            </span>
+                            <span className={styles.healthDetail} title={service.detail ?? ''}>
+                              {service.detail ?? ''}
+                            </span>
+                          </div>
+                        ))
+                      )}
                     </CardBody>
                   </Card>
+
                   <Card>
-                    <CardHeader title={t('dashboard.costs.title')} />
-                    <CardBody className={styles.gapCard}>
-                      <span className={styles.gapBadge}>
-                        <span aria-hidden="true">○</span>
-                        {t('dashboard.notConnected')}
-                      </span>
-                      <p className="text-xs text-text-muted">{t('dashboard.costs.body')}</p>
-                      <div className={styles.gapList}>
-                        <p className={styles.gapItem}>
-                          <span className={styles.gapMono}>GET /v1/cms/ops/costs</span>
-                          {t('dashboard.costs.needCosts')}
-                        </p>
-                      </div>
+                    <CardHeader
+                      title={t('dashboard.queuesOps.title')}
+                      hint={t('dashboard.queuesOps.hint')}
+                    />
+                    <CardBody>
+                      {opsQueues.isError ? (
+                        <p className={styles.note}>{t('dashboard.satelliteError')}</p>
+                      ) : (opsQueues.data?.queues.length ?? 0) === 0 ? (
+                        // An unreachable broker contributes no rows; health is
+                        // where that outage is reported.
+                        <p className={styles.note}>{t('dashboard.queuesOps.empty')}</p>
+                      ) : (
+                        <div className={styles.queueTableWrap}>
+                          <table className={styles.queueTable}>
+                            <caption className="sr-only">{t('dashboard.queuesOps.title')}</caption>
+                            <thead>
+                              <tr className={styles.queueHead}>
+                                <th scope="col" className={styles.queueHeadCell}>
+                                  {t('dashboard.queuesOps.col.name')}
+                                </th>
+                                <th scope="col" className={`${styles.queueHeadCell} text-right`}>
+                                  {t('dashboard.queuesOps.col.pending')}
+                                </th>
+                                <th scope="col" className={`${styles.queueHeadCell} text-right`}>
+                                  {t('dashboard.queuesOps.col.running')}
+                                </th>
+                                <th scope="col" className={`${styles.queueHeadCell} text-right`}>
+                                  {t('dashboard.queuesOps.col.failed')}
+                                </th>
+                                <th scope="col" className={`${styles.queueHeadCell} text-right`}>
+                                  {t('dashboard.queuesOps.col.dead')}
+                                </th>
+                                <th scope="col" className={`${styles.queueHeadCell} text-right`}>
+                                  {t('dashboard.queuesOps.col.oldest')}
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {opsQueues.data?.queues.map((queue) => (
+                                <tr key={queue.name} className={styles.queueRowLine}>
+                                  <td className={styles.queueCellName}>
+                                    {queue.name}
+                                    {queue.source === 'database' ? (
+                                      <span className="ml-1.5 align-middle">
+                                        <Badge tone="lavender">
+                                          {t('dashboard.queuesOps.outbox')}
+                                        </Badge>
+                                      </span>
+                                    ) : null}
+                                  </td>
+                                  <td className={styles.queueCell}>
+                                    {formatNumber(queue.pending, locale)}
+                                  </td>
+                                  <td className={styles.queueCellMuted}>
+                                    {formatNumber(queue.running, locale)}
+                                  </td>
+                                  <td
+                                    className={
+                                      queue.failed24h > 0
+                                        ? styles.queueCellBad
+                                        : styles.queueCellMuted
+                                    }
+                                  >
+                                    {/* A truncated scan is a floor, and says so. */}
+                                    {queue.failed24hTruncated ? '≥' : ''}
+                                    {formatNumber(queue.failed24h, locale)}
+                                  </td>
+                                  <td
+                                    className={
+                                      queue.deadLetter > 0
+                                        ? styles.queueCellBad
+                                        : styles.queueCellMuted
+                                    }
+                                  >
+                                    {formatNumber(queue.deadLetter, locale)}
+                                  </td>
+                                  <td className={styles.queueCellMuted}>
+                                    {queue.oldestPendingSeconds != null
+                                      ? t('dashboard.queuesOps.age', {
+                                          minutes: formatNumber(
+                                            Math.round(queue.oldestPendingSeconds / 60),
+                                            locale,
+                                          ),
+                                        })
+                                      : '—'}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </CardBody>
+                  </Card>
+                </div>
+
+                <div className={styles.splitGrid}>
+                  <Card>
+                    <CardHeader
+                      title={t('dashboard.costs.title')}
+                      hint={t('dashboard.costsLive.hint')}
+                    />
+                    <CardBody>
+                      {costs.isError ? (
+                        <p className={styles.note}>{t('dashboard.satelliteError')}</p>
+                      ) : costs.data && !costs.data.sourcesConfigured ? (
+                        /* "No source connected" is not a zero — no currency
+                           symbol may appear on this branch. */
+                        <p className={styles.costEmpty}>{t('dashboard.costsLive.noSource')}</p>
+                      ) : (costs.data?.providers.length ?? 0) === 0 ? (
+                        <p className={styles.costEmpty}>{t('dashboard.costsLive.empty')}</p>
+                      ) : (
+                        costs.data?.providers.map((line) => (
+                          <div key={line.key} className={styles.costRow}>
+                            <span className={styles.costKey}>{line.key}</span>
+                            <span className={styles.costBasis}>
+                              <Badge tone={line.basis === 'billed' ? 'mint' : 'neutral'}>
+                                {t(`dashboard.costsLive.${line.basis}` as const)}
+                              </Badge>
+                            </span>
+                            <span className={styles.costQuota}>
+                              {line.quotaUsedRatio != null ? (
+                                <span className={styles.trendBar}>
+                                  <span
+                                    className={styles.trendFill}
+                                    style={{
+                                      width: `${Math.min(line.quotaUsedRatio * 100, 100)}%`,
+                                    }}
+                                  />
+                                </span>
+                              ) : null}
+                            </span>
+                            <span className={styles.costValue}>
+                              {formatMoney({ amount: line.today, currency: line.currency }, locale)}{' '}
+                              · {t('dashboard.costsLive.mtd')}{' '}
+                              {formatMoney(
+                                { amount: line.monthToDate, currency: line.currency },
+                                locale,
+                              )}
+                            </span>
+                          </div>
+                        ))
+                      )}
                     </CardBody>
                   </Card>
                 </div>

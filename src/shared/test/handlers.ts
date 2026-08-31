@@ -29,6 +29,9 @@ import {
   cmsSafetyRules,
   cmsBanners,
   cmsCampaigns,
+  opsHealth,
+  opsQueues,
+  opsCosts,
   cmsPlanTemplates,
 } from './fixtures'
 
@@ -1292,6 +1295,15 @@ export const handlers = [
     row.updatedAt = new Date().toISOString()
     return HttpResponse.json({ id: row.id, status: row.lifecycleStatus })
   }),
+
+  /*
+   * Ops observability (GoGo-BE#247). Static snapshots: the mock's job is the
+   * SHAPE — all four health states, a truncated failure floor, the outbox
+   * row, and costs that honestly say "no source connected".
+   */
+  http.get(`${BASE}/cms/ops/health`, () => HttpResponse.json(opsHealth)),
+  http.get(`${BASE}/cms/ops/queues`, () => HttpResponse.json(opsQueues)),
+  http.get(`${BASE}/cms/ops/costs`, () => HttpResponse.json(opsCosts)),
 
   http.get(`${BASE}/cms/safety-rules`, ({ request }) => {
     const denied = requireOpsAdmin()

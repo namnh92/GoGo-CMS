@@ -54,16 +54,41 @@ describe('dashboard (CMS-035)', () => {
     expect(await screen.findByText('Mở quản lý import')).toBeInTheDocument()
   })
 
-  it('renders cost and monitoring as explicitly not connected, with no invented numbers', async () => {
+  it('renders every health state distinctly — unknown is never healthy', async () => {
     signInAs('ops_admin')
     renderWithProviders(<Routed />, { route: '/' })
 
     expect(await screen.findByText('Sức khoẻ dịch vụ')).toBeInTheDocument()
-    expect(screen.getAllByText('Chưa nối').length).toBe(2)
-    // The named missing contracts appear as monospace endpoints.
-    expect(screen.getByText('GET /v1/cms/ops/health')).toBeInTheDocument()
-    expect(screen.getByText('GET /v1/cms/ops/costs')).toBeInTheDocument()
-    // No dollar figure anywhere on the screen.
+    // The four states from the fixture, each in words, not colour alone.
+    expect(await screen.findByText('Suy giảm')).toBeInTheDocument()
+    expect(screen.getByText('Sập')).toBeInTheDocument()
+    expect(screen.getByText('Chưa đo')).toBeInTheDocument()
+    expect(screen.getAllByText('Khoẻ').length).toBeGreaterThan(0)
+    // The unknown provider's explanation is shown, not painted over.
+    expect(screen.getByText(/chưa có lời gọi nào/)).toBeInTheDocument()
+  })
+
+  it('marks a truncated failure count as a floor and labels the outbox row', async () => {
+    signInAs('ops_admin')
+    renderWithProviders(<Routed />, { route: '/' })
+
+    // Title appears in both the heading and the sr-only caption; take the table.
+    await screen.findByRole('heading', { name: 'Hàng đợi nền' })
+    const table = (await screen.findByText('image-processing')).closest('table')!
+    // 500 was capped: rendered as a floor, never as an exact count.
+    expect(within(table).getByText('≥500')).toBeInTheDocument()
+    // The Postgres outbox is a queue here, and says where its numbers come from.
+    expect(within(table).getByText('outbox_events')).toBeInTheDocument()
+    expect(within(table).getByText('outbox')).toBeInTheDocument()
+  })
+
+  it('renders "no cost source" without any currency figure — not as zero', async () => {
+    signInAs('ops_admin')
+    renderWithProviders(<Routed />, { route: '/' })
+
+    expect(await screen.findByText(/Chưa có nguồn chi phí nào được nối/)).toBeInTheDocument()
+    // No invented money on the whole screen: the fixture has sourcesConfigured=false.
     expect(screen.queryByText(/\$\d/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/\d\s*₫/)).not.toBeInTheDocument()
   })
 })

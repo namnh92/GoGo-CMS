@@ -1345,6 +1345,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/cms/auth/access-exchange": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Exchange a Cloudflare Access assertion for a staff session (SSO)
+         * @description ADR-0010. Cloudflare Access authenticates the operator against the upstream identity provider and enforces MFA there, then signs a short-lived assertion which the CMS Worker forwards on `Cf-Access-Jwt-Assertion`. This endpoint verifies that assertion's signature, issuer and audience against the team's published key set and opens an ordinary staff session.
+         *
+         *     The assertion is **not** trusted because it is present: this API is reachable without passing through Access, so the header is client-settable and only the signature makes it meaningful. A verified identity is also not an account — the address must already have an active `admin_users` row, and no account is created here.
+         */
+        post: operations["cmsAccessExchange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/cms/auth/refresh": {
         parameters: {
             query?: never;
@@ -1446,6 +1468,185 @@ export interface paths {
         put?: never;
         /** Super admin: create a staff account */
         post: operations["cmsCreateAdmin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ops: app accounts
+         * @description BE-CMS-G7. `ops_admin` and above, and deliberately outside the guard's rank-read: an editor reading catalogue data is ordinary, an editor reading the user base is not.
+         *
+         *     **Minimum PII by construction.** No coordinates, no device tokens, no raw preference selections — support work needs to know who someone is and what they have done, not where they were. A field that is not returned cannot leak from a console session, a screenshot, or a cache.
+         */
+        get: operations["cmsListUsers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/users/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ops: one account, with the rooms it has been in */
+        get: operations["cmsUserDetail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/users/{id}/suspend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ops: suspend an account (expected back)
+         * @description Revokes every session as well as setting the status. `AuthGuard` trusts the access token until the session is revoked, so flipping the status alone would leave the account working for up to the token lifetime — long enough to matter during an incident, short enough to pass testing.
+         */
+        post: operations["cmsSuspendUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/users/{id}/ban": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ops: ban an account (not expected back)
+         * @description Same enforcement as suspend. The two are separate values because what distinguishes them is whether the account is expected back, and an operator reviewing one needs to know which they are looking at without reading a free-text note.
+         */
+        post: operations["cmsBanUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/users/{id}/reactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ops: lift a suspension or ban */
+        post: operations["cmsReactivateUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/users/{id}/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Super admin: erase an account on its holder's behalf
+         * @description Runs the same erasure as the consumer `DELETE /me` — PII nulled, sessions revoked, content pseudonymized, address freed. One implementation, not two: two versions of "erase this person" drift, and the one that drifts is the one that leaves a table behind.
+         *
+         *     `super_admin` only. It is the only action here that cannot be undone, and the account it destroys belongs to someone else.
+         */
+        post: operations["cmsDeleteUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/users/{id}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ops: subject-access export, made through support
+         * @description The same payload as `/me/export`. The audit entry is the point: a staff member reading somebody's data is an event, and it must be attributable even though the bytes are identical to the self-service export.
+         *
+         *     Rate limited per actor — the payload is one person's whole history, and a loop over the user list is a data export nobody authorized.
+         */
+        post: operations["cmsExportUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/rooms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ops: rooms, read-only
+         * @description `code` is never returned. It is a bearer secret — whoever holds it can join the room — and an operations list is exactly the kind of place a value like that gets copied out of.
+         *
+         *     The host appears as an id, not a name or an address: it links to the account detail, which is where identifying data belongs and is access-controlled.
+         */
+        get: operations["cmsListRooms"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ops: plans, read-only */
+        get: operations["cmsListPlans"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2214,6 +2415,105 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/cms/auth/admins/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Super admin: change a staff account's role or display name
+         * @description BE-CMS-G9. An admin cannot change their own role — not because self-promotion is the risk, a `super_admin` is already the top of the model, but because a one-person path from any role to any other removes the only check the model has.
+         */
+        patch: operations["cmsUpdateAdmin"];
+        trace?: never;
+    };
+    "/cms/auth/admins/{id}/suspend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Super admin: suspend a staff account
+         * @description Revokes every session as well as flipping the status. Both are true and they answer different questions: the guard stops the account being used, the revoke stops the refresh chain being continued.
+         */
+        post: operations["cmsSuspendAdmin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/auth/admins/{id}/reactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Super admin: reactivate a suspended staff account */
+        post: operations["cmsReactivateAdmin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/auth/admins/{id}/reset-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Super admin: issue a one-time temporary password
+         * @description The temporary password is in this response and nowhere else — not in a log, not readable again, not recoverable if the tab closes. Every existing session is revoked (a reset happens because control of the account is in doubt) and the account then owes a change, enforced by the server on every other CMS route.
+         *
+         *     MFA is deliberately left alone: resetting it here would turn one `super_admin` into a complete account takeover with no second factor in the way.
+         */
+        post: operations["cmsResetAdminPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/auth/change-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Staff: replace your own password
+         * @description The only route reachable while a password change is owed, which is what keeps the obligation from being a deadlock. The current password is required even then: it proves the caller is the person the temporary password was handed to, and without it a leaked session id would be enough. Every other session of this account is revoked.
+         */
+        post: operations["cmsChangeOwnPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/cms/moderation": {
         parameters: {
             query?: never;
@@ -2651,6 +2951,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/cms/ops/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ops: dependency health for the console
+         * @description BE-CMS-G8. `/health` and `/metrics` exist but neither reaches the console — the CMS Worker proxies `/v1/*` only, and Prometheus text is not something a client should parse.
+         *
+         *     `unknown` is a first-class value, not a fallback. A dependency nobody has checked is not healthy, and reporting it as healthy is how a dashboard becomes the last place to learn about an outage. Provider rows come from the circuit breaker rather than from live calls: probing Google to colour a screen would spend the quota whose exhaustion this view is meant to reveal — so a provider with no traffic yet is absent rather than green.
+         *
+         *     Cached ~20s server-side. This is a screen, not an alerting path.
+         */
+        get: operations["cmsOpsHealth"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/ops/queues": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ops: background queue depth
+         * @description The BullMQ queues plus `outbox_events`, the transactional outbox — a queue in every sense that matters here, living in Postgres where BullMQ cannot see it. Omitting it would hide the backlog that actually delays notifications.
+         *
+         *     A broker that is unreachable contributes no rows rather than rows of zeros; `/cms/ops/health` is where that is reported.
+         */
+        get: operations["cmsOpsQueues"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/ops/costs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ops: provider cost and quota, where a real source exists
+         * @description Only providers with a real source appear — a billing API, or a persisted internal counter. A provider with no source is **absent**, never estimated into existence.
+         *
+         *     **`providers: []` means "no cost source connected", never "nothing was spent".** `sourcesConfigured` says which, so the console can render the difference: a zero and an unknown are different claims, and today only the second is supportable. No billing API is wired up, and the in-process `places_provider_cost_units` counter measures SKU units rather than money and resets on deploy, so it cannot answer "today" or "month to date".
+         */
+        get: operations["cmsOpsCosts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/cms/ops/kpis": {
         parameters: {
             query?: never;
@@ -2795,6 +3163,167 @@ export interface components {
              * @description Absent on an account that has never signed in.
              */
             lastLoginAt?: string;
+            /** @description #248. Whether a second factor is enrolled — the status, never anything about the secret. It is what lets the console show which accounts are unprotected. */
+            mfaEnrolled: boolean;
+            /** @description A temporary password is outstanding on this account. */
+            mustChangePassword: boolean;
+        };
+        AdminActionReason: {
+            /** @description Recorded in the audit log. Mandatory: a row that records what changed but not why answers the easy half of the question a reviewer is asking. */
+            reason: string;
+        };
+        CmsServiceHealth: {
+            /** @description `api`, `db`, `redis`, `worker`, or a provider name discovered from the circuit breaker. Not a closed enum: a provider appears once it has been called, and pinning the list here would mean a new provider silently missing from the view. */
+            key: string;
+            /**
+             * @description `unknown` is a real answer — nothing has measured this dependency in this process. It is not a synonym for healthy.
+             * @enum {string}
+             */
+            status: "healthy" | "degraded" | "down" | "unknown";
+            /** @description Present only where the check actually timed something. */
+            latencyMs?: number;
+            /** Format: date-time */
+            checkedAt: string;
+            /** @description Why it is degraded or unknown, in words the console can show. */
+            detail?: string;
+        };
+        CmsQueueStats: {
+            name: string;
+            /**
+             * @description Where these numbers came from, so the console can say so.
+             * @enum {string}
+             */
+            source: "bullmq" | "database";
+            /** @description Waiting plus delayed. */
+            pending: number;
+            running: number;
+            /** @description Failures finished in the last 24 hours — computed from job timestamps, not from BullMQ's retained `failed` count, which answers "how many are still on disk" and moves when retention changes. */
+            failed24h: number;
+            /** @description True when the scan hit its cap, so `failed24h` is a floor rather than a count. A truncated number that does not say so is what an incident review discovers afterwards. */
+            failed24hTruncated: boolean;
+            /** @description Jobs whose attempts are exhausted; they will not be retried. */
+            deadLetter: number;
+            /** @description Age of the oldest waiting job. Null when nothing is waiting. */
+            oldestPendingSeconds?: number | null;
+            /** @description Connected consumers. Null when the backend does not report it — null and 0 are different facts, and zero on a queue with work is the alarm. */
+            workers?: number | null;
+        };
+        CmsCostLine: {
+            key: string;
+            /** @description Minor units. */
+            today: number;
+            /** @description Minor units. */
+            monthToDate: number;
+            currency: string;
+            /**
+             * @description Where the number came from. A line never omits this: an estimate and an invoice are different claims about the same provider.
+             * @enum {string}
+             */
+            basis: "billed" | "estimated";
+            /** @description 0–1, present only where the provider reports a quota. */
+            quotaUsedRatio?: number;
+        };
+        CmsAppUser: {
+            /** Format: uuid */
+            id: string;
+            displayName: string;
+            /** @description Null on a deleted account — the address is freed for re-registration. */
+            email?: string | null;
+            /** @enum {string} */
+            status: "active" | "suspended" | "banned" | "deleted";
+            /**
+             * @description How this account signs in. One real value today, because email + password is the only method that exists; it is reported rather than assumed so the console does not have to guess when a second lands. There is deliberately no filter on it — a control that can only return everything is not a control.
+             * @enum {string}
+             */
+            authMethod: "password" | "none";
+            locale: string;
+            /** Format: date-time */
+            createdAt: string;
+            /**
+             * Format: date-time
+             * @description Newest session use. Null for an account that never signed in.
+             */
+            lastActiveAt?: string | null;
+            counters: {
+                roomsCreated: number;
+                roomsJoined: number;
+                reviews: number;
+                savedPlaces: number;
+            };
+            /** @description Reports filed against this person, open or decided. */
+            reportCount: number;
+        };
+        CmsAppUserDetail: components["schemas"]["CmsAppUser"] & {
+            /** @description From the audit log, not a column — the reason is already written there with who set it and when, and a second copy on the row is one that drifts. Absent while the account is active. */
+            statusReason?: string;
+            /** Format: date-time */
+            statusChangedAt?: string;
+            /** @description The 20 most recently joined. No invite code. */
+            rooms: {
+                /** Format: uuid */
+                id: string;
+                type: string;
+                status: string;
+                decisionMode: string;
+                participantCount: number;
+                title?: string;
+                role: string;
+                /** Format: date-time */
+                joinedAt: string;
+                /** Format: date-time */
+                createdAt: string;
+            }[];
+        };
+        CmsAppUserPage: {
+            items: components["schemas"]["CmsAppUser"][];
+            nextCursor: string | null;
+            totalCount: number;
+        };
+        CmsUserStatusResult: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            status: "active" | "suspended" | "banned";
+        };
+        CmsRoomPage: {
+            items: {
+                /** Format: uuid */
+                id: string;
+                type: string;
+                status: string;
+                decisionMode: string;
+                participantCount: number;
+                title?: string;
+                /**
+                 * Format: uuid
+                 * @description An id, not a name — it links to the account detail.
+                 */
+                hostUserId: string;
+                memberCount: number;
+                planCount: number;
+                /** Format: date-time */
+                scheduledDate?: string;
+                /** Format: date-time */
+                createdAt: string;
+            }[];
+            nextCursor: string | null;
+            totalCount: number;
+        };
+        CmsPlanPage: {
+            items: {
+                /** Format: uuid */
+                id: string;
+                /** Format: uuid */
+                roomId: string;
+                version: number;
+                status: string;
+                isStale: boolean;
+                stopCount: number;
+                /** Format: date-time */
+                createdAt: string;
+            }[];
+            nextCursor: string | null;
+            totalCount: number;
         };
         CmsAdminPage: {
             items: components["schemas"]["CmsAdmin"][];
@@ -3262,6 +3791,8 @@ export interface components {
             refreshExpiresIn?: number;
             role?: components["schemas"]["AdminRole"];
             displayName?: string;
+            /** @description #248. True when a `super_admin` issued a temporary password that has not been replaced. The console must route to the change screen; the obligation itself is enforced server-side — every other CMS route answers 403 `PASSWORD_CHANGE_REQUIRED` until it is cleared. */
+            mustChangePassword?: boolean;
         };
         PlaceSubmissionSummary: {
             /** Format: uuid */
@@ -6785,6 +7316,57 @@ export interface operations {
             429: components["responses"]["RateLimited"];
         };
     };
+    cmsAccessExchange: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Set by Cloudflare Access. Absent when the caller did not come through it. */
+                "Cf-Access-Jwt-Assertion": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Session opened, identical in shape and lifetime to `cmsLogin`. Same cookies, same rotating refresh, same revocation family. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSession"];
+                };
+            };
+            /** @description Assertion missing (`ACCESS_ASSERTION_MISSING`) or not valid (`ACCESS_ASSERTION_INVALID` — one code for every rejection, so signature, audience, issuer and expiry failures cannot be told apart by probing). */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description The identity is genuine but has no active staff account (`ADMIN_ONLY`). Being on the Access allow-list does not make somebody staff. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            /** @description SSO is not configured for this environment (`ACCESS_SSO_NOT_CONFIGURED`, not retryable), or the identity provider's key set is unreachable (`ACCESS_KEYS_UNAVAILABLE`, retryable). Password + TOTP remains available in both cases. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     cmsRefresh: {
         parameters: {
             query?: never;
@@ -6979,6 +7561,270 @@ export interface operations {
                 content?: never;
             };
             403: components["responses"]["Forbidden"];
+        };
+    };
+    cmsListUsers: {
+        parameters: {
+            query?: {
+                /** @description Display name or email substring. */
+                q?: string;
+                status?: "active" | "suspended" | "banned" | "deleted";
+                /** @description Capped at 100: every row costs four indexed counter lookups, and the page size is what keeps this from being a table scan. */
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accounts, newest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsAppUserPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+        };
+    };
+    cmsUserDetail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Account detail */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsAppUserDetail"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    cmsSuspendUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminActionReason"];
+            };
+        };
+        responses: {
+            /** @description Suspended */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsUserStatusResult"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            /** @description `USER_DELETED` — a deleted account cannot change status. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    cmsBanUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminActionReason"];
+            };
+        };
+        responses: {
+            /** @description Banned */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsUserStatusResult"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            /** @description `USER_DELETED` — a deleted account cannot change status. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    cmsReactivateUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminActionReason"];
+            };
+        };
+        responses: {
+            /** @description Reactivated */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsUserStatusResult"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            /** @description `USER_DELETED` — a deleted account is anonymized and its address freed for re-registration, so reviving it would attach a stranger's history to whoever now holds that address. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    cmsDeleteUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminActionReason"];
+            };
+        };
+        responses: {
+            /** @description Erased; idempotent on an already-deleted account */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        deleted: boolean;
+                    };
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    cmsExportUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminActionReason"];
+            };
+        };
+        responses: {
+            /** @description The account's own data */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    cmsListRooms: {
+        parameters: {
+            query?: {
+                status?: "draft" | "active" | "planning" | "completed" | "archived";
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rooms, newest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsRoomPage"];
+                };
+            };
+        };
+    };
+    cmsListPlans: {
+        parameters: {
+            query?: {
+                status?: "draft" | "current" | "superseded" | "archived";
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Plans, newest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsPlanPage"];
+                };
+            };
         };
     };
     cmsListPlaces: {
@@ -8569,6 +9415,209 @@ export interface operations {
             };
         };
     };
+    cmsUpdateAdmin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    role?: components["schemas"]["AdminRole"];
+                    displayName?: string;
+                    /** @description Recorded in the audit log. Mandatory on every staff-account mutation. */
+                    reason: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsAdmin"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description `SELF_ROLE_CHANGE` — another super_admin must change your role. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            /** @description `LAST_SUPER_ADMIN` — demoting the only active super_admin would leave a console nobody can administer. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    cmsSuspendAdmin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminActionReason"];
+            };
+        };
+        responses: {
+            /** @description Suspended */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsAdmin"];
+                };
+            };
+            /** @description `SELF_SUSPEND` — you cannot suspend your own account. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            /** @description `LAST_SUPER_ADMIN` — the only active super_admin cannot be suspended. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    cmsReactivateAdmin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminActionReason"];
+            };
+        };
+        responses: {
+            /** @description Reactivated */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsAdmin"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    cmsResetAdminPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminActionReason"];
+            };
+        };
+        responses: {
+            /** @description Temporary password issued — shown exactly once */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        temporaryPassword: string;
+                        /** @enum {boolean} */
+                        mustChangePassword: true;
+                    };
+                };
+            };
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    cmsChangeOwnPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    currentPassword: string;
+                    newPassword: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Changed */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        changed: boolean;
+                    };
+                };
+            };
+            /** @description `PASSWORD_UNCHANGED` — the new password must differ from the old. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description `INVALID_CREDENTIALS` — current password is incorrect. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+        };
+    };
     cmsModerationQueue: {
         parameters: {
             query?: {
@@ -9229,6 +10278,74 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             429: components["responses"]["RateLimited"];
+        };
+    };
+    cmsOpsHealth: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One row per dependency this deployment can say anything about */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        services: components["schemas"]["CmsServiceHealth"][];
+                    };
+                };
+            };
+        };
+    };
+    cmsOpsQueues: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Queue depths */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        queues: components["schemas"]["CmsQueueStats"][];
+                    };
+                };
+            };
+        };
+    };
+    cmsOpsCosts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cost lines, possibly none */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        providers: components["schemas"]["CmsCostLine"][];
+                        /** @description False when no provider has a usable source. An empty list with this false must not render as a zero amount. */
+                        sourcesConfigured: boolean;
+                    };
+                };
+            };
         };
     };
     cmsOpsKpis: {

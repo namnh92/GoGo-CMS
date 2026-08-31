@@ -6,6 +6,9 @@ export const queryKeys = {
   session: ['session'] as const,
 
   opsKpis: ['ops', 'kpis'] as const,
+  opsHealth: ['ops', 'health'] as const,
+  opsQueues: ['ops', 'queues'] as const,
+  opsCosts: ['ops', 'costs'] as const,
 
   planTemplates: {
     all: ['plan-templates'] as const,
