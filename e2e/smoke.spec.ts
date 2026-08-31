@@ -28,6 +28,7 @@ const SCREENS: [string, RegExp][] = [
   ['/safety-rules', /Luật Trust & Safety/],
   ['/campaigns', /Chiến dịch thông báo/],
   ['/campaigns/cp-dang-gui', /Khảo sát trải nghiệm/],
+  ['/app-control', /Điều khiển ứng dụng/],
   ['/settings', /Vận hành và cấu hình/],
   ['/settings/accounts', /Tài khoản CMS/],
   ['/roles', /Vai trò & quyền/],

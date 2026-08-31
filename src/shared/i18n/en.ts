@@ -932,4 +932,43 @@ export const en: Partial<Record<MessageKey, string>> = {
   'roles.domain.audit': 'Audit',
   'roles.domain.emergency': 'Emergency takedown',
   'roles.domain.admin': 'CMS accounts',
+
+  'nav.appControl': 'App control',
+
+  'appControl.title': 'App control',
+  'appControl.breadcrumb': 'App control',
+  'appControl.scopeNote':
+    'Same flag system as Settings → App flags — a purposed view, not a second store. all/all is the scope every override falls back to.',
+  'appControl.saved': 'Saved {key}.',
+  'appControl.keyGone':
+    'Key {key} is no longer in the server catalog — nothing reads it, so there is no switch here.',
+  'appControl.sourceNote':
+    'Everything on this screen reads and writes through /cms/feature-flags. The key list is decided by the server catalog; this screen invents none.',
+
+  'appControl.maintenance.title': 'Maintenance mode',
+  'appControl.maintenance.hint':
+    'maintenance_mode — the app serves the maintenance screen instead of content.',
+  'appControl.maintenance.on': 'IN MAINTENANCE',
+  'appControl.maintenance.off': 'Operating normally',
+  'appControl.maintenance.enable': 'Enable maintenance',
+  'appControl.maintenance.disable': 'Disable maintenance',
+  'appControl.maintenance.activeWarn':
+    'Users in this scope are seeing the maintenance screen instead of the app.',
+  'appControl.maintenance.confirmTitle': 'Enable maintenance mode?',
+  'appControl.maintenance.confirmBody':
+    'Every user in the selected scope will see the maintenance screen instead of the app until it is disabled.',
+
+  'appControl.version.title': 'App versions',
+  'appControl.version.hint':
+    'Below minimum the client must update; below recommended it is only nudged.',
+  'appControl.version.minimum_app_version': 'Minimum version',
+  'appControl.version.recommended_app_version': 'Recommended version',
+  'appControl.version.value': 'Value',
+  'appControl.version.default': 'Using the catalog default',
+  'appControl.version.overridden': 'Overridden at {at}',
+
+  'appControl.switches.title': 'Feature switches',
+  'appControl.switches.hint':
+    'Boolean feature_* keys from the catalog — off is the emergency path; the deterministic pipeline stays the source of truth.',
+  'appControl.switches.none': 'The catalog currently has no feature_* keys.',
 }
