@@ -47,6 +47,19 @@ export const en: Partial<Record<MessageKey, string>> = {
   'moderation.history': 'Moderation history',
   'moderation.historyEmpty': 'No decision has been recorded for this item yet.',
 
+  'jobDetail.validation.title': 'Validation outcome',
+  'jobDetail.validation.hint':
+    'Counted across the whole job by the server, not the page on screen.',
+  'jobDetail.validation.valid': 'Valid',
+  'jobDetail.validation.validHint': 'ready + imported',
+  'jobDetail.validation.warning': 'Needs confirmation',
+  'jobDetail.validation.warningHint': 'waiting on a candidate choice',
+  'jobDetail.validation.error': 'Errors',
+  'jobDetail.validation.errorHint': 'invalid + unresolved + failed',
+  'jobDetail.validation.duplicate': 'Duplicates',
+  'jobDetail.validation.duplicateHint': 'matches an existing place',
+  'jobDetail.validation.scope': '{counted} rows classified · {inFlight} still processing',
+
   'imports.col.createdBy': 'Created by',
   'imports.col.completedAt': 'Completed at',
 
