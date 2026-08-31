@@ -23,6 +23,7 @@ import type {
   CmsAppUserDetail,
   CmsRoomSummary,
   CmsPlanSummary,
+  CmsRoomGuest,
 } from '@/shared/api/contracts'
 import type { ImportJob, ImportRow } from '@/shared/api/contracts-import'
 
@@ -2040,3 +2041,59 @@ export const cmsPlans: CmsPlanSummary[] = [
     createdAt: iso(60 * 24 * 3),
   },
 ]
+
+/**
+ * `GET /cms/rooms/{id}/guests` (GoGo-BE#257). One of each state — active,
+ * claimed, expired, removed — and no token or hash anywhere, because the
+ * server never returns one.
+ */
+export const cmsRoomGuests: Record<string, CmsRoomGuest[]> = {
+  '22222222-0000-4000-8000-000000000002': [
+    {
+      memberId: '44444444-0000-4000-8000-000000000001',
+      guestSessionId: '55555555-0000-4000-8000-000000000001',
+      displayName: 'Khách vui vẻ',
+      selectionStatus: 'completed',
+      joinedAt: iso(60 * 3),
+      // Far future relative to the REAL clock: the console computes "active"
+      // against Date.now(), not against the fixtures' frozen now.
+      sessionExpiresAt: iso(-60 * 24 * 365),
+      sessionRevokedAt: null,
+      removedAt: null,
+      claimed: false,
+    },
+    {
+      memberId: '44444444-0000-4000-8000-000000000002',
+      guestSessionId: '55555555-0000-4000-8000-000000000002',
+      displayName: 'Mèo Mun',
+      selectionStatus: 'in_progress',
+      joinedAt: iso(60 * 24 * 2),
+      sessionExpiresAt: iso(60 * 24),
+      sessionRevokedAt: null,
+      removedAt: null,
+      claimed: true,
+    },
+    {
+      memberId: '44444444-0000-4000-8000-000000000003',
+      guestSessionId: '55555555-0000-4000-8000-000000000003',
+      displayName: 'Người bí ẩn',
+      selectionStatus: 'not_started',
+      joinedAt: iso(60 * 30),
+      sessionExpiresAt: iso(60 * 6),
+      sessionRevokedAt: null,
+      removedAt: null,
+      claimed: false,
+    },
+    {
+      memberId: '44444444-0000-4000-8000-000000000004',
+      guestSessionId: '55555555-0000-4000-8000-000000000004',
+      displayName: 'Bạn ơi đi đâu',
+      selectionStatus: 'completed',
+      joinedAt: iso(60 * 24 * 3),
+      sessionExpiresAt: iso(60 * 24 * 2),
+      sessionRevokedAt: iso(60 * 24 * 2),
+      removedAt: iso(60 * 24 * 2),
+      claimed: false,
+    },
+  ],
+}

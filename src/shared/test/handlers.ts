@@ -35,6 +35,7 @@ import {
   cmsAppUsers,
   cmsRooms,
   cmsPlans,
+  cmsRoomGuests,
   cmsPlanTemplates,
 } from './fixtures'
 
@@ -99,6 +100,7 @@ const db = {
   safetyRules: JSON.parse(JSON.stringify(cmsSafetyRules)) as typeof cmsSafetyRules,
   banners: JSON.parse(JSON.stringify(cmsBanners)) as typeof cmsBanners,
   appUsers: JSON.parse(JSON.stringify(cmsAppUsers)) as typeof cmsAppUsers,
+  roomGuests: JSON.parse(JSON.stringify(cmsRoomGuests)) as typeof cmsRoomGuests,
   campaigns: JSON.parse(JSON.stringify(cmsCampaigns)) as typeof cmsCampaigns,
 }
 
@@ -1530,6 +1532,29 @@ export const handlers = [
     let items = cmsRooms
     if (status) items = items.filter((row) => row.status === status)
     return HttpResponse.json(pageOf(items, limit, cursor))
+  }),
+
+  http.get(`${BASE}/cms/rooms/:id/guests`, ({ params }) => {
+    const denied = requireOpsAdmin('the user base is ops_admin and above')
+    if (denied) return denied
+    // Removed guests stay listed: votes and reports reference the row.
+    return HttpResponse.json({ guests: db.roomGuests[params.id as string] ?? [] })
+  }),
+
+  http.post(`${BASE}/cms/rooms/:id/guests/:memberId/remove`, async ({ params, request }) => {
+    const denied = requireOpsAdmin('the user base is ops_admin and above')
+    if (denied) return denied
+    const guests = db.roomGuests[params.id as string] ?? []
+    const guest = guests.find((row) => row.memberId === params.memberId)
+    if (!guest) return envelope(404, 'NOT_FOUND', 'guest membership not found')
+    const body = (await request.json()) as { reason?: string }
+    if (!body.reason || body.reason.trim().length < 3) {
+      return envelope(400, 'BAD_REQUEST', 'reason required')
+    }
+    if (guest.removedAt) return envelope(409, 'ALREADY_REMOVED', 'already removed')
+    guest.removedAt = new Date().toISOString()
+    guest.sessionRevokedAt = guest.removedAt
+    return HttpResponse.json({ memberId: guest.memberId, removed: true }, { status: 201 })
   }),
 
   http.get(`${BASE}/cms/plans`, ({ request }) => {

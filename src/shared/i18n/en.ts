@@ -1148,4 +1148,26 @@ export const en: Partial<Record<MessageKey, string>> = {
   'plans.col.stops': 'Stops',
   'plans.col.createdAt': 'Created',
   'plans.filter.statusAll': 'All statuses',
+
+  'guests.title': 'Room guests',
+  'guests.open': 'Guests',
+  'guests.scopeNote':
+    'Scoped per room on purpose — there is no global guest directory: no moderation case needs one, and it would be a new PII surface with no reader. The guest credential never appears.',
+  'guests.empty': 'No guests in this room yet',
+  'guests.emptyHint': 'Guests joining by invite link appear here, removed ones included.',
+  'guests.joined': 'Joined',
+  'guests.expires': 'session expires',
+  'guests.removedAt': 'removed at',
+  'guests.state.active': 'Active',
+  'guests.state.claimed': 'Claimed into an account',
+  'guests.state.expired': 'Session expired',
+  'guests.state.removed': 'Removed from room',
+  'guests.remove': 'Remove from room',
+  'guests.removeTitle': 'Remove this guest?',
+  'guests.removed': 'Guest removed, session revoked.',
+  'guests.notABan':
+    'This is "out of the room now": the session dies immediately (issued tokens included). It is NOT a ban — whoever still holds a valid invite link can join again. To prevent a return, rotate or revoke the room invite.',
+  'guests.error.alreadyRemoved': 'This guest was already removed.',
+  'guests.error.notAGuest':
+    'This is a registered member — they follow the user moderation path, not guest removal.',
 }

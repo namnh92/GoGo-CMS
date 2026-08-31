@@ -49,6 +49,7 @@ export const queryKeys = {
   rooms: {
     all: ['cms-rooms'] as const,
     list: (filters: Record<string, unknown>) => ['cms-rooms', 'list', filters] as const,
+    guests: (roomId: string) => ['cms-rooms', 'guests', roomId] as const,
   },
   plans: {
     all: ['cms-plans'] as const,

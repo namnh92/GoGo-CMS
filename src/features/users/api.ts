@@ -1,5 +1,6 @@
 import { apiFetch, apiFetchParsed } from '@/shared/api/client'
 import {
+  cmsRoomGuestsSchema,
   cmsAppUserDetailSchema,
   cmsAppUserPageSchema,
   cmsPlanPageSchema,
@@ -10,6 +11,7 @@ import {
   type CmsAppUserPage,
   type CmsPlanPage,
   type CmsRoomPage,
+  type CmsRoomGuests,
   type CmsUserStatusResult,
 } from '@/shared/api/contracts'
 
@@ -111,5 +113,28 @@ export function fetchPlans(
       cursor: filters.cursor ?? undefined,
     },
     signal,
+  })
+}
+
+/** Every guest membership of one room, removed ones included (GoGo-BE#257). */
+export function fetchRoomGuests(roomId: string, signal?: AbortSignal): Promise<CmsRoomGuests> {
+  return apiFetchParsed(cmsRoomGuestsSchema, `/cms/rooms/${roomId}/guests`, { signal })
+}
+
+/**
+ * "Out of the room now" — the active session is revoked (denylist included)
+ * and the membership row is marked removed but kept, because votes and
+ * reports reference it. **Not a ban**: whoever still holds a valid invite can
+ * join again; preventing that is invite rotation, a different action this
+ * call does not pretend to include.
+ */
+export function removeRoomGuest(
+  roomId: string,
+  memberId: string,
+  reason: string,
+): Promise<{ memberId: string; removed: boolean }> {
+  return apiFetch(`/cms/rooms/${roomId}/guests/${memberId}/remove`, {
+    method: 'POST',
+    body: { reason },
   })
 }
