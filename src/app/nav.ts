@@ -120,6 +120,13 @@ const OPERATIONS: NavLeaf[] = [
     match: (p) => p.startsWith('/safety-rules'),
   },
   {
+    // Purposed maintenance/version/kill-switch view over the flag contract.
+    to: '/app-control',
+    labelKey: 'nav.appControl',
+    permission: 'flag.read',
+    match: (p) => p.startsWith('/app-control'),
+  },
+  {
     to: '/settings',
     labelKey: 'nav.settings',
     permission: 'ranking.read',

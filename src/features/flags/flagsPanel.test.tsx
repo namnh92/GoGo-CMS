@@ -19,8 +19,8 @@ describe('FlagsPanel (CMS-030)', () => {
 
     // Driven by the catalog, not the override list — a key with no stored row
     // would be invisible if it read only the overrides.
-    expect(await screen.findByText('search.ranking_overrides')).toBeInTheDocument()
-    const row = await rowFor('search.ranking_overrides')
+    expect(await screen.findByText('place_import.rules')).toBeInTheDocument()
+    const row = await rowFor('place_import.rules')
     expect(within(row).getByText('Chưa cấu hình')).toBeInTheDocument()
   })
 
@@ -28,7 +28,7 @@ describe('FlagsPanel (CMS-030)', () => {
     signInAs('ops_admin')
     renderWithProviders(<FlagsPanel />)
 
-    const row = await rowFor('suggestion.recommendation_limit')
+    const row = await rowFor('recommendation_limit')
     // Stored as 0. "Not configured" would be a different, wrong statement.
     expect(within(row).queryByText('Chưa cấu hình')).not.toBeInTheDocument()
     expect(within(row).getByLabelText('Giá trị')).toHaveValue('0')
@@ -38,9 +38,9 @@ describe('FlagsPanel (CMS-030)', () => {
     signInAs('ops_admin')
     renderWithProviders(<FlagsPanel />)
 
-    const version = await rowFor('app.minimum_version')
+    const version = await rowFor('minimum_app_version')
     expect(within(version).getByText('Phiên bản')).toBeInTheDocument()
-    const json = await rowFor('search.ranking_overrides')
+    const json = await rowFor('place_import.rules')
     expect(within(json).getByText('JSON')).toBeInTheDocument()
   })
 
@@ -49,7 +49,7 @@ describe('FlagsPanel (CMS-030)', () => {
     const user = userEvent.setup()
     renderWithProviders(<FlagsPanel />)
 
-    const row = await rowFor('app.minimum_version')
+    const row = await rowFor('minimum_app_version')
     const field = within(row).getByLabelText('Giá trị')
     await user.clear(field)
     await user.type(field, '2.6')
@@ -63,7 +63,7 @@ describe('FlagsPanel (CMS-030)', () => {
     const user = userEvent.setup()
     renderWithProviders(<FlagsPanel />)
 
-    const row = await rowFor('search.ranking_overrides')
+    const row = await rowFor('place_import.rules')
     // `{` starts a key sequence in user-event, so it is escaped here.
     await user.type(within(row).getByLabelText('Giá trị'), '{{not json')
     await user.click(within(row).getByRole('button', { name: 'Lưu' }))
@@ -76,13 +76,13 @@ describe('FlagsPanel (CMS-030)', () => {
     const user = userEvent.setup()
     renderWithProviders(<FlagsPanel />)
 
-    const row = await rowFor('app.minimum_version')
+    const row = await rowFor('minimum_app_version')
     const field = within(row).getByLabelText('Giá trị')
     await user.clear(field)
     await user.type(field, '3.0.0')
     await user.click(within(row).getByRole('button', { name: 'Lưu' }))
 
-    expect(await screen.findByText(/Đã lưu app.minimum_version/)).toBeInTheDocument()
+    expect(await screen.findByText(/Đã lưu minimum_app_version/)).toBeInTheDocument()
   })
 
   it('blocks a per-platform edit on a key that is not platform-scoped', async () => {
@@ -90,10 +90,10 @@ describe('FlagsPanel (CMS-030)', () => {
     const user = userEvent.setup()
     renderWithProviders(<FlagsPanel />)
 
-    await screen.findByText('suggestion.recommendation_limit')
+    await screen.findByText('recommendation_limit')
     await user.selectOptions(screen.getByLabelText('Nền tảng'), 'ios')
 
-    const row = await rowFor('suggestion.recommendation_limit')
+    const row = await rowFor('recommendation_limit')
     // The server would refuse this write, so the console does not offer it.
     expect(within(row).getByText(/không nhận ghi đè theo nền tảng/)).toBeInTheDocument()
     expect(within(row).getByRole('button', { name: 'Lưu' })).toBeDisabled()
@@ -120,6 +120,6 @@ describe('FlagsPanel (CMS-030)', () => {
     signInAs('editor')
     renderWithProviders(<FlagsPanel />)
     await waitFor(() => expect(screen.queryByText('Cấu hình ứng dụng')).not.toBeInTheDocument())
-    expect(screen.queryByText('app.minimum_version')).not.toBeInTheDocument()
+    expect(screen.queryByText('minimum_app_version')).not.toBeInTheDocument()
   })
 })

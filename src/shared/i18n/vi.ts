@@ -1530,6 +1530,44 @@ export const vi = {
   'roles.domain.audit': 'Kiểm toán',
   'roles.domain.emergency': 'Gỡ khẩn cấp',
   'roles.domain.admin': 'Tài khoản CMS',
+
+  'nav.appControl': 'Điều khiển ứng dụng',
+
+  'appControl.title': 'Điều khiển ứng dụng',
+  'appControl.breadcrumb': 'Điều khiển ứng dụng',
+  'appControl.scopeNote':
+    'Cùng một hệ cờ với tab Cấu hình → Cờ ứng dụng — đây là view theo mục đích, không phải kho thứ hai. all/all là phạm vi mọi ghi đè rơi về.',
+  'appControl.saved': 'Đã lưu {key}.',
+  'appControl.keyGone':
+    'Key {key} không còn trong catalog server — không còn code nào đọc nó, nên ở đây không có công tắc.',
+  'appControl.sourceNote':
+    'Mọi giá trị trên màn này đọc và ghi qua /cms/feature-flags. Danh sách key do catalog server quyết định; màn này không tự bịa key.',
+
+  'appControl.maintenance.title': 'Chế độ bảo trì',
+  'appControl.maintenance.hint': 'maintenance_mode — app hiển thị màn bảo trì thay vì nội dung.',
+  'appControl.maintenance.on': 'ĐANG BẢO TRÌ',
+  'appControl.maintenance.off': 'Hoạt động bình thường',
+  'appControl.maintenance.enable': 'Bật bảo trì',
+  'appControl.maintenance.disable': 'Tắt bảo trì',
+  'appControl.maintenance.activeWarn':
+    'Người dùng trong phạm vi này đang thấy màn bảo trì thay vì ứng dụng.',
+  'appControl.maintenance.confirmTitle': 'Bật chế độ bảo trì?',
+  'appControl.maintenance.confirmBody':
+    'Mọi người dùng trong phạm vi chọn sẽ thấy màn bảo trì thay vì ứng dụng cho tới khi tắt lại.',
+
+  'appControl.version.title': 'Phiên bản ứng dụng',
+  'appControl.version.hint':
+    'Dưới mức tối thiểu client bắt buộc cập nhật; dưới mức khuyến nghị chỉ nhắc.',
+  'appControl.version.minimum_app_version': 'Phiên bản tối thiểu',
+  'appControl.version.recommended_app_version': 'Phiên bản khuyến nghị',
+  'appControl.version.value': 'Giá trị',
+  'appControl.version.default': 'Đang dùng mặc định catalog',
+  'appControl.version.overridden': 'Ghi đè lúc {at}',
+
+  'appControl.switches.title': 'Công tắc tính năng',
+  'appControl.switches.hint':
+    'Các key boolean feature_* từ catalog — tắt là đường tắt khẩn cấp, hệ deterministic vẫn là nguồn chân lý.',
+  'appControl.switches.none': 'Catalog hiện không có key feature_* nào.',
 } as const
 
 export type MessageKey = keyof typeof vi
