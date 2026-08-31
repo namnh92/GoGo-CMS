@@ -49,8 +49,13 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   const t = useCallback<Translate>(
     (key, values) => {
-      // vi is the source catalogue; en falls back to it key by key.
-      const message = CATALOGUES[locale][key] ?? vi[key]
+      // vi is the source catalogue; en falls back to it key by key. A key in
+      // neither yields the key itself, never undefined: `useErrorMessage`
+      // detects an unresolved key by comparing against it, and callers that
+      // render the result directly show a visibly wrong label rather than the
+      // string "undefined". Only a server-side code the client has never heard
+      // of reaches here, and that is exactly when it must not blank out.
+      const message = CATALOGUES[locale][key] ?? vi[key] ?? key
       return interpolate(message, values)
     },
     [locale],
