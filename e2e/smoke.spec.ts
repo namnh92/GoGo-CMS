@@ -30,6 +30,7 @@ const SCREENS: [string, RegExp][] = [
   ['/campaigns/cp-dang-gui', /Khảo sát trải nghiệm/],
   ['/settings', /Vận hành và cấu hình/],
   ['/settings/accounts', /Tài khoản CMS/],
+  ['/roles', /Vai trò & quyền/],
   ['/audit', /Nhật ký kiểm toán/],
   ['/search-quality', /Chất lượng tìm kiếm/],
 ]

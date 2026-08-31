@@ -71,18 +71,22 @@ describe('grouped navigation (CMS-017)', () => {
   })
 
   it('offers a role only the screens it may open, grouping included', async () => {
-    // `editor` is rank 1, so ops routes are unreadable — but the audit log is
-    // declared on `editor`, so its group still renders with that one child.
+    // `editor` is rank 1, so every ops route is unreadable and the whole
+    // Vận hành group disappears (CMS-036 moved audit into Quản trị). The
+    // Quản trị group still renders: audit and the RBAC description are
+    // readable by every role, while the accounts screen stays super-admin.
     signInAs('editor')
     renderWithProviders(<AppShell />)
 
     expect(await screen.findByRole('link', { name: 'Địa điểm' })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Cấu hình' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Chất lượng tìm kiếm' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Vận hành' })).not.toBeInTheDocument()
 
-    const operations = screen.getByRole('button', { name: 'Vận hành' })
-    expect(operations).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Quản trị' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Nhật ký kiểm toán' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Vai trò & quyền' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Tài khoản CMS' })).not.toBeInTheDocument()
   })
 
   it('rolls the pending count up to the group header once it is closed', async () => {
