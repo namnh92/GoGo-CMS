@@ -1,5 +1,6 @@
 import { apiFetch, apiFetchParsed, newIdempotencyKey } from '@/shared/api/client'
 import {
+  cmsModerationReviewSchema,
   cmsCommunityPlacePageSchema,
   cmsModerationCheckinPageSchema,
   cmsModerationCountsSchema,
@@ -14,6 +15,7 @@ import {
   type ReportStatus,
   type ReportTargetType,
   type ReviewModerationStatus,
+  type CmsModerationReview,
 } from '@/shared/api/contracts'
 import { fetchAudit } from '@/features/audit/api'
 import type { AuditPage } from '@/shared/api/contracts'
@@ -73,6 +75,18 @@ export function fetchModerationReviews(
  * four arrays was only ever correct while every queue fitted in one page, and
  * the review backlog no longer does.
  */
+/**
+ * BE-CMS-G6 (#232): one review by id, **not filtered by status** — a shared
+ * URL pointing at an already-decided review must open rather than the console
+ * claiming a row that plainly exists is "not in the current filter".
+ */
+export function fetchModerationReview(
+  id: string,
+  signal?: AbortSignal,
+): Promise<CmsModerationReview> {
+  return apiFetchParsed(cmsModerationReviewSchema, `/cms/moderation/reviews/${id}`, { signal })
+}
+
 export function fetchModerationCounts(signal?: AbortSignal): Promise<CmsModerationCounts> {
   return apiFetchParsed(cmsModerationCountsSchema, '/cms/moderation/counts', { signal })
 }

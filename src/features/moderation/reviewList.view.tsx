@@ -18,7 +18,7 @@ import {
   type CmsModerationReview,
   type ReviewModerationStatus,
 } from '@/shared/api/contracts'
-import { fetchModerationReviews, type ReviewQueueFilters } from './api'
+import { fetchModerationReview, fetchModerationReviews, type ReviewQueueFilters } from './api'
 import { ReviewDetailDrawer } from './reviewDetail.view'
 import { ReviewStatusBadge } from './reviewStatus'
 import { styles } from './reviewList.style'
@@ -66,6 +66,19 @@ export default function ReviewListScreen() {
     queryKey: queryKeys.moderation.reviews(filters),
     queryFn: ({ signal }) => fetchModerationReviews(filters, signal),
     enabled: canRead,
+  })
+
+  /*
+   * BE-CMS-G6: a deep link fetches its review by id, whatever the list's
+   * filter and page happen to hold. The row from the current page doubles as
+   * initial data so an in-page click opens instantly.
+   */
+  const selectedQuery = useQuery({
+    queryKey: queryKeys.moderation.review(reviewId ?? ''),
+    queryFn: ({ signal }) => fetchModerationReview(reviewId!, signal),
+    enabled: canRead && Boolean(reviewId),
+    initialData: () => query.data?.items.find((item) => item.id === reviewId),
+    staleTime: 15_000,
   })
 
   /** Any filter change invalidates the walked cursors — page 1 is the only safe landing. */
@@ -167,11 +180,10 @@ export default function ReviewListScreen() {
 
   const page = query.data
   const nextCursor = page?.nextCursor ?? null
-  const selected = page?.items.find((item) => item.id === reviewId) ?? null
-  // A link can point at a review that this filter and page do not contain —
-  // there is no `GET /cms/moderation/reviews/{id}` to fall back on, so say so
-  // instead of opening an empty drawer.
-  const missingSelection = Boolean(reviewId) && !selected && query.status === 'success'
+  const selected = selectedQuery.data ?? null
+  // Only a real 404 (`REVIEW_NOT_FOUND`) counts as missing now — the id read
+  // is unfiltered, so "not in the current filter" can no longer happen.
+  const missingSelection = Boolean(reviewId) && selectedQuery.isError
 
   return (
     <>

@@ -110,17 +110,6 @@ describe('review queue — server-side (CMS-031, finishes CMS-022)', () => {
     expect(within(drawer).getByText('Lịch sử kiểm duyệt')).toBeInTheDocument()
   })
 
-  it('says so when a link points outside the current filter', async () => {
-    signInAs('moderator')
-    // Published, so it is not in the default pending filter.
-    renderWithProviders(<ReviewRoutes />, { route: `${AT}/rev-007` })
-
-    expect(
-      await screen.findByText(/không nằm trong bộ lọc hoặc trang hiện tại/),
-    ).toBeInTheDocument()
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-  })
-
   it('requires a reason before a decision, and an editor may not decide at all', async () => {
     signInAs('editor')
     renderWithProviders(<ReviewRoutes />, { route: `${AT}/rev-001` })
@@ -149,5 +138,27 @@ describe('review queue — server-side (CMS-031, finishes CMS-022)', () => {
     renderWithProviders(<ReviewRoutes />, { route: AT })
     // Editors do have rank-based read, so the screen opens.
     expect(await screen.findByRole('table')).toBeInTheDocument()
+  })
+})
+
+describe('review deep-link (CMS-041, BE-CMS-G6)', () => {
+  it('opens a decided review by id while the list filters pending', async () => {
+    signInAs('moderator')
+    // rev-007 is published; the default list filter is pending, so the old
+    // page-scan could never have found it.
+    renderWithProviders(<ReviewRoutes />, { route: `${AT}/rev-007` })
+
+    const drawer = await screen.findByRole('dialog')
+    expect(await within(drawer).findByText(/rev-007|Đánh giá/)).toBeInTheDocument()
+    // The unfiltered read means the "not in this filter" apology is gone.
+    expect(screen.queryByText(/không nằm trong bộ lọc/)).not.toBeInTheDocument()
+  })
+
+  it('says REVIEW_NOT_FOUND for a link to a review that does not exist', async () => {
+    signInAs('moderator')
+    renderWithProviders(<ReviewRoutes />, { route: `${AT}/rev-999` })
+
+    expect(await screen.findByText(/không tồn tại/)).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 })

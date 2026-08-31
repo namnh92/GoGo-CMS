@@ -47,7 +47,7 @@ export const vi = {
   'reviews.emptyHint': 'Đổi trạng thái hoặc nới bộ lọc để xem thêm.',
   'reviews.pageInfo': 'Trang này {shown} · tổng {total} khớp bộ lọc',
   'reviews.notOnThisPage':
-    'Đánh giá trong đường dẫn không nằm trong bộ lọc hoặc trang hiện tại. Đổi trạng thái hoặc xoá bộ lọc để tìm.',
+    'Đánh giá trong đường dẫn không tồn tại — có thể đã bị xoá. (REVIEW_NOT_FOUND)',
   'reviews.decided': 'Đã xử lý',
   'reviews.updatedAt': 'Cập nhật lúc',
   'reviews.lastReason': 'Lý do lần trước',
