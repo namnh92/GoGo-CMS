@@ -24,6 +24,9 @@ export const vi = {
   'nav.collections': 'Bộ sưu tập',
   'nav.imports': 'Nhập liệu',
   'nav.settings': 'Cấu hình',
+  'nav.group.catalog': 'Địa điểm & nội dung',
+  'nav.group.review': 'Kiểm duyệt',
+  'nav.group.operations': 'Vận hành',
 
   'role.editor': 'Biên tập',
   'role.moderator': 'Kiểm duyệt viên',
