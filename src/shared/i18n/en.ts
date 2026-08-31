@@ -26,6 +26,9 @@ export const en: Partial<Record<MessageKey, string>> = {
   'nav.collections': 'Collections',
   'nav.imports': 'Imports',
   'nav.settings': 'Settings',
+  'nav.group.catalog': 'Places & content',
+  'nav.group.review': 'Moderation',
+  'nav.group.operations': 'Operations',
 
   'role.editor': 'Editor',
   'role.moderator': 'Moderator',
