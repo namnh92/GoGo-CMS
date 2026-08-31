@@ -21,6 +21,10 @@ const CollectionsScreen = lazy(() => import('@/features/collections/collections.
 const RecommendationListScreen = lazy(
   () => import('@/features/recommendations/recommendationList.view'),
 )
+const PlanTemplateListScreen = lazy(() => import('@/features/planTemplates/planTemplateList.view'))
+const PlanTemplateDetailScreen = lazy(
+  () => import('@/features/planTemplates/planTemplateDetail.view'),
+)
 const RecommendationDetailScreen = lazy(
   () => import('@/features/recommendations/recommendationDetail.view'),
 )
@@ -82,6 +86,8 @@ export const router = createBrowserRouter([
           { path: 'collections', element: <CollectionsScreen /> },
           { path: 'recommendations', element: <RecommendationListScreen /> },
           { path: 'recommendations/:id', element: <RecommendationDetailScreen /> },
+          { path: 'plan-templates', element: <PlanTemplateListScreen /> },
+          { path: 'plan-templates/:id', element: <PlanTemplateDetailScreen /> },
           { path: 'settings', element: <SettingsScreen /> },
           { path: 'settings/accounts', element: <AdminListScreen /> },
           { path: 'settings/accounts/new', element: <NewAccountScreen /> },

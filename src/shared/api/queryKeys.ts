@@ -7,6 +7,12 @@ export const queryKeys = {
 
   opsKpis: ['ops', 'kpis'] as const,
 
+  planTemplates: {
+    all: ['plan-templates'] as const,
+    list: (filters: Record<string, unknown>) => ['plan-templates', 'list', filters] as const,
+    detail: (id: string) => ['plan-templates', 'detail', id] as const,
+  },
+
   recommendations: {
     all: ['recommendations'] as const,
     list: (filters: Record<string, unknown>) => ['recommendations', 'list', filters] as const,

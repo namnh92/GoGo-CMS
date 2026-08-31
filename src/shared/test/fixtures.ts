@@ -1252,3 +1252,102 @@ export const cmsRecommendations: RecommendationFixture[] = Array.from(
     }
   },
 )
+
+/**
+ * `GET /cms/plan-templates` (GoGo-BE#223). Two pages, every status, and one
+ * published template with ordered stops so reordering is exercisable.
+ */
+type PlanTemplateFixture = {
+  id: string
+  slug: string
+  locale: string
+  internalName: string
+  title: string
+  description: string | null
+  audience: 'couple' | 'group' | 'family' | 'solo' | null
+  areaKey: string | null
+  budget: { min: number; max: number; currency: string; scope: 'per_person' | 'per_group' } | null
+  expectedDurationMinutes: number | null
+  status: 'draft' | 'published' | 'archived'
+  stopCount: number
+  taxonomies: { id: string; kind: 'category' | 'mood'; key: string }[]
+  createdByAdminId: string | null
+  createdAt: string
+  updatedAt: string
+  stops: {
+    id: string
+    position: number
+    categoryTaxonomyId: string | null
+    categoryKey: string
+    preferredPlaceId: string | null
+    preferredPlaceName: string | null
+    isOptional: boolean
+    expectedDurationMinutes: number | null
+    budget: {
+      min: number
+      max: number
+      currency: string
+      scope: 'per_person' | 'per_group'
+    } | null
+    note: string | null
+  }[]
+}
+
+const PLAN_TEMPLATE_STATUSES = ['draft', 'published', 'archived'] as const
+
+export const cmsPlanTemplates: PlanTemplateFixture[] = Array.from({ length: 27 }, (_, index) => {
+  const nth = index + 1
+  const status = PLAN_TEMPLATE_STATUSES[nth % 3]!
+  const stops =
+    status === 'published'
+      ? [
+          {
+            id: `stop-${nth}-1`,
+            position: 0,
+            categoryTaxonomyId: 'tx-cat-cafe',
+            categoryKey: 'cafe',
+            preferredPlaceId: 'pl-chao-ban',
+            preferredPlaceName: 'Chào Bạn Cafe & Space',
+            isOptional: false,
+            expectedDurationMinutes: 90,
+            // Minor units with currency and scope, never a bare number.
+            budget: { min: 50_000, max: 120_000, currency: 'VND', scope: 'per_person' as const },
+            note: null,
+          },
+          {
+            id: `stop-${nth}-2`,
+            position: 1,
+            categoryTaxonomyId: 'tx-cat-cafe',
+            categoryKey: 'cafe',
+            preferredPlaceId: null,
+            preferredPlaceName: null,
+            isOptional: true,
+            expectedDurationMinutes: 45,
+            budget: null,
+            note: null,
+          },
+        ]
+      : []
+  return {
+    id: `tpl-${String(nth).padStart(3, '0')}`,
+    slug: `mau-lich-trinh-${nth}`,
+    locale: 'vi',
+    internalName: `Mẫu lịch trình số ${nth}`,
+    title: `Buổi hẹn ${nth}`,
+    description: null,
+    audience: (['couple', 'group', 'family', 'solo'] as const)[nth % 4]!,
+    areaKey: nth % 2 === 0 ? 'hcm.q1' : 'hcm.q3',
+    budget:
+      nth % 3 === 0
+        ? { min: 200_000, max: 500_000, currency: 'VND', scope: 'per_group' as const }
+        : null,
+    expectedDurationMinutes: 60 + (nth % 5) * 30,
+    status,
+    stopCount: stops.length,
+    taxonomies: [],
+    createdByAdminId: null,
+    createdAt: iso(nth * 59),
+    updatedAt: iso(nth * 37),
+    stops,
+  }
+})
