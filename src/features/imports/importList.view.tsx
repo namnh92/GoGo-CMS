@@ -28,6 +28,13 @@ import { styles } from './importList.style'
 
 const PAGE_SIZE = 25
 
+/**
+ * `createdBy` and `completedAt` are both nullish in the contract — a job that
+ * is still running has no completion time, and an older row may have no
+ * recorded author. An em dash says "no value"; an empty cell reads as a bug.
+ */
+const EMPTY_CELL = '—'
+
 export default function ImportListScreen() {
   const t = useT()
   const { locale } = useI18n()
@@ -154,11 +161,35 @@ export default function ImportListScreen() {
         enableSorting: false,
       },
       {
+        // Split out of the timestamp cell: "who started this" is the first
+        // question during an incident, and it should be scannable on its own.
+        id: 'createdBy',
+        header: () => t('imports.col.createdBy'),
+        cell: ({ row }) => (
+          <span className={styles.meta}>{row.original.createdBy ?? EMPTY_CELL}</span>
+        ),
+        enableSorting: false,
+      },
+      {
         id: 'createdAt',
         header: () => t('imports.col.createdAt'),
         cell: ({ row }) => (
           <span className={styles.meta}>
-            {row.original.createdBy ?? '—'} · {formatRelative(row.original.createdAt, locale)}
+            {row.original.createdAt ? formatRelative(row.original.createdAt, locale) : EMPTY_CELL}
+          </span>
+        ),
+        enableSorting: false,
+      },
+      {
+        id: 'completedAt',
+        header: () => t('imports.col.completedAt'),
+        cell: ({ row }) => (
+          <span className={styles.meta}>
+            {/* Nullish while the job is still running, and an em dash says so
+                — an empty cell reads as a rendering bug. */}
+            {row.original.completedAt
+              ? formatRelative(row.original.completedAt, locale)
+              : EMPTY_CELL}
           </span>
         ),
         enableSorting: false,
