@@ -1004,3 +1004,108 @@ export const cmsSafetyRulePageSchema = z.object({
   totalCount: z.number().int().default(0),
 })
 export type CmsSafetyRulePage = z.infer<typeof cmsSafetyRulePageSchema>
+
+/**
+ * CMS-scoped media upload (GoGo-BE#227).
+ *
+ * `POST /cms/uploads` authorizes a presigned PUT for a staff purpose. The
+ * bytes go straight to storage and never cross the API, which is why the
+ * server cannot report the image's pixel dimensions here — nothing has read
+ * the object yet.
+ */
+export const cmsUploadPurposeSchema = z.enum(['banner_image', 'campaign_image'])
+export type CmsUploadPurpose = z.infer<typeof cmsUploadPurposeSchema>
+
+/** Exactly what the presigner will sign for. Anything else is refused. */
+export const cmsUploadContentTypeSchema = z.enum([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/heic',
+])
+export type CmsUploadContentType = z.infer<typeof cmsUploadContentTypeSchema>
+
+export const cmsUploadSchema = z.object({
+  id: z.string(),
+  /** Server-generated — actor plus a UUID, never anything the client supplied. */
+  key: z.string(),
+  /** Presigned PUT, signed for this key and this content type, and it expires. */
+  uploadUrl: z.string(),
+  expiresAt: z.string(),
+  maxBytes: z.number().int(),
+  contentType: z.string(),
+  /**
+   * Where the object will be readable once uploaded. Null until media hosting
+   * is configured — an honest absence rather than a URL that would 404.
+   */
+  readUrl: z.string().nullable(),
+})
+export type CmsUpload = z.infer<typeof cmsUploadSchema>
+
+/**
+ * Banners (GoGo-BE#224).
+ *
+ * Two statuses on purpose. `lifecycleStatus` is what a person set;
+ * `status` is what the banner is right now, with `expired` **computed by the
+ * server** from the end time on every read rather than stored — a stored
+ * expiry is wrong for as long as it takes something to notice, or forever if
+ * nothing runs.
+ */
+export const bannerPlacementSchema = z.enum(['home_hero', 'home_secondary'])
+export type BannerPlacement = z.infer<typeof bannerPlacementSchema>
+
+/** The lifecycle a person controls. `expired` is not settable. */
+export const bannerStatusSchema = z.enum(['draft', 'scheduled', 'published', 'archived'])
+export type BannerStatus = z.infer<typeof bannerStatusSchema>
+
+export const bannerEffectiveStatusSchema = z.enum([
+  'draft',
+  'scheduled',
+  'published',
+  'archived',
+  'expired',
+])
+export type BannerEffectiveStatus = z.infer<typeof bannerEffectiveStatusSchema>
+
+export const bannerDestinationSchema = z.enum([
+  'none',
+  'place',
+  'recommendation',
+  'plan_template',
+  'campaign',
+  'external_url',
+])
+export type BannerDestination = z.infer<typeof bannerDestinationSchema>
+
+export const cmsBannerSchema = z.object({
+  id: z.string(),
+  /** The editorial name — what an editor searches, not what a user reads. */
+  name: z.string(),
+  imageKey: z.string(),
+  /** Null until media hosting is configured, rather than a URL that would 404. */
+  imageUrl: z.string().nullish(),
+  title: z.string().nullish(),
+  subtitle: z.string().nullish(),
+  ctaLabel: z.string().nullish(),
+  destinationType: bannerDestinationSchema,
+  destinationValue: z.string().nullish(),
+  audience: contentAudienceSchema.nullish(),
+  placement: bannerPlacementSchema,
+  startsAt: z.string().nullish(),
+  endsAt: z.string().nullish(),
+  /** Higher first, between banners competing for one placement. */
+  priority: z.number().int(),
+  status: bannerEffectiveStatusSchema,
+  lifecycleStatus: bannerStatusSchema,
+  createdByAdminId: z.string().nullish(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+})
+export type CmsBanner = z.infer<typeof cmsBannerSchema>
+
+export const cmsBannerPageSchema = z.object({
+  items: z.array(cmsBannerSchema).default([]),
+  nextCursor: z.string().nullable().default(null),
+  totalCount: z.number().int().default(0),
+})
+export type CmsBannerPage = z.infer<typeof cmsBannerPageSchema>

@@ -1220,6 +1220,106 @@ export const vi = {
 
   'error.SHEET_PERMISSION_DENIED': 'GoGo không có quyền đọc bảng tính này.',
   'error.UNKNOWN': 'Đã xảy ra lỗi không xác định.',
+
+  'nav.banners': 'Banner',
+
+  'media.hint': 'JPEG, PNG, WebP hoặc HEIC. Ảnh tải thẳng lên kho lưu trữ, không đi qua API.',
+  'media.choose': 'Chọn ảnh',
+  'media.replace': 'Đổi ảnh',
+  'media.noImage': 'Chưa có ảnh',
+  'media.noPreview': 'Chưa xem trước được',
+  'media.error.contentType': 'Định dạng ảnh không được hỗ trợ. Dùng JPEG, PNG, WebP hoặc HEIC.',
+
+  'banners.title': 'Banner trang chủ',
+  'banners.breadcrumb': 'Banner',
+  'banners.new': 'Tạo banner',
+  'banners.newHint': 'Cần tên và ảnh. Nội dung, điểm đến và lịch chạy đặt ở màn hình chi tiết.',
+  'banners.create': 'Tạo',
+  'banners.created': 'Đã tạo banner {name}.',
+  'banners.saved': 'Đã lưu banner.',
+  'banners.statusChanged': 'Đã đổi trạng thái banner.',
+  'banners.empty': 'Chưa có banner nào',
+  'banners.emptyHint': 'Tạo banner đầu tiên, hoặc bỏ bớt bộ lọc.',
+  'banners.pageInfo': 'Trang này {shown} · tổng {total} khớp bộ lọc',
+  'banners.editTitle': 'Nội dung banner',
+  'banners.editHint': 'Ảnh là bắt buộc. Điểm đến được server kiểm tra lại trước khi lưu.',
+  'banners.previewTitle': 'Xem trước',
+  'banners.previewHint': 'Bố cục gần đúng trên trang chủ, không phải ảnh chụp thật.',
+  'banners.lifecycleTitle': 'Trạng thái',
+  'banners.lifecycleHint': 'Chỉ các trạng thái do người đặt. “Hết hạn” do server tự tính.',
+  'banners.factsTitle': 'Thông tin',
+  'banners.noPreview': 'Chưa có ảnh xem trước',
+  'banners.noWindow': 'Không đặt lịch',
+  'banners.audienceAll': 'Mọi đối tượng',
+  'banners.createNote':
+    'Banner tạo ra ở trạng thái nháp. Ảnh được gắn với banner khi lưu; khoá ảnh của người khác hoặc đã hết hạn sẽ bị từ chối.',
+  'banners.expiredNote':
+    'Banner này đã qua thời điểm kết thúc. “Hết hạn” do server tính lại mỗi lần đọc — muốn chạy tiếp thì dời thời gian kết thúc.',
+  'banners.effectiveNote':
+    'Trạng thái hiệu lực do server tính từ thời gian kết thúc mỗi lần đọc; trạng thái vòng đời là thứ người dùng đặt.',
+
+  'banners.col.image': 'Ảnh',
+  'banners.col.name': 'Tên banner',
+  'banners.col.placement': 'Vị trí',
+  'banners.col.audience': 'Đối tượng',
+  'banners.col.window': 'Lịch chạy',
+  'banners.col.priority': 'Ưu tiên',
+  'banners.col.status': 'Trạng thái',
+  'banners.col.updatedAt': 'Cập nhật',
+
+  'banners.filter.search': 'Tìm theo tên banner',
+  'banners.filter.placementAll': 'Mọi vị trí',
+  'banners.filter.statusAll': 'Mọi trạng thái',
+  'banners.filter.audienceAll': 'Mọi đối tượng',
+
+  'banners.field.name': 'Tên banner',
+  'banners.field.nameHint': 'Tên nội bộ để tìm kiếm, không hiển thị cho người dùng.',
+  'banners.field.image': 'Ảnh banner',
+  'banners.field.placement': 'Vị trí hiển thị',
+  'banners.field.bannerTitle': 'Tiêu đề hiển thị',
+  'banners.field.subtitle': 'Mô tả ngắn',
+  'banners.field.ctaLabel': 'Nhãn nút',
+  'banners.field.audience': 'Đối tượng',
+  'banners.field.destinationType': 'Loại điểm đến',
+  'banners.field.destinationValue': 'Điểm đến',
+  'banners.field.destinationIdHint':
+    'ID của nội dung tương ứng. Server kiểm tra ID có tồn tại không.',
+  'banners.field.destinationUrlHint':
+    'Bắt buộc https, không chứa tài khoản/mật khẩu, không trỏ vào mạng nội bộ.',
+  'banners.field.startsAt': 'Bắt đầu',
+  'banners.field.endsAt': 'Kết thúc',
+  'banners.field.priority': 'Ưu tiên',
+  'banners.field.priorityHint': 'Số lớn hiển thị trước, khi nhiều banner tranh cùng một vị trí.',
+  'banners.field.lifecycleStatus': 'Trạng thái vòng đời',
+  'banners.field.createdAt': 'Ngày tạo',
+
+  'banners.error.name': 'Tên banner cần tối thiểu 3 ký tự.',
+  'banners.error.image': 'Banner bắt buộc phải có ảnh.',
+  'banners.error.destinationRequired': 'Loại điểm đến này cần một giá trị.',
+  'banners.error.destinationForbidden': 'Loại điểm đến này không nhận giá trị.',
+  'banners.error.destinationUrl':
+    'Link phải là https, không chứa thông tin đăng nhập và không trỏ vào mạng nội bộ.',
+  'banners.error.window': 'Thời điểm kết thúc phải sau thời điểm bắt đầu.',
+
+  'banners.placement.home_hero': 'Trang chủ — banner lớn',
+  'banners.placement.home_secondary': 'Trang chủ — banner phụ',
+
+  'banners.status.draft': 'Nháp',
+  'banners.status.scheduled': 'Đã lên lịch',
+  'banners.status.published': 'Đang chạy',
+  'banners.status.archived': 'Đã lưu trữ',
+  'banners.status.expired': 'Hết hạn',
+  'banners.transition.draft': 'Chuyển về nháp',
+  'banners.transition.scheduled': 'Lên lịch',
+  'banners.transition.published': 'Chạy ngay',
+  'banners.transition.archived': 'Lưu trữ',
+
+  'banners.destination.none': 'Không điều hướng',
+  'banners.destination.place': 'Địa điểm',
+  'banners.destination.recommendation': 'Gợi ý biên tập',
+  'banners.destination.plan_template': 'Mẫu lịch trình',
+  'banners.destination.campaign': 'Chiến dịch',
+  'banners.destination.external_url': 'Link ngoài',
 } as const
 
 export type MessageKey = keyof typeof vi

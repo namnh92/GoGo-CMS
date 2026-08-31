@@ -15,6 +15,7 @@ import type {
   CmsModerationCheckin,
   CmsCommunityPlace,
   CmsSafetyRule,
+  CmsBanner,
 } from '@/shared/api/contracts'
 import type { ImportJob, ImportRow } from '@/shared/api/contracts-import'
 
@@ -1481,5 +1482,125 @@ export const cmsSafetyRules: CmsSafetyRule[] = [
     createdBy: null,
     createdAt: iso(60 * 24 * 2),
     updatedAt: iso(60 * 24 * 2),
+  },
+]
+
+/**
+ * `GET /cms/banners` (GoGo-BE#224).
+ *
+ * Covers both placements, every lifecycle status and — importantly — one
+ * banner whose window has closed, so `expired` is reachable without waiting
+ * for a clock. `imageUrl` is null on one row: media hosting is not configured
+ * in dev, and the console must render that absence rather than a broken image.
+ */
+export const cmsBanners: CmsBanner[] = [
+  {
+    id: 'bn-tet-hero',
+    name: 'Hero Tết 2026',
+    imageKey: 'cms/banner/adm-ops/tet-2026.jpg',
+    imageUrl: 'https://images.gogo.test/banners/tet-2026.jpg',
+    title: 'Hẹn hò ngày Tết',
+    subtitle: 'Gợi ý quán mở xuyên Tết ở Hà Nội',
+    ctaLabel: 'Xem gợi ý',
+    destinationType: 'recommendation',
+    destinationValue: 'rec-tet-ha-noi',
+    audience: 'couple',
+    placement: 'home_hero',
+    startsAt: iso(60 * 24 * 3),
+    endsAt: null,
+    priority: 100,
+    status: 'published',
+    lifecycleStatus: 'published',
+    createdByAdminId: 'adm-ops',
+    createdAt: iso(60 * 24 * 20),
+    updatedAt: iso(60 * 6),
+  },
+  {
+    id: 'bn-cuoi-tuan',
+    name: 'Cuối tuần gần nhà',
+    // Hosting is not configured for this one — an honest null, not a URL
+    // that would 404.
+    imageKey: 'cms/banner/adm-ops/cuoi-tuan.png',
+    imageUrl: null,
+    title: 'Đi đâu cuối tuần?',
+    subtitle: null,
+    ctaLabel: 'Mở danh sách',
+    destinationType: 'plan_template',
+    destinationValue: 'pt-cuoi-tuan-ha-noi',
+    audience: 'group',
+    placement: 'home_secondary',
+    startsAt: null,
+    endsAt: null,
+    priority: 50,
+    status: 'draft',
+    lifecycleStatus: 'draft',
+    createdByAdminId: 'adm-ops',
+    createdAt: iso(60 * 24 * 6),
+    updatedAt: iso(60 * 24),
+  },
+  {
+    id: 'bn-noel-cu',
+    name: 'Noel 2025',
+    imageKey: 'cms/banner/adm-ops/noel-2025.jpg',
+    imageUrl: 'https://images.gogo.test/banners/noel-2025.jpg',
+    title: 'Đêm Giáng sinh',
+    subtitle: 'Quán ấm cúng cho hai người',
+    ctaLabel: null,
+    destinationType: 'external_url',
+    destinationValue: 'https://gogo.vn/noel',
+    audience: 'couple',
+    placement: 'home_hero',
+    startsAt: iso(60 * 24 * 250),
+    // The window closed: the server reports `expired` while the lifecycle
+    // status a person set is still `published`.
+    endsAt: iso(60 * 24 * 240),
+    priority: 80,
+    status: 'expired',
+    lifecycleStatus: 'published',
+    createdByAdminId: 'adm-ops',
+    createdAt: iso(60 * 24 * 260),
+    updatedAt: iso(60 * 24 * 240),
+  },
+  {
+    id: 'bn-sap-chay',
+    name: 'Lễ hội ẩm thực tháng 9',
+    imageKey: 'cms/banner/adm-ops/le-hoi-thang-9.webp',
+    imageUrl: 'https://images.gogo.test/banners/le-hoi-thang-9.webp',
+    title: 'Lễ hội ẩm thực',
+    subtitle: 'Ba ngày cuối tuần này',
+    ctaLabel: 'Đặt lịch đi',
+    destinationType: 'place',
+    destinationValue: 'pl-pho-bat-dan',
+    audience: null,
+    placement: 'home_secondary',
+    startsAt: iso(-60 * 24 * 2),
+    endsAt: iso(-60 * 24 * 9),
+    priority: 60,
+    status: 'scheduled',
+    lifecycleStatus: 'scheduled',
+    createdByAdminId: 'adm-ops',
+    createdAt: iso(60 * 24 * 2),
+    updatedAt: iso(60 * 24 * 2),
+  },
+  {
+    id: 'bn-luu-tru',
+    name: 'Hè 2025 (đã lưu trữ)',
+    imageKey: 'cms/banner/adm-ops/he-2025.jpg',
+    imageUrl: 'https://images.gogo.test/banners/he-2025.jpg',
+    title: 'Trốn nóng',
+    subtitle: null,
+    ctaLabel: null,
+    destinationType: 'none',
+    destinationValue: null,
+    audience: 'family',
+    placement: 'home_hero',
+    startsAt: null,
+    endsAt: null,
+    priority: 10,
+    status: 'archived',
+    lifecycleStatus: 'archived',
+    createdByAdminId: null,
+    createdAt: iso(60 * 24 * 400),
+    updatedAt: iso(60 * 24 * 300),
   },
 ]

@@ -27,6 +27,7 @@ import {
   communityPlaceQueue,
   cmsRecommendations,
   cmsSafetyRules,
+  cmsBanners,
   cmsPlanTemplates,
 } from './fixtures'
 
@@ -77,6 +78,8 @@ const db = {
   experiments: experiments.map((item) => ({ ...item })),
   items: JSON.parse(JSON.stringify(collectionItems)) as typeof collectionItems,
   decidedSubmissions: decidedSubmissions.map((item) => ({ ...item })),
+  /** Upload keys issued this session; a banner may only reference one of them. */
+  uploads: [] as string[],
   /** Counts break-glass calls so the burst limit is reachable in dev. */
   takedowns: 0,
   /** Audit entries written during this session, newest first. */
@@ -87,6 +90,7 @@ const db = {
   recommendations: JSON.parse(JSON.stringify(cmsRecommendations)) as typeof cmsRecommendations,
   planTemplates: JSON.parse(JSON.stringify(cmsPlanTemplates)) as typeof cmsPlanTemplates,
   safetyRules: JSON.parse(JSON.stringify(cmsSafetyRules)) as typeof cmsSafetyRules,
+  banners: JSON.parse(JSON.stringify(cmsBanners)) as typeof cmsBanners,
 }
 
 /**
@@ -172,6 +176,21 @@ function requireOpsAdmin() {
   if (role === 'ops_admin' || role === 'super_admin') return null
   return envelope(403, 'FORBIDDEN', 'safety rules are ops_admin only')
 }
+
+/**
+ * `expired` is computed from the end time on every read, never stored — a
+ * stored expiry is wrong for as long as it takes something to notice. Only a
+ * published banner can expire; a draft with a past end time is still a draft.
+ */
+function effectiveBannerStatus(row: (typeof cmsBanners)[number]) {
+  if (row.lifecycleStatus !== 'published') return row.lifecycleStatus
+  if (row.endsAt && new Date(row.endsAt).getTime() <= Date.now()) return 'expired' as const
+  return row.lifecycleStatus
+}
+
+/** A 1×1 transparent PNG, base64. */
+const TRANSPARENT_PNG =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
 
 export const handlers = [
   // Runs before every other handler: MSW walks this list in order, and
@@ -923,6 +942,185 @@ export const handlers = [
    * gets a 403 from the mock exactly as they would from the server, and the
    * console's permission-denied state is reachable in dev.
    */
+  /*
+   * CMS-scoped presigned upload (GoGo-BE#227).
+   *
+   * Returns a URL, never a storage credential. `readUrl` is null here on
+   * purpose: media hosting is not configured in dev, and the console has to
+   * render that absence rather than a URL that would 404.
+   */
+  http.post(`${BASE}/cms/uploads`, async ({ request }) => {
+    const { role } = currentActor()
+    if (role !== 'editor' && role !== 'ops_admin' && role !== 'super_admin') {
+      return envelope(403, 'FORBIDDEN', 'uploads are editor/ops only')
+    }
+    const body = (await request.json()) as {
+      purpose?: string
+      contentType?: string
+      contentLength?: number
+    }
+    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/heic']
+    if (!body.contentType || !allowed.includes(body.contentType)) {
+      return envelope(400, 'UNSUPPORTED_CONTENT_TYPE', 'content type not allowed')
+    }
+    const maxBytes = 10 * 1024 * 1024
+    if (Number(body.contentLength ?? 0) > maxBytes) {
+      return envelope(400, 'FILE_TOO_LARGE', 'over the size ceiling')
+    }
+    const id = `up-${db.uploads.length + 1}`
+    // Server-generated from actor + a UUID, never anything the client sent.
+    const key = `cms/${body.purpose}/adm-mock/${id}`
+    db.uploads.push(key)
+    return HttpResponse.json(
+      {
+        id,
+        key,
+        uploadUrl: `https://storage.gogo.test/put/${id}`,
+        expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
+        maxBytes,
+        contentType: body.contentType,
+        readUrl: null,
+      },
+      { status: 201 },
+    )
+  }),
+
+  /* The presigned PUT itself. Storage, not the API — so no envelope. */
+  http.put('https://storage.gogo.test/put/*', () => new HttpResponse(null, { status: 200 })),
+
+  /*
+   * Banner images the fixtures point at.
+   *
+   * Served rather than left to fail: an `<img>` whose src does not resolve is
+   * a broken image in dev and a console error in the smoke test, which is
+   * exactly the state rule 15 says a card must never be in. One transparent
+   * pixel is enough to prove the element renders.
+   */
+  http.get('https://images.gogo.test/*', () => {
+    const pixel = Uint8Array.from(atob(TRANSPARENT_PNG), (char) => char.charCodeAt(0))
+    return new HttpResponse(pixel, { headers: { 'Content-Type': 'image/png' } })
+  }),
+
+  /*
+   * Banners (GoGo-BE#224). `status` filters on the EFFECTIVE status, which
+   * includes `expired` — computed, never stored.
+   */
+  http.get(`${BASE}/cms/banners`, ({ request }) => {
+    const url = new URL(request.url)
+    const placement = url.searchParams.get('placement')
+    const status = url.searchParams.get('status')
+    const audience = url.searchParams.get('audience')
+    const q = url.searchParams.get('q')?.toLowerCase()
+    const limit = Number(url.searchParams.get('limit') ?? 25)
+    const cursor = url.searchParams.get('cursor')
+
+    let items = db.banners.map((row) => ({ ...row, status: effectiveBannerStatus(row) }))
+    if (placement) items = items.filter((row) => row.placement === placement)
+    if (status) items = items.filter((row) => row.status === status)
+    if (audience) items = items.filter((row) => row.audience === audience)
+    if (q) items = items.filter((row) => row.name.toLowerCase().includes(q))
+    return HttpResponse.json(pageOf(items, limit, cursor))
+  }),
+
+  http.post(`${BASE}/cms/banners`, async ({ request }) => {
+    const body = (await request.json()) as Record<string, unknown>
+    const name = String(body.name ?? '')
+    if (db.banners.some((row) => row.name === name)) {
+      return envelope(409, 'BANNER_NAME_TAKEN', 'a banner with that name exists')
+    }
+    const imageKey = String(body.imageKey ?? '')
+    // A key must have been issued by this session's upload call; anything else
+    // would become a broken image.
+    if (!imageKey || !db.uploads.includes(imageKey)) {
+      return envelope(400, 'INVALID_UPLOAD_KEY', 'image key is not usable')
+    }
+    const created = {
+      id: `bn-${db.banners.length + 100}`,
+      name,
+      imageKey,
+      imageUrl: null,
+      title: (body.title as string) ?? null,
+      subtitle: (body.subtitle as string) ?? null,
+      ctaLabel: (body.ctaLabel as string) ?? null,
+      destinationType: (body.destinationType as 'none') ?? 'none',
+      destinationValue: (body.destinationValue as string) ?? null,
+      audience: (body.audience as 'couple') ?? null,
+      placement: body.placement as 'home_hero',
+      startsAt: (body.startsAt as string) ?? null,
+      endsAt: (body.endsAt as string) ?? null,
+      priority: Number(body.priority ?? 0),
+      status: 'draft' as const,
+      lifecycleStatus: 'draft' as const,
+      createdByAdminId: 'adm-mock',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+    db.banners.unshift(created)
+    return HttpResponse.json(created, { status: 201 })
+  }),
+
+  http.get(`${BASE}/cms/banners/:id`, ({ params }) => {
+    const row = db.banners.find((item) => item.id === params.id)
+    if (!row) return envelope(404, 'NOT_FOUND', 'banner not found')
+    return HttpResponse.json({ ...row, status: effectiveBannerStatus(row) })
+  }),
+
+  http.patch(`${BASE}/cms/banners/:id`, async ({ params, request }) => {
+    const row = db.banners.find((item) => item.id === params.id)
+    if (!row) return envelope(404, 'NOT_FOUND', 'banner not found')
+    const body = (await request.json()) as Record<string, unknown>
+    const startsAt = (body.startsAt as string) ?? row.startsAt
+    const endsAt = (body.endsAt as string) ?? row.endsAt
+    if (startsAt && endsAt && new Date(endsAt) <= new Date(startsAt)) {
+      return envelope(400, 'INVALID_SCHEDULE', 'the window is inverted')
+    }
+    const destinationType =
+      (body.destinationType as typeof row.destinationType) ?? row.destinationType
+    const destinationValue =
+      body.destinationValue !== undefined
+        ? String(body.destinationValue)
+        : (row.destinationValue ?? '')
+    if (destinationType !== 'none' && destinationValue.trim() === '') {
+      return envelope(400, 'INVALID_DESTINATION', 'this destination type needs a value')
+    }
+    for (const key of [
+      'name',
+      'imageKey',
+      'title',
+      'subtitle',
+      'ctaLabel',
+      'audience',
+      'placement',
+      'startsAt',
+      'endsAt',
+    ] as const) {
+      if (body[key] !== undefined) (row as Record<string, unknown>)[key] = body[key]
+    }
+    row.destinationType = destinationType
+    row.destinationValue = destinationType === 'none' ? null : destinationValue
+    if (body.priority !== undefined) row.priority = Number(body.priority)
+    row.updatedAt = new Date().toISOString()
+    return HttpResponse.json({ ...row, status: effectiveBannerStatus(row) })
+  }),
+
+  http.patch(`${BASE}/cms/banners/:id/status`, async ({ params, request }) => {
+    const row = db.banners.find((item) => item.id === params.id)
+    if (!row) return envelope(404, 'NOT_FOUND', 'banner not found')
+    const body = (await request.json()) as { status: string }
+    if (body.status === 'scheduled' && !row.startsAt) {
+      return envelope(400, 'SCHEDULE_REQUIRED', 'scheduling needs a start time')
+    }
+    if (body.status === 'published' && row.endsAt && new Date(row.endsAt) <= new Date()) {
+      // Publishing a closed window would produce something the very next read
+      // reports as expired.
+      return envelope(400, 'WINDOW_CLOSED', 'the window has already closed')
+    }
+    row.lifecycleStatus = body.status as typeof row.lifecycleStatus
+    row.status = effectiveBannerStatus(row)
+    row.updatedAt = new Date().toISOString()
+    return HttpResponse.json({ id: row.id, status: row.lifecycleStatus })
+  }),
+
   http.get(`${BASE}/cms/safety-rules`, ({ request }) => {
     const denied = requireOpsAdmin()
     if (denied) return denied

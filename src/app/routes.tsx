@@ -28,6 +28,8 @@ const PlanTemplateDetailScreen = lazy(
 const RecommendationDetailScreen = lazy(
   () => import('@/features/recommendations/recommendationDetail.view'),
 )
+const BannerListScreen = lazy(() => import('@/features/banners/bannerList.view'))
+const BannerDetailScreen = lazy(() => import('@/features/banners/bannerDetail.view'))
 const SafetyRuleListScreen = lazy(() => import('@/features/safety/safetyRuleList.view'))
 const SafetyRuleDetailScreen = lazy(() => import('@/features/safety/safetyRuleDetail.view'))
 const SettingsScreen = lazy(() => import('@/features/ranking/settings.view'))
@@ -90,6 +92,8 @@ export const router = createBrowserRouter([
           { path: 'recommendations/:id', element: <RecommendationDetailScreen /> },
           { path: 'plan-templates', element: <PlanTemplateListScreen /> },
           { path: 'plan-templates/:id', element: <PlanTemplateDetailScreen /> },
+          { path: 'banners', element: <BannerListScreen /> },
+          { path: 'banners/:id', element: <BannerDetailScreen /> },
           { path: 'safety-rules', element: <SafetyRuleListScreen /> },
           { path: 'safety-rules/:id', element: <SafetyRuleDetailScreen /> },
           { path: 'settings', element: <SettingsScreen /> },

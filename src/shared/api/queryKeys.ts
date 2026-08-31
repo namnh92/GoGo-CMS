@@ -19,6 +19,12 @@ export const queryKeys = {
     detail: (id: string) => ['recommendations', 'detail', id] as const,
   },
 
+  banners: {
+    all: ['banners'] as const,
+    list: (filters: Record<string, unknown>) => ['banners', 'list', filters] as const,
+    detail: (id: string) => ['banners', 'detail', id] as const,
+  },
+
   safetyRules: {
     all: ['safety-rules'] as const,
     list: (filters: Record<string, unknown>) => ['safety-rules', 'list', filters] as const,

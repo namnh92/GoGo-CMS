@@ -49,6 +49,10 @@ const ROUTE_ROLES = {
   emergency: ['editor', 'moderator', 'ops_admin'],
   /** `CmsSafetyRulesController` — @RequireRole('ops_admin') */
   safety: ['ops_admin'],
+  /** `CmsBannersController` — @RequireRole('editor', 'ops_admin') */
+  banners: ['editor', 'ops_admin'],
+  /** `CmsUploadsController` — @RequireRole('editor', 'ops_admin') */
+  uploads: ['editor', 'ops_admin'],
   /** `POST /cms/auth/admins` — @RequireRole('super_admin') */
   admins: ['super_admin'],
 } as const satisfies Record<string, readonly AdminRole[]>
@@ -130,6 +134,13 @@ const PERMISSIONS = {
   // to a moderator: `canAccess` lands on the same answer the server does.
   'safety.read': ['safety', 'read'],
   'safety.manage': ['safety', 'write'],
+
+  // Banners — their own controller, editor and ops both write. Uploading the
+  // image is the same pair on a separate controller, so it gets its own
+  // permission rather than being assumed from `banner.manage`.
+  'banner.read': ['banners', 'read'],
+  'banner.manage': ['banners', 'write'],
+  'upload.create': ['uploads', 'write'],
 
   // Audit — declared on `editor`, so rank-based read opens the log to every
   // role. It is read-only everywhere: the server serves no write route here.
