@@ -2,13 +2,16 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { useI18n, useT } from '@/shared/i18n/i18n'
 import { queryKeys } from '@/shared/api/queryKeys'
-import { formatNumber, formatPercent } from '@/shared/format'
+import { formatDateTime, formatNumber, formatPercent } from '@/shared/format'
 import { PageBody, PageHeader } from '@/app/PageHeader'
 import { Card, CardBody, CardHeader, KpiCard } from '@/shared/ui/Card'
 import { Button } from '@/shared/ui/Button'
 import { AsyncBoundary, PermissionDeniedState } from '@/shared/ui/State'
 import { useSession } from '@/shared/auth/session'
-import { fetchOpsKpis } from './api'
+import { fetchModerationCounts } from '@/features/moderation/api'
+import { fetchImportJobs } from '@/features/imports/api'
+import { JobStatusBadge } from '@/features/imports/status'
+import { fetchOpsKpis, fetchSearchAnalytics } from './api'
 import { styles } from './dashboard.style'
 
 /**
@@ -29,6 +32,42 @@ export default function DashboardScreen() {
     staleTime: 60_000,
     enabled: can('ops.dashboard'),
   })
+
+  /*
+   * The satellite cards each stand on their own endpoint and their own
+   * permission. A failed satellite never takes the KPI row down with it —
+   * each card renders its own error state instead.
+   */
+  const counts = useQuery({
+    queryKey: queryKeys.moderation.counts,
+    queryFn: ({ signal }) => fetchModerationCounts(signal),
+    staleTime: 60_000,
+    enabled: can('moderation.read'),
+  })
+  const jobs = useQuery({
+    queryKey: queryKeys.imports.list(0, 5),
+    queryFn: ({ signal }) => fetchImportJobs(0, 5, signal),
+    staleTime: 60_000,
+    enabled: can('import.read'),
+  })
+  const search = useQuery({
+    queryKey: queryKeys.searchAnalytics(7),
+    queryFn: ({ signal }) => fetchSearchAnalytics(7, 5, signal),
+    staleTime: 60_000,
+    enabled: can('searchAnalytics.read'),
+  })
+
+  /**
+   * The four real queues. Reviews have their own screen; the other three live
+   * as tabs whose state is local to /moderation, so all three link there — a
+   * `?tab=` param nothing reads would be a dead control.
+   */
+  const queues = [
+    { key: 'reviews', to: '/moderation/reviews', value: counts.data?.reviews },
+    { key: 'reports', to: '/moderation', value: counts.data?.reports },
+    { key: 'checkins', to: '/moderation', value: counts.data?.checkins },
+    { key: 'community', to: '/moderation', value: counts.data?.communityPlaces },
+  ] as const
 
   if (!can('ops.dashboard')) {
     return (
@@ -196,33 +235,183 @@ export default function DashboardScreen() {
                   </Card>
 
                   <Card>
-                    <CardHeader title={t('dashboard.backlog.title')} />
+                    <CardHeader
+                      title={t('dashboard.queues.title')}
+                      hint={t('dashboard.queues.hint')}
+                    />
                     <CardBody>
-                      <div className={styles.backlogRow}>
-                        <span className={styles.backlogLabel}>
-                          {t('dashboard.backlog.reviews')}
-                        </span>
-                        <span className={styles.backlogValue}>
-                          {formatNumber(kpis.moderationBacklog.reviews, locale)}
-                        </span>
-                      </div>
-                      <div className={styles.backlogRow}>
-                        <span className={styles.backlogLabel}>
-                          {t('dashboard.backlog.reports')}
-                        </span>
-                        <span className={styles.backlogValue}>
-                          {formatNumber(kpis.moderationBacklog.reports, locale)}
-                        </span>
-                      </div>
+                      {can('moderation.read') ? (
+                        counts.isError ? (
+                          <p className={styles.note}>{t('dashboard.satelliteError')}</p>
+                        ) : (
+                          queues.map((queue) => (
+                            <button
+                              key={queue.key}
+                              type="button"
+                              className={styles.queueRow}
+                              onClick={() => navigate(queue.to)}
+                            >
+                              <span className={styles.queueLabel}>
+                                {t(`dashboard.queues.${queue.key}` as const)}
+                              </span>
+                              <span
+                                className={
+                                  (queue.value ?? 0) > 0 ? styles.queueValue : styles.queueZero
+                                }
+                              >
+                                {queue.value === undefined
+                                  ? '…'
+                                  : formatNumber(queue.value, locale)}
+                              </span>
+                            </button>
+                          ))
+                        )
+                      ) : (
+                        <p className={styles.note}>{t('dashboard.queues.noPermission')}</p>
+                      )}
+                    </CardBody>
+                  </Card>
+                </div>
+
+                <div className={styles.splitGrid}>
+                  <Card>
+                    <CardHeader
+                      title={t('dashboard.imports.title')}
+                      hint={t('dashboard.imports.hint')}
+                    />
+                    <CardBody>
+                      {can('import.read') ? (
+                        jobs.isError ? (
+                          <p className={styles.note}>{t('dashboard.satelliteError')}</p>
+                        ) : (jobs.data?.items.length ?? 0) === 0 ? (
+                          <p className={styles.note}>{t('dashboard.imports.empty')}</p>
+                        ) : (
+                          jobs.data?.items.map((job) => (
+                            <div key={job.id} className={styles.jobRow}>
+                              <div className="min-w-0">
+                                <p className={styles.jobName}>
+                                  {job.sourceFileName ??
+                                    t(`importSource.${job.sourceType}` as const)}
+                                </p>
+                                <p className={styles.jobMeta}>
+                                  {job.createdAt ? formatDateTime(job.createdAt, locale) : '—'}
+                                </p>
+                              </div>
+                              <JobStatusBadge status={job.status} />
+                              <span className={styles.jobTotals}>
+                                {formatNumber(job.totals.success, locale)}/
+                                {formatNumber(job.totals.rows, locale)}
+                              </span>
+                            </div>
+                          ))
+                        )
+                      ) : (
+                        <p className={styles.note}>{t('dashboard.queues.noPermission')}</p>
+                      )}
                       <div className={styles.cta}>
                         <Button
                           size="sm"
                           variant="secondary"
-                          disabled={!can('moderation.read')}
-                          onClick={() => navigate('/moderation')}
+                          disabled={!can('import.read')}
+                          onClick={() => navigate('/imports')}
                         >
-                          {t('dashboard.backlog.cta')}
+                          {t('dashboard.imports.cta')}
                         </Button>
+                      </div>
+                    </CardBody>
+                  </Card>
+
+                  <Card>
+                    <CardHeader
+                      title={t('dashboard.searchTrend.title')}
+                      hint={t('dashboard.searchTrend.hint')}
+                    />
+                    <CardBody>
+                      {can('searchAnalytics.read') ? (
+                        search.isError ? (
+                          <p className={styles.note}>{t('dashboard.satelliteError')}</p>
+                        ) : (
+                          <>
+                            {/* Bar per day, number written beside it — same
+                                discipline as the search-quality console. */}
+                            {(search.data?.trend ?? []).map((point) => (
+                              <div key={point.day} className={styles.trendRow}>
+                                <span className={styles.trendDay}>{point.day}</span>
+                                <span className={styles.trendBar}>
+                                  <span
+                                    className={styles.trendFill}
+                                    style={{
+                                      width: `${Math.min(point.zeroResultRate * 100, 100)}%`,
+                                    }}
+                                  />
+                                </span>
+                                <span className={styles.trendValue}>
+                                  {formatPercent(point.zeroResultRate, locale)} ·{' '}
+                                  {formatNumber(point.zeroResults, locale)}/
+                                  {formatNumber(point.searches, locale)}
+                                </span>
+                              </div>
+                            ))}
+                            <div className={styles.cta}>
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => navigate('/search-quality')}
+                              >
+                                {t('searchQuality.open')}
+                              </Button>
+                            </div>
+                          </>
+                        )
+                      ) : (
+                        <p className={styles.note}>{t('dashboard.queues.noPermission')}</p>
+                      )}
+                    </CardBody>
+                  </Card>
+                </div>
+
+                {/*
+                 * The Figma dashboard also draws service health, infra gauges
+                 * and cost budgets. No endpoint serves any of it, and a
+                 * hard-coded "Healthy" would be worse than nothing — so the
+                 * section exists, says it is not connected, and names exactly
+                 * what the backend would have to expose.
+                 */}
+                <h2 className={styles.sectionTitle}>{t('dashboard.observability.title')}</h2>
+                <div className={styles.gapGrid}>
+                  <Card>
+                    <CardHeader title={t('dashboard.monitoring.title')} />
+                    <CardBody className={styles.gapCard}>
+                      <span className={styles.gapBadge}>
+                        <span aria-hidden="true">○</span>
+                        {t('dashboard.notConnected')}
+                      </span>
+                      <p className="text-xs text-text-muted">{t('dashboard.monitoring.body')}</p>
+                      <div className={styles.gapList}>
+                        <p className={styles.gapItem}>
+                          <span className={styles.gapMono}>GET /v1/cms/ops/health</span>
+                          {t('dashboard.monitoring.needHealth')}
+                        </p>
+                        <p className={styles.gapItem}>
+                          <span className={styles.gapMono}>GET /v1/cms/ops/queues</span>
+                          {t('dashboard.monitoring.needQueues')}
+                        </p>
+                      </div>
+                    </CardBody>
+                  </Card>
+                  <Card>
+                    <CardHeader title={t('dashboard.costs.title')} />
+                    <CardBody className={styles.gapCard}>
+                      <span className={styles.gapBadge}>
+                        <span aria-hidden="true">○</span>
+                        {t('dashboard.notConnected')}
+                      </span>
+                      <p className="text-xs text-text-muted">{t('dashboard.costs.body')}</p>
+                      <div className={styles.gapList}>
+                        <p className={styles.gapItem}>
+                          <span className={styles.gapMono}>GET /v1/cms/ops/costs</span>
+                          {t('dashboard.costs.needCosts')}
+                        </p>
                       </div>
                     </CardBody>
                   </Card>
