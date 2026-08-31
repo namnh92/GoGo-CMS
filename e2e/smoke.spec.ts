@@ -16,6 +16,7 @@ const SCREENS: [string, RegExp][] = [
   ['/imports', /Quản lý nhập hàng loạt/],
   ['/imports/new', /nhập/i],
   ['/moderation', /Bảng kiểm duyệt/],
+  ['/moderation/reviews', /Đánh giá của người dùng/],
   ['/submissions', /Đề xuất địa điểm từ app/],
   ['/taxonomy', /Hệ thống phân loại/],
   ['/collections', /Bộ sưu tập/],

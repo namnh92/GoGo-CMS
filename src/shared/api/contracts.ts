@@ -350,6 +350,65 @@ export type ModerationQueue = z.infer<typeof moderationQueueSchema>
 
 export type ModerationKind = 'review' | 'report' | 'checkin' | 'community'
 
+/**
+ * `GET /cms/moderation/reviews` (GoGo-BE#219) — the review queue with the
+ * filters, keyset paging and totals the unified queue never had.
+ *
+ * `GET /cms/moderation` is deprecated in favour of this and its sibling
+ * per-type queues; reports, check-ins and community places still read the old
+ * one until they are migrated too.
+ *
+ * The author's display name is returned because moderating text means knowing
+ * who wrote it. Email and phone are not part of that judgement and the server
+ * never selects them — so there is nothing here to accidentally render.
+ */
+export const reviewModerationStatusSchema = z.enum([
+  'pending',
+  'published',
+  'rejected',
+  'removed',
+  'hidden',
+])
+export type ReviewModerationStatus = z.infer<typeof reviewModerationStatusSchema>
+
+export const cmsModerationReviewSchema = z.object({
+  id: z.string(),
+  status: reviewModerationStatusSchema,
+  rating: z.number().int(),
+  text: z.string().nullish(),
+  placeId: z.string().nullish(),
+  placeName: z.string().nullish(),
+  planId: z.string().nullish(),
+  authorUserId: z.string(),
+  authorDisplayName: z.string().nullish(),
+  /** Undecided reports pointing at this review. */
+  openReportCount: z.number().int().default(0),
+  moderatedByAdminId: z.string().nullish(),
+  moderationReason: z.string().nullish(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+})
+export type CmsModerationReview = z.infer<typeof cmsModerationReviewSchema>
+
+export const cmsModerationReviewPageSchema = z.object({
+  items: z.array(cmsModerationReviewSchema).default([]),
+  /** Keyset cursor over (createdAt, id); null only when there is no more. */
+  nextCursor: z.string().nullable().default(null),
+  /** Rows matching the filter — not rows in this page. */
+  totalCount: z.number().int().default(0),
+})
+export type CmsModerationReviewPage = z.infer<typeof cmsModerationReviewPageSchema>
+
+/** `GET /cms/moderation/counts` — the backlog behind the sidebar badge. */
+export const cmsModerationCountsSchema = z.object({
+  reviews: z.number().int().default(0),
+  reports: z.number().int().default(0),
+  checkins: z.number().int().default(0),
+  communityPlaces: z.number().int().default(0),
+  total: z.number().int().default(0),
+})
+export type CmsModerationCounts = z.infer<typeof cmsModerationCountsSchema>
+
 export const rankingConfigKeySchema = z.enum(['suggestion.scoring', 'search.ranking'])
 export type RankingConfigKey = z.infer<typeof rankingConfigKeySchema>
 

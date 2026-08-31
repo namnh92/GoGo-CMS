@@ -14,6 +14,7 @@ const ImportListScreen = lazy(() => import('@/features/imports/importList.view')
 const ImportWizardScreen = lazy(() => import('@/features/imports/importWizard.view'))
 const ImportJobScreen = lazy(() => import('@/features/imports/jobDetail.view'))
 const ModerationQueueScreen = lazy(() => import('@/features/moderation/moderationQueue.view'))
+const ReviewListScreen = lazy(() => import('@/features/moderation/reviewList.view'))
 const SubmissionQueueScreen = lazy(() => import('@/features/submissions/submissionQueue.view'))
 const TaxonomyScreen = lazy(() => import('@/features/taxonomy/taxonomy.view'))
 const CollectionsScreen = lazy(() => import('@/features/collections/collections.view'))
@@ -65,9 +66,10 @@ export const router = createBrowserRouter([
           { path: 'imports/new', element: <ImportWizardScreen /> },
           { path: 'imports/:jobId', element: <ImportJobScreen /> },
           { path: 'moderation', element: <ModerationQueueScreen /> },
-          // Same screen, focused on one review: a shareable handle, not a
-          // duplicate moderation surface.
-          { path: 'moderation/reviews/:reviewId', element: <ModerationQueueScreen /> },
+          // Reviews have their own filtered, cursor-paged queue since
+          // GoGo-BE#219; the detail drawer opens over it on the same route.
+          { path: 'moderation/reviews', element: <ReviewListScreen /> },
+          { path: 'moderation/reviews/:reviewId', element: <ReviewListScreen /> },
           { path: 'submissions', element: <SubmissionQueueScreen /> },
           { path: 'taxonomy', element: <TaxonomyScreen /> },
           { path: 'collections', element: <CollectionsScreen /> },
