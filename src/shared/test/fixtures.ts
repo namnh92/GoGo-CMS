@@ -2315,3 +2315,113 @@ export const privacyRequests: PrivacyRequest[] = [
     sla: 'DUE_SOON',
   },
 ]
+
+/**
+ * `GET /cms/ops/summary|providers` (GoGo-BE#315).
+ *
+ * Shaped like a real DEV answer: Places measured, Routes measured with a
+ * failure, Sheets not instrumented at all. That last row is the interesting
+ * one — it is the case the console must render as "chưa đo" rather than as a
+ * quiet zero.
+ */
+export const opsLatencySemantics = {
+  unit: 'seconds' as const,
+  source: 'place_provider_request_duration_seconds histogram',
+  excludesHttpStatuses: ['400', '404'],
+  excludesReason:
+    'Deterministic input rejections (#314). Google refuses a malformed place id in tens of milliseconds, so counting those would make the provider look faster the more broken links users paste.',
+  p99MinSamples: 100,
+}
+
+export const opsCostModel = {
+  kind: 'units_only' as const,
+  estimatedCost: null,
+  currency: null,
+  basis: 'sku_request_counter',
+  note: 'Billable SKU units counted per request. Not money: no unit price is configured, and no provider billing API is connected.',
+}
+
+const opsTrendSeries = (base: number) =>
+  Array.from({ length: 12 }, (_, i) => ({
+    t: new Date(Date.UTC(2026, 8, 1, 0, i * 5)).toISOString(),
+    v: base + (i % 4) * 0.25,
+  }))
+
+export const opsSummary = {
+  window: '24h' as const,
+  effectiveWindow: '24h',
+  retentionDays: 14,
+  truncated: false,
+  generatedAt: '2026-09-01T12:00:00.000Z',
+  backend: { status: 'ok' as const },
+  totals: {
+    providerRequests: 420,
+    providerSuccesses: 400,
+    providerFailures: 8,
+    providerRejected: 12,
+    providerSuccessRate: 0.952,
+    providerFailureRate: 0.019,
+    providerRejectedRate: 0.029,
+    latency: { p50: 0.175, p95: 0.44, p99: null },
+    rejectedLatency: { p50: 0.03, p95: 0.05 },
+    billableUnits: 512,
+  },
+  trends: {
+    stepSeconds: 300,
+    series: {
+      requests: opsTrendSeries(2),
+      failures: opsTrendSeries(0),
+      latencyP95: opsTrendSeries(0.4),
+      costUnits: opsTrendSeries(3),
+    },
+  },
+  costModel: opsCostModel,
+  latencySemantics: opsLatencySemantics,
+}
+
+export const opsProviders = {
+  window: '24h' as const,
+  effectiveWindow: '24h',
+  retentionDays: 14,
+  truncated: false,
+  generatedAt: '2026-09-01T12:00:00.000Z',
+  backend: { status: 'ok' as const },
+  providers: [
+    {
+      provider: 'places' as const,
+      instrumented: true,
+      calls: 400,
+      successes: 388,
+      failures: 0,
+      rejected: 12,
+      successRate: 0.97,
+      latency: { p50: 0.175, p95: 0.44, p99: null },
+      billableUnits: 500,
+    },
+    {
+      provider: 'routes' as const,
+      instrumented: true,
+      calls: 20,
+      successes: 12,
+      failures: 8,
+      rejected: 0,
+      successRate: 0.6,
+      latency: { p50: 0.21, p95: 0.6, p99: null },
+      billableUnits: 12,
+    },
+    {
+      // No metric at all. Never a zero.
+      provider: 'sheets' as const,
+      instrumented: false,
+      calls: 0,
+      successes: 0,
+      failures: 0,
+      rejected: 0,
+      successRate: null,
+      latency: { p50: null, p95: null, p99: null },
+      billableUnits: null,
+    },
+  ],
+  costModel: opsCostModel,
+  latencySemantics: opsLatencySemantics,
+}

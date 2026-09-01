@@ -1287,6 +1287,129 @@ export const cmsCostLineSchema = z.object({
 })
 export type CmsCostLine = z.infer<typeof cmsCostLineSchema>
 
+/**
+ * BE-CMS-P2 (GoGo-BE#315) — the monitoring view.
+ *
+ * The console reads these and never `/v1/metrics`, never Grafana. It holds no
+ * metrics token, no Grafana credential, and sends no PromQL: `window` is an
+ * enum and the server owns every query.
+ *
+ * Nullable is load-bearing throughout. A `null` here means *not measured*,
+ * which is a different claim from a measured zero — rendering the second when
+ * the first is true is the failure this whole screen is designed around.
+ */
+export const opsWindowSchema = z.enum(['1h', '24h', '7d', '30d'])
+export type OpsWindow = z.infer<typeof opsWindowSchema>
+
+export const opsPercentilesSchema = z.object({
+  p50: z.number().nullable(),
+  p95: z.number().nullable(),
+  /** Null below the server's sample floor — too few observations to mean anything. */
+  p99: z.number().nullable(),
+})
+
+export const opsEnvelopeSchema = z.object({
+  window: opsWindowSchema,
+  /** What the store could actually answer. Shorter than `window` when retention is. */
+  effectiveWindow: z.string(),
+  retentionDays: z.number().int(),
+  truncated: z.boolean(),
+  generatedAt: z.string(),
+  stale: z.boolean().optional(),
+  asOf: z.string().optional(),
+  backend: z.object({
+    status: z.enum(['ok', 'degraded', 'unavailable']),
+    detail: z.string().optional(),
+  }),
+})
+
+export const opsCostModelSchema = z.object({
+  kind: z.literal('units_only'),
+  /** Always null today: units are counted, money is not. */
+  estimatedCost: z.number().nullable(),
+  currency: z.string().nullable(),
+  basis: z.string(),
+  note: z.string(),
+})
+
+export const opsLatencySemanticsSchema = z.object({
+  unit: z.literal('seconds'),
+  source: z.string(),
+  excludesHttpStatuses: z.array(z.string()),
+  excludesReason: z.string(),
+  p99MinSamples: z.number().int(),
+})
+
+export const opsSeriesSchema = z.array(z.object({ t: z.string(), v: z.number() })).default([])
+
+export const opsTrendsSchema = z.object({
+  stepSeconds: z.number().int(),
+  series: z.object({
+    requests: opsSeriesSchema,
+    failures: opsSeriesSchema,
+    latencyP95: opsSeriesSchema,
+    costUnits: opsSeriesSchema,
+  }),
+})
+
+export const opsTotalsSchema = z.object({
+  providerRequests: z.number(),
+  providerSuccesses: z.number(),
+  providerFailures: z.number(),
+  providerRejected: z.number(),
+  providerSuccessRate: z.number().nullable(),
+  providerFailureRate: z.number().nullable(),
+  providerRejectedRate: z.number().nullable(),
+  latency: opsPercentilesSchema,
+  rejectedLatency: z.object({ p50: z.number().nullable(), p95: z.number().nullable() }),
+  billableUnits: z.number(),
+})
+
+export const opsProviderSchema = z.object({
+  provider: z.enum(['places', 'routes', 'sheets']),
+  /** False = no metric exists for it. Render "chưa đo", never "0 lượt gọi". */
+  instrumented: z.boolean(),
+  calls: z.number(),
+  successes: z.number(),
+  failures: z.number(),
+  rejected: z.number(),
+  successRate: z.number().nullable(),
+  latency: opsPercentilesSchema,
+  /** Null where the provider has no SKU counter — Sheets is quota-limited. */
+  billableUnits: z.number().nullable(),
+})
+export type OpsProviderRow = z.infer<typeof opsProviderSchema>
+
+export const opsOperationSchema = opsProviderSchema
+  .omit({ provider: true, instrumented: true })
+  .extend({ method: z.string() })
+export type OpsOperationRow = z.infer<typeof opsOperationSchema>
+
+export const opsSummarySchema = opsEnvelopeSchema.extend({
+  totals: opsTotalsSchema.nullable(),
+  trends: opsTrendsSchema.nullable(),
+  costModel: opsCostModelSchema,
+  latencySemantics: opsLatencySemanticsSchema,
+})
+export type OpsSummary = z.infer<typeof opsSummarySchema>
+
+export const opsProvidersSchema = opsEnvelopeSchema.extend({
+  providers: z.array(opsProviderSchema).default([]),
+  costModel: opsCostModelSchema,
+  latencySemantics: opsLatencySemanticsSchema,
+})
+export type OpsProviders = z.infer<typeof opsProvidersSchema>
+
+export const opsProviderDetailSchema = opsEnvelopeSchema.extend({
+  provider: opsProviderSchema
+    .extend({ operations: z.array(opsOperationSchema).default([]) })
+    .nullable(),
+  trends: opsTrendsSchema.nullable(),
+  costModel: opsCostModelSchema,
+  latencySemantics: opsLatencySemanticsSchema,
+})
+export type OpsProviderDetail = z.infer<typeof opsProviderDetailSchema>
+
 export const cmsOpsCostsSchema = z.object({
   providers: z.array(cmsCostLineSchema).default([]),
   /** False = no cost source connected. An empty list must not render as zero. */

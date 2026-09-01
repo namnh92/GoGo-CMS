@@ -1,0 +1,27 @@
+export const styles = {
+  toolbar: 'flex flex-wrap items-center justify-between gap-3',
+  windowGroup: 'inline-flex rounded-pill border border-line bg-surface p-0.5',
+  windowButton:
+    'rounded-pill px-3 py-1 text-xs font-semibold text-text-muted transition-colors hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-coral',
+  windowButtonActive: 'bg-coral-soft text-coral-deep',
+  kpiGrid: 'grid gap-4 sm:grid-cols-2 xl:grid-cols-4',
+  banner: 'flex items-start gap-3 rounded-card border px-4 py-3 text-[13px] leading-relaxed',
+  bannerWarn: 'border-amber/40 bg-amber-soft text-amber',
+  bannerDown: 'border-danger/40 bg-danger-soft text-danger',
+  bannerInfo: 'border-line bg-surface-muted text-text-muted',
+  note: 'flex items-start gap-2 rounded-compact border border-line bg-surface-muted px-3 py-2 text-xs text-text-muted',
+  table: 'w-full border-collapse text-[13px]',
+  th: 'border-b border-line px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-text-subtle',
+  thNum:
+    'border-b border-line px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wide text-text-subtle',
+  td: 'border-b border-line/70 px-3 py-2 align-middle',
+  tdNum: 'border-b border-line/70 px-3 py-2 text-right tabular-nums align-middle',
+  provider: 'font-semibold text-text',
+  method: 'font-mono text-[12px] text-text-muted',
+  unmeasured: 'text-[12px] italic text-text-subtle',
+  trendGrid: 'grid gap-4 sm:grid-cols-2',
+  trendCard: 'rounded-card border border-line bg-surface p-4',
+  trendLabel: 'text-xs font-semibold text-text-subtle',
+  trendValue: 'mt-0.5 font-display text-xl font-extrabold tabular-nums text-text',
+  scroller: 'overflow-x-auto',
+} as const

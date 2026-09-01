@@ -1895,6 +1895,67 @@ export const vi = {
 
   'users.openPrivacyWarn':
     'Người dùng này đang có {count} yêu cầu riêng tư mở. Xoá trực tiếp ở đây KHÔNG cập nhật sổ yêu cầu — hãy mở yêu cầu tương ứng và chạy từ đó.',
+  'nav.monitoring': 'Giám sát provider',
+  'monitoring.title': 'Giám sát provider',
+  'monitoring.subtitle':
+    'Lưu lượng, độ tin cậy và độ trễ của các dịch vụ Google, đọc từ kho time-series.',
+  'monitoring.denied': 'Chỉ ops_admin trở lên xem được dữ liệu vận hành.',
+  'monitoring.window': 'Khoảng thời gian',
+  'monitoring.window.1h': '1 giờ',
+  'monitoring.window.24h': '24 giờ',
+  'monitoring.window.7d': '7 ngày',
+  'monitoring.window.30d': '30 ngày',
+  'monitoring.unmeasured': 'chưa đo',
+  'monitoring.backend.ok': 'Đang thu thập',
+  'monitoring.backend.degraded': 'Số liệu cũ',
+  'monitoring.backend.unavailable': 'Không kết nối được',
+  'monitoring.banner.unavailable':
+    'Không đọc được kho số liệu. Phần còn lại của GoGo không bị ảnh hưởng — đây là sự cố của giám sát, không phải của hệ thống.',
+  'monitoring.banner.stale':
+    'Lần làm mới gần nhất thất bại. Đang hiển thị số liệu thu thập lúc {at}.',
+  'monitoring.banner.truncated':
+    'Yêu cầu {window} nhưng kho chỉ giữ {days} ngày. Biểu đồ dưới đây phủ {effective}, phần còn lại không tồn tại chứ không phải bằng 0.',
+  'monitoring.kpi.requests': 'Lượt gọi provider',
+  'monitoring.kpi.requestsSub': 'trong {window}',
+  'monitoring.kpi.successRate': 'Tỷ lệ thành công',
+  'monitoring.kpi.successSub': '{failures} lỗi provider · {rejected} request bị từ chối',
+  'monitoring.kpi.p95': 'Độ trễ p95',
+  'monitoring.kpi.p95Sub': 'không tính status {statuses}',
+  'monitoring.kpi.units': 'Đơn vị tính phí',
+  'monitoring.kpi.unitsSub': 'Số đơn vị SKU, không phải tiền — chưa nối API billing nào.',
+  'monitoring.reliability.title': 'Độ tin cậy',
+  'monitoring.reliability.failures': 'Lỗi provider',
+  'monitoring.reliability.failuresHint':
+    'Google không phục vụ được ta: auth, quota, sự cố phía họ.',
+  'monitoring.reliability.rejected': 'Request bị từ chối',
+  'monitoring.reliability.rejectedHint':
+    'Yêu cầu của ta sai — place id hỏng, sheet không tồn tại. Không phải sự cố provider.',
+  'monitoring.reliability.p50': 'Độ trễ p50 / p99',
+  'monitoring.reliability.latencyHint': 'p99 để trống khi chưa đủ mẫu.',
+  'monitoring.reliability.rejectedLatency': 'Độ trễ của request bị từ chối',
+  'monitoring.reliability.rejectedLatencyHint': 'Tách riêng, không trộn vào p95 chính.',
+  'monitoring.trends.title': 'Xu hướng',
+  'monitoring.trends.requests': 'Lưu lượng gọi',
+  'monitoring.trends.failures': 'Lỗi provider',
+  'monitoring.trends.latencyP95': 'Độ trễ p95',
+  'monitoring.trends.costUnits': 'Đơn vị tính phí',
+  'monitoring.trends.tooFewPoints': 'Chưa đủ dữ liệu để vẽ',
+  'monitoring.trends.ariaLabel': 'Xu hướng {metric} trong {window}',
+  'monitoring.trends.note':
+    'Khoảng trống là lúc không có phép đo, không phải bằng 0. Cần trục và zoom thì dùng Grafana.',
+  'monitoring.providers.title': 'Theo provider',
+  'monitoring.providers.provider': 'Provider',
+  'monitoring.providers.calls': 'Lượt gọi',
+  'monitoring.providers.successRate': 'Thành công',
+  'monitoring.providers.failures': 'Lỗi',
+  'monitoring.providers.rejected': 'Bị từ chối',
+  'monitoring.providers.p50': 'p50',
+  'monitoring.providers.p95': 'p95',
+  'monitoring.providers.units': 'Đơn vị phí',
+  'monitoring.providers.notInstrumented': 'Chưa đo — chưa có metric nào cho provider này',
+  'monitoring.provider.places': 'Google Places',
+  'monitoring.provider.routes': 'Google Routes',
+  'monitoring.provider.sheets': 'Google Sheets',
 } as const
 
 export type MessageKey = keyof typeof vi

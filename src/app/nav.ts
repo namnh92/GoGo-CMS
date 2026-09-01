@@ -139,6 +139,17 @@ const OPERATIONS: NavLeaf[] = [
     permission: 'searchAnalytics.read',
     match: (p) => p.startsWith('/search-quality'),
   },
+  {
+    // GoGo-BE#315. `ops.dashboard`, the same gate the server puts on
+    // /cms/ops/*: provider spend and infrastructure health are not editorial
+    // data, so an editor never sees the entry — and would get a 403 if they
+    // typed the URL, because the nav is presentation and the API is the
+    // authorization layer.
+    to: '/monitoring',
+    labelKey: 'nav.monitoring',
+    permission: 'ops.dashboard',
+    match: (p) => p.startsWith('/monitoring'),
+  },
 ]
 
 /**

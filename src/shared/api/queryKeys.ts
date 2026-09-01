@@ -9,6 +9,9 @@ export const queryKeys = {
   opsHealth: ['ops', 'health'] as const,
   opsQueues: ['ops', 'queues'] as const,
   opsCosts: ['ops', 'costs'] as const,
+  opsSummary: (window: string) => ['ops', 'summary', window] as const,
+  opsProviders: (window: string) => ['ops', 'providers', window] as const,
+  opsProvider: (provider: string, window: string) => ['ops', 'provider', provider, window] as const,
 
   planTemplates: {
     all: ['plan-templates'] as const,
