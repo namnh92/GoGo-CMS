@@ -1867,9 +1867,66 @@ export const opsQueues: CmsOpsQueues = {
   ],
 }
 
+/**
+ * GoGo-BE#335 — a connected ledger, priced.
+ *
+ * Places has a measured amount, Sheets a measured zero, and the two things
+ * with no amount are named in `gaps` rather than being left out: Routes bills
+ * per matrix element at a list price nobody has verified, and the Maps SDK
+ * renders on a handset the backend cannot see.
+ */
 export const opsCosts: CmsOpsCosts = {
+  providers: [
+    {
+      key: 'places',
+      today: 240,
+      monthToDate: 1_040,
+      currency: 'USD',
+      basis: 'estimated',
+      todayMicros: 2_400_000,
+      monthToDateMicros: 10_400_000,
+      billableUnitsToday: 120,
+      billableUnitsMonthToDate: 1_520,
+    },
+    {
+      key: 'sheets',
+      today: 0,
+      monthToDate: 0,
+      currency: 'USD',
+      basis: 'estimated',
+      todayMicros: 0,
+      monthToDateMicros: 0,
+      billableUnitsToday: 0,
+      billableUnitsMonthToDate: 0,
+    },
+  ],
+  sourcesConfigured: true,
+  currency: 'USD',
+  pricingVersion: '2026-09-01',
+  basis: 'ESTIMATED',
+  confidence: 'MEDIUM',
+  asOf: '2026-09-01T12:00:00.000Z',
+  gaps: [
+    {
+      key: 'google.routeMatrix',
+      provider: 'routes',
+      kind: 'price_unknown',
+      detail: 'Billed per matrix element; no per-element list price verified.',
+    },
+    {
+      key: 'google.maps_sdk_ios',
+      provider: 'maps_sdk',
+      kind: 'not_instrumented',
+      detail: 'The SDK renders on the handset; the backend sees no map load.',
+    },
+  ],
+}
+
+/** The pre-#335 shape, still parsed: a console can ship ahead of the backend. */
+export const opsCostsUnmeasured: CmsOpsCosts = {
   providers: [],
   sourcesConfigured: false,
+  gaps: [],
 }
 
 /**
@@ -2334,11 +2391,37 @@ export const opsLatencySemantics = {
 }
 
 export const opsCostModel = {
-  kind: 'units_only' as const,
-  estimatedCost: null,
-  currency: null,
-  basis: 'sku_request_counter',
-  note: 'Billable SKU units counted per request. Not money: no unit price is configured, and no provider billing API is connected.',
+  kind: 'estimated' as const,
+  estimatedCost: 1_040,
+  estimatedCostMicros: 10_400_000,
+  currency: 'USD',
+  basis: 'ESTIMATED',
+  confidence: 'MEDIUM',
+  pricingVersion: '2026-09-01',
+  freeCapApplied: false,
+  costComplete: false,
+  unpricedOperations: ['google.routeMatrix'],
+  measurementGaps: [
+    {
+      key: 'google.routeMatrix',
+      provider: 'routes',
+      kind: 'price_unknown' as const,
+      detail: 'Billed per matrix element; no per-element list price verified.',
+    },
+    {
+      key: 'google.maps_sdk_ios',
+      provider: 'maps_sdk',
+      kind: 'not_instrumented' as const,
+      detail: 'The SDK renders on the handset; the backend sees no map load.',
+    },
+    {
+      key: 'google.maps_sdk_android',
+      provider: 'maps_sdk',
+      kind: 'not_instrumented' as const,
+      detail: 'The SDK renders on the handset; the backend sees no map load.',
+    },
+  ],
+  note: 'Ước tính theo bảng giá niêm yết Google, chưa trừ hạn mức miễn phí. Không phải hóa đơn.',
 }
 
 const opsTrendSeries = (base: number) =>
@@ -2365,6 +2448,11 @@ export const opsSummary = {
     latency: { p50: 0.175, p95: 0.44, p99: null },
     rejectedLatency: { p50: 0.03, p95: 0.05 },
     billableUnits: 512,
+    estimatedCost: 1_040,
+    estimatedCostMicros: 10_400_000,
+    // Routes is measured and unpriced, so the total is a floor.
+    costComplete: false,
+    unpricedOperations: ['google.routeMatrix'],
   },
   trends: {
     stepSeconds: 300,
@@ -2397,6 +2485,10 @@ export const opsProviders = {
       successRate: 0.97,
       latency: { p50: 0.175, p95: 0.44, p99: null },
       billableUnits: 500,
+      estimatedCost: 1_040,
+      estimatedCostMicros: 10_400_000,
+      costComplete: true,
+      unpricedOperations: [],
     },
     {
       provider: 'routes' as const,
@@ -2408,6 +2500,11 @@ export const opsProviders = {
       successRate: 0.6,
       latency: { p50: 0.21, p95: 0.6, p99: null },
       billableUnits: 12,
+      // Units exact, price unverified. Never rendered as free.
+      estimatedCost: null,
+      estimatedCostMicros: null,
+      costComplete: false,
+      unpricedOperations: ['google.routeMatrix'],
     },
     {
       // No metric at all. Never a zero.
@@ -2420,6 +2517,26 @@ export const opsProviders = {
       successRate: null,
       latency: { p50: null, p95: null, p99: null },
       billableUnits: null,
+      estimatedCost: null,
+      estimatedCostMicros: null,
+      costComplete: true,
+      unpricedOperations: [],
+    },
+    {
+      // #335 — the handset renders the map; nothing here counts it.
+      provider: 'maps_sdk' as const,
+      instrumented: false,
+      calls: 0,
+      successes: 0,
+      failures: 0,
+      rejected: 0,
+      successRate: null,
+      latency: { p50: null, p95: null, p99: null },
+      billableUnits: null,
+      estimatedCost: null,
+      estimatedCostMicros: null,
+      costComplete: false,
+      unpricedOperations: [],
     },
   ],
   costModel: opsCostModel,

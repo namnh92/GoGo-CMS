@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { screen, within } from '@testing-library/react'
 import { Route, Routes } from 'react-router-dom'
 import { renderWithProviders, signInAs } from '@/shared/test/render'
+import { http, HttpResponse } from 'msw'
+import { server } from '@/shared/test/server'
 import {
+  opsCostsUnmeasured,
   moderationReportQueue,
   moderationCheckinQueue,
   communityPlaceQueue,
@@ -62,7 +65,9 @@ describe('dashboard (CMS-035)', () => {
     // The four states from the fixture, each in words, not colour alone.
     expect(await screen.findByText('Suy giảm')).toBeInTheDocument()
     expect(screen.getByText('Sập')).toBeInTheDocument()
-    expect(screen.getByText('Chưa đo')).toBeInTheDocument()
+    // "Chưa đo" now appears on the cost card too (GoGo-BE#335 gaps), so this
+    // asserts the health table's own copy rather than the only one on screen.
+    expect(screen.getAllByText('Chưa đo').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Khoẻ').length).toBeGreaterThan(0)
     // The unknown provider's explanation is shown, not painted over.
     expect(screen.getByText(/chưa có lời gọi nào/)).toBeInTheDocument()
@@ -82,12 +87,41 @@ describe('dashboard (CMS-035)', () => {
     expect(within(table).getByText('outbox')).toBeInTheDocument()
   })
 
+  /**
+   * GoGo-BE#335 connected a durable ledger, so this card shows money. The rule
+   * it replaced is not gone: what has no amount is *named*, never folded into
+   * one.
+   */
+  it('shows estimated spend and names what it could not price', async () => {
+    signInAs('ops_admin')
+    renderWithProviders(<Routed />, { route: '/' })
+
+    // 10,40 US$ month to date for Places (vi locale), from the fixture's
+    // 10_400_000 micros.
+    // The amount and its "MTD" label share one node, so the row is the unit
+    // of assertion rather than a bare text match.
+    const placesRow = (await screen.findByText('places')).closest('div')!
+    // Intl separates the number from the currency with a non-breaking space, so
+    // the assertion normalises whitespace rather than pinning U+00A0.
+    expect(placesRow.textContent?.replace(/\s/g, ' ')).toContain('10,40 US$')
+    // Routes has exact units and no verified per-element price.
+    expect(screen.getByText('google.routeMatrix')).toBeInTheDocument()
+    expect(screen.getByText('Chưa có giá')).toBeInTheDocument()
+    // The SDK renders on the handset; nothing here counts it.
+    expect(screen.getByText('google.maps_sdk_ios')).toBeInTheDocument()
+    // Freshness, so a stale figure can be recognised as one.
+    expect(screen.getByText(/bảng giá 2026-09-01/)).toBeInTheDocument()
+  })
+
   it('renders "no cost source" without any currency figure — not as zero', async () => {
+    // The ledger switched off (`COST_LEDGER_ENABLED=false`) is the rollback
+    // path for GoGo-BE#335, and it must still read as "we do not know" rather
+    // than as nothing spent.
+    server.use(http.get('/v1/cms/ops/costs', () => HttpResponse.json(opsCostsUnmeasured)))
     signInAs('ops_admin')
     renderWithProviders(<Routed />, { route: '/' })
 
     expect(await screen.findByText(/Chưa có nguồn chi phí nào được nối/)).toBeInTheDocument()
-    // No invented money on the whole screen: the fixture has sourcesConfigured=false.
     expect(screen.queryByText(/\$\d/)).not.toBeInTheDocument()
     expect(screen.queryByText(/\d\s*₫/)).not.toBeInTheDocument()
   })

@@ -1276,7 +1276,7 @@ export type CmsOpsQueues = z.infer<typeof cmsOpsQueuesSchema>
 
 export const cmsCostLineSchema = z.object({
   key: z.string(),
-  /** Minor units. */
+  /** Minor units (USD cents). */
   today: z.number().int(),
   monthToDate: z.number().int(),
   currency: z.string(),
@@ -1284,8 +1284,37 @@ export const cmsCostLineSchema = z.object({
   basis: z.enum(['billed', 'estimated']),
   /** 0–1, present only where the provider reports a quota. */
   quotaUsedRatio: z.number().nullish(),
+  /**
+   * GoGo-BE#335 — the exact figures behind the rounded cents, and the measured
+   * quantity the money is derived from. Optional so a server that has not
+   * shipped #335 still parses.
+   */
+  todayMicros: z.number().int().optional(),
+  monthToDateMicros: z.number().int().optional(),
+  billableUnitsToday: z.number().int().optional(),
+  billableUnitsMonthToDate: z.number().int().optional(),
 })
 export type CmsCostLine = z.infer<typeof cmsCostLineSchema>
+
+/**
+ * GoGo-BE#335 — why a number is missing. Two absences, never merged.
+ *
+ * `not_instrumented` — nobody counted it, so there are no units to price. The
+ * Maps SDK renders on the handset and the backend never sees a map load.
+ * `price_unknown` — the units are exact and the list price is unverified;
+ * Routes bills per matrix element.
+ *
+ * Both render as "chưa đo" on screen, but an operator chasing one does
+ * something completely different from an operator chasing the other, so the
+ * console shows which.
+ */
+export const opsCostGapSchema = z.object({
+  key: z.string(),
+  provider: z.string().nullable(),
+  kind: z.enum(['not_instrumented', 'price_unknown']),
+  detail: z.string(),
+})
+export type OpsCostGap = z.infer<typeof opsCostGapSchema>
 
 /**
  * BE-CMS-P2 (GoGo-BE#315) — the monitoring view.
@@ -1323,14 +1352,42 @@ export const opsEnvelopeSchema = z.object({
   }),
 })
 
+/**
+ * GoGo-BE#335 gave this surface a price list, so `kind` can now be
+ * `'estimated'` and the money fields carry numbers.
+ *
+ * Both kinds stay in the union: a console deployed ahead of the backend must
+ * keep parsing `units_only`, and that tolerance is also the rollback path.
+ * Everything money-shaped is optional for the same reason.
+ *
+ * `estimatedCost` is integer USD **minor units**, which is what `formatMoney`
+ * takes. `null` is "chưa đo" and must never be rendered as `$0.00`.
+ */
 export const opsCostModelSchema = z.object({
-  kind: z.literal('units_only'),
-  /** Always null today: units are counted, money is not. */
+  kind: z.enum(['units_only', 'estimated']),
   estimatedCost: z.number().nullable(),
+  estimatedCostMicros: z.number().nullable().optional(),
   currency: z.string().nullable(),
   basis: z.string(),
+  confidence: z.string().nullish(),
+  pricingVersion: z.string().nullish(),
+  /**
+   * False on the windowed surface: a free cap is monthly and the window is
+   * 1h–30d. Month-to-date spend with the cap applied lives on the dashboard's
+   * cost card, from `/cms/ops/costs`.
+   */
+  freeCapApplied: z.boolean().optional(),
+  /**
+   * False when an operation in view has no verified price. The amount shown is
+   * then a floor, not a total, and the screen has to say so — `unpricedOperations`
+   * names them.
+   */
+  costComplete: z.boolean().optional(),
+  unpricedOperations: z.array(z.string()).default([]),
+  measurementGaps: z.array(opsCostGapSchema).default([]),
   note: z.string(),
 })
+export type OpsCostModel = z.infer<typeof opsCostModelSchema>
 
 export const opsLatencySemanticsSchema = z.object({
   unit: z.literal('seconds'),
@@ -1363,10 +1420,20 @@ export const opsTotalsSchema = z.object({
   latency: opsPercentilesSchema,
   rejectedLatency: z.object({ p50: z.number().nullable(), p95: z.number().nullable() }),
   billableUnits: z.number(),
+  estimatedCost: z.number().nullable().optional(),
+  estimatedCostMicros: z.number().nullable().optional(),
+  costComplete: z.boolean().optional(),
+  unpricedOperations: z.array(z.string()).default([]),
 })
 
 export const opsProviderSchema = z.object({
-  provider: z.enum(['places', 'routes', 'sheets']),
+  /**
+   * `maps_sdk` (GoGo-BE#335) always arrives with `instrumented: false` — the
+   * SDK renders on the handset and the backend sees no map load. It is a row
+   * rather than an omission so the table can name it: an absent row and a zero
+   * row read the same to anyone who is not holding the spec.
+   */
+  provider: z.enum(['places', 'routes', 'sheets', 'maps_sdk']),
   /** False = no metric exists for it. Render "chưa đo", never "0 lượt gọi". */
   instrumented: z.boolean(),
   calls: z.number(),
@@ -1377,12 +1444,17 @@ export const opsProviderSchema = z.object({
   latency: opsPercentilesSchema,
   /** Null where the provider has no SKU counter — Sheets is quota-limited. */
   billableUnits: z.number().nullable(),
+  /** USD minor units at list price. Null = no verified price here, not free. */
+  estimatedCost: z.number().nullable().optional(),
+  estimatedCostMicros: z.number().nullable().optional(),
+  costComplete: z.boolean().optional(),
+  unpricedOperations: z.array(z.string()).default([]),
 })
 export type OpsProviderRow = z.infer<typeof opsProviderSchema>
 
 export const opsOperationSchema = opsProviderSchema
   .omit({ provider: true, instrumented: true })
-  .extend({ method: z.string() })
+  .extend({ method: z.string(), googleSku: z.string().nullish() })
 export type OpsOperationRow = z.infer<typeof opsOperationSchema>
 
 export const opsSummarySchema = opsEnvelopeSchema.extend({
@@ -1412,8 +1484,23 @@ export type OpsProviderDetail = z.infer<typeof opsProviderDetailSchema>
 
 export const cmsOpsCostsSchema = z.object({
   providers: z.array(cmsCostLineSchema).default([]),
-  /** False = no cost source connected. An empty list must not render as zero. */
+  /**
+   * False = no durable cost source connected. An empty list must not render as
+   * zero.
+   *
+   * True since GoGo-BE#335, where a per-day ledger replaced the in-process
+   * counter — so an empty amount from a connected source **is** a measured
+   * zero, and is allowed to render as one. What is genuinely unknown moved to
+   * `gaps` rather than disappearing.
+   */
   sourcesConfigured: z.boolean(),
+  currency: z.string().optional(),
+  pricingVersion: z.string().optional(),
+  basis: z.string().optional(),
+  confidence: z.string().optional(),
+  /** Newest ledger write — how fresh these numbers are. */
+  asOf: z.string().nullish(),
+  gaps: z.array(opsCostGapSchema).default([]),
 })
 export type CmsOpsCosts = z.infer<typeof cmsOpsCostsSchema>
 
