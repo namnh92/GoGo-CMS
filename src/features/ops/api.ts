@@ -1,6 +1,13 @@
 import { apiFetchParsed } from '@/shared/api/client'
 import {
   cmsOpsCostsSchema,
+  opsProviderDetailSchema,
+  opsProvidersSchema,
+  opsSummarySchema,
+  type OpsProviderDetail,
+  type OpsProviders,
+  type OpsSummary,
+  type OpsWindow,
   cmsOpsHealthSchema,
   cmsOpsQueuesSchema,
   opsKpisSchema,
@@ -57,4 +64,36 @@ export function fetchOpsQueues(signal?: AbortSignal): Promise<CmsOpsQueues> {
  */
 export function fetchOpsCosts(signal?: AbortSignal): Promise<CmsOpsCosts> {
   return apiFetchParsed(cmsOpsCostsSchema, '/cms/ops/costs', { signal })
+}
+
+/**
+ * BE-CMS-P2 (GoGo-BE#315) — provider monitoring, from the time-series store.
+ *
+ * The console holds no Grafana credential and no metrics token, and sends no
+ * PromQL: `window` is one of four values and GoGo-BE owns every query. It also
+ * never calls `/v1/metrics` — that endpoint is a machine surface behind a
+ * shared token with no per-user authorization, and a browser is the wrong
+ * place for it.
+ *
+ * `backend.status` is part of the payload rather than the HTTP status on
+ * purpose: monitoring being down is a fact about monitoring, and a 5xx here
+ * would render as "the CMS is broken".
+ */
+export function fetchOpsSummary(window: OpsWindow, signal?: AbortSignal): Promise<OpsSummary> {
+  return apiFetchParsed(opsSummarySchema, '/cms/ops/summary', { query: { window }, signal })
+}
+
+export function fetchOpsProviders(window: OpsWindow, signal?: AbortSignal): Promise<OpsProviders> {
+  return apiFetchParsed(opsProvidersSchema, '/cms/ops/providers', { query: { window }, signal })
+}
+
+export function fetchOpsProvider(
+  provider: 'places' | 'routes' | 'sheets',
+  window: OpsWindow,
+  signal?: AbortSignal,
+): Promise<OpsProviderDetail> {
+  return apiFetchParsed(opsProviderDetailSchema, `/cms/ops/providers/${provider}`, {
+    query: { window },
+    signal,
+  })
 }

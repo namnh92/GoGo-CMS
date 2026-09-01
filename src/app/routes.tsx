@@ -8,6 +8,7 @@ import { LoadingState } from '@/shared/ui/State'
 // under `src/features/<feature>/` and add nothing else.
 const LoginScreen = lazy(() => import('@/features/auth/login.view'))
 const DashboardScreen = lazy(() => import('@/features/ops/dashboard.view'))
+const MonitoringScreen = lazy(() => import('@/features/ops/monitoring.view'))
 const PlaceListScreen = lazy(() => import('@/features/places/placeList.view'))
 const PlaceEditorScreen = lazy(() => import('@/features/places/placeEditor.view'))
 const ImportListScreen = lazy(() => import('@/features/imports/importList.view'))
@@ -83,6 +84,7 @@ export const router = createBrowserRouter([
         element: <Lazy />,
         children: [
           { index: true, element: <DashboardScreen /> },
+          { path: 'monitoring', element: <MonitoringScreen /> },
           { path: 'places', element: <PlaceListScreen /> },
           { path: 'places/:id', element: <PlaceEditorScreen /> },
           { path: 'imports', element: <ImportListScreen /> },

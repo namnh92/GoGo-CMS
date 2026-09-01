@@ -32,6 +32,8 @@ import {
   opsHealth,
   opsQueues,
   opsCosts,
+  opsProviders,
+  opsSummary,
   cmsAppUsers,
   cmsRooms,
   cmsPlans,
@@ -1743,6 +1745,22 @@ export const handlers = [
   http.get(`${BASE}/cms/ops/health`, () => HttpResponse.json(opsHealth)),
   http.get(`${BASE}/cms/ops/queues`, () => HttpResponse.json(opsQueues)),
   http.get(`${BASE}/cms/ops/costs`, () => HttpResponse.json(opsCosts)),
+  // GoGo-BE#315. The window is echoed back so a test can prove the selector
+  // actually re-queries rather than only repainting.
+  http.get(`${BASE}/cms/ops/summary`, ({ request }) => {
+    const window = new URL(request.url).searchParams.get('window') ?? '24h'
+    const truncated = window === '30d'
+    return HttpResponse.json({
+      ...opsSummary,
+      window,
+      effectiveWindow: truncated ? '14d' : window,
+      truncated,
+    })
+  }),
+  http.get(`${BASE}/cms/ops/providers`, ({ request }) => {
+    const window = new URL(request.url).searchParams.get('window') ?? '24h'
+    return HttpResponse.json({ ...opsProviders, window, effectiveWindow: window })
+  }),
 
   http.get(`${BASE}/cms/safety-rules`, ({ request }) => {
     const denied = requireOpsAdmin()
