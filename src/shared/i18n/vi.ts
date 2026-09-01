@@ -1600,6 +1600,11 @@ export const vi = {
   'dashboard.costsLive.billed': 'hoá đơn',
   'dashboard.costsLive.estimated': 'ước tính',
   'dashboard.costsLive.mtd': 'tháng này',
+  'dashboard.costsLive.units': '{units} đơn vị',
+  'dashboard.costsLive.asOf': 'Số liệu tới {at} · bảng giá {version}',
+  'dashboard.costsLive.gapsTitle': 'Chưa quy ra tiền được',
+  'dashboard.costsLive.gap.not_instrumented': 'Chưa đo',
+  'dashboard.costsLive.gap.price_unknown': 'Chưa có giá',
 
   'auth.change.title': 'Đặt mật khẩu mới',
   'auth.change.subtitle': 'Mật khẩu tạm phải được thay trước khi vào console.',
@@ -1922,7 +1927,17 @@ export const vi = {
   'monitoring.kpi.p95': 'Độ trễ p95',
   'monitoring.kpi.p95Sub': 'không tính status {statuses}',
   'monitoring.kpi.units': 'Đơn vị tính phí',
-  'monitoring.kpi.unitsSub': 'Số đơn vị SKU, không phải tiền — chưa nối API billing nào.',
+  'monitoring.kpi.unitsSub': 'Số đơn vị SKU đo được. Tiền ở thẻ bên cạnh.',
+  'monitoring.kpi.cost': 'Chi phí ước tính',
+  'monitoring.kpi.costSub': 'Giá niêm yết, chưa trừ hạn mức miễn phí · bảng giá {version}',
+  'monitoring.kpi.costPartial': 'Sàn, không phải tổng — {operations} chưa có giá',
+  'monitoring.cost.estimateOnly':
+    'Đây là ước tính từ số đếm của chính ta nhân bảng giá niêm yết Google, không phải hoá đơn.',
+  'monitoring.cost.gapsTitle': 'Chưa quy ra tiền được',
+  'monitoring.cost.gap.not_instrumented': 'Chưa đo',
+  'monitoring.cost.gap.price_unknown': 'Chưa có giá',
+  'monitoring.cost.gapsNote':
+    'Hai loại thiếu khác nhau: “Chưa đo” là không đếm được đơn vị nào — thêm giá cũng vô ích; “Chưa có giá” là đơn vị đếm chính xác nhưng chưa xác minh giá niêm yết. Không cái nào được hiển thị là 0.',
   'monitoring.reliability.title': 'Độ tin cậy',
   'monitoring.reliability.failures': 'Lỗi provider',
   'monitoring.reliability.failuresHint':
@@ -1952,10 +1967,12 @@ export const vi = {
   'monitoring.providers.p50': 'p50',
   'monitoring.providers.p95': 'p95',
   'monitoring.providers.units': 'Đơn vị phí',
+  'monitoring.providers.cost': 'Ước tính',
   'monitoring.providers.notInstrumented': 'Chưa đo — chưa có metric nào cho provider này',
   'monitoring.provider.places': 'Google Places',
   'monitoring.provider.routes': 'Google Routes',
   'monitoring.provider.sheets': 'Google Sheets',
+  'monitoring.provider.maps_sdk': 'Google Maps SDK (app)',
 } as const
 
 export type MessageKey = keyof typeof vi

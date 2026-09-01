@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useI18n, useT } from '@/shared/i18n/i18n'
 import { queryKeys } from '@/shared/api/queryKeys'
-import { formatDateTime, formatNumber, formatPercent } from '@/shared/format'
+import { formatDateTime, formatMoney, formatNumber, formatPercent } from '@/shared/format'
 import { PageBody, PageHeader } from '@/app/PageHeader'
 import { Card, CardBody, CardHeader, KpiCard } from '@/shared/ui/Card'
 import { Badge } from '@/shared/ui/Badge'
@@ -10,7 +10,14 @@ import { AsyncBoundary, PermissionDeniedState } from '@/shared/ui/State'
 import { Sparkline } from '@/shared/ui/Sparkline'
 import { cn } from '@/shared/ui/cn'
 import { useSession } from '@/shared/auth/session'
-import type { OpsProviderRow, OpsSummary, OpsWindow, OpsProviders } from '@/shared/api/contracts'
+import type {
+  OpsCostGap,
+  OpsCostModel,
+  OpsProviderRow,
+  OpsProviders,
+  OpsSummary,
+  OpsWindow,
+} from '@/shared/api/contracts'
 import { fetchOpsProviders, fetchOpsSummary } from './api'
 import { styles } from './monitoring.style'
 
@@ -188,6 +195,19 @@ function Seconds({ value }: { value: number | null }) {
   return <>{`${Math.round(value * 1000)} ms`}</>
 }
 
+/**
+ * Money, or "chưa đo".
+ *
+ * `null` means no verified price, or nothing measured to price — both are
+ * absences, and neither may render as `$0.00`. A measured zero is a number and
+ * renders as one.
+ */
+function Money({ value, currency }: { value: number | null | undefined; currency: string | null }) {
+  const { locale } = useI18n()
+  if (value === null || value === undefined || !currency) return <Unmeasured />
+  return <>{formatMoney({ amount: value, currency }, locale)}</>
+}
+
 function Rate({ value }: { value: number | null }) {
   const { locale } = useI18n()
   if (value === null) return <Unmeasured />
@@ -250,12 +270,11 @@ function Overview({ data }: { data: OpsSummary }) {
         <KpiCard
           label={t('monitoring.kpi.units')}
           value={formatNumber(totals.billableUnits, locale)}
-          // Units, not money. The API returns `estimatedCost: null` because no
-          // unit price exists in the system, so the console must not print a
-          // currency symbol next to a count.
           sub={t('monitoring.kpi.unitsSub')}
         />
       </div>
+
+      <CostOverview costModel={data.costModel} />
 
       <Card>
         <CardHeader title={t('monitoring.reliability.title')} />
@@ -294,6 +313,73 @@ function Overview({ data }: { data: OpsSummary }) {
         </CardBody>
       </Card>
     </>
+  )
+}
+
+/**
+ * The money, and everything the money leaves out.
+ *
+ * GoGo-BE#335 gave this screen a price list, and the whole risk of doing that
+ * is a plausible-looking total. Three things guard against it, in view rather
+ * than in a comment:
+ *
+ * - the amount is labelled as a list-price estimate with no free tier removed,
+ *   and carries the price-list version it came from;
+ * - when an operation in view has no verified price, the figure is announced
+ *   as a floor and the operation is named;
+ * - the two kinds of gap — nothing counted, and nothing priced — get their own
+ *   panel with their own words, because they are fixed by different people.
+ */
+function CostOverview({ costModel }: { costModel: OpsCostModel }) {
+  const t = useT()
+  const partial = costModel.costComplete === false && costModel.unpricedOperations.length > 0
+  return (
+    <>
+      <div className={styles.kpiGrid}>
+        <KpiCard
+          label={t('monitoring.kpi.cost')}
+          value={<Money value={costModel.estimatedCost} currency={costModel.currency} />}
+          tone={partial ? 'negative' : 'neutral'}
+          sub={
+            partial
+              ? t('monitoring.kpi.costPartial', {
+                  operations: costModel.unpricedOperations.join(', '),
+                })
+              : t('monitoring.kpi.costSub', { version: costModel.pricingVersion ?? '—' })
+          }
+        />
+      </div>
+      <p className={styles.note}>
+        <span aria-hidden="true">ℹ</span>
+        {t('monitoring.cost.estimateOnly')} {costModel.note}
+      </p>
+      <CostGaps gaps={costModel.measurementGaps} />
+    </>
+  )
+}
+
+function CostGaps({ gaps }: { gaps: OpsCostGap[] }) {
+  const t = useT()
+  if (gaps.length === 0) return null
+  return (
+    <Card>
+      <CardHeader title={t('monitoring.cost.gapsTitle')} />
+      <CardBody>
+        <div className={styles.gapList}>
+          {gaps.map((gap) => (
+            <div key={`${gap.kind}:${gap.key}`} className={styles.gapRow}>
+              {/* Colour alone never carries this: the badge says which kind. */}
+              <Badge tone={gap.kind === 'not_instrumented' ? 'neutral' : 'amber'}>
+                {t(`monitoring.cost.gap.${gap.kind}` as 'monitoring.cost.gap.not_instrumented')}
+              </Badge>
+              <span className={styles.gapKey}>{gap.key}</span>
+              <span className={styles.gapDetail}>{gap.detail}</span>
+            </div>
+          ))}
+        </div>
+        <p className={styles.note}>{t('monitoring.cost.gapsNote')}</p>
+      </CardBody>
+    </Card>
   )
 }
 
@@ -376,11 +462,12 @@ function ProviderTable({ data }: { data: OpsProviders }) {
             <th className={styles.thNum}>{t('monitoring.providers.p50')}</th>
             <th className={styles.thNum}>{t('monitoring.providers.p95')}</th>
             <th className={styles.thNum}>{t('monitoring.providers.units')}</th>
+            <th className={styles.thNum}>{t('monitoring.providers.cost')}</th>
           </tr>
         </thead>
         <tbody>
           {data.providers.map((p) => (
-            <ProviderRow key={p.provider} row={p} />
+            <ProviderRow key={p.provider} row={p} currency={data.costModel.currency} />
           ))}
         </tbody>
       </table>
@@ -389,7 +476,7 @@ function ProviderTable({ data }: { data: OpsProviders }) {
   )
 }
 
-function ProviderRow({ row }: { row: OpsProviderRow }) {
+function ProviderRow({ row, currency }: { row: OpsProviderRow; currency: string | null }) {
   const t = useT()
   const { locale } = useI18n()
   const name = t(`monitoring.provider.${row.provider}` as 'monitoring.provider.places')
@@ -405,7 +492,7 @@ function ProviderRow({ row }: { row: OpsProviderRow }) {
           are different claims, and printing the second where the first is true
           is how a dashboard becomes the last place to learn something.
         */}
-        <td className={styles.td} colSpan={7}>
+        <td className={styles.td} colSpan={8}>
           <Badge tone="neutral">{t('monitoring.providers.notInstrumented')}</Badge>
         </td>
       </tr>
@@ -431,6 +518,14 @@ function ProviderRow({ row }: { row: OpsProviderRow }) {
       </td>
       <td className={styles.tdNum}>
         {row.billableUnits === null ? <Unmeasured /> : formatNumber(row.billableUnits, locale)}
+      </td>
+      <td className={styles.tdNum}>
+        {/*
+          Routes measures its units exactly and has no verified per-element
+          list price, so this cell is "chưa đo" beside a real call count. That
+          combination is the point: the units are a fact and the money is not.
+        */}
+        <Money value={row.estimatedCost} currency={currency} />
       </td>
     </tr>
   )

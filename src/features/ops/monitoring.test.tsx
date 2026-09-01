@@ -85,13 +85,50 @@ describe('provider monitoring (GoGo-BE#315)', () => {
     expect(screen.getByText(opsCostModel.note)).toBeInTheDocument()
   })
 
-  it('never prints a currency next to a unit count', async () => {
+  /**
+   * GoGo-BE#335 gave this screen a price list, so it prints money. The rule it
+   * replaced — never a number nobody measured — did not go away; it moved.
+   */
+  it('prints money as an estimate, and never for something unpriced', async () => {
     signInAs('ops_admin')
-    const { container } = render()
+    render()
     await screen.findByText('512')
-    // `estimatedCost` is null because no unit price exists in the system.
-    expect(container.textContent).not.toMatch(/[₫$€]/)
-    expect(screen.getByText(/không phải tiền/)).toBeInTheDocument()
+    // 10,40 US$ (vi locale) from the fixture's 10_400_000 micros, labelled as
+    // a list-price estimate.
+    // Intl puts a non-breaking space before the currency; match on normalised
+    // text rather than pinning U+00A0.
+    // The KPI card and the Places row both carry it, which is the point: one
+    // total and one per-provider figure, from the same price list.
+    expect(
+      (await screen.findAllByText((_, el) => el?.textContent?.replace(/\s/g, ' ') === '10,40 US$'))
+        .length,
+    ).toBeGreaterThan(0)
+    // The qualification appears under the KPI and again under the provider
+    // table — both places a reader might stop.
+    expect(screen.getAllByText(/chưa trừ hạn mức miễn phí/).length).toBeGreaterThan(0)
+    // Routes is measured and unpriced, so the total is announced as a floor
+    // and the operation is named rather than silently dropped.
+    expect(screen.getByText(/Sàn, không phải tổng/)).toBeInTheDocument()
+  })
+
+  it('separates "nobody counted it" from "nobody priced it"', async () => {
+    signInAs('ops_admin')
+    render()
+    await screen.findByText('512')
+    // Two absences, two words. They are fixed by different people: one needs
+    // client telemetry, the other needs a number in the pricing registry.
+    expect(await screen.findByText('Chưa có giá')).toBeInTheDocument()
+    expect(screen.getAllByText('Chưa đo').length).toBeGreaterThan(0)
+    expect(screen.getByText('google.maps_sdk_ios')).toBeInTheDocument()
+    expect(screen.getByText('google.routeMatrix')).toBeInTheDocument()
+  })
+
+  it('lists the Maps SDK as a provider row rather than leaving it out', async () => {
+    signInAs('ops_admin')
+    render()
+    // An absent row and a zero row read the same to anyone not holding the
+    // spec, so the uninstrumented provider is named and marked.
+    expect(await screen.findByText('Google Maps SDK (app)')).toBeInTheDocument()
   })
 
   it('switching the window re-queries rather than repainting', async () => {

@@ -553,41 +553,77 @@ export default function DashboardScreen() {
                         <p className={styles.note}>{t('dashboard.satelliteError')}</p>
                       ) : costs.data && !costs.data.sourcesConfigured ? (
                         /* "No source connected" is not a zero — no currency
-                           symbol may appear on this branch. */
+                           symbol may appear on this branch. Since GoGo-BE#335
+                           this means the durable ledger is switched off, which
+                           is the rollback path for that PR. */
                         <p className={styles.costEmpty}>{t('dashboard.costsLive.noSource')}</p>
-                      ) : (costs.data?.providers.length ?? 0) === 0 ? (
+                      ) : (costs.data?.providers.length ?? 0) === 0 &&
+                        (costs.data?.gaps.length ?? 0) === 0 ? (
                         <p className={styles.costEmpty}>{t('dashboard.costsLive.empty')}</p>
                       ) : (
-                        costs.data?.providers.map((line) => (
-                          <div key={line.key} className={styles.costRow}>
-                            <span className={styles.costKey}>{line.key}</span>
-                            <span className={styles.costBasis}>
-                              <Badge tone={line.basis === 'billed' ? 'mint' : 'neutral'}>
-                                {t(`dashboard.costsLive.${line.basis}` as const)}
-                              </Badge>
-                            </span>
-                            <span className={styles.costQuota}>
-                              {line.quotaUsedRatio != null ? (
-                                <span className={styles.trendBar}>
-                                  <span
-                                    className={styles.trendFill}
-                                    style={{
-                                      width: `${Math.min(line.quotaUsedRatio * 100, 100)}%`,
-                                    }}
-                                  />
-                                </span>
-                              ) : null}
-                            </span>
-                            <span className={styles.costValue}>
-                              {formatMoney({ amount: line.today, currency: line.currency }, locale)}{' '}
-                              · {t('dashboard.costsLive.mtd')}{' '}
-                              {formatMoney(
-                                { amount: line.monthToDate, currency: line.currency },
-                                locale,
-                              )}
-                            </span>
-                          </div>
-                        ))
+                        <>
+                          {costs.data?.providers.map((line) => (
+                            <div key={line.key} className={styles.costRow}>
+                              <span className={styles.costKey}>{line.key}</span>
+                              <span className={styles.costBasis}>
+                                <Badge tone={line.basis === 'billed' ? 'mint' : 'neutral'}>
+                                  {t(`dashboard.costsLive.${line.basis}` as const)}
+                                </Badge>
+                              </span>
+                              <span className={styles.costQuota}>
+                                {/* The measured quantity behind the estimate.
+                                    Units are a fact; the money over them is
+                                    not, and showing both keeps that visible. */}
+                                {line.billableUnitsMonthToDate !== undefined
+                                  ? t('dashboard.costsLive.units', {
+                                      units: formatNumber(line.billableUnitsMonthToDate, locale),
+                                    })
+                                  : null}
+                              </span>
+                              <span className={styles.costValue}>
+                                {formatMoney(
+                                  { amount: line.today, currency: line.currency },
+                                  locale,
+                                )}{' '}
+                                · {t('dashboard.costsLive.mtd')}{' '}
+                                {formatMoney(
+                                  { amount: line.monthToDate, currency: line.currency },
+                                  locale,
+                                )}
+                              </span>
+                            </div>
+                          ))}
+                          {/*
+                            What the amounts above leave out, named rather than
+                            omitted. A provider missing from a list that says
+                            "sources connected" reads as zero spend, which is
+                            the one claim this card must never make.
+                          */}
+                          {costs.data?.gaps.map((gap) => (
+                            <div key={`${gap.kind}:${gap.key}`} className={styles.costRow}>
+                              <span className={styles.costKey}>{gap.key}</span>
+                              <span className={styles.costBasis}>
+                                <Badge tone={gap.kind === 'price_unknown' ? 'amber' : 'neutral'}>
+                                  {t(
+                                    `dashboard.costsLive.gap.${gap.kind}` as 'dashboard.costsLive.gap.price_unknown',
+                                  )}
+                                </Badge>
+                              </span>
+                              <span className={styles.costQuota} />
+                              <span className={styles.costValue}>
+                                {t('dashboard.costsLive.gapsTitle')}
+                              </span>
+                            </div>
+                          ))}
+                          {costs.data?.asOf ? (
+                            <p className={styles.note}>
+                              {t('dashboard.costsLive.asOf', {
+                                at: formatDateTime(costs.data.asOf, locale),
+                                version: costs.data.pricingVersion ?? '—',
+                              })}
+                            </p>
+                          ) : null}
+                        </>
                       )}
                     </CardBody>
                   </Card>

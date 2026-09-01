@@ -24,4 +24,9 @@ export const styles = {
   trendLabel: 'text-xs font-semibold text-text-subtle',
   trendValue: 'mt-0.5 font-display text-xl font-extrabold tabular-nums text-text',
   scroller: 'overflow-x-auto',
+  gapList: 'flex flex-col gap-2',
+  gapRow:
+    'flex flex-wrap items-baseline gap-2 rounded-compact border border-line bg-surface-muted px-3 py-2',
+  gapKey: 'font-mono text-[12px] text-text',
+  gapDetail: 'text-[11px] leading-relaxed text-text-muted',
 } as const
