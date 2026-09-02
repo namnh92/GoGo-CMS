@@ -132,6 +132,13 @@ export type PlaceHourInput = Pick<
   'dayOfWeek' | 'openMinute' | 'closeMinute' | 'isOvernight'
 >
 
+const placeHourInputSchema = z.object({
+  dayOfWeek: z.number().int(),
+  openMinute: z.number().int(),
+  closeMinute: z.number().int(),
+  isOvernight: z.boolean(),
+})
+
 /** Provider facts must be shown with their attribution (FR-INGEST-014). */
 export const placeSourceSchema = z.object({
   id: z.string(),
@@ -140,8 +147,54 @@ export const placeSourceSchema = z.object({
   url: z.string().nullish(),
   attribution: z.string().nullish(),
   fetchedAt: z.string().nullish(),
+  // GoGo-BE#341 — what GoGo's own liveness refresh recorded about this
+  // identity. GoGo metadata, not provider content; null on a legacy row.
+  sourceStatus: z.string().nullish(),
+  refreshAfter: z.string().nullish(),
+  lastRefreshErrorCode: z.string().nullish(),
+  movedToExternalId: z.string().nullish(),
+  fetchTier: z.string().nullish(),
 })
 export type PlaceSource = z.infer<typeof placeSourceSchema>
+
+/**
+ * `CmsProviderPreview` (GoGo-BE#341) — one live Google answer, rendered beside
+ * the stored place and then discarded. `ephemeral` is literally `true` in the
+ * contract: the server keeps nothing, and the dialog says so.
+ */
+export const providerPreviewTierSchema = z.enum(['core', 'quality'])
+export type ProviderPreviewTier = z.infer<typeof providerPreviewTierSchema>
+
+export const cmsProviderPreviewSchema = z.object({
+  outcome: z.enum(['found', 'not_found', 'invalid_id']),
+  tier: z.enum(['core', 'quality', 'detail']),
+  requestedGooglePlaceId: z.string(),
+  fetchedAt: z.string(),
+  attribution: z.string(),
+  ephemeral: z.literal(true),
+  provider: z
+    .object({
+      googlePlaceId: z.string(),
+      moved: z.boolean(),
+      name: z.string(),
+      addressText: z.string(),
+      location: z.object({ lat: z.number(), lng: z.number() }),
+      businessStatus: z.string(),
+      primaryType: z.string().nullable(),
+      types: z.array(z.string()),
+      googleMapsUri: z.string().nullable(),
+      quality: z
+        .object({
+          rating: z.number().nullable(),
+          ratingCount: z.number().int(),
+          hours: z.array(placeHourInputSchema),
+          priceLevel: z.number().int().nullable(),
+        })
+        .nullable(),
+    })
+    .nullable(),
+})
+export type CmsProviderPreview = z.infer<typeof cmsProviderPreviewSchema>
 
 /**
  * Media is a storage key plus its moderation state — not a display URL. The

@@ -21,15 +21,16 @@ import { PageBody, PageHeader } from '@/app/PageHeader'
 import { Card, CardBody, CardHeader } from '@/shared/ui/Card'
 import { Button } from '@/shared/ui/Button'
 import { Select, TextArea, TextInput, Toggle } from '@/shared/ui/Field'
-import { Badge } from '@/shared/ui/Badge'
+import { Badge, StatusBadge } from '@/shared/ui/Badge'
 import { Drawer, ConfirmDialog } from '@/shared/ui/Overlay'
 import { AsyncBoundary, PermissionDeniedState, useErrorMessage } from '@/shared/ui/State'
 import { AuditTrail } from '@/shared/ui/AuditTrail'
 import { useToast } from '@/shared/ui/Toast'
 import { CloseIcon, PlusIcon, ShieldOffIcon } from '@/shared/ui/icons'
 import { TakedownDialog } from '@/features/emergency/takedownDialog.view'
+import { ProviderPreviewDialog } from './providerPreview.view'
 import { fetchTaxonomies } from '@/features/taxonomy/api'
-import type { PlaceHourInput, PlaceStatus, PriceUnit } from '@/shared/api/contracts'
+import type { PlaceHourInput, PlaceSource, PlaceStatus, PriceUnit } from '@/shared/api/contracts'
 import {
   addPlacePrice,
   fetchPlace,
@@ -39,6 +40,7 @@ import {
   transitionPlace,
   updatePlace,
   verifyFreshness,
+  requestProviderRefresh,
 } from './api'
 import { PLACE_STATUSES } from './status'
 import { styles } from './placeEditor.style'
@@ -72,6 +74,34 @@ const PRICE_UNITS: PriceUnit[] = ['per_person', 'per_item', 'per_hour', 'per_nig
  */
 type HourDraft = PlaceHourInput & { source?: string; verifiedAt?: string | null }
 
+/** Tone + glyph per recorded liveness state — colour is never the only signal. */
+function sourceStatusTone(status: string): 'mint' | 'amber' | 'danger' | 'neutral' {
+  switch (status) {
+    case 'active':
+      return 'mint'
+    case 'moved':
+    case 'temporarily_closed':
+      return 'amber'
+    case 'closed':
+      return 'danger'
+    default:
+      return 'neutral'
+  }
+}
+function sourceStatusShape(status: string): 'check' | 'alert' | 'clock' | 'info' {
+  switch (status) {
+    case 'active':
+      return 'check'
+    case 'moved':
+    case 'closed':
+      return 'alert'
+    case 'temporarily_closed':
+      return 'clock'
+    default:
+      return 'info'
+  }
+}
+
 export default function PlaceEditorScreen() {
   const t = useT()
   const { locale } = useI18n()
@@ -87,6 +117,8 @@ export default function PlaceEditorScreen() {
   const canWrite = can('place.write')
   const [auditOpen, setAuditOpen] = useState(false)
   const [takedownOpen, setTakedownOpen] = useState(false)
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const [refreshOpen, setRefreshOpen] = useState(false)
   const [mergeTarget, setMergeTarget] = useState<{ id: string; name: string } | null>(null)
   const [hours, setHours] = useState<HourDraft[]>([])
   const [taxonomyIds, setTaxonomyIds] = useState<string[]>([])
@@ -125,6 +157,11 @@ export default function PlaceEditorScreen() {
   } = form
 
   const place = placeQuery.data
+  // The public contract labels Google provenance `google` (GoGo-BE#334); older
+  // fixtures still say `google_places`. Either is the identity the preview needs.
+  const googleSource: PlaceSource | undefined = place?.sources.find(
+    (source) => source.provider === 'google' || source.provider === 'google_places',
+  )
 
   useEffect(() => {
     if (!place) return
@@ -209,6 +246,18 @@ export default function PlaceEditorScreen() {
     mutationFn: () => verifyFreshness(id),
     onSuccess: () => {
       toast.success(t('placeEditor.verifyFreshness'))
+      invalidate()
+    },
+    onError: (error) => toast.error(describeError(error)),
+  })
+
+  // GoGo-BE#341 — moves the refresh clock only; the worker's next tick does
+  // the (free, ID-only) check and records the outcome on the source row.
+  const refreshRequest = useMutation({
+    mutationFn: () => requestProviderRefresh(id),
+    onSuccess: () => {
+      toast.success(t('placeEditor.refreshRequest.success'))
+      setRefreshOpen(false)
       invalidate()
     },
     onError: (error) => toast.error(describeError(error)),
@@ -753,23 +802,85 @@ export default function PlaceEditorScreen() {
                                   </a>
                                 ) : null}
                               </span>
-                              <span className="shrink-0 text-[11px] tabular-nums text-text-subtle">
-                                {formatRelative(source.fetchedAt, locale)}
+                              <span className="flex shrink-0 flex-col items-end gap-1 text-[11px] tabular-nums text-text-subtle">
+                                <span>{formatRelative(source.fetchedAt, locale)}</span>
+                                {/* GoGo-BE#341: what GoGo's own liveness refresh recorded. */}
+                                {source.sourceStatus ? (
+                                  <StatusBadge
+                                    tone={sourceStatusTone(source.sourceStatus)}
+                                    shape={sourceStatusShape(source.sourceStatus)}
+                                    label={label(
+                                      `sourceStatus.${source.sourceStatus}`,
+                                      source.sourceStatus,
+                                    )}
+                                  />
+                                ) : null}
                               </span>
                             </li>
                           ))}
                         </ul>
                       )}
-                      <Button
-                        className="mt-3"
-                        size="sm"
-                        variant="secondary"
-                        disabled={!can('place.verifyFreshness') || !online}
-                        loading={freshness.isPending}
-                        onClick={() => freshness.mutate()}
-                      >
-                        {t('placeEditor.verifyFreshness')}
-                      </Button>
+                      {googleSource ? (
+                        <dl className={styles.sourceMeta}>
+                          <dt className={styles.sourceMetaKey}>
+                            {t('placeEditor.source.refreshAfter')}
+                          </dt>
+                          <dd className={styles.sourceMetaValue}>
+                            {googleSource.refreshAfter
+                              ? formatRelative(googleSource.refreshAfter, locale)
+                              : t('placeEditor.source.dormant')}
+                          </dd>
+                          {googleSource.lastRefreshErrorCode ? (
+                            <>
+                              <dt className={styles.sourceMetaKey}>
+                                {t('placeEditor.source.lastError')}
+                              </dt>
+                              <dd className={`${styles.sourceMetaValue} font-mono`}>
+                                {googleSource.lastRefreshErrorCode}
+                              </dd>
+                            </>
+                          ) : null}
+                          {googleSource.movedToExternalId ? (
+                            <>
+                              <dt className={styles.sourceMetaKey}>
+                                {t('placeEditor.source.movedTo')}
+                              </dt>
+                              <dd className={`${styles.sourceMetaValue} font-mono`}>
+                                {googleSource.movedToExternalId}
+                              </dd>
+                            </>
+                          ) : null}
+                        </dl>
+                      ) : null}
+                      <div className={styles.sourceActions}>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={!can('place.verifyFreshness') || !online}
+                          loading={freshness.isPending}
+                          onClick={() => freshness.mutate()}
+                        >
+                          {t('placeEditor.verifyFreshness')}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={!can('place.previewProvider') || !online || !googleSource}
+                          title={!googleSource ? t('placeEditor.source.noGoogle') : undefined}
+                          onClick={() => setPreviewOpen(true)}
+                        >
+                          {t('placeEditor.providerPreview.open')}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={!can('place.requestRefresh') || !online || !googleSource}
+                          title={!googleSource ? t('placeEditor.source.noGoogle') : undefined}
+                          onClick={() => setRefreshOpen(true)}
+                        >
+                          {t('placeEditor.refreshRequest.open')}
+                        </Button>
+                      </div>
                     </CardBody>
                   </Card>
                 </div>
@@ -828,6 +939,39 @@ export default function PlaceEditorScreen() {
         resourceLabel={place?.name}
       />
 
+      {place && googleSource ? (
+        <ProviderPreviewDialog
+          open={previewOpen}
+          onClose={() => setPreviewOpen(false)}
+          place={place}
+          source={googleSource}
+        />
+      ) : null}
+      <ConfirmDialog
+        open={refreshOpen}
+        onClose={() => setRefreshOpen(false)}
+        onConfirm={() => refreshRequest.mutate()}
+        title={t('placeEditor.refreshRequest.title')}
+        description={t('placeEditor.refreshRequest.description')}
+        confirmLabel={t('placeEditor.refreshRequest.confirm')}
+        tone="primary"
+        irreversible={false}
+        loading={refreshRequest.isPending}
+        changes={[
+          {
+            label: t('placeEditor.refreshRequest.changeAfter'),
+            from: googleSource?.refreshAfter
+              ? formatRelative(googleSource.refreshAfter, locale)
+              : t('placeEditor.source.dormant'),
+            to: t('placeEditor.refreshRequest.now'),
+          },
+          {
+            label: t('placeEditor.refreshRequest.changePriority'),
+            from: t('placeEditor.refreshRequest.normal'),
+            to: t('placeEditor.refreshRequest.high'),
+          },
+        ]}
+      />
       <ConfirmDialog
         open={mergeTarget !== null}
         onClose={() => setMergeTarget(null)}

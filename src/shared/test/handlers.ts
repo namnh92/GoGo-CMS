@@ -40,6 +40,7 @@ import {
   cmsRoomGuests,
   privacyRequests,
   cmsPlanTemplates,
+  providerPreviewAnswer,
 } from './fixtures'
 
 const BASE = '/v1'
@@ -613,6 +614,34 @@ export const handlers = [
     if (!place) return envelope(404, 'NOT_FOUND', 'place not found')
     place.freshnessCheckedAt = new Date().toISOString()
     return HttpResponse.json(place, { status: 201 })
+  }),
+
+  // GoGo-BE#341 — ephemeral preview: answers, never mutates `db.places`.
+  http.post(`${BASE}/cms/places/:id/provider-preview`, async ({ params, request }) => {
+    const place = db.places.find((item) => item.id === params.id)
+    if (!place) return envelope(404, 'PLACE_NOT_FOUND', 'place not found')
+    const body = (await request.json()) as { tier?: string }
+    if (body.tier !== 'core' && body.tier !== 'quality') {
+      return envelope(400, 'VALIDATION_FAILED', 'tier must be core or quality')
+    }
+    const google = place.sources.find((s) => s.provider === 'google')
+    if (!google) return envelope(409, 'PLACE_NO_PROVIDER_SOURCE', 'no google identity')
+    if (google.externalId === 'ChIJ_chao_ban_cafe') {
+      return HttpResponse.json(providerPreviewAnswer.found(body.tier), { status: 201 })
+    }
+    return HttpResponse.json(providerPreviewAnswer.notFound(body.tier), { status: 201 })
+  }),
+
+  http.post(`${BASE}/cms/places/:id/refresh`, ({ params }) => {
+    const place = db.places.find((item) => item.id === params.id)
+    if (!place) return envelope(404, 'PLACE_NOT_FOUND', 'place not found')
+    const google = place.sources.find((s) => s.provider === 'google')
+    if (!google) return envelope(409, 'PLACE_NO_PROVIDER_SOURCE', 'no google identity')
+    google.refreshAfter = new Date().toISOString()
+    return HttpResponse.json(
+      { requested: true, refreshAfter: google.refreshAfter },
+      { status: 201 },
+    )
   }),
 
   http.post(`${BASE}/cms/places/:id/merge`, async ({ params, request }) => {

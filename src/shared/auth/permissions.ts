@@ -97,6 +97,10 @@ const PERMISSIONS = {
   'place.transition': ['catalog', 'write'],
   'place.merge': ['catalog', 'write'],
   'place.verifyFreshness': ['catalog', 'write'],
+  // GoGo-BE#341 — both sit on the editor-only `cms/places` controller: a
+  // preview spends provider budget, a refresh request moves the refresh clock.
+  'place.previewProvider': ['catalog', 'write'],
+  'place.requestRefresh': ['catalog', 'write'],
 
   // Editorial content — editor and ops both write taxonomy and collections.
   'taxonomy.read': ['content', 'read'],

@@ -1,3 +1,4 @@
+import { z } from 'zod'
 import { apiFetch, apiFetchParsed, newIdempotencyKey } from '@/shared/api/client'
 import {
   auditPageSchema,
@@ -14,6 +15,8 @@ import {
   type PlaceStatus,
   type PriceUnit,
   type StalePlace,
+  cmsProviderPreviewSchema,
+  type ProviderPreviewTier,
 } from '@/shared/api/contracts'
 
 /** Every parameter `GET /cms/places` actually accepts (GoGo-BE#141). */
@@ -165,6 +168,37 @@ export function addPlacePrice(
 
 export function verifyFreshness(id: string) {
   return apiFetch(`/cms/places/${id}/verify-freshness`, {
+    method: 'POST',
+    idempotencyKey: newIdempotencyKey(),
+  })
+}
+
+/**
+ * `cmsPreviewProviderContent` (GoGo-BE#341) — Google's current answer for this
+ * place, at the tier the moderator chose. Rendered, compared, discarded: the
+ * server stores nothing from it, and neither does the console — no query
+ * cache, no local storage, a mutation whose result lives in the open dialog.
+ */
+export function previewProviderContent(id: string, tier: ProviderPreviewTier) {
+  return apiFetchParsed(cmsProviderPreviewSchema, `/cms/places/${id}/provider-preview`, {
+    method: 'POST',
+    body: { tier },
+    idempotencyKey: newIdempotencyKey(),
+  })
+}
+
+/**
+ * `cmsRequestPlaceRefresh` (GoGo-BE#341) — ask the scheduled liveness refresh
+ * to look at this place on its next tick. No provider call; only the place's
+ * refresh clock and priority move.
+ */
+const providerRefreshRequestSchema = z.object({
+  requested: z.literal(true),
+  refreshAfter: z.string(),
+})
+
+export function requestProviderRefresh(id: string) {
+  return apiFetchParsed(providerRefreshRequestSchema, `/cms/places/${id}/refresh`, {
     method: 'POST',
     idempotencyKey: newIdempotencyKey(),
   })

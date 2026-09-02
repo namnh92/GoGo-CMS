@@ -251,11 +251,16 @@ export const places: CmsPlaceDetail[] = [
     sources: [
       {
         id: 'src-1',
-        provider: 'google_places',
+        provider: 'google',
         externalId: 'ChIJ_chao_ban_cafe',
         url: 'https://maps.google.com/?cid=chao-ban',
         attribution: 'Dữ liệu © Google',
         fetchedAt: iso(60 * 48),
+        sourceStatus: 'active',
+        refreshAfter: iso(-60 * 24 * 12),
+        lastRefreshErrorCode: null,
+        movedToExternalId: null,
+        fetchTier: 'quality',
       },
       {
         id: 'src-2',
@@ -296,7 +301,7 @@ export const places: CmsPlaceDetail[] = [
     sources: [
       {
         id: 'src-3',
-        provider: 'google_places',
+        provider: 'google',
         externalId: 'ChIJ_pho_bat_dan',
         url: 'https://maps.google.com/?cid=pho-bat-dan',
         attribution: 'Dữ liệu © Google',
@@ -2541,4 +2546,49 @@ export const opsProviders = {
   ],
   costModel: opsCostModel,
   latencySemantics: opsLatencySemantics,
+}
+
+/**
+ * GoGo-BE#341 — what the mock answers for `POST /cms/places/:id/provider-preview`.
+ * Invented, like everything here; the name deliberately differs from the stored
+ * one so the comparison has something to show.
+ */
+export const providerPreviewAnswer = {
+  found: (tier: 'core' | 'quality') => ({
+    outcome: 'found' as const,
+    tier,
+    requestedGooglePlaceId: 'ChIJ_chao_ban_cafe',
+    fetchedAt: iso(0),
+    attribution: 'Google Maps',
+    ephemeral: true as const,
+    provider: {
+      googlePlaceId: 'ChIJ_chao_ban_cafe',
+      moved: false,
+      name: 'Chào Bạn Cafe & Space (Google)',
+      addressText: '126 Nguyễn Thị Minh Khai, Phường 6, Quận 3',
+      location: { lat: 10.7769, lng: 106.6953 },
+      businessStatus: 'OPERATIONAL',
+      primaryType: 'cafe',
+      types: ['cafe', 'food'],
+      googleMapsUri: 'https://maps.google.com/?cid=chao-ban',
+      quality:
+        tier === 'quality'
+          ? {
+              rating: 4.5,
+              ratingCount: 1320,
+              hours: [{ dayOfWeek: 1, openMinute: 480, closeMinute: 1320, isOvernight: false }],
+              priceLevel: 2,
+            }
+          : null,
+    },
+  }),
+  notFound: (tier: 'core' | 'quality') => ({
+    outcome: 'not_found' as const,
+    tier,
+    requestedGooglePlaceId: 'ChIJ_pho_bat_dan',
+    fetchedAt: iso(0),
+    attribution: 'Google Maps',
+    ephemeral: true as const,
+    provider: null,
+  }),
 }
