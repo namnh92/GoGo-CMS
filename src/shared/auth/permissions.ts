@@ -136,6 +136,11 @@ const PERMISSIONS = {
   'flag.manage': ['ops', 'write'],
   'experiment.read': ['ops', 'read'],
   'experiment.manage': ['ops', 'write'],
+  // Cost Center (GoGo-BE#381/#382) — `/cms/ops/costs*` on `CmsOpsController`,
+  // `ops_admin` in both directions like the rest of /cms/ops/*. Manual cost
+  // items are the one thing here a person writes.
+  'cost.read': ['ops', 'read'],
+  'cost.manageManualItems': ['ops', 'write'],
 
   // Trust & Safety — its own controller, `ops_admin` in both directions. A
   // rule here can suspend an account with no human in the loop, which is

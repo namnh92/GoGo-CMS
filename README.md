@@ -247,6 +247,7 @@ Backend cho toàn bộ nhóm này **đã xong và đang chạy** (GoGo-BE `devel
 | `/audit`          | Nhật ký kiểm toán: lọc, rà soát gỡ khẩn cấp, diff before/after                         | CMS-014                         |
 | `/search-quality` | Chất lượng tìm kiếm: tỷ lệ zero-result kèm mẫu số, truy vấn hỏng                       | CMS-015                         |
 | `/settings`       | Cờ tính năng, trọng số ranking (bốn mắt + rollback), thử nghiệm A/B, đánh giá offline  | CMS-008, CMS-013                |
+| `/costs/manual`   | Chi phí thủ công: phí cố định nhập tay → dòng MANUAL trong Cost Center, có audit       | COST-CMS-010                    |
 
 ## Trạng thái
 

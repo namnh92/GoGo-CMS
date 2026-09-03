@@ -1533,6 +1533,7 @@ export const vi = {
   'roles.domain.user': 'Người dùng app',
   'roles.domain.privacy': 'Yêu cầu riêng tư',
   'roles.domain.admin': 'Tài khoản CMS',
+  'roles.domain.cost': 'Cost Center',
 
   'nav.appControl': 'Điều khiển ứng dụng',
 
@@ -1973,6 +1974,66 @@ export const vi = {
   'monitoring.provider.routes': 'Google Routes',
   'monitoring.provider.sheets': 'Google Sheets',
   'monitoring.provider.maps_sdk': 'Google Maps SDK (app)',
+
+  // COST-CMS-010 (GoGo-BE#382) — chi phí thủ công
+  'nav.manualCosts': 'Chi phí thủ công',
+  'manualCosts.title': 'Chi phí thủ công',
+  'manualCosts.breadcrumb': 'Chi phí thủ công',
+  'manualCosts.hint':
+    'Phí cố định nhập tay — Apple Developer, tên miền, VPS, Play Console. Mỗi khoản được rải thành dòng chi phí MANUAL theo ngày (đến hôm nay) để Cost Center, ngân sách và dự báo tính đủ; delta của test không tính khoản này.',
+  'manualCosts.denied': 'Chỉ ops_admin trở lên xem được chi phí.',
+  'manualCosts.new': 'Thêm khoản chi',
+  'manualCosts.edit': 'Sửa khoản chi',
+  'manualCosts.create': 'Thêm',
+  'manualCosts.delete': 'Xoá khoản chi',
+  'manualCosts.empty': 'Chưa có khoản chi thủ công nào',
+  'manualCosts.emptyHint':
+    'Thêm phí cố định (Apple Developer, tên miền, VPS…) để Cost Center tính đủ chi phí.',
+  'manualCosts.eligibleHint':
+    'Chỉ dịch vụ khai báo MANUAL_COST trong registry mới nhận chi phí thủ công; danh sách lấy từ server.',
+  'manualCosts.formNote':
+    'Số tiền là mức phí theo kỳ, không phải theo ngày. Server tự rải theo số ngày của tháng/năm; khoản một lần tính trọn vào ngày bắt đầu.',
+  'manualCosts.col.name': 'Khoản chi',
+  'manualCosts.col.service': 'Dịch vụ',
+  'manualCosts.col.amount': 'Số tiền',
+  'manualCosts.col.window': 'Hiệu lực',
+  'manualCosts.col.updated': 'Cập nhật',
+  'manualCosts.field.service': 'Dịch vụ',
+  'manualCosts.field.servicePick': 'Chọn dịch vụ…',
+  'manualCosts.field.name': 'Tên khoản chi',
+  'manualCosts.field.amount': 'Số tiền',
+  'manualCosts.field.amountHint': 'Theo đơn vị tiền tệ, dấu chấm cho phần thập phân — ví dụ 99.99',
+  'manualCosts.field.currency': 'Tiền tệ',
+  'manualCosts.field.period': 'Chu kỳ',
+  'manualCosts.field.effectiveFrom': 'Hiệu lực từ',
+  'manualCosts.field.effectiveTo': 'Hiệu lực đến',
+  'manualCosts.field.effectiveToHint':
+    'Để trống nếu chưa kết thúc. Khoản một lần chỉ tính ngày bắt đầu.',
+  'manualCosts.field.note': 'Ghi chú',
+  'manualCosts.period.ONE_TIME': 'Một lần',
+  'manualCosts.period.MONTHLY': 'Hàng tháng',
+  'manualCosts.period.YEARLY': 'Hàng năm',
+  'manualCosts.per.ONE_TIME': 'một lần',
+  'manualCosts.per.MONTHLY': '/tháng',
+  'manualCosts.per.YEARLY': '/năm',
+  'manualCosts.openEnded': 'chưa kết thúc',
+  'manualCosts.error.service': 'Chọn dịch vụ.',
+  'manualCosts.error.name': 'Nhập tên khoản chi.',
+  'manualCosts.error.amount': 'Số tiền không hợp lệ cho loại tiền này.',
+  'manualCosts.error.effectiveFrom': 'Chọn ngày bắt đầu.',
+  'manualCosts.error.range': 'Ngày kết thúc phải từ ngày bắt đầu trở đi.',
+  'manualCosts.created': 'Đã thêm {name}.',
+  'manualCosts.updated': 'Đã lưu {name}.',
+  'manualCosts.deleted': 'Đã xoá {name}.',
+  'manualCosts.deleteTitle': 'Xoá khoản chi?',
+  'manualCosts.deleteDescription':
+    'Mọi dòng chi phí MANUAL sinh từ khoản này biến mất khỏi Cost Center ngay khi xoá. Lịch sử kiểm toán vẫn giữ lại khoản chi như trước khi xoá.',
+  'manualCosts.change.item': 'Khoản chi',
+  'manualCosts.change.rows': 'Dòng chi phí đã sinh',
+  'manualCosts.change.rowsFrom': 'Theo ngày, từ {from}',
+  'manualCosts.change.rowsTo': 'Không còn',
+  'manualCosts.audit.title': 'Lịch sử thay đổi',
+  'manualCosts.audit.hint': 'Mọi lần thêm, sửa, xoá đều được server ghi lại.',
 } as const
 
 export type MessageKey = keyof typeof vi

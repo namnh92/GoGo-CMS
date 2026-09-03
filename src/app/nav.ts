@@ -150,6 +150,14 @@ const OPERATIONS: NavLeaf[] = [
     permission: 'ops.dashboard',
     match: (p) => p.startsWith('/monitoring'),
   },
+  {
+    // COST-CMS-010 (GoGo-BE#382): fees typed in by hand, materialised into the
+    // Cost Center. Same gate as the rest of /cms/ops/*.
+    to: '/costs/manual',
+    labelKey: 'nav.manualCosts',
+    permission: 'cost.read',
+    match: (p) => p.startsWith('/costs/manual'),
+  },
 ]
 
 /**

@@ -1,5 +1,8 @@
-import { apiFetchParsed } from '@/shared/api/client'
+import { apiFetch, apiFetchParsed } from '@/shared/api/client'
+import type { RequestBody } from '@/shared/api/generated'
 import {
+  cmsManualCostItemEnvelopeSchema,
+  cmsManualCostItemsSchema,
   cmsOpsCostsSchema,
   opsProviderDetailSchema,
   opsProvidersSchema,
@@ -12,6 +15,8 @@ import {
   cmsOpsQueuesSchema,
   opsKpisSchema,
   searchAnalyticsSchema,
+  type CmsManualCostItem,
+  type CmsManualCostItems,
   type CmsOpsCosts,
   type CmsOpsHealth,
   type CmsOpsQueues,
@@ -96,4 +101,54 @@ export function fetchOpsProvider(
     query: { window },
     signal,
   })
+}
+
+/**
+ * COST-CMS-010 (GoGo-BE#382) — manual / fixed cost items.
+ *
+ * The list carries `eligibleServices`: the registry's services that declare
+ * `MANUAL_COST`, which is the form's provider/service picker. A new manual
+ * provider on the server appears here with no CMS change.
+ */
+export function fetchManualCostItems(signal?: AbortSignal): Promise<CmsManualCostItems> {
+  return apiFetchParsed(cmsManualCostItemsSchema, '/cms/ops/costs/manual-items', { signal })
+}
+
+/** Exactly the body `cmsOpsCreateManualCostItem` declares — micros per period. */
+export type ManualCostItemInput = RequestBody<'cmsOpsCreateManualCostItem'>
+/** Omitted fields are left alone; `null` clears `effectiveTo` / `note`. */
+export type ManualCostItemPatch = RequestBody<'cmsOpsUpdateManualCostItem'>
+
+/**
+ * Retryable: the key makes a repeat return the item that was created rather
+ * than a second one — the server rebuilds MANUAL rows on every create, and a
+ * duplicated subscription would double the month.
+ */
+export async function createManualCostItem(
+  input: ManualCostItemInput,
+  idempotencyKey: string,
+): Promise<CmsManualCostItem> {
+  const { item } = await apiFetchParsed(
+    cmsManualCostItemEnvelopeSchema,
+    '/cms/ops/costs/manual-items',
+    { method: 'POST', body: input, idempotencyKey },
+  )
+  return item
+}
+
+export async function updateManualCostItem(
+  id: string,
+  patch: ManualCostItemPatch,
+): Promise<CmsManualCostItem> {
+  const { item } = await apiFetchParsed(
+    cmsManualCostItemEnvelopeSchema,
+    `/cms/ops/costs/manual-items/${id}`,
+    { method: 'PATCH', body: patch },
+  )
+  return item
+}
+
+/** Every MANUAL row derived from the item is gone before this resolves. */
+export function deleteManualCostItem(id: string): Promise<{ deleted: true }> {
+  return apiFetch(`/cms/ops/costs/manual-items/${id}`, { method: 'DELETE' })
 }

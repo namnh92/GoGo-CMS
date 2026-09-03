@@ -26,6 +26,7 @@ import type {
   CmsRoomGuest,
   PrivacyRequest,
 } from '@/shared/api/contracts'
+import type { CmsManualCostEligibleService, CmsManualCostItem } from '@/shared/api/contracts'
 import type { ImportJob, ImportRow } from '@/shared/api/contracts-import'
 
 /**
@@ -2542,3 +2543,72 @@ export const opsProviders = {
   costModel: opsCostModel,
   latencySemantics: opsLatencySemantics,
 }
+
+/**
+ * COST-CMS-010 (GoGo-BE#382) — manual / fixed cost items and the registry's
+ * MANUAL_COST services, as the server lists them (manual providers wholesale,
+ * Play Console alone under Google).
+ */
+export const cmsManualCostEligibleServices: CmsManualCostEligibleService[] = [
+  {
+    providerId: 'google',
+    providerDisplayName: 'Google',
+    serviceId: 'google.play_console',
+    displayName: 'Play Console',
+  },
+  {
+    providerId: 'apple',
+    providerDisplayName: 'Apple',
+    serviceId: 'apple.developer_program',
+    displayName: 'Developer Program',
+  },
+  {
+    providerId: 'hosting',
+    providerDisplayName: 'Hosting',
+    serviceId: 'hosting.vps',
+    displayName: 'VPS subscription',
+  },
+  {
+    providerId: 'registrar',
+    providerDisplayName: 'Domain registrar',
+    serviceId: 'registrar.domain',
+    displayName: 'Domain registration',
+  },
+]
+
+export const cmsManualCostItems: CmsManualCostItem[] = [
+  {
+    id: 'mc-apple',
+    environment: 'dev',
+    providerId: 'apple',
+    serviceId: 'apple.developer_program',
+    name: 'Apple Developer Program',
+    amountMicros: 99_000_000,
+    currency: 'USD',
+    period: 'YEARLY',
+    effectiveFrom: '2026-01-15',
+    effectiveTo: null,
+    note: null,
+    createdBy: 'adm-ops',
+    createdAt: '2026-01-15T03:00:00Z',
+    updatedBy: 'adm-ops',
+    updatedAt: '2026-01-15T03:00:00Z',
+  },
+  {
+    id: 'mc-domain',
+    environment: 'dev',
+    providerId: 'registrar',
+    serviceId: 'registrar.domain',
+    name: 'gogo.vn',
+    amountMicros: 350_000_000_000,
+    currency: 'VND',
+    period: 'ONE_TIME',
+    effectiveFrom: '2026-03-01',
+    effectiveTo: null,
+    note: 'Gia hạn 1 năm',
+    createdBy: 'adm-ops',
+    createdAt: '2026-03-01T02:00:00Z',
+    updatedBy: 'adm-ops',
+    updatedAt: '2026-03-01T02:00:00Z',
+  },
+]

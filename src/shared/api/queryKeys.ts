@@ -12,6 +12,8 @@ export const queryKeys = {
   opsSummary: (window: string) => ['ops', 'summary', window] as const,
   opsProviders: (window: string) => ['ops', 'providers', window] as const,
   opsProvider: (provider: string, window: string) => ['ops', 'provider', provider, window] as const,
+  /** COST-CMS-010 (GoGo-BE#382) — manual cost items and the services one may name. */
+  opsManualCosts: ['ops', 'manual-costs'] as const,
 
   planTemplates: {
     all: ['plan-templates'] as const,
