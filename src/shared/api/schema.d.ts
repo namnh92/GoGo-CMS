@@ -909,7 +909,7 @@ export interface paths {
         put?: never;
         /**
          * Propose a place from a resolved provider id (FR-INGEST-011/012)
-         * @description Creates at most one pending proposal per provider place; repeat submissions increment submissionCount. Never publishes to the catalog. Guests must submit within their room-scoped session. 409 `PLACE_IDENTITY_CONFLICT` means the Google Place ID is recorded against two GoGo places: accepting would attach the proposal to an ambiguous identity, so an editor merges them first (#334).
+         * @description Creates at most one pending proposal per provider place; repeat submissions increment submissionCount. Never publishes to the catalog. Guests must submit within their room-scoped session. 409 `PLACE_IDENTITY_CONFLICT` means the Google Place ID is recorded against two GoGo places: accepting would attach the proposal to an ambiguous identity, so an editor merges them first (#334). 400 `RESOLUTION_TOKEN_INVALID` (retryable) means the `resolutionToken` was expired, edited or minted for another place — resolve the link again and resubmit; the server never falls back to a silent provider fetch.
          */
         post: operations["submitPlace"];
         delete?: never;
@@ -3219,10 +3219,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Ops: estimated provider spend today and month to date, from the durable ledger
+         * Ops: Cost Center overview — cards, registry-keyed provider rows, legacy #335 lines
          * @description Backed by `provider_usage_daily` since #335 — a per-day, per-environment record of what each provider operation actually did, priced against a versioned list price. It survives deploys, which is what lets it answer "today" and "month to date"; the in-process counter it replaced could not.
          *
-         *     Three rules the payload keeps, all of them about not overstating what is known:
+         *     **COST-BE-022 (#381)** adds the epic §35 Cost Center on top of that payload: `cards` (today, month-to-date, projected month, budget, unknown providers/services, cost of monitoring) and `providerRows` — one row per provider in the cost registry with its services nested, each carrying usage meters, estimated / actual / fixed / manual money after epic §12 precedence (ACTUAL beats ESTIMATED for the same spend and the two are never added), a basis, a confidence, a `costStatus`, and per-row freshness from `cost_source_freshness`. An unknown cost is `spendMicros: null` with `costStatus: UNKNOWN`, never 0; a `0` appears only as `MEASURED_ZERO` — an instrumented service under a FRESH or STALE source that counted nothing. A provider added to the registry appears as a row with no API or CMS change (epic §44.2).
+         *
+         *     The legacy fields keep their #335 rules, one release, for the deployed dashboard (re-vendor is COST-CMS-009) and are deprecated:
          *
          *     - **It is an estimate, and says so.** `basis: ESTIMATED`, and no field
          *       is named `billed`, `actualSpend` or `invoiceCost`. Free caps are
@@ -3240,7 +3242,7 @@ export interface paths {
          *       SDK renders on the handset; the backend sees no map load.
          *
          *
-         *     `sourcesConfigured: false` with an empty list means the ledger is off (`COST_LEDGER_ENABLED=false`) and must not render as a zero amount. With it on, a zero **is** a measured zero: the operations are instrumented and made no calls.
+         *     `sourcesConfigured: false` with an empty list means the ledger is off (`COST_LEDGER_ENABLED=false`) and must not render as a zero amount. With it on, a zero **is** a measured zero: the operations are instrumented and made no calls. The legacy and v2 shapes share no key.
          */
         get: operations["cmsOpsCosts"];
         put?: never;
@@ -3249,6 +3251,161 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/cms/ops/costs/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ops: Cost Center — one row per registered provider, with services
+         * @description Epic §34/§36. Rows are rendered from the cost registry in registry order: a provider added to `COST_REGISTRY_DATA` appears here with no API or CMS change, as `status: planned` and `costStatus: UNKNOWN` until a source covers it. The CMS must not hard-code provider names into overview logic; everything it needs to render a row is on the row.
+         *
+         *     `ops_admin` and above.
+         */
+        get: operations["cmsOpsCostProviders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/ops/costs/providers/{providerId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ops: Cost Center — one provider row
+         * @description Same row as in the list. The id is a registry id, not an enum: the registry is data, so an unknown id is a 404 rather than a 400.
+         */
+        get: operations["cmsOpsCostProvider"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/ops/costs/providers/{providerId}/services/{serviceId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ops: Cost Center — one service, with usage grouped by operation
+         * @description The service row plus `operations[]`: every registry operation of the service with its meters for the window, and any operation label seen in the tables that the registry does not know (`unregistered: true`) — a billed call never vanishes because somebody forgot to fold a SKU. A service under another provider is a 404.
+         */
+        get: operations["cmsOpsCostService"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/ops/costs/test-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ops: Cost Center — test-run cost records, newest first
+         * @description Epic §28/§36 — the runs `TestCostService` recorded for this deployment (COST-BE-019, #378). A provider registered after a run started still shows in its deltas: the keys are the table's, not a list in code.
+         */
+        get: operations["cmsOpsCostTestRuns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/ops/costs/test-runs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ops: Cost Center — one test run with its per-meter deltas
+         * @description While the run is `running` the deltas are its baseline snapshot (delta 0, unpriced) and both totals are `null`: nothing has been measured, and a floor of 0 would read as a result. A finished run carries deltas priced at list on the day it finished; a meter with no price is `estimatedCostDelta: null` and named in `unpriced`.
+         */
+        get: operations["cmsOpsCostTestRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/ops/costs/manual-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ops: Cost Center — manual / fixed cost items, and the services one may name
+         * @description COST-BE-023 (#382), epic §27. Items for this deployment (Apple Developer, a domain, a VPS…), each a fee per period over an effective range, entered by hand and never collected. Every item is materialised into `provider_cost_daily` as MANUAL rows — one per covered day, up to today — so it shows in the Cost API, budgets and forecast beside estimated and actual spend; per-test deltas never include it.
+         *
+         *     `eligibleServices` is the registry's list of services that declare `MANUAL_COST` (own or inherited): the form's provider/service picker, so a new manual provider appears here with no CMS change (§44.2).
+         */
+        get: operations["cmsOpsManualCostItems"];
+        put?: never;
+        /**
+         * Ops: Cost Center — add a manual cost item
+         * @description Audited as `cost.manual_item.created`; the item's MANUAL rows exist before the response. Refused with field errors (`COST_MANUAL_ITEM_INVALID`) when the service is not registered under the provider or does not declare `MANUAL_COST`, when `effectiveTo` precedes `effectiveFrom`, or when the currency is not an ISO 4217 code. Retryable: `Idempotency-Key` replays the created item instead of adding a second one.
+         */
+        post: operations["cmsOpsCreateManualCostItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/ops/costs/manual-items/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Ops: Cost Center — one manual cost item */
+        get: operations["cmsOpsManualCostItem"];
+        put?: never;
+        post?: never;
+        /**
+         * Ops: Cost Center — remove a manual cost item and its rows
+         * @description Audited as `cost.manual_item.deleted` with the item as it was. Every MANUAL row derived from it is gone before the response — a deleted subscription leaves no spend behind.
+         */
+        delete: operations["cmsOpsDeleteManualCostItem"];
+        options?: never;
+        head?: never;
+        /**
+         * Ops: Cost Center — change a manual cost item
+         * @description Partial. The merged item is validated as a whole, audited as `cost.manual_item.updated` with only the fields that changed, and its rows are rebuilt: a moved service, a new amount or a shortened range is reflected in `provider_cost_daily` before the response. An empty body is a 400.
+         */
+        patch: operations["cmsOpsUpdateManualCostItem"];
         trace?: never;
     };
     "/cms/ops/kpis": {
@@ -3321,7 +3478,10 @@ export interface paths {
         };
         /**
          * Ops: one provider, broken down by adapter operation
-         * @description Adds the per-operation rows the list view omits — for Places that is `google.searchText`, `google.details.core|quality|detail`, `google.autocomplete` and `google.expand`, each a distinct SKU.
+         * @deprecated
+         * @description Deprecated by COST-BE-022 (#381): the `provider` enum (`places|routes|sheets`) is the legacy console grouping, not a registry id. Kept one release; read `/cms/ops/costs/providers/{providerId}/services/{serviceId}` for the registry-keyed row.
+         *
+         *     Adds the per-operation rows the list view omits — for Places that is `google.searchText`, `google.details.core|quality|detail`, `google.autocomplete` and `google.expand`, each a distinct SKU.
          */
         get: operations["cmsOpsProvider"];
         put?: never;
@@ -3701,6 +3861,358 @@ export interface components {
             t: string;
             v: number;
         }[];
+        /**
+         * @default mtd
+         * @enum {string}
+         */
+        CmsCostWindow: "today" | "7d" | "30d" | "mtd";
+        CmsCostDateRange: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+        };
+        /**
+         * @description `KNOWN` — at least one cost row in the window; `spendMicros` is a number. `MEASURED_ZERO` — no cost row and no usage, but an instrumented operation under a FRESH or STALE source: somebody was counting and counted nothing; `spendMicros` is 0. `UNKNOWN` — nothing else; `spendMicros` is null and the console renders "—" and "Chưa có nguồn chi phí", never `$0`.
+         * @enum {string}
+         */
+        CmsCostStatus: "KNOWN" | "MEASURED_ZERO" | "UNKNOWN";
+        /**
+         * @description Where the number came from. `MIXED` when the rows that count carry more than one basis (an estimate beside a fixed fee); `UNKNOWN` when there is no number.
+         * @enum {string}
+         */
+        CmsCostBasis: "ACTUAL" | "ESTIMATED" | "FIXED" | "MANUAL" | "MIXED" | "UNKNOWN";
+        /** @enum {string} */
+        CmsCostConfidence: "HIGH" | "MEDIUM" | "LOW";
+        /**
+         * @description Epic §23, recomputed against now from `cost_source_freshness`. A STALE source has numbers on record that were true when taken; an UNKNOWN one has no numbers at all.
+         * @enum {string}
+         */
+        CmsCostFreshnessStatus: "FRESH" | "STALE" | "UNAVAILABLE" | "UNKNOWN";
+        CmsCostFreshnessSource: {
+            /** @example ledger */
+            sourceId: string;
+            /** @description Null when the source covers the whole provider. */
+            serviceId: string | null;
+            status: components["schemas"]["CmsCostFreshnessStatus"];
+            /** Format: date-time */
+            lastSuccessfulAt: string | null;
+            /** Format: date-time */
+            lastAttemptAt: string | null;
+            /** Format: date-time */
+            sourceAsOf: string | null;
+            staleAfterS: number;
+            consecutiveFailures: number;
+        };
+        CmsCostFreshness: {
+            /** @description The worst covering source (FRESH < STALE < UNKNOWN < UNAVAILABLE). No covering source at all is UNKNOWN. */
+            status: components["schemas"]["CmsCostFreshnessStatus"];
+            /**
+             * Format: date-time
+             * @description Newest `sourceAsOf` across covering sources.
+             */
+            sourceAsOf: string | null;
+            sources: components["schemas"]["CmsCostFreshnessSource"][];
+        };
+        /** @description One usage meter over the window. Two sources never sum: for one day the most confident source is taken (the ledger over a Prometheus backfill) and the winners are summed over days. */
+        CmsCostUsageLine: {
+            /** @description Registry meter id (`google.routeMatrix/billable_elements`); null when unregistered. */
+            meterId: string | null;
+            operationId: string | null;
+            /** @example billable_elements */
+            usageMetricId: string;
+            billingSkuId: string | null;
+            /** @example matrix_element */
+            unit: string;
+            billable: boolean;
+            quantity: number;
+            sources: string[];
+        };
+        /** @description Money on a row after epic §12 precedence. `spendMicros` is the one number to report; the per-basis figures say what it is made of. Nothing here is ever a sum of ACTUAL and ESTIMATED for the same spend. */
+        CmsCostMoney: {
+            /** @description Original-currency micros after precedence. Null = unknown, never 0. */
+            spendMicros: number | null;
+            /** @description Best estimate per key, shadowed or not — the reconciliation counterpart of `actualMicros`. Null when no ESTIMATED row. */
+            estimatedMicros: number | null;
+            actualMicros: number | null;
+            fixedMicros: number | null;
+            manualMicros: number | null;
+            /** @description Estimates an ACTUAL row displaced; part of `estimatedMicros`, never of `spendMicros`. */
+            shadowedEstimatedMicros: number;
+            basis: components["schemas"]["CmsCostBasis"];
+            /** @description Lowest confidence among the rows that count. */
+            confidence: components["schemas"]["CmsCostConfidence"] | null;
+            /** @description Null when unknown or when the rows disagree (`mixedCurrency`). */
+            currency: string | null;
+            /** @description More than one billing currency in scope — the number cannot be summed honestly. */
+            mixedCurrency: boolean;
+            costStatus: components["schemas"]["CmsCostStatus"];
+        };
+        CmsCostServiceRow: components["schemas"]["CmsCostMoney"] & {
+            /** @example google.places */
+            serviceId: string;
+            /** @example google */
+            providerId: string;
+            displayName: string;
+            /** @example maps */
+            category: string;
+            capabilities: string[];
+            /** @description At least one operation emits a metric. False renders as "chưa đo", never as zero. */
+            instrumented: boolean;
+            usage: components["schemas"]["CmsCostUsageLine"][];
+            /** @description No QUOTA collector exists yet (epic §6); null until one does. */
+            quota: null;
+            /**
+             * Format: date-time
+             * @description Newest write among the rows behind this row.
+             */
+            lastUpdated: string | null;
+            freshness: components["schemas"]["CmsCostFreshness"];
+        };
+        CmsCostOperationUsage: {
+            /** @example google.routeMatrix */
+            operationId: string;
+            displayName: string | null;
+            instrumented: boolean;
+            /** @description True when the label is in the tables but not in the registry — a SKU somebody forgot to fold. */
+            unregistered: boolean;
+            meters: components["schemas"]["CmsCostUsageLine"][];
+        };
+        CmsCostServiceDetail: components["schemas"]["CmsCostServiceRow"] & {
+            operations: components["schemas"]["CmsCostOperationUsage"][];
+        };
+        CmsCostProviderRow: components["schemas"]["CmsCostMoney"] & {
+            /** @example google */
+            providerId: string;
+            displayName: string;
+            /**
+             * @description Registry status. `planned` renders as "chưa nối".
+             * @enum {string}
+             */
+            status: "active" | "planned" | "manual";
+            capabilities: string[];
+            billingTimezone: string | null;
+            /** @description Services with `costStatus: UNKNOWN` — what the unknown card counts. */
+            unknownServices: string[];
+            services: components["schemas"]["CmsCostServiceRow"][];
+            /** Format: date-time */
+            lastUpdated: string | null;
+            freshness: components["schemas"]["CmsCostFreshness"];
+        };
+        CmsCostByBasis: {
+            ACTUAL: number;
+            ESTIMATED: number;
+            FIXED: number;
+            MANUAL: number;
+        };
+        CmsCostCard: {
+            /** @description Null when no cost row is in scope — unknown, not zero. */
+            spendMicros: number | null;
+            byBasis: components["schemas"]["CmsCostByBasis"] | null;
+            currency: string | null;
+            mixedCurrency: boolean;
+            /** @description How many services contributed a row. */
+            services: number;
+        };
+        CmsCostBudgetScope: {
+            /** @enum {string} */
+            kind: "TOTAL" | "PROVIDER" | "SERVICE";
+            /** @description Registry provider or service id; null for TOTAL. */
+            id: string | null;
+        };
+        /** @description COST-BE-020 (#379) — one budget's month, epic §32/§33. */
+        CmsCostBudgetStatus: {
+            scope: components["schemas"]["CmsCostBudgetScope"];
+            monthMicros: number;
+            usedMicros: number;
+            remainingMicros: number;
+            /** @description Two decimals. Null only when the budget is 0 and spend is positive — the ratio is unbounded and JSON has no infinity. */
+            usedPct: number | null;
+            /** @description Null under three elapsed days or with no rows (epic §33). */
+            projectedMicros: number | null;
+            projectedPct: number | null;
+            /** @enum {string} */
+            state: "ok" | "warning" | "exceeded" | "projected_exceed";
+            currency: string;
+        };
+        /** @description Epic §35 overview cards. Month-shaped whatever the window. */
+        CmsCostCards: {
+            today: components["schemas"]["CmsCostCard"] & {
+                /** Format: date */
+                day: string;
+            };
+            monthToDate: components["schemas"]["CmsCostCard"] & {
+                /** @example 2026-09 */
+                month: string;
+            };
+            projected: {
+                /** @description MTD daily average × days in the month; null under `minElapsedDays`. */
+                micros: number | null;
+                month: string;
+                elapsedDays: number;
+                minElapsedDays: number;
+                currency: string | null;
+            };
+            budget: {
+                /** @description The TOTAL scope, null when none is set. */
+                total: components["schemas"]["CmsCostBudgetStatus"] | null;
+                budgets: components["schemas"]["CmsCostBudgetStatus"][];
+            };
+            /** @description Providers and services with no cost source (`costStatus: UNKNOWN`). */
+            unknown: {
+                providerIds: string[];
+                serviceIds: string[];
+            };
+            costOfMonitoring: components["schemas"]["CmsCostCard"] & {
+                serviceIds: string[];
+            };
+        };
+        CmsCostOverview: {
+            /** @example dev */
+            environment: string;
+            /** @description False when `COST_LEDGER_ENABLED=false` — the in-process ledger writes nothing. */
+            ledgerEnabled: boolean;
+            window: components["schemas"]["CmsCostWindow"];
+            range: components["schemas"]["CmsCostDateRange"];
+            /** @example 2026-09 */
+            month: string;
+            /** Format: date */
+            today: string;
+            /** Format: date-time */
+            generatedAt: string;
+            cards: components["schemas"]["CmsCostCards"];
+            /** @description One row per registry provider, registry order. */
+            providerRows: components["schemas"]["CmsCostProviderRow"][];
+            /** @description Ids in the tables the registry does not know. Money there is reported nowhere else. */
+            unattributed: {
+                providerIds: string[];
+                serviceIds: string[];
+            };
+        };
+        CmsCostTestRun: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            environment: string;
+            /** @enum {string} */
+            status: "running" | "ok" | "over_budget" | "failed";
+            /** Format: date-time */
+            startedAt: string;
+            /** Format: date-time */
+            endedAt: string | null;
+            /** Format: date-time */
+            baselineSnapshotAt: string;
+            /** Format: date-time */
+            finalSnapshotAt: string | null;
+            gitSha: string | null;
+            /** @description Epic §30 — registry service ids the run declared relevant; null = all. */
+            services: string[] | null;
+            /** @description Epic §29 soft budget as declared (`maxProviderCalls`, `maxProviderUsage`, `maxEstimatedCostMicros`). */
+            budget: {
+                [key: string]: unknown;
+            } | null;
+            notes: string | null;
+        };
+        CmsCostTestRunDelta: {
+            providerId: string;
+            serviceId: string;
+            operationId: string | null;
+            usageMetricId: string;
+            billingSkuId: string | null;
+            unit: string;
+            usageBefore: number;
+            usageAfter: number;
+            usageDelta: number;
+            /** @description List price on the day the run finished; null when the price is unknown. */
+            estimatedCostDelta: number | null;
+            /** @description Null until an ACTUAL source exists. */
+            actualCostDelta: number | null;
+            currency: string;
+            /** @enum {string} */
+            basis: "ESTIMATED" | "UNKNOWN";
+            /** @enum {string} */
+            confidence: "MEDIUM" | "LOW";
+        };
+        CmsCostTestRunDetail: components["schemas"]["CmsCostTestRun"] & {
+            deltas: components["schemas"]["CmsCostTestRunDelta"][];
+            /** @description Sum of known estimated deltas; null when nothing was priceable or the run is open. */
+            estimatedCostMicros: number | null;
+            actualCostMicros: number | null;
+            /** @description Billable meters whose price is unknown — the reason a total may be a floor. */
+            unpriced: string[];
+        };
+        /**
+         * @description How `amountMicros` recurs. MONTHLY is spread over the days of each month it covers, YEARLY over each year, ONE_TIME lands whole on `effectiveFrom`.
+         * @enum {string}
+         */
+        CmsManualCostPeriod: "ONE_TIME" | "MONTHLY" | "YEARLY";
+        /** @description COST-BE-023 (#382), epic §27 — a fee entered by hand. Money is micros of `currency` per period, never a daily share; the daily rows are derived (`provider_cost_daily`, basis MANUAL, confidence HIGH, source `manual_cost_items:<id>`). */
+        CmsManualCostItem: {
+            /** Format: uuid */
+            id: string;
+            environment: string;
+            /** @description Registry provider id. */
+            providerId: string;
+            /** @description Registry service id under `providerId`; must declare `MANUAL_COST`. */
+            serviceId: string;
+            name: string;
+            amountMicros: number;
+            currency: string;
+            period: components["schemas"]["CmsManualCostPeriod"];
+            /**
+             * Format: date
+             * @description Inclusive.
+             */
+            effectiveFrom: string;
+            /**
+             * Format: date
+             * @description Inclusive; null = open-ended. Ignored for ONE_TIME.
+             */
+            effectiveTo: string | null;
+            note: string | null;
+            /** Format: uuid */
+            createdBy: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: uuid */
+            updatedBy: string | null;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        CmsManualCostItemInput: {
+            providerId: string;
+            serviceId: string;
+            name: string;
+            amountMicros: number;
+            /** @default USD */
+            currency: string;
+            period: components["schemas"]["CmsManualCostPeriod"];
+            /** Format: date */
+            effectiveFrom: string;
+            /** Format: date */
+            effectiveTo?: string | null;
+            note?: string | null;
+        };
+        CmsManualCostItemPatch: {
+            providerId?: string;
+            serviceId?: string;
+            name?: string;
+            amountMicros?: number;
+            currency?: string;
+            period?: components["schemas"]["CmsManualCostPeriod"];
+            /** Format: date */
+            effectiveFrom?: string;
+            /** Format: date */
+            effectiveTo?: string | null;
+            note?: string | null;
+        };
+        /** @description A registry service that declares `MANUAL_COST`, own or inherited from its provider. */
+        CmsManualCostEligibleService: {
+            providerId: string;
+            providerDisplayName: string;
+            serviceId: string;
+            displayName: string;
+        };
         CmsCostLine: {
             /**
              * @description The provider the line reports (`places`, `routes`, `sheets`, …). Deliberately not an enum: only providers with a priceable total appear here, and constraining a response property that was open would break a client that already handles an unknown key.
@@ -4184,6 +4696,8 @@ export interface components {
             reasonCodes?: string[];
             /** Format: uuid */
             existingPlaceId?: string;
+            /** @description Opaque, short-lived proof that this request verified the Google Place ID with the provider (#337). Present only when the answer came from a live provider check and the place is operational; send it back on `POST /place-submissions` to skip the duplicate verification fetch. It carries no provider content and authorises nothing — an expired or edited token is rejected with a retryable `RESOLUTION_TOKEN_INVALID` and the client resolves again. */
+            resolutionToken?: string;
             candidate?: {
                 googlePlaceId?: string;
                 name?: string;
@@ -5423,6 +5937,10 @@ export interface components {
         IdempotencyKey: string;
         /** @description Fixed window, never a duration or a range. Four values only: a free-form range is arbitrary load on the store and an arbitrary number of points at the browser, and the enum is also what makes "no client-supplied PromQL" true by construction rather than by escaping. */
         OpsWindow: "1h" | "24h" | "7d" | "30d";
+        /** @description COST-BE-022 (#381). Day-shaped windows only: the daily cost and usage tables cannot answer `1h`. `mtd` is the default because a free cap and an invoice are monthly; the cards are month-shaped whatever the window, and the rows follow the window. */
+        CostWindow: components["schemas"]["CmsCostWindow"];
+        /** @description A cost-registry provider id — `google`, `cloudflare`, `gogo`. Not an enum: the registry is data, and an unknown id is a 404. */
+        CostProviderId: string;
         /** @description Opaque cursor from a previous page. */
         Cursor: string;
         Limit: number;
@@ -7135,6 +7653,8 @@ export interface operations {
                     };
                     vibes?: string[];
                     note?: string;
+                    /** @description The `resolutionToken` from the preceding `POST /places/resolve-google-maps-link` (#337). Optional — without it the server verifies the place with the provider again, which is the behaviour before this field existed. */
+                    resolutionToken?: string;
                 };
             };
         };
@@ -7146,6 +7666,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SubmissionResult"];
+                };
+            };
+            /** @description `RESOLUTION_TOKEN_INVALID` — the `resolutionToken` was expired, edited, or minted for another place. `retryable: true`: resolve the link again and resubmit. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
             403: components["responses"]["Forbidden"];
@@ -11390,20 +11919,27 @@ export interface operations {
     };
     cmsOpsCosts: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description COST-BE-022 (#381). Day-shaped windows only: the daily cost and usage tables cannot answer `1h`. `mtd` is the default because a free cap and an invoice are monthly; the cards are month-shaped whatever the window, and the rows follow the window. */
+                window?: components["parameters"]["CostWindow"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Estimated spend per provider, plus what could not be estimated */
+            /** @description Cost Center overview plus the legacy estimated lines */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": {
+                        /**
+                         * @deprecated
+                         * @description Legacy #335 lines keyed `places|routes|sheets`. Kept one release for the deployed dashboard; read `providerRows` instead.
+                         */
                         providers: components["schemas"]["CmsCostLine"][];
                         /** @description False when no durable source is connected. An empty list with this false must not render as a zero amount. */
                         sourcesConfigured: boolean;
@@ -11420,10 +11956,359 @@ export interface operations {
                          * @description Newest ledger write in the window — how fresh these numbers are. Null when nothing has been recorded this month.
                          */
                         asOf: string | null;
+                        /**
+                         * @deprecated
+                         * @description Legacy gap list. `providerRows[].services[]` carries the same facts as `costStatus`, `instrumented` and `freshness`.
+                         */
                         gaps: components["schemas"]["CmsOpsCostGap"][];
+                    } & components["schemas"]["CmsCostOverview"];
+                };
+            };
+            /** @description Role may not read operational data */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    cmsOpsCostProviders: {
+        parameters: {
+            query?: {
+                /** @description COST-BE-022 (#381). Day-shaped windows only: the daily cost and usage tables cannot answer `1h`. `mtd` is the default because a free cap and an invoice are monthly; the cards are month-shaped whatever the window, and the rows follow the window. */
+                window?: components["parameters"]["CostWindow"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Provider rows, registry order */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        window: components["schemas"]["CmsCostWindow"];
+                        providers: components["schemas"]["CmsCostProviderRow"][];
                     };
                 };
             };
+            /** @description Role may not read operational data */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    cmsOpsCostProvider: {
+        parameters: {
+            query?: {
+                /** @description COST-BE-022 (#381). Day-shaped windows only: the daily cost and usage tables cannot answer `1h`. `mtd` is the default because a free cap and an invoice are monthly; the cards are month-shaped whatever the window, and the rows follow the window. */
+                window?: components["parameters"]["CostWindow"];
+            };
+            header?: never;
+            path: {
+                /** @description A cost-registry provider id — `google`, `cloudflare`, `gogo`. Not an enum: the registry is data, and an unknown id is a 404. */
+                providerId: components["parameters"]["CostProviderId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The provider row */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        window: components["schemas"]["CmsCostWindow"];
+                        provider: components["schemas"]["CmsCostProviderRow"];
+                    };
+                };
+            };
+            /** @description Role may not read operational data */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    cmsOpsCostService: {
+        parameters: {
+            query?: {
+                /** @description COST-BE-022 (#381). Day-shaped windows only: the daily cost and usage tables cannot answer `1h`. `mtd` is the default because a free cap and an invoice are monthly; the cards are month-shaped whatever the window, and the rows follow the window. */
+                window?: components["parameters"]["CostWindow"];
+            };
+            header?: never;
+            path: {
+                /** @description A cost-registry provider id — `google`, `cloudflare`, `gogo`. Not an enum: the registry is data, and an unknown id is a 404. */
+                providerId: components["parameters"]["CostProviderId"];
+                /** @description A cost-registry service id — `google.places`, `cloudflare.r2`. */
+                serviceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The service detail */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        window: components["schemas"]["CmsCostWindow"];
+                        service: components["schemas"]["CmsCostServiceDetail"];
+                    };
+                };
+            };
+            /** @description Role may not read operational data */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    cmsOpsCostTestRuns: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Runs, newest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        testRuns: components["schemas"]["CmsCostTestRun"][];
+                    };
+                };
+            };
+            /** @description Role may not read operational data */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    cmsOpsCostTestRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The run and its deltas */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        testRun: components["schemas"]["CmsCostTestRunDetail"];
+                    };
+                };
+            };
+            /** @description Not a UUID */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Role may not read operational data */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    cmsOpsManualCostItems: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Items and the services a manual item may name */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["CmsManualCostItem"][];
+                        eligibleServices: components["schemas"]["CmsManualCostEligibleService"][];
+                    };
+                };
+            };
+            /** @description Role may not read operational data */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    cmsOpsCreateManualCostItem: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client-generated key for retryable mutations. Repeating a request with the same key returns the original result instead of re-applying it. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CmsManualCostItemInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        item: components["schemas"]["CmsManualCostItem"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    cmsOpsManualCostItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The item */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        item: components["schemas"]["CmsManualCostItem"];
+                    };
+                };
+            };
+            /** @description Not a UUID */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    cmsOpsDeleteManualCostItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        deleted: true;
+                    };
+                };
+            };
+            /** @description Not a UUID */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    cmsOpsUpdateManualCostItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CmsManualCostItemPatch"];
+            };
+        };
+        responses: {
+            /** @description The item after the change */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        item: components["schemas"]["CmsManualCostItem"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     cmsOpsKpis: {

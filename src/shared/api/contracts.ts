@@ -1317,6 +1317,55 @@ export const opsCostGapSchema = z.object({
 export type OpsCostGap = z.infer<typeof opsCostGapSchema>
 
 /**
+ * COST-CMS-010 (GoGo-BE#382) — manual / fixed cost items, `/cms/ops/costs/manual-items`.
+ *
+ * A fee somebody typed in: Apple Developer, a domain, a VPS, Play Console.
+ * `amountMicros` is micros of `currency` **per period**, never a daily share
+ * — the server spreads it into MANUAL rows up to today, so the Cost Center
+ * sees it beside estimated and actual spend. Which services may carry one is
+ * the registry's answer (`eligibleServices`), not a list in this client.
+ */
+export const manualCostPeriodSchema = z.enum(['ONE_TIME', 'MONTHLY', 'YEARLY'])
+export type ManualCostPeriod = z.infer<typeof manualCostPeriodSchema>
+
+export const cmsManualCostItemSchema = z.object({
+  id: z.string(),
+  environment: z.string(),
+  providerId: z.string(),
+  serviceId: z.string(),
+  name: z.string(),
+  amountMicros: z.number().int(),
+  currency: z.string(),
+  period: manualCostPeriodSchema,
+  /** `YYYY-MM-DD`, inclusive. */
+  effectiveFrom: z.string(),
+  /** `YYYY-MM-DD`, inclusive; null = open-ended. Ignored for ONE_TIME. */
+  effectiveTo: z.string().nullable(),
+  note: z.string().nullable(),
+  createdBy: z.string().nullable(),
+  createdAt: z.string(),
+  updatedBy: z.string().nullable(),
+  updatedAt: z.string(),
+})
+export type CmsManualCostItem = z.infer<typeof cmsManualCostItemSchema>
+
+export const cmsManualCostEligibleServiceSchema = z.object({
+  providerId: z.string(),
+  providerDisplayName: z.string(),
+  serviceId: z.string(),
+  displayName: z.string(),
+})
+export type CmsManualCostEligibleService = z.infer<typeof cmsManualCostEligibleServiceSchema>
+
+export const cmsManualCostItemsSchema = z.object({
+  items: z.array(cmsManualCostItemSchema),
+  eligibleServices: z.array(cmsManualCostEligibleServiceSchema),
+})
+export type CmsManualCostItems = z.infer<typeof cmsManualCostItemsSchema>
+
+export const cmsManualCostItemEnvelopeSchema = z.object({ item: cmsManualCostItemSchema })
+
+/**
  * BE-CMS-P2 (GoGo-BE#315) — the monitoring view.
  *
  * The console reads these and never `/v1/metrics`, never Grafana. It holds no

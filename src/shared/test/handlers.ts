@@ -32,6 +32,8 @@ import {
   opsHealth,
   opsQueues,
   opsCosts,
+  cmsManualCostEligibleServices,
+  cmsManualCostItems,
   opsProviders,
   opsSummary,
   cmsAppUsers,
@@ -106,6 +108,9 @@ const db = {
   roomGuests: JSON.parse(JSON.stringify(cmsRoomGuests)) as typeof cmsRoomGuests,
   privacy: JSON.parse(JSON.stringify(privacyRequests)) as typeof privacyRequests,
   campaigns: JSON.parse(JSON.stringify(cmsCampaigns)) as typeof cmsCampaigns,
+  manualCosts: JSON.parse(JSON.stringify(cmsManualCostItems)) as typeof cmsManualCostItems,
+  /** Idempotency-Key → the item it created, so a replay returns that one. */
+  manualCostKeys: new Map<string, (typeof cmsManualCostItems)[number]>(),
 }
 
 /**
@@ -117,6 +122,20 @@ function sessionCookies(): Headers {
   headers.append('Set-Cookie', 'gogo_at=mock-access-token; Path=/; SameSite=Lax')
   headers.append('Set-Cookie', `gogo_csrf=${MOCK_CSRF}; Path=/; SameSite=Lax`)
   return headers
+}
+
+/** A refused write: one field error, the way GoGo-BE's `AppError.badRequest` shapes it. */
+function fieldEnvelope(code: string, field: string, fieldCode: string, message: string) {
+  return HttpResponse.json(
+    {
+      code,
+      message,
+      field_errors: [{ field, code: fieldCode, message }],
+      request_id: `mock-${fieldCode}`,
+      retryable: false,
+    },
+    { status: 400 },
+  )
 }
 
 function envelope(status: number, code: string, message: string) {
@@ -234,6 +253,56 @@ async function userStatusAction(
   row.statusReason = next === 'active' ? null : body.reason
   row.statusChangedAt = new Date().toISOString()
   return HttpResponse.json({ id: row.id, status: row.status }, { status: 201 })
+}
+
+/**
+ * What GoGo-BE refuses on a manual cost write, as field errors: a service the
+ * registry does not list under MANUAL_COST, and an end before the start.
+ */
+function refuseManualCost(body: Record<string, unknown>) {
+  const service = cmsManualCostEligibleServices.find(
+    (candidate) =>
+      candidate.serviceId === body.serviceId && candidate.providerId === body.providerId,
+  )
+  if (!service) {
+    return fieldEnvelope(
+      'COST_MANUAL_ITEM_INVALID',
+      'serviceId',
+      'manual_cost_not_supported',
+      `${String(body.serviceId)} does not declare MANUAL_COST; a manual item cannot name it`,
+    )
+  }
+  const from = String(body.effectiveFrom ?? '')
+  const to = body.effectiveTo
+  if (typeof to === 'string' && to < from) {
+    return fieldEnvelope(
+      'COST_MANUAL_ITEM_INVALID',
+      'effectiveTo',
+      'invalid_range',
+      'effectiveTo must not be before effectiveFrom',
+    )
+  }
+  return null
+}
+
+function recordManualCostAudit(action: string, resourceId: string, diff: unknown): void {
+  const { role } = currentActor()
+  db.audit.unshift({
+    id: `audit-mc-${db.audit.length + 1}`,
+    action,
+    actorType: 'admin',
+    actorId: 'adm-mock',
+    actorRole: role,
+    resourceType: 'manual_cost_item',
+    resourceId,
+    occurredAt: new Date().toISOString(),
+    diff,
+    reason: null,
+    breakGlass: false,
+    requestId: `mock-${action}`,
+    ipAddress: '10.0.0.1',
+    authorizationPath: null,
+  })
 }
 
 export const handlers = [
@@ -1745,6 +1814,83 @@ export const handlers = [
   http.get(`${BASE}/cms/ops/health`, () => HttpResponse.json(opsHealth)),
   http.get(`${BASE}/cms/ops/queues`, () => HttpResponse.json(opsQueues)),
   http.get(`${BASE}/cms/ops/costs`, () => HttpResponse.json(opsCosts)),
+
+  /*
+   * COST-CMS-010 (GoGo-BE#382). Manual cost items — the mock's job is the
+   * contract: `eligibleServices` from the registry, the field-error shape on
+   * a refused write, the Idempotency-Key replay on create, and an audit row
+   * per write so the trail on the screen has something to show.
+   */
+  http.get(`${BASE}/cms/ops/costs/manual-items`, () =>
+    HttpResponse.json({
+      items: db.manualCosts,
+      eligibleServices: cmsManualCostEligibleServices,
+    }),
+  ),
+  http.post(`${BASE}/cms/ops/costs/manual-items`, async ({ request }) => {
+    const key = request.headers.get('idempotency-key')
+    const replay = key ? db.manualCostKeys.get(key) : undefined
+    if (replay) return HttpResponse.json({ item: replay }, { status: 201 })
+    const body = (await request.json()) as Record<string, unknown>
+    const refused = refuseManualCost(body)
+    if (refused) return refused
+    const now = new Date().toISOString()
+    const item: (typeof cmsManualCostItems)[number] = {
+      id: `mc-${db.manualCosts.length + 100}`,
+      environment: 'dev',
+      providerId: String(body.providerId),
+      serviceId: String(body.serviceId),
+      name: String(body.name),
+      amountMicros: Number(body.amountMicros),
+      currency: String(body.currency ?? 'USD'),
+      period: body.period as 'MONTHLY',
+      effectiveFrom: String(body.effectiveFrom),
+      effectiveTo: (body.effectiveTo as string | null | undefined) ?? null,
+      note: (body.note as string | null | undefined) ?? null,
+      createdBy: 'adm-mock',
+      createdAt: now,
+      updatedBy: 'adm-mock',
+      updatedAt: now,
+    }
+    db.manualCosts.unshift(item)
+    if (key) db.manualCostKeys.set(key, item)
+    recordManualCostAudit('cost.manual_item.created', item.id, { after: body })
+    return HttpResponse.json({ item }, { status: 201 })
+  }),
+  http.get(`${BASE}/cms/ops/costs/manual-items/:id`, ({ params }) => {
+    const item = db.manualCosts.find((row) => row.id === params.id)
+    if (!item) return envelope(404, 'COST_MANUAL_ITEM_NOT_FOUND', 'no such item')
+    return HttpResponse.json({ item })
+  }),
+  http.patch(`${BASE}/cms/ops/costs/manual-items/:id`, async ({ params, request }) => {
+    const item = db.manualCosts.find((row) => row.id === params.id)
+    if (!item) return envelope(404, 'COST_MANUAL_ITEM_NOT_FOUND', 'no such item')
+    const body = (await request.json()) as Record<string, unknown>
+    // The merged item is validated whole, as the server does.
+    const merged = { ...item, ...body } as Record<string, unknown>
+    const refused = refuseManualCost(merged)
+    if (refused) return refused
+    const changed: Record<string, { before: unknown; after: unknown }> = {}
+    for (const key of Object.keys(body)) {
+      const current = (item as Record<string, unknown>)[key]
+      if (current !== body[key]) {
+        changed[key] = { before: current, after: body[key] }
+        ;(item as Record<string, unknown>)[key] = body[key]
+      }
+    }
+    item.updatedAt = new Date().toISOString()
+    if (Object.keys(changed).length > 0) {
+      recordManualCostAudit('cost.manual_item.updated', item.id, { changed })
+    }
+    return HttpResponse.json({ item })
+  }),
+  http.delete(`${BASE}/cms/ops/costs/manual-items/:id`, ({ params }) => {
+    const index = db.manualCosts.findIndex((row) => row.id === params.id)
+    if (index < 0) return envelope(404, 'COST_MANUAL_ITEM_NOT_FOUND', 'no such item')
+    const [gone] = db.manualCosts.splice(index, 1)
+    recordManualCostAudit('cost.manual_item.deleted', String(params.id), { before: gone })
+    return HttpResponse.json({ deleted: true })
+  }),
   // GoGo-BE#315. The window is echoed back so a test can prove the selector
   // actually re-queries rather than only repainting.
   http.get(`${BASE}/cms/ops/summary`, ({ request }) => {
