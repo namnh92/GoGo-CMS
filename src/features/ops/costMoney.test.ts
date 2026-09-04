@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { microsToAmountText, microsToMinor, parseAmountToMicros } from './manualCostMoney'
+import { microsToAmountText, microsToMinor, parseAmountToMicros } from './costMoney'
 
 describe('manual cost money (COST-CMS-010)', () => {
   it('parses major units into micros with integer arithmetic', () => {

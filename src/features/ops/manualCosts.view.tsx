@@ -37,7 +37,7 @@ import {
   type ManualCostItemInput,
   type ManualCostItemPatch,
 } from './api'
-import { microsToAmountText, microsToMinor, parseAmountToMicros } from './manualCostMoney'
+import { microsToAmountText, microsToMinor, parseAmountToMicros } from './costMoney'
 import { styles } from './manualCosts.style'
 
 /** The currencies the display layer knows how to render; the server takes any ISO code. */
@@ -113,7 +113,7 @@ function formatDay(day: string, locale: Locale): string {
  * server appears here with no change to this screen.
  *
  * Money crosses the wire as micros per period. The form takes major units
- * and converts with integer arithmetic (`manualCostMoney.ts`); the table
+ * and converts with integer arithmetic (`costMoney.ts`); the table
  * renders through `formatMoney` like every other amount in the console.
  */
 export default function ManualCostsScreen() {

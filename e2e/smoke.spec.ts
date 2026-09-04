@@ -38,6 +38,10 @@ const SCREENS: [string, RegExp][] = [
   ['/roles', /Vai trò & quyền/],
   ['/audit', /Nhật ký kiểm toán/],
   ['/search-quality', /Chất lượng tìm kiếm/],
+  // COST-CMS-009. Matched on body copy rather than the page title: the title
+  // also names the nav entry, and `main` is what has to have drawn.
+  ['/costs', /Chưa rõ chi phí/],
+  ['/costs/test-runs/33333333-0000-4000-8000-000000000001', /Chênh lệch theo chỉ số/],
 ]
 
 test('every screen renders for a super admin with no console error', async ({ page }) => {

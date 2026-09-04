@@ -19,6 +19,15 @@ import type {
   CmsCampaign,
   CmsOpsHealth,
   CmsOpsQueues,
+  CmsCostFreshness,
+  CmsCostFreshnessSource,
+  CmsCostFreshnessStatus,
+  CmsCostOperationUsage,
+  CmsCostOverview,
+  CmsCostProviderRow,
+  CmsCostServiceRow,
+  CmsCostTestRun,
+  CmsCostTestRunDetail,
   CmsOpsCosts,
   CmsAppUserDetail,
   CmsRoomSummary,
@@ -2612,3 +2621,577 @@ export const cmsManualCostItems: CmsManualCostItem[] = [
     updatedAt: '2026-03-01T02:00:00Z',
   },
 ]
+
+/**
+ * COST-CMS-009 (GoGo-BE#381) — the Cost Center payload.
+ *
+ * The mock's job is the SHAPE, and specifically the four ways a row can be
+ * honest about money, all reachable in one render:
+ *
+ * - `google.places` — KNOWN: a fresh source, a real estimate.
+ * - `google.sheets` — MEASURED_ZERO: instrumented, fresh, and it counted 0.
+ * - `google.routeMatrix` — usage but no verified price: UNKNOWN money beside a
+ *   real quantity, which is why the two are separate columns.
+ * - `google.mapsSdk`, `cloudflare.workers`, `vietmap` — nothing measures them
+ *   at all. Collectors sit at UNKNOWN until GoGo-Infra#114 lands their SSM
+ *   rows, and that is what a DEV console genuinely looks like today.
+ *
+ * Ids are registry-shaped rather than an enum, so the fixture also proves the
+ * screen renders a provider it has never heard of (`apple`, `gogo`).
+ */
+function costFreshness(
+  status: CmsCostFreshnessStatus,
+  sources: CmsCostFreshnessSource[] = [],
+): CmsCostFreshness {
+  const asOf = sources.reduce<string | null>(
+    (newest, source) =>
+      source.sourceAsOf && (!newest || source.sourceAsOf > newest) ? source.sourceAsOf : newest,
+    null,
+  )
+  return { status, sourceAsOf: asOf, sources }
+}
+
+function costSource(
+  sourceId: string,
+  status: CmsCostFreshnessStatus,
+  overrides: Partial<CmsCostFreshnessSource> = {},
+): CmsCostFreshnessSource {
+  const at = status === 'FRESH' ? iso(30) : status === 'STALE' ? iso(60 * 40) : null
+  return {
+    sourceId,
+    serviceId: null,
+    status,
+    lastSuccessfulAt: at,
+    lastAttemptAt: at ?? iso(15),
+    sourceAsOf: at,
+    staleAfterS: 86_400,
+    consecutiveFailures: status === 'UNAVAILABLE' ? 3 : 0,
+    ...overrides,
+  }
+}
+
+/** Nothing measures it: money is null and every per-basis figure with it. */
+const UNKNOWN_MONEY = {
+  spendMicros: null,
+  estimatedMicros: null,
+  actualMicros: null,
+  fixedMicros: null,
+  manualMicros: null,
+  shadowedEstimatedMicros: 0,
+  basis: 'UNKNOWN',
+  confidence: null,
+  currency: null,
+  mixedCurrency: false,
+  costStatus: 'UNKNOWN',
+} as const
+
+export const costServices: Record<string, CmsCostServiceRow> = {
+  'google.places': {
+    ...UNKNOWN_MONEY,
+    spendMicros: 10_400_000,
+    estimatedMicros: 10_400_000,
+    basis: 'ESTIMATED',
+    confidence: 'MEDIUM',
+    currency: 'USD',
+    costStatus: 'KNOWN',
+    serviceId: 'google.places',
+    providerId: 'google',
+    displayName: 'Places API',
+    category: 'maps',
+    capabilities: ['PLACE_SEARCH', 'PLACE_DETAILS'],
+    instrumented: true,
+    usage: [
+      {
+        meterId: 'google.placeDetails/requests',
+        operationId: 'google.placeDetails',
+        usageMetricId: 'requests',
+        billingSkuId: 'places.details.essentials',
+        unit: 'request',
+        billable: true,
+        quantity: 1_520,
+        sources: ['ledger'],
+      },
+    ],
+    quota: null,
+    lastUpdated: iso(45),
+    freshness: costFreshness('FRESH', [costSource('ledger', 'FRESH')]),
+  },
+  'google.sheets': {
+    ...UNKNOWN_MONEY,
+    // A measured zero: somebody was counting, and counted nothing. It is not
+    // the same claim as "no source", and must not render like one.
+    spendMicros: 0,
+    estimatedMicros: 0,
+    basis: 'ESTIMATED',
+    confidence: 'MEDIUM',
+    currency: 'USD',
+    costStatus: 'MEASURED_ZERO',
+    serviceId: 'google.sheets',
+    providerId: 'google',
+    displayName: 'Sheets API',
+    category: 'ops',
+    capabilities: ['EXPORT'],
+    instrumented: true,
+    usage: [
+      {
+        meterId: 'google.sheetsAppend/requests',
+        operationId: 'google.sheetsAppend',
+        usageMetricId: 'requests',
+        billingSkuId: null,
+        unit: 'request',
+        billable: false,
+        quantity: 0,
+        sources: ['ledger'],
+      },
+    ],
+    quota: null,
+    lastUpdated: iso(45),
+    freshness: costFreshness('FRESH', [costSource('ledger', 'FRESH')]),
+  },
+  'google.routeMatrix': {
+    ...UNKNOWN_MONEY,
+    // Units are exact, money is not: Routes bills per matrix element and no
+    // per-element list price is verified. A floor with a currency beside it
+    // would be a false claim, so the money column stays unknown.
+    serviceId: 'google.routeMatrix',
+    providerId: 'google',
+    displayName: 'Routes — Matrix',
+    category: 'maps',
+    capabilities: ['ROUTE_MATRIX'],
+    instrumented: true,
+    usage: [
+      {
+        meterId: 'google.routeMatrix/billable_elements',
+        operationId: 'google.routeMatrix',
+        usageMetricId: 'billable_elements',
+        billingSkuId: null,
+        unit: 'matrix_element',
+        billable: true,
+        quantity: 8_400,
+        sources: ['ledger'],
+      },
+    ],
+    quota: null,
+    lastUpdated: iso(45),
+    freshness: costFreshness('FRESH', [costSource('ledger', 'FRESH')]),
+  },
+  'google.mapsSdk': {
+    ...UNKNOWN_MONEY,
+    serviceId: 'google.mapsSdk',
+    providerId: 'google',
+    displayName: 'Maps SDK (mobile)',
+    category: 'maps',
+    capabilities: ['MAP_RENDER'],
+    // The SDK renders on the handset; the backend sees no map load.
+    instrumented: false,
+    usage: [],
+    quota: null,
+    lastUpdated: null,
+    freshness: costFreshness('UNKNOWN'),
+  },
+  'cloudflare.r2': {
+    ...UNKNOWN_MONEY,
+    spendMicros: 1_250_000,
+    estimatedMicros: 1_400_000,
+    actualMicros: 1_250_000,
+    shadowedEstimatedMicros: 1_400_000,
+    basis: 'ACTUAL',
+    confidence: 'HIGH',
+    currency: 'USD',
+    costStatus: 'KNOWN',
+    serviceId: 'cloudflare.r2',
+    providerId: 'cloudflare',
+    displayName: 'R2 object storage',
+    category: 'storage',
+    capabilities: ['OBJECT_STORAGE'],
+    instrumented: true,
+    usage: [
+      {
+        meterId: 'cloudflare.r2/class_a_operations',
+        operationId: 'cloudflare.r2Write',
+        usageMetricId: 'class_a_operations',
+        billingSkuId: 'r2.class_a',
+        unit: 'operation',
+        billable: true,
+        quantity: 240_000,
+        sources: ['cloudflare_api'],
+      },
+    ],
+    quota: null,
+    lastUpdated: iso(60 * 40),
+    freshness: costFreshness('STALE', [costSource('cloudflare_api', 'STALE')]),
+  },
+  'cloudflare.workers': {
+    ...UNKNOWN_MONEY,
+    serviceId: 'cloudflare.workers',
+    providerId: 'cloudflare',
+    displayName: 'Workers',
+    category: 'compute',
+    capabilities: ['EDGE_COMPUTE'],
+    instrumented: false,
+    usage: [],
+    quota: null,
+    lastUpdated: null,
+    // No credential yet (GoGo-Infra#114): the collector has never succeeded.
+    freshness: costFreshness('UNKNOWN', [
+      costSource('cloudflare_api', 'UNKNOWN', { serviceId: 'cloudflare.workers' }),
+    ]),
+  },
+  'apple.developerProgram': {
+    ...UNKNOWN_MONEY,
+    spendMicros: 8_250_000,
+    manualMicros: 8_250_000,
+    basis: 'MANUAL',
+    confidence: 'HIGH',
+    currency: 'USD',
+    costStatus: 'KNOWN',
+    serviceId: 'apple.developerProgram',
+    providerId: 'apple',
+    displayName: 'Apple Developer Program',
+    category: 'store',
+    capabilities: ['MANUAL_COST'],
+    instrumented: false,
+    usage: [],
+    quota: null,
+    lastUpdated: iso(60 * 6),
+    freshness: costFreshness('FRESH', [costSource('manual_cost_items', 'FRESH')]),
+  },
+  'gogo.metrics': {
+    ...UNKNOWN_MONEY,
+    spendMicros: 640_000,
+    estimatedMicros: 640_000,
+    basis: 'ESTIMATED',
+    confidence: 'MEDIUM',
+    currency: 'USD',
+    costStatus: 'KNOWN',
+    serviceId: 'gogo.metrics',
+    providerId: 'gogo',
+    displayName: 'Metrics store',
+    category: 'internal',
+    capabilities: ['METRICS'],
+    instrumented: true,
+    usage: [
+      {
+        meterId: 'gogo.metrics/active_series',
+        operationId: 'gogo.metricsIngest',
+        usageMetricId: 'active_series',
+        billingSkuId: 'metrics.series',
+        unit: 'series',
+        billable: true,
+        quantity: 18_400,
+        sources: ['ledger'],
+      },
+    ],
+    quota: null,
+    lastUpdated: iso(45),
+    freshness: costFreshness('FRESH', [costSource('ledger', 'FRESH')]),
+  },
+}
+
+export const costProviderRows: CmsCostProviderRow[] = [
+  {
+    ...UNKNOWN_MONEY,
+    spendMicros: 10_400_000,
+    estimatedMicros: 10_400_000,
+    basis: 'ESTIMATED',
+    confidence: 'MEDIUM',
+    currency: 'USD',
+    costStatus: 'KNOWN',
+    providerId: 'google',
+    displayName: 'Google',
+    status: 'active',
+    capabilities: ['PLACE_SEARCH', 'ROUTE_MATRIX', 'MAP_RENDER'],
+    billingTimezone: 'America/Los_Angeles',
+    unknownServices: ['google.routeMatrix', 'google.mapsSdk'],
+    services: [
+      costServices['google.places']!,
+      costServices['google.sheets']!,
+      costServices['google.routeMatrix']!,
+      costServices['google.mapsSdk']!,
+    ],
+    lastUpdated: iso(45),
+    freshness: costFreshness('UNKNOWN', [costSource('ledger', 'FRESH')]),
+  },
+  {
+    ...UNKNOWN_MONEY,
+    spendMicros: 1_250_000,
+    estimatedMicros: 1_400_000,
+    actualMicros: 1_250_000,
+    shadowedEstimatedMicros: 1_400_000,
+    basis: 'ACTUAL',
+    confidence: 'HIGH',
+    currency: 'USD',
+    costStatus: 'KNOWN',
+    providerId: 'cloudflare',
+    displayName: 'Cloudflare',
+    status: 'active',
+    capabilities: ['OBJECT_STORAGE', 'EDGE_COMPUTE'],
+    billingTimezone: 'UTC',
+    unknownServices: ['cloudflare.workers'],
+    services: [costServices['cloudflare.r2']!, costServices['cloudflare.workers']!],
+    lastUpdated: iso(60 * 40),
+    freshness: costFreshness('STALE', [costSource('cloudflare_api', 'STALE')]),
+  },
+  {
+    ...UNKNOWN_MONEY,
+    spendMicros: 8_250_000,
+    manualMicros: 8_250_000,
+    basis: 'MANUAL',
+    confidence: 'HIGH',
+    currency: 'USD',
+    costStatus: 'KNOWN',
+    providerId: 'apple',
+    displayName: 'Apple',
+    status: 'manual',
+    capabilities: ['MANUAL_COST'],
+    billingTimezone: null,
+    unknownServices: [],
+    services: [costServices['apple.developerProgram']!],
+    lastUpdated: iso(60 * 6),
+    freshness: costFreshness('FRESH', [costSource('manual_cost_items', 'FRESH')]),
+  },
+  {
+    ...UNKNOWN_MONEY,
+    spendMicros: 640_000,
+    estimatedMicros: 640_000,
+    basis: 'ESTIMATED',
+    confidence: 'MEDIUM',
+    currency: 'USD',
+    costStatus: 'KNOWN',
+    providerId: 'gogo',
+    displayName: 'GoGo (nội bộ)',
+    status: 'active',
+    capabilities: ['METRICS'],
+    billingTimezone: 'Asia/Ho_Chi_Minh',
+    unknownServices: [],
+    services: [costServices['gogo.metrics']!],
+    lastUpdated: iso(45),
+    freshness: costFreshness('FRESH', [costSource('ledger', 'FRESH')]),
+  },
+  {
+    ...UNKNOWN_MONEY,
+    // In the registry, nothing connected. `planned` is not zero spend.
+    providerId: 'vietmap',
+    displayName: 'VIETMAP',
+    status: 'planned',
+    capabilities: ['PLACE_SEARCH'],
+    billingTimezone: null,
+    unknownServices: [],
+    services: [],
+    lastUpdated: null,
+    freshness: costFreshness('UNKNOWN'),
+  },
+]
+
+/** Operations behind each service, for the drill-down drawer. */
+export const costServiceOperations: Record<string, CmsCostOperationUsage[]> = {
+  'google.places': [
+    {
+      operationId: 'google.placeDetails',
+      displayName: 'Place Details',
+      instrumented: true,
+      unregistered: false,
+      meters: costServices['google.places']!.usage,
+    },
+    {
+      // In the tables, not in the registry — a SKU somebody forgot to fold.
+      operationId: 'google.placePhoto',
+      displayName: null,
+      instrumented: true,
+      unregistered: true,
+      meters: [
+        {
+          meterId: null,
+          operationId: 'google.placePhoto',
+          usageMetricId: 'requests',
+          billingSkuId: null,
+          unit: 'request',
+          billable: true,
+          quantity: 96,
+          sources: ['ledger'],
+        },
+      ],
+    },
+  ],
+  'google.mapsSdk': [],
+}
+
+export const costOverview: CmsCostOverview = {
+  environment: 'dev',
+  ledgerEnabled: true,
+  window: 'mtd',
+  range: { from: '2026-09-01', to: '2026-09-04' },
+  month: '2026-09',
+  today: '2026-09-04',
+  generatedAt: iso(5),
+  cards: {
+    today: {
+      day: '2026-09-04',
+      spendMicros: 2_400_000,
+      byBasis: { ACTUAL: 0, ESTIMATED: 2_400_000, FIXED: 0, MANUAL: 0 },
+      currency: 'USD',
+      mixedCurrency: false,
+      services: 2,
+    },
+    monthToDate: {
+      month: '2026-09',
+      spendMicros: 20_540_000,
+      byBasis: {
+        ACTUAL: 1_250_000,
+        ESTIMATED: 11_040_000,
+        FIXED: 0,
+        MANUAL: 8_250_000,
+      },
+      currency: 'USD',
+      mixedCurrency: false,
+      services: 4,
+    },
+    projected: {
+      micros: 61_620_000,
+      month: '2026-09',
+      elapsedDays: 10,
+      minElapsedDays: 3,
+      currency: 'USD',
+    },
+    budget: {
+      total: {
+        scope: { kind: 'TOTAL', id: null },
+        monthMicros: 25_000_000,
+        usedMicros: 20_540_000,
+        remainingMicros: 4_460_000,
+        usedPct: 82.16,
+        projectedMicros: 61_620_000,
+        projectedPct: 246.48,
+        state: 'projected_exceed',
+        currency: 'USD',
+      },
+      budgets: [
+        {
+          scope: { kind: 'PROVIDER', id: 'google' },
+          monthMicros: 15_000_000,
+          usedMicros: 10_400_000,
+          remainingMicros: 4_600_000,
+          usedPct: 69.33,
+          projectedMicros: 31_200_000,
+          projectedPct: 208,
+          state: 'warning',
+          currency: 'USD',
+        },
+      ],
+    },
+    unknown: {
+      providerIds: ['vietmap'],
+      serviceIds: ['google.routeMatrix', 'google.mapsSdk', 'cloudflare.workers'],
+    },
+    costOfMonitoring: {
+      spendMicros: 640_000,
+      byBasis: { ACTUAL: 0, ESTIMATED: 640_000, FIXED: 0, MANUAL: 0 },
+      currency: 'USD',
+      mixedCurrency: false,
+      services: 1,
+      serviceIds: ['gogo.metrics'],
+    },
+  },
+  providerRows: costProviderRows,
+  unattributed: { providerIds: [], serviceIds: ['google.legacyGeocode'] },
+}
+
+export const costTestRuns: CmsCostTestRun[] = [
+  {
+    id: '33333333-0000-4000-8000-000000000001',
+    name: 'e2e · suggestion smoke',
+    environment: 'dev',
+    status: 'ok',
+    startedAt: iso(60 * 5),
+    endedAt: iso(60 * 4),
+    baselineSnapshotAt: iso(60 * 5),
+    finalSnapshotAt: iso(60 * 4),
+    gitSha: '9d0d85e',
+    services: ['google.places', 'google.routeMatrix'],
+    budget: { maxProviderCalls: 200, maxEstimatedCostMicros: 500_000 },
+    notes: null,
+  },
+  {
+    id: '33333333-0000-4000-8000-000000000002',
+    name: 'load · room fanout',
+    environment: 'dev',
+    status: 'running',
+    startedAt: iso(20),
+    endedAt: null,
+    baselineSnapshotAt: iso(20),
+    finalSnapshotAt: null,
+    gitSha: null,
+    services: null,
+    budget: null,
+    notes: 'Đang chạy trong CI.',
+  },
+]
+
+export const costTestRunDetails: Record<string, CmsCostTestRunDetail> = {
+  '33333333-0000-4000-8000-000000000001': {
+    ...costTestRuns[0]!,
+    deltas: [
+      {
+        providerId: 'google',
+        serviceId: 'google.places',
+        operationId: 'google.placeDetails',
+        usageMetricId: 'requests',
+        billingSkuId: 'places.details.essentials',
+        unit: 'request',
+        usageBefore: 1_400,
+        usageAfter: 1_520,
+        usageDelta: 120,
+        estimatedCostDelta: 40_000,
+        actualCostDelta: null,
+        currency: 'USD',
+        basis: 'ESTIMATED',
+        confidence: 'MEDIUM',
+      },
+      {
+        providerId: 'google',
+        serviceId: 'google.routeMatrix',
+        operationId: 'google.routeMatrix',
+        usageMetricId: 'billable_elements',
+        billingSkuId: 'routes.matrix.element',
+        unit: 'matrix_element',
+        usageBefore: 8_000,
+        usageAfter: 8_400,
+        usageDelta: 400,
+        // No verified per-element list price: the run's total is a floor.
+        estimatedCostDelta: null,
+        actualCostDelta: null,
+        currency: 'USD',
+        basis: 'UNKNOWN',
+        confidence: 'LOW',
+      },
+    ],
+    estimatedCostMicros: 40_000,
+    actualCostMicros: null,
+    unpriced: ['google.routeMatrix/billable_elements'],
+  },
+  '33333333-0000-4000-8000-000000000002': {
+    ...costTestRuns[1]!,
+    deltas: [
+      {
+        providerId: 'google',
+        serviceId: 'google.places',
+        operationId: 'google.placeDetails',
+        usageMetricId: 'requests',
+        billingSkuId: 'places.details.essentials',
+        unit: 'request',
+        usageBefore: 1_520,
+        usageAfter: 1_520,
+        usageDelta: 0,
+        estimatedCostDelta: null,
+        actualCostDelta: null,
+        currency: 'USD',
+        basis: 'UNKNOWN',
+        confidence: 'LOW',
+      },
+    ],
+    // The run is open: nothing has been measured, and 0 would read as a result.
+    estimatedCostMicros: null,
+    actualCostMicros: null,
+    unpriced: [],
+  },
+}

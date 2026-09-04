@@ -1,7 +1,8 @@
-import { minorUnitExponent } from '@/shared/format'
+import { formatMoney, minorUnitExponent } from '@/shared/format'
+import type { Locale } from '@/shared/i18n/i18n'
 
 /**
- * COST-CMS-010 — the one place micros meet the form.
+ * The one place micros meet the display layer and the form.
  *
  * The Cost API speaks micros (10⁻⁶ of the currency unit); `formatMoney`
  * speaks minor units; a person types major units. All three conversions are
@@ -43,4 +44,19 @@ export function microsToAmountText(micros: number, currency: string): string {
     .padStart(6, '0')
     .slice(0, exponent)
   return exponent === 0 ? String(whole) : `${whole}.${fraction}`
+}
+
+/**
+ * Micros → the string the console shows. `null` is **unknown**, not zero, and
+ * the caller decides what to say beside the dash — "Chưa có nguồn chi phí" on
+ * a cost row, "chưa đo" on a usage row. A missing currency is the same
+ * absence: an amount with no unit is not an amount (CLAUDE.md rule 13).
+ */
+export function formatMicros(
+  micros: number | null | undefined,
+  currency: string | null | undefined,
+  locale: Locale,
+): string {
+  if (micros == null || !currency) return '—'
+  return formatMoney({ amount: microsToMinor(micros, currency), currency }, locale)
 }

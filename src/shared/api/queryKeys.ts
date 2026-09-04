@@ -14,6 +14,16 @@ export const queryKeys = {
   opsProvider: (provider: string, window: string) => ['ops', 'provider', provider, window] as const,
   /** COST-CMS-010 (GoGo-BE#382) — manual cost items and the services one may name. */
   opsManualCosts: ['ops', 'manual-costs'] as const,
+  /**
+   * COST-CMS-009 (GoGo-BE#381) — the Cost Center. The window is part of the
+   * key: the rows follow it, so a shared key would show 30 days of usage under
+   * a "today" heading.
+   */
+  opsCostCenter: (window: string) => ['ops', 'cost-center', window] as const,
+  opsCostService: (providerId: string, serviceId: string, window: string) =>
+    ['ops', 'cost-service', providerId, serviceId, window] as const,
+  opsCostTestRuns: (limit: number) => ['ops', 'cost-test-runs', limit] as const,
+  opsCostTestRun: (id: string) => ['ops', 'cost-test-run', id] as const,
 
   planTemplates: {
     all: ['plan-templates'] as const,
