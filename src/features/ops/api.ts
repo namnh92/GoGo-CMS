@@ -1,6 +1,10 @@
 import { apiFetch, apiFetchParsed } from '@/shared/api/client'
 import type { RequestBody } from '@/shared/api/generated'
 import {
+  cmsCostOverviewSchema,
+  cmsCostServiceDetailEnvelopeSchema,
+  cmsCostTestRunEnvelopeSchema,
+  cmsCostTestRunsSchema,
   cmsManualCostItemEnvelopeSchema,
   cmsManualCostItemsSchema,
   cmsOpsCostsSchema,
@@ -15,6 +19,11 @@ import {
   cmsOpsQueuesSchema,
   opsKpisSchema,
   searchAnalyticsSchema,
+  type CmsCostOverview,
+  type CmsCostServiceDetailEnvelope,
+  type CmsCostTestRunDetail,
+  type CmsCostTestRuns,
+  type CmsCostWindow,
   type CmsManualCostItem,
   type CmsManualCostItems,
   type CmsOpsCosts,
@@ -151,4 +160,74 @@ export async function updateManualCostItem(
 /** Every MANUAL row derived from the item is gone before this resolves. */
 export function deleteManualCostItem(id: string): Promise<{ deleted: true }> {
   return apiFetch(`/cms/ops/costs/manual-items/${id}`, { method: 'DELETE' })
+}
+
+/**
+ * COST-CMS-009 (GoGo-BE#381) — the Cost Center overview.
+ *
+ * One read answers the whole page: the §35 cards and one row per registry
+ * provider with its services nested. There is no per-provider fan-out, and
+ * nothing here may branch on a provider id — a provider added to the server's
+ * registry arrives as another row.
+ *
+ * Refreshing this screen calls no paid provider. Every figure comes from
+ * GoGo-BE's own daily tables, which is also why the console needs no Grafana
+ * credential and sends no PromQL: it reads `/v1/cms/ops/*` and nothing else.
+ *
+ * The response also carries the deprecated #335 keys for the dashboard card;
+ * they are a different shape parsed by `cmsOpsCostsSchema`, and this schema
+ * drops them.
+ */
+export function fetchCostOverview(
+  window: CmsCostWindow,
+  signal?: AbortSignal,
+): Promise<CmsCostOverview> {
+  return apiFetchParsed(cmsCostOverviewSchema, '/cms/ops/costs', { query: { window }, signal })
+}
+
+/**
+ * One service with `operations[]` — every registry operation and its meters,
+ * plus any operation label the tables carry that the registry does not know
+ * (`unregistered`), so a billed call never vanishes because somebody forgot
+ * to fold a SKU.
+ *
+ * Ids are registry ids rather than an enum, so they are encoded rather than
+ * validated against a list here: an unknown id is the server's 404 to give.
+ */
+export function fetchCostService(
+  providerId: string,
+  serviceId: string,
+  window: CmsCostWindow,
+  signal?: AbortSignal,
+): Promise<CmsCostServiceDetailEnvelope> {
+  return apiFetchParsed(
+    cmsCostServiceDetailEnvelopeSchema,
+    `/cms/ops/costs/providers/${encodeURIComponent(providerId)}/services/${encodeURIComponent(serviceId)}`,
+    { query: { window }, signal },
+  )
+}
+
+/** Test-run cost records, newest first (epic §28, GoGo-BE#378). */
+export function fetchCostTestRuns(limit = 20, signal?: AbortSignal): Promise<CmsCostTestRuns> {
+  return apiFetchParsed(cmsCostTestRunsSchema, '/cms/ops/costs/test-runs', {
+    query: { limit },
+    signal,
+  })
+}
+
+/**
+ * One run with its per-meter deltas. A run still `running` carries its
+ * baseline snapshot at delta 0 and null totals — nothing has been measured,
+ * and a floor of 0 would read as a result.
+ */
+export async function fetchCostTestRun(
+  id: string,
+  signal?: AbortSignal,
+): Promise<CmsCostTestRunDetail> {
+  const { testRun } = await apiFetchParsed(
+    cmsCostTestRunEnvelopeSchema,
+    `/cms/ops/costs/test-runs/${encodeURIComponent(id)}`,
+    { signal },
+  )
+  return testRun
 }

@@ -3,6 +3,11 @@ import type { AdminRole, CollectionStatus, PlaceStatus } from '@/shared/api/cont
 import { ALLOWED_ACTIONS, ALLOWED_TRIGGERS } from '@/features/safety/conditions'
 import type { ImportRow } from '@/shared/api/contracts-import'
 import {
+  costOverview,
+  costServiceOperations,
+  costServices,
+  costTestRunDetails,
+  costTestRuns,
   auditEntries,
   collectionItems,
   collections,
@@ -1813,7 +1818,53 @@ export const handlers = [
    */
   http.get(`${BASE}/cms/ops/health`, () => HttpResponse.json(opsHealth)),
   http.get(`${BASE}/cms/ops/queues`, () => HttpResponse.json(opsQueues)),
-  http.get(`${BASE}/cms/ops/costs`, () => HttpResponse.json(opsCosts)),
+  /*
+   * COST-CMS-009 (GoGo-BE#381). One endpoint, two shapes in one body: the
+   * deprecated #335 keys the dashboard card still reads, and the v2 Cost
+   * Center payload. They share no key, so neither strips the other — and the
+   * window is echoed back so a test can prove the selector re-queries rather
+   * than only repainting.
+   */
+  http.get(`${BASE}/cms/ops/costs`, ({ request }) => {
+    const denied = requireOpsAdmin('operational cost is ops_admin and above')
+    if (denied) return denied
+    const window = new URL(request.url).searchParams.get('window') ?? 'mtd'
+    return HttpResponse.json({ ...opsCosts, ...costOverview, window })
+  }),
+
+  http.get(
+    `${BASE}/cms/ops/costs/providers/:providerId/services/:serviceId`,
+    ({ params, request }) => {
+      const denied = requireOpsAdmin('operational cost is ops_admin and above')
+      if (denied) return denied
+      const service = costServices[String(params.serviceId)]
+      // The registry is data, so an unknown id is a 404 rather than a 400 —
+      // and a service under the wrong provider is just as absent.
+      if (!service || service.providerId !== String(params.providerId)) {
+        return envelope(404, 'NOT_FOUND', 'no such service')
+      }
+      const window = new URL(request.url).searchParams.get('window') ?? 'mtd'
+      return HttpResponse.json({
+        window,
+        service: { ...service, operations: costServiceOperations[service.serviceId] ?? [] },
+      })
+    },
+  ),
+
+  http.get(`${BASE}/cms/ops/costs/test-runs`, ({ request }) => {
+    const denied = requireOpsAdmin('operational cost is ops_admin and above')
+    if (denied) return denied
+    const limit = Number(new URL(request.url).searchParams.get('limit') ?? 20)
+    return HttpResponse.json({ testRuns: costTestRuns.slice(0, limit) })
+  }),
+
+  http.get(`${BASE}/cms/ops/costs/test-runs/:id`, ({ params }) => {
+    const denied = requireOpsAdmin('operational cost is ops_admin and above')
+    if (denied) return denied
+    const run = costTestRunDetails[String(params.id)]
+    if (!run) return envelope(404, 'NOT_FOUND', 'no such run')
+    return HttpResponse.json({ testRun: run })
+  }),
 
   /*
    * COST-CMS-010 (GoGo-BE#382). Manual cost items — the mock's job is the

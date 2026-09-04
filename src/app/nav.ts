@@ -151,6 +151,17 @@ const OPERATIONS: NavLeaf[] = [
     match: (p) => p.startsWith('/monitoring'),
   },
   {
+    // COST-CMS-009 (GoGo-BE#381): what GoGo spends, what it only estimates,
+    // and what nothing measures yet. `cost.read` is the same `ops_admin` gate
+    // the server puts on /cms/ops/costs*.
+    to: '/costs',
+    labelKey: 'nav.costCenter',
+    permission: 'cost.read',
+    // `/costs/manual` is its own entry below, so the Cost Center must not
+    // claim it — an active state on two rows at once tells the operator nothing.
+    match: (p) => p === '/costs' || p.startsWith('/costs/test-runs'),
+  },
+  {
     // COST-CMS-010 (GoGo-BE#382): fees typed in by hand, materialised into the
     // Cost Center. Same gate as the rest of /cms/ops/*.
     to: '/costs/manual',

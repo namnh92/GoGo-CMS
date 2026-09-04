@@ -9,6 +9,8 @@ import { LoadingState } from '@/shared/ui/State'
 const LoginScreen = lazy(() => import('@/features/auth/login.view'))
 const DashboardScreen = lazy(() => import('@/features/ops/dashboard.view'))
 const MonitoringScreen = lazy(() => import('@/features/ops/monitoring.view'))
+const CostCenterScreen = lazy(() => import('@/features/ops/costCenter.view'))
+const CostTestRunScreen = lazy(() => import('@/features/ops/costTestRun.view'))
 const ManualCostsScreen = lazy(() => import('@/features/ops/manualCosts.view'))
 const PlaceListScreen = lazy(() => import('@/features/places/placeList.view'))
 const PlaceEditorScreen = lazy(() => import('@/features/places/placeEditor.view'))
@@ -86,7 +88,9 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <DashboardScreen /> },
           { path: 'monitoring', element: <MonitoringScreen /> },
+          { path: 'costs', element: <CostCenterScreen /> },
           { path: 'costs/manual', element: <ManualCostsScreen /> },
+          { path: 'costs/test-runs/:id', element: <CostTestRunScreen /> },
           { path: 'places', element: <PlaceListScreen /> },
           { path: 'places/:id', element: <PlaceEditorScreen /> },
           { path: 'imports', element: <ImportListScreen /> },

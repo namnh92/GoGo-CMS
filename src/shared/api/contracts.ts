@@ -1554,6 +1554,319 @@ export const cmsOpsCostsSchema = z.object({
 export type CmsOpsCosts = z.infer<typeof cmsOpsCostsSchema>
 
 /**
+ * COST-CMS-009 (GoGo-BE#381) — the Cost Center, epic §34–§36.
+ *
+ * Three rules shape every schema below, and the screen renders them literally:
+ *
+ * - **Unknown is not zero.** `spendMicros: null` with `costStatus: UNKNOWN`
+ *   means nothing measures this yet. A `0` appears only as `MEASURED_ZERO` —
+ *   an instrumented service under a FRESH or STALE source that counted
+ *   nothing. The console must render those as different claims.
+ * - **Ids come from the registry, not from an enum here.** A provider added
+ *   to `COST_REGISTRY_DATA` arrives as a new row with no CMS change, so
+ *   nothing in the UI may branch on `google` / `places` / `routes`.
+ * - **ACTUAL and ESTIMATED never add up.** `spendMicros` is the one number to
+ *   report after §12 precedence; the per-basis figures say what it is made of,
+ *   and `shadowedEstimatedMicros` is an estimate an invoice displaced.
+ *
+ * Money here is **micros** (10⁻⁶ of the currency unit), not the minor units
+ * `formatMoney` takes — `costMoney.ts` is the only place the two meet.
+ */
+export const cmsCostWindowSchema = z.enum(['today', '7d', '30d', 'mtd'])
+export type CmsCostWindow = z.infer<typeof cmsCostWindowSchema>
+
+export const cmsCostStatusSchema = z.enum(['KNOWN', 'MEASURED_ZERO', 'UNKNOWN'])
+export type CmsCostStatus = z.infer<typeof cmsCostStatusSchema>
+
+export const cmsCostBasisSchema = z.enum([
+  'ACTUAL',
+  'ESTIMATED',
+  'FIXED',
+  'MANUAL',
+  'MIXED',
+  'UNKNOWN',
+])
+export type CmsCostBasis = z.infer<typeof cmsCostBasisSchema>
+
+export const cmsCostConfidenceSchema = z.enum(['HIGH', 'MEDIUM', 'LOW'])
+export type CmsCostConfidence = z.infer<typeof cmsCostConfidenceSchema>
+
+/**
+ * Epic §23, recomputed against now. A STALE source has numbers on record that
+ * were true when taken; an UNKNOWN one has no numbers at all. Collectors stay
+ * UNKNOWN until their credentials land (GoGo-Infra#114), and that is a fact
+ * the screen shows rather than hides.
+ */
+export const cmsCostFreshnessStatusSchema = z.enum(['FRESH', 'STALE', 'UNAVAILABLE', 'UNKNOWN'])
+export type CmsCostFreshnessStatus = z.infer<typeof cmsCostFreshnessStatusSchema>
+
+export const cmsCostFreshnessSourceSchema = z.object({
+  sourceId: z.string(),
+  /** Null when the source covers the whole provider. */
+  serviceId: z.string().nullable(),
+  status: cmsCostFreshnessStatusSchema,
+  lastSuccessfulAt: z.string().nullable(),
+  lastAttemptAt: z.string().nullable(),
+  sourceAsOf: z.string().nullable(),
+  staleAfterS: z.number().int(),
+  consecutiveFailures: z.number().int(),
+})
+export type CmsCostFreshnessSource = z.infer<typeof cmsCostFreshnessSourceSchema>
+
+export const cmsCostFreshnessSchema = z.object({
+  /** The worst covering source; no covering source at all is UNKNOWN. */
+  status: cmsCostFreshnessStatusSchema,
+  sourceAsOf: z.string().nullable(),
+  sources: z.array(cmsCostFreshnessSourceSchema).default([]),
+})
+export type CmsCostFreshness = z.infer<typeof cmsCostFreshnessSchema>
+
+/** One usage meter over the window. Two sources never sum — the server picks a winner per day. */
+export const cmsCostUsageLineSchema = z.object({
+  /** Registry meter id; null when the label is in the tables but not the registry. */
+  meterId: z.string().nullable(),
+  operationId: z.string().nullable(),
+  usageMetricId: z.string(),
+  billingSkuId: z.string().nullable(),
+  unit: z.string(),
+  billable: z.boolean(),
+  quantity: z.number().int(),
+  sources: z.array(z.string()).default([]),
+})
+export type CmsCostUsageLine = z.infer<typeof cmsCostUsageLineSchema>
+
+export const cmsCostMoneySchema = z.object({
+  /** Original-currency micros after §12 precedence. Null = unknown, never 0. */
+  spendMicros: z.number().int().nullable(),
+  estimatedMicros: z.number().int().nullable(),
+  actualMicros: z.number().int().nullable(),
+  fixedMicros: z.number().int().nullable(),
+  manualMicros: z.number().int().nullable(),
+  /** Estimates an ACTUAL row displaced — part of `estimatedMicros`, never of `spendMicros`. */
+  shadowedEstimatedMicros: z.number().int(),
+  basis: cmsCostBasisSchema,
+  confidence: cmsCostConfidenceSchema.nullable(),
+  /** Null when unknown or when the rows disagree (`mixedCurrency`). */
+  currency: z.string().nullable(),
+  /** More than one billing currency in scope — the number cannot be summed honestly. */
+  mixedCurrency: z.boolean(),
+  costStatus: cmsCostStatusSchema,
+})
+export type CmsCostMoney = z.infer<typeof cmsCostMoneySchema>
+
+export const cmsCostServiceRowSchema = cmsCostMoneySchema.extend({
+  serviceId: z.string(),
+  providerId: z.string(),
+  displayName: z.string(),
+  category: z.string(),
+  capabilities: z.array(z.string()).default([]),
+  /** At least one operation emits a metric. False renders as "chưa đo", never as zero. */
+  instrumented: z.boolean(),
+  usage: z.array(cmsCostUsageLineSchema).default([]),
+  /**
+   * No QUOTA collector exists yet (epic §6), so the server sends `null` for
+   * every service. Parsed loosely and rendered nowhere: a column that is
+   * structurally empty is worse than an absent one.
+   */
+  quota: z.unknown().nullish(),
+  lastUpdated: z.string().nullable(),
+  freshness: cmsCostFreshnessSchema,
+})
+export type CmsCostServiceRow = z.infer<typeof cmsCostServiceRowSchema>
+
+export const cmsCostOperationUsageSchema = z.object({
+  operationId: z.string(),
+  displayName: z.string().nullable(),
+  instrumented: z.boolean(),
+  /** In the tables but not the registry — a SKU somebody forgot to fold. */
+  unregistered: z.boolean(),
+  meters: z.array(cmsCostUsageLineSchema).default([]),
+})
+export type CmsCostOperationUsage = z.infer<typeof cmsCostOperationUsageSchema>
+
+export const cmsCostServiceDetailSchema = cmsCostServiceRowSchema.extend({
+  operations: z.array(cmsCostOperationUsageSchema).default([]),
+})
+export type CmsCostServiceDetail = z.infer<typeof cmsCostServiceDetailSchema>
+
+export const cmsCostProviderStatusSchema = z.enum(['active', 'planned', 'manual'])
+export type CmsCostProviderStatus = z.infer<typeof cmsCostProviderStatusSchema>
+
+export const cmsCostProviderRowSchema = cmsCostMoneySchema.extend({
+  providerId: z.string(),
+  displayName: z.string(),
+  /** Registry status. `planned` renders as "chưa nối", not as a zero. */
+  status: cmsCostProviderStatusSchema,
+  capabilities: z.array(z.string()).default([]),
+  billingTimezone: z.string().nullable(),
+  /** Services with `costStatus: UNKNOWN` — what the unknown card counts. */
+  unknownServices: z.array(z.string()).default([]),
+  services: z.array(cmsCostServiceRowSchema).default([]),
+  lastUpdated: z.string().nullable(),
+  freshness: cmsCostFreshnessSchema,
+})
+export type CmsCostProviderRow = z.infer<typeof cmsCostProviderRowSchema>
+
+export const cmsCostByBasisSchema = z.object({
+  ACTUAL: z.number().int(),
+  ESTIMATED: z.number().int(),
+  FIXED: z.number().int(),
+  MANUAL: z.number().int(),
+})
+export type CmsCostByBasis = z.infer<typeof cmsCostByBasisSchema>
+
+export const cmsCostCardSchema = z.object({
+  /** Null when no cost row is in scope — unknown, not zero. */
+  spendMicros: z.number().int().nullable(),
+  byBasis: cmsCostByBasisSchema.nullable(),
+  currency: z.string().nullable(),
+  mixedCurrency: z.boolean(),
+  /** How many services contributed a row. */
+  services: z.number().int(),
+})
+export type CmsCostCard = z.infer<typeof cmsCostCardSchema>
+
+export const cmsCostBudgetScopeSchema = z.object({
+  kind: z.enum(['TOTAL', 'PROVIDER', 'SERVICE']),
+  /** Registry provider or service id; null for TOTAL. */
+  id: z.string().nullable(),
+})
+export type CmsCostBudgetScope = z.infer<typeof cmsCostBudgetScopeSchema>
+
+export const cmsCostBudgetStatusSchema = z.object({
+  scope: cmsCostBudgetScopeSchema,
+  monthMicros: z.number().int(),
+  usedMicros: z.number().int(),
+  remainingMicros: z.number().int(),
+  /** Null only when the budget is 0 and spend is positive — JSON has no infinity. */
+  usedPct: z.number().nullable(),
+  /** Null under `minElapsedDays` or with no rows (epic §33). */
+  projectedMicros: z.number().int().nullable(),
+  projectedPct: z.number().nullable(),
+  state: z.enum(['ok', 'warning', 'exceeded', 'projected_exceed']),
+  currency: z.string(),
+})
+export type CmsCostBudgetStatus = z.infer<typeof cmsCostBudgetStatusSchema>
+
+/** Epic §35 overview cards. Month-shaped whatever the window. */
+export const cmsCostCardsSchema = z.object({
+  today: cmsCostCardSchema.extend({ day: z.string() }),
+  monthToDate: cmsCostCardSchema.extend({ month: z.string() }),
+  projected: z.object({
+    /** MTD daily average × days in the month; null under `minElapsedDays`. */
+    micros: z.number().int().nullable(),
+    month: z.string(),
+    elapsedDays: z.number().int(),
+    minElapsedDays: z.number().int(),
+    currency: z.string().nullable(),
+  }),
+  budget: z.object({
+    total: cmsCostBudgetStatusSchema.nullable(),
+    budgets: z.array(cmsCostBudgetStatusSchema).default([]),
+  }),
+  unknown: z.object({
+    providerIds: z.array(z.string()).default([]),
+    serviceIds: z.array(z.string()).default([]),
+  }),
+  costOfMonitoring: cmsCostCardSchema.extend({
+    serviceIds: z.array(z.string()).default([]),
+  }),
+})
+export type CmsCostCards = z.infer<typeof cmsCostCardsSchema>
+
+/**
+ * `GET /cms/ops/costs?window=` — the v2 half of the payload. The legacy #335
+ * keys travel in the same body and are parsed separately by
+ * `cmsOpsCostsSchema` for the dashboard card; the two shapes share no key, so
+ * neither strips the other.
+ */
+export const cmsCostOverviewSchema = z.object({
+  environment: z.string(),
+  /** False when `COST_LEDGER_ENABLED=false` — the in-process ledger writes nothing. */
+  ledgerEnabled: z.boolean(),
+  window: cmsCostWindowSchema,
+  range: z.object({ from: z.string(), to: z.string() }),
+  month: z.string(),
+  today: z.string(),
+  generatedAt: z.string(),
+  cards: cmsCostCardsSchema,
+  /** One row per registry provider, registry order. */
+  providerRows: z.array(cmsCostProviderRowSchema).default([]),
+  /** Ids in the tables the registry does not know. Money there is reported nowhere else. */
+  unattributed: z.object({
+    providerIds: z.array(z.string()).default([]),
+    serviceIds: z.array(z.string()).default([]),
+  }),
+})
+export type CmsCostOverview = z.infer<typeof cmsCostOverviewSchema>
+
+export const cmsCostServiceDetailEnvelopeSchema = z.object({
+  window: cmsCostWindowSchema,
+  service: cmsCostServiceDetailSchema,
+})
+export type CmsCostServiceDetailEnvelope = z.infer<typeof cmsCostServiceDetailEnvelopeSchema>
+
+/**
+ * Epic §28/§36 — what a test run cost (GoGo-BE#378/#381). While a run is
+ * `running` its deltas are the baseline snapshot and both totals are null:
+ * nothing has been measured, and a floor of 0 would read as a result.
+ */
+export const cmsCostTestRunSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  environment: z.string(),
+  status: z.enum(['running', 'ok', 'over_budget', 'failed']),
+  startedAt: z.string(),
+  endedAt: z.string().nullable(),
+  baselineSnapshotAt: z.string(),
+  finalSnapshotAt: z.string().nullable(),
+  gitSha: z.string().nullable(),
+  /** Registry service ids the run declared relevant; null = all. */
+  services: z.array(z.string()).nullable(),
+  /** Soft budget as declared (epic §29); shape is the run's, not ours. */
+  budget: z.record(z.unknown()).nullable(),
+  notes: z.string().nullable(),
+})
+export type CmsCostTestRun = z.infer<typeof cmsCostTestRunSchema>
+
+export const cmsCostTestRunDeltaSchema = z.object({
+  providerId: z.string(),
+  serviceId: z.string(),
+  operationId: z.string().nullable(),
+  usageMetricId: z.string(),
+  billingSkuId: z.string().nullable(),
+  unit: z.string(),
+  usageBefore: z.number().int(),
+  usageAfter: z.number().int(),
+  usageDelta: z.number().int(),
+  /** List price on the day the run finished; null when the price is unknown. */
+  estimatedCostDelta: z.number().int().nullable(),
+  /** Null until an ACTUAL source exists. */
+  actualCostDelta: z.number().int().nullable(),
+  currency: z.string(),
+  basis: z.enum(['ESTIMATED', 'UNKNOWN']),
+  confidence: z.enum(['MEDIUM', 'LOW']),
+})
+export type CmsCostTestRunDelta = z.infer<typeof cmsCostTestRunDeltaSchema>
+
+export const cmsCostTestRunDetailSchema = cmsCostTestRunSchema.extend({
+  deltas: z.array(cmsCostTestRunDeltaSchema).default([]),
+  /** Sum of known estimated deltas; null when nothing was priceable or the run is open. */
+  estimatedCostMicros: z.number().int().nullable(),
+  actualCostMicros: z.number().int().nullable(),
+  /** Billable meters whose price is unknown — why a total may be a floor. */
+  unpriced: z.array(z.string()).default([]),
+})
+export type CmsCostTestRunDetail = z.infer<typeof cmsCostTestRunDetailSchema>
+
+export const cmsCostTestRunsSchema = z.object({
+  testRuns: z.array(cmsCostTestRunSchema).default([]),
+})
+export type CmsCostTestRuns = z.infer<typeof cmsCostTestRunsSchema>
+
+export const cmsCostTestRunEnvelopeSchema = z.object({ testRun: cmsCostTestRunDetailSchema })
+
+/**
  * App-user management (GoGo-BE#246 §1–§4).
  *
  * Minimum PII by construction: no coordinates, no device tokens, no raw
