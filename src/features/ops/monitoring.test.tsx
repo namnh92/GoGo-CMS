@@ -131,6 +131,46 @@ describe('provider monitoring (GoGo-BE#315)', () => {
     expect(await screen.findByText('Google Maps SDK (app)')).toBeInTheDocument()
   })
 
+  /**
+   * COST-CMS-012 (#112). /monitoring is the runtime surface for the whole
+   * registry: every provider has a row, Google is one group, and a provider
+   * nothing measures says so instead of disappearing.
+   */
+  it('lists every registry provider once — Google as one group, none dropped for lacking telemetry', async () => {
+    signInAs('ops_admin')
+    render()
+
+    const table = (await screen.findByText('Upstash')).closest('table')!
+    // One header row plus one row per fixture provider — nothing filtered out.
+    expect(within(table).getAllByRole('row')).toHaveLength(1 + 6)
+    for (const name of ['Google', 'Cloudflare', 'Upstash', 'Apple', 'GoGo (nội bộ)', 'VIETMAP']) {
+      expect(within(table).getByText(name)).toBeInTheDocument()
+    }
+    // Google appears once here; its service groups live in their own table below.
+    expect(within(table).getAllByText('Google')).toHaveLength(1)
+    expect(screen.getByText('Google Places')).toBeInTheDocument()
+  })
+
+  it('states the telemetry situation per provider in words — never a zero, never a blank', async () => {
+    signInAs('ops_admin')
+    render()
+    const table = (await screen.findByText('Upstash')).closest('table')!
+    const rowOf = (name: string) => within(table).getByText(name).closest('tr')!
+
+    // Google: measured, and the one uninstrumented service is named.
+    expect(within(rowOf('Google')).getByText('Đã đo')).toBeInTheDocument()
+    expect(within(rowOf('Google')).getByText(/Chưa đo: Maps SDK \(mobile\)/)).toBeInTheDocument()
+    // Upstash: active and read by a collector, but blind at runtime.
+    expect(within(rowOf('Upstash')).getByText('NOT INSTRUMENTED')).toBeInTheDocument()
+    expect(within(rowOf('Upstash')).getByText('Mới')).toBeInTheDocument()
+    // VIETMAP: planned — nothing integrated, nothing to measure yet.
+    expect(within(rowOf('VIETMAP')).getByText('NO TELEMETRY')).toBeInTheDocument()
+    // Apple: a fixed fee has no runtime.
+    expect(within(rowOf('Apple')).getByText('N/A')).toBeInTheDocument()
+    // Every row links to the financial surface.
+    expect(within(table).getAllByRole('link', { name: 'Cost Center →' })).toHaveLength(6)
+  })
+
   it('switching the window re-queries rather than repainting', async () => {
     signInAs('ops_admin')
     render()

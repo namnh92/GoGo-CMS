@@ -1,16 +1,18 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import { useI18n, useT } from '@/shared/i18n/i18n'
 import { queryKeys } from '@/shared/api/queryKeys'
 import { formatDateTime, formatMoney, formatNumber, formatPercent } from '@/shared/format'
 import { PageBody, PageHeader } from '@/app/PageHeader'
 import { Card, CardBody, CardHeader, KpiCard } from '@/shared/ui/Card'
-import { Badge } from '@/shared/ui/Badge'
+import { Badge, StatusBadge, type BadgeShape, type Tone } from '@/shared/ui/Badge'
 import { AsyncBoundary, PermissionDeniedState } from '@/shared/ui/State'
 import { Sparkline } from '@/shared/ui/Sparkline'
 import { cn } from '@/shared/ui/cn'
 import { useSession } from '@/shared/auth/session'
 import type {
+  CmsCostProviderRow,
   OpsCostGap,
   OpsCostModel,
   OpsProviderRow,
@@ -18,7 +20,8 @@ import type {
   OpsSummary,
   OpsWindow,
 } from '@/shared/api/contracts'
-import { fetchOpsProviders, fetchOpsSummary } from './api'
+import { fetchCostOverview, fetchOpsProviders, fetchOpsSummary } from './api'
+import { FreshnessBadge, ProviderStatusBadge } from './costParts'
 import { styles } from './monitoring.style'
 
 const WINDOWS: OpsWindow[] = ['1h', '24h', '7d', '30d']
@@ -36,6 +39,14 @@ const WINDOWS: OpsWindow[] = ['1h', '24h', '7d', '30d']
  * zero.** `null` renders as "chưa đo", an unavailable backend renders as a
  * banner and blanks rather than zeros, and a truncated window says how many
  * days it actually covers. Grafana is next door for anyone who needs axes.
+ *
+ * COST-CMS-012 (#112): this is the runtime surface for the whole provider
+ * registry, not a Google page. Every registry provider has a row; one whose
+ * runtime nothing in this process measures says NOT INSTRUMENTED or NO
+ * TELEMETRY rather than disappearing, and one with no runtime to measure says
+ * N/A. Google is one provider group; its per-service runtime table sits under
+ * it. The registry is read from the Cost Center payload (`providerRows`) — the
+ * one registry-keyed endpoint the CMS has — and nothing here invents telemetry.
  */
 export default function MonitoringScreen() {
   const t = useT()
@@ -60,6 +71,15 @@ export default function MonitoringScreen() {
     queryFn: ({ signal }) => fetchOpsProviders(window, signal),
     staleTime: 45_000,
     refetchInterval: 60_000,
+    enabled: allowed,
+  })
+
+  // The registry, keyed by provider id — same query the dashboard and the Cost
+  // Center use, so one cache entry serves all three.
+  const registry = useQuery({
+    queryKey: queryKeys.opsCostCenter('mtd'),
+    queryFn: ({ signal }) => fetchCostOverview('mtd', signal),
+    staleTime: 60_000,
     enabled: allowed,
   })
 
@@ -109,6 +129,20 @@ export default function MonitoringScreen() {
             </>
           )}
         </AsyncBoundary>
+
+        <Card>
+          <CardHeader title={t('monitoring.registry.title')} hint={t('monitoring.registry.hint')} />
+          <CardBody>
+            <AsyncBoundary
+              status={registry.status}
+              error={registry.error}
+              data={registry.data}
+              onRetry={() => void registry.refetch()}
+            >
+              {(data) => <RegistryTable rows={data.providerRows} />}
+            </AsyncBoundary>
+          </CardBody>
+        </Card>
 
         <Card>
           <CardHeader title={t('monitoring.providers.title')} />
@@ -526,6 +560,121 @@ function ProviderRow({ row, currency }: { row: OpsProviderRow; currency: string 
           combination is the point: the units are a fact and the money is not.
         */}
         <Money value={row.estimatedCost} currency={currency} />
+      </td>
+    </tr>
+  )
+}
+
+// ── registry-wide runtime telemetry (COST-CMS-012) ──────────────────────────
+
+type TelemetryState = 'INSTRUMENTED' | 'NOT_INSTRUMENTED' | 'NO_TELEMETRY' | 'NA'
+
+/**
+ * Epic §6 capability names that mean "a collector reads this provider from the
+ * outside" — a closed contract list, never a provider id (§44.3). A provider
+ * that only costs what somebody types in, or only writes its own fixed row,
+ * has no runtime to measure.
+ */
+const COLLECTOR_CAPABILITIES = new Set([
+  'USAGE_COLLECTOR',
+  'ACTUAL_COST_COLLECTOR',
+  'ESTIMATED_COST',
+  'QUOTA',
+  'BUDGET',
+  'TEST_RUN_DELTA',
+])
+
+/**
+ * Derived from registry facts only: which services are instrumented in this
+ * process, the registry status, the declared capabilities and whether any
+ * collector source exists. Nothing here knows a provider by name.
+ */
+function telemetryState(provider: CmsCostProviderRow): TelemetryState {
+  if (provider.services.some((service) => service.instrumented)) return 'INSTRUMENTED'
+  if (provider.status === 'manual') return 'NA'
+  if (provider.status === 'planned') return 'NO_TELEMETRY'
+  const collected =
+    provider.capabilities.some((capability) => COLLECTOR_CAPABILITIES.has(capability)) ||
+    provider.freshness.sources.length > 0
+  return collected ? 'NOT_INSTRUMENTED' : 'NA'
+}
+
+const TELEMETRY_TONE: Record<TelemetryState, { tone: Tone; shape: BadgeShape }> = {
+  INSTRUMENTED: { tone: 'mint', shape: 'check' },
+  // Active and billed, but blind at runtime: the one state worth a warning.
+  NOT_INSTRUMENTED: { tone: 'amber', shape: 'alert' },
+  NO_TELEMETRY: { tone: 'neutral', shape: 'info' },
+  NA: { tone: 'neutral', shape: 'dot' },
+}
+
+function RegistryTable({ rows }: { rows: CmsCostProviderRow[] }) {
+  const t = useT()
+  return (
+    <div className={styles.scroller}>
+      <table className={styles.table}>
+        <thead>
+          <tr>
+            <th className={styles.th}>{t('monitoring.registry.col.provider')}</th>
+            <th className={styles.th}>{t('monitoring.registry.col.status')}</th>
+            <th className={styles.th}>{t('monitoring.registry.col.telemetry')}</th>
+            <th className={styles.th}>{t('monitoring.registry.col.collector')}</th>
+            <th className={styles.th}>{t('monitoring.registry.col.cost')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <RegistryRow key={row.providerId} row={row} />
+          ))}
+        </tbody>
+      </table>
+      <p className={styles.note}>{t('monitoring.registry.note')}</p>
+    </div>
+  )
+}
+
+function RegistryRow({ row }: { row: CmsCostProviderRow }) {
+  const t = useT()
+  const { locale } = useI18n()
+  const state = telemetryState(row)
+  const style = TELEMETRY_TONE[state]
+  const uninstrumented = row.services
+    .filter((service) => !service.instrumented)
+    .map((service) => service.displayName)
+  const detail =
+    state === 'INSTRUMENTED'
+      ? uninstrumented.length > 0
+        ? t('monitoring.telemetry.detail.INSTRUMENTED', { services: uninstrumented.join(', ') })
+        : t('monitoring.telemetry.detail.instrumentedAll')
+      : t(`monitoring.telemetry.detail.${state}` as 'monitoring.telemetry.detail.NA')
+  return (
+    <tr>
+      <td className={styles.td}>
+        <span className={styles.provider}>{row.displayName}</span>
+        <p className={styles.method}>{row.providerId}</p>
+      </td>
+      <td className={styles.td}>
+        <ProviderStatusBadge status={row.status} />
+      </td>
+      <td className={styles.td}>
+        <StatusBadge
+          tone={style.tone}
+          shape={style.shape}
+          label={t(`monitoring.telemetry.${state}` as 'monitoring.telemetry.NA')}
+        />
+        <p className={styles.gapDetail}>{detail}</p>
+      </td>
+      <td className={styles.td}>
+        <FreshnessBadge status={row.freshness.status} />
+        {row.freshness.sourceAsOf ? (
+          <p className={styles.gapDetail}>
+            {t('monitoring.registry.collectorAsOf', {
+              at: formatDateTime(row.freshness.sourceAsOf, locale),
+            })}
+          </p>
+        ) : null}
+      </td>
+      <td className={styles.td}>
+        <Link to="/costs">{t('monitoring.registry.openCosts')}</Link>
       </td>
     </tr>
   )

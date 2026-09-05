@@ -2837,6 +2837,29 @@ export const costServices: Record<string, CmsCostServiceRow> = {
       costSource('cloudflare_api', 'UNKNOWN', { serviceId: 'cloudflare.workers' }),
     ]),
   },
+  'upstash.redis': {
+    ...UNKNOWN_MONEY,
+    spendMicros: 0,
+    estimatedMicros: 0,
+    basis: 'ESTIMATED',
+    confidence: 'MEDIUM',
+    currency: 'USD',
+    costStatus: 'KNOWN',
+    serviceId: 'upstash.redis',
+    providerId: 'upstash',
+    displayName: 'Redis',
+    category: 'cache',
+    capabilities: ['USAGE_COLLECTOR', 'ESTIMATED_COST'],
+    // Read from the provider's own API by a collector; this process emits no
+    // runtime metric for it (COST-CMS-012 — NOT INSTRUMENTED, not absent).
+    instrumented: false,
+    usage: [],
+    quota: null,
+    lastUpdated: iso(30),
+    freshness: costFreshness('FRESH', [
+      costSource('upstash_api', 'FRESH', { serviceId: 'upstash.redis' }),
+    ]),
+  },
   'apple.developerProgram': {
     ...UNKNOWN_MONEY,
     spendMicros: 8_250_000,
@@ -2931,6 +2954,26 @@ export const costProviderRows: CmsCostProviderRow[] = [
     services: [costServices['cloudflare.r2']!, costServices['cloudflare.workers']!],
     lastUpdated: iso(60 * 40),
     freshness: costFreshness('STALE', [costSource('cloudflare_api', 'STALE')]),
+  },
+  {
+    ...UNKNOWN_MONEY,
+    spendMicros: 0,
+    estimatedMicros: 0,
+    basis: 'ESTIMATED',
+    confidence: 'MEDIUM',
+    currency: 'USD',
+    costStatus: 'KNOWN',
+    providerId: 'upstash',
+    displayName: 'Upstash',
+    status: 'active',
+    // Epic §6 capability names: a collector reads it, nothing in-process
+    // instruments it — the shape every non-Google infrastructure provider has.
+    capabilities: ['USAGE_COLLECTOR', 'ESTIMATED_COST'],
+    billingTimezone: 'UTC',
+    unknownServices: [],
+    services: [costServices['upstash.redis']!],
+    lastUpdated: iso(30),
+    freshness: costFreshness('FRESH', [costSource('upstash_api', 'FRESH')]),
   },
   {
     ...UNKNOWN_MONEY,
