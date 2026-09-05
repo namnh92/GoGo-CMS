@@ -42,7 +42,11 @@ let listenersAttached = false
 const listeners = new Set<Listener>()
 
 /** Test seam. Production callers never touch these. */
-export const reachabilityConfig = { healthPath: HEALTH_PATH, recheckMs: RECHECK_MS, timeoutMs: PROBE_TIMEOUT_MS }
+export const reachabilityConfig = {
+  healthPath: HEALTH_PATH,
+  recheckMs: RECHECK_MS,
+  timeoutMs: PROBE_TIMEOUT_MS,
+}
 
 function set(next: boolean): void {
   if (next === online) return
