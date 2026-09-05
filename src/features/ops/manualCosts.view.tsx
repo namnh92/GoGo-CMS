@@ -187,8 +187,9 @@ export default function ManualCostsScreen() {
     close()
     void queryClient.invalidateQueries({ queryKey: queryKeys.opsManualCosts })
     void queryClient.invalidateQueries({ queryKey: queryKeys.audit.all })
-    // The dashboard's cost card reads the rows this write rebuilt.
-    void queryClient.invalidateQueries({ queryKey: queryKeys.opsCosts })
+    // The dashboard card and the Cost Center both read the rows this write
+    // rebuilt, under every window.
+    void queryClient.invalidateQueries({ queryKey: queryKeys.opsCostCenterAll })
   }
   const refuse = (error: unknown) => {
     if (error instanceof ApiError && error.fieldErrors.length > 0) {

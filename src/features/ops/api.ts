@@ -7,7 +7,6 @@ import {
   cmsCostTestRunsSchema,
   cmsManualCostItemEnvelopeSchema,
   cmsManualCostItemsSchema,
-  cmsOpsCostsSchema,
   opsProviderDetailSchema,
   opsProvidersSchema,
   opsSummarySchema,
@@ -26,7 +25,6 @@ import {
   type CmsCostWindow,
   type CmsManualCostItem,
   type CmsManualCostItems,
-  type CmsOpsCosts,
   type CmsOpsHealth,
   type CmsOpsQueues,
   type OpsKpis,
@@ -69,15 +67,6 @@ export function fetchOpsHealth(signal?: AbortSignal): Promise<CmsOpsHealth> {
 /** BullMQ queues plus the Postgres outbox. An unreachable broker contributes no rows. */
 export function fetchOpsQueues(signal?: AbortSignal): Promise<CmsOpsQueues> {
   return apiFetchParsed(cmsOpsQueuesSchema, '/cms/ops/queues', { signal })
-}
-
-/**
- * Only providers with a real source appear. `sourcesConfigured: false` with an
- * empty list means "nothing is connected", and the caller must not render it
- * as a zero amount.
- */
-export function fetchOpsCosts(signal?: AbortSignal): Promise<CmsOpsCosts> {
-  return apiFetchParsed(cmsOpsCostsSchema, '/cms/ops/costs', { signal })
 }
 
 /**

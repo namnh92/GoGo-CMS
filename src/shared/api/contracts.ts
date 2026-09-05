@@ -1776,9 +1776,10 @@ export type CmsCostCards = z.infer<typeof cmsCostCardsSchema>
 
 /**
  * `GET /cms/ops/costs?window=` — the v2 half of the payload. The legacy #335
- * keys travel in the same body and are parsed separately by
- * `cmsOpsCostsSchema` for the dashboard card; the two shapes share no key, so
- * neither strips the other.
+ * keys travel in the same body; `cmsOpsCostsSchema` still mirrors them as the
+ * contract, but since COST-CMS-011 (#111) nothing in the CMS reads that half —
+ * the dashboard card summarises `providerRows` too. The two shapes share no
+ * key, so neither strips the other.
  */
 export const cmsCostOverviewSchema = z.object({
   environment: z.string(),

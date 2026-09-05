@@ -1487,6 +1487,11 @@ export const vi = {
   'dashboard.observability.title': 'Giám sát & chi phí',
   'dashboard.monitoring.title': 'Sức khoẻ dịch vụ',
   'dashboard.costs.title': 'Chi phí nhà cung cấp',
+  'dashboard.costs.hint':
+    'Một dòng cho mỗi provider trong registry, tháng này, sau quy tắc hoá đơn ưu tiên hơn ước tính. Chưa có nguồn là chưa biết, không phải 0.',
+  'dashboard.costs.footer':
+    'Tháng {month} · số liệu tới {at} · {providers} provider chưa có nguồn chi phí.',
+  'dashboard.costs.open': 'Xem Cost Center →',
 
   'nav.group.administration': 'Quản trị',
   'nav.roles': 'Vai trò & quyền',
@@ -1593,19 +1598,6 @@ export const vi = {
   'dashboard.queuesOps.col.oldest': 'Chờ lâu nhất',
   'dashboard.queuesOps.outbox': 'outbox',
   'dashboard.queuesOps.age': '{minutes} phút',
-  'dashboard.costsLive.hint':
-    'Chỉ provider có nguồn số thật; mỗi dòng ghi rõ là hoá đơn hay ước tính.',
-  'dashboard.costsLive.noSource':
-    'Chưa có nguồn chi phí nào được nối. Đây không phải 0 đồng — là chưa đo được.',
-  'dashboard.costsLive.empty': 'Nguồn đã nối nhưng chưa có dòng chi phí nào trong kỳ.',
-  'dashboard.costsLive.billed': 'hoá đơn',
-  'dashboard.costsLive.estimated': 'ước tính',
-  'dashboard.costsLive.mtd': 'tháng này',
-  'dashboard.costsLive.units': '{units} đơn vị',
-  'dashboard.costsLive.asOf': 'Số liệu tới {at} · bảng giá {version}',
-  'dashboard.costsLive.gapsTitle': 'Chưa quy ra tiền được',
-  'dashboard.costsLive.gap.not_instrumented': 'Chưa đo',
-  'dashboard.costsLive.gap.price_unknown': 'Chưa có giá',
 
   'auth.change.title': 'Đặt mật khẩu mới',
   'auth.change.subtitle': 'Mật khẩu tạm phải được thay trước khi vào console.',
