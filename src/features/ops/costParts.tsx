@@ -4,9 +4,12 @@ import { Badge, StatusBadge, type BadgeShape, type Tone } from '@/shared/ui/Badg
 import type {
   CmsCostBasis,
   CmsCostConfidence,
+  CmsCostDataFreshness,
   CmsCostFreshnessStatus,
   CmsCostProviderStatus,
+  CmsCostSourceKind,
   CmsCostUsageLine,
+  CmsRuntimeCoverage,
 } from '@/shared/api/contracts'
 import { formatMicros } from './costMoney'
 import { styles } from './costCenter.style'
@@ -124,7 +127,6 @@ export function FreshnessBadge({ status }: { status: CmsCostFreshnessStatus }) {
 const PROVIDER_STATUS_TONE: Record<CmsCostProviderStatus, Tone> = {
   active: 'mint',
   planned: 'neutral',
-  manual: 'lavender',
 }
 
 export function ProviderStatusBadge({ status }: { status: CmsCostProviderStatus }) {
@@ -188,5 +190,68 @@ export function MeterList({
         <span className={styles.unknownCell}>{t('cost.meter.more', { count: rest })}</span>
       ) : null}
     </span>
+  )
+}
+
+// ── ADR-0014 — the /monitoring dimensions, one badge each ───────────────────
+
+const COVERAGE_TONE: Record<CmsRuntimeCoverage, { tone: Tone; shape: BadgeShape }> = {
+  FULL: { tone: 'mint', shape: 'check' },
+  PARTIAL: { tone: 'amber', shape: 'info' },
+  // A runtime exists and nothing measures it: the one state worth a warning.
+  NOT_INSTRUMENTED: { tone: 'amber', shape: 'alert' },
+  'N/A': { tone: 'neutral', shape: 'dot' },
+}
+
+export function RuntimeCoverageBadge({ coverage }: { coverage: CmsRuntimeCoverage }) {
+  const label = useLabel()
+  const style = COVERAGE_TONE[coverage] ?? COVERAGE_TONE['N/A']
+  return (
+    <StatusBadge
+      tone={style.tone}
+      shape={style.shape}
+      label={label(`monitoring.coverage.${coverage}`, coverage)}
+    />
+  )
+}
+
+const COST_SOURCE_TONE: Record<CmsCostSourceKind, { tone: Tone; shape: BadgeShape }> = {
+  AUTO: { tone: 'lavender', shape: 'check' },
+  MANUAL: { tone: 'lavender', shape: 'dot' },
+  NONE: { tone: 'neutral', shape: 'dot' },
+}
+
+export function CostSourceKindBadge({ kind }: { kind: CmsCostSourceKind }) {
+  const label = useLabel()
+  const style = COST_SOURCE_TONE[kind] ?? COST_SOURCE_TONE.NONE
+  return (
+    <StatusBadge
+      tone={style.tone}
+      shape={style.shape}
+      label={label(`monitoring.costSource.${kind}`, kind)}
+    />
+  )
+}
+
+const COST_DATA_TONE: Record<CmsCostDataFreshness, { tone: Tone; shape: BadgeShape }> = {
+  FRESH: { tone: 'mint', shape: 'check' },
+  STALE: { tone: 'amber', shape: 'clock' },
+  ERROR: { tone: 'danger', shape: 'alert' },
+}
+
+/** `null` is "nothing to be current" and is said in words, never left blank. */
+export function CostDataFreshnessBadge({ freshness }: { freshness: CmsCostDataFreshness | null }) {
+  const t = useT()
+  const label = useLabel()
+  if (freshness === null) {
+    return <StatusBadge tone="neutral" shape="dot" label={t('monitoring.costFreshness.none')} />
+  }
+  const style = COST_DATA_TONE[freshness] ?? COST_DATA_TONE.ERROR
+  return (
+    <StatusBadge
+      tone={style.tone}
+      shape={style.shape}
+      label={label(`monitoring.costFreshness.${freshness}`, freshness)}
+    />
   )
 }
