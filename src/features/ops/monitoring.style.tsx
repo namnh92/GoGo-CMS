@@ -29,4 +29,8 @@ export const styles = {
     'flex flex-wrap items-baseline gap-2 rounded-compact border border-line bg-surface-muted px-3 py-2',
   gapKey: 'font-mono text-[12px] text-text',
   gapDetail: 'text-[11px] leading-relaxed text-text-muted',
+  toggle:
+    'mt-1 text-[11px] font-semibold text-coral-deep underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-coral',
+  detailCell: 'border-b border-line/70 bg-surface-muted px-3 py-2',
+  detailCaption: 'mb-1 text-[11px] font-semibold text-text-subtle',
 } as const

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useI18n, useT } from '@/shared/i18n/i18n'
@@ -6,13 +6,14 @@ import { queryKeys } from '@/shared/api/queryKeys'
 import { formatDateTime, formatMoney, formatNumber, formatPercent } from '@/shared/format'
 import { PageBody, PageHeader } from '@/app/PageHeader'
 import { Card, CardBody, CardHeader, KpiCard } from '@/shared/ui/Card'
-import { Badge, StatusBadge, type BadgeShape, type Tone } from '@/shared/ui/Badge'
+import { Badge } from '@/shared/ui/Badge'
 import { AsyncBoundary, PermissionDeniedState } from '@/shared/ui/State'
 import { Sparkline } from '@/shared/ui/Sparkline'
 import { cn } from '@/shared/ui/cn'
 import { useSession } from '@/shared/auth/session'
 import type {
   CmsCostProviderRow,
+  CmsCostServiceRow,
   OpsCostGap,
   OpsCostModel,
   OpsProviderRow,
@@ -21,7 +22,13 @@ import type {
   OpsWindow,
 } from '@/shared/api/contracts'
 import { fetchCostOverview, fetchOpsProviders, fetchOpsSummary } from './api'
-import { FreshnessBadge, ProviderStatusBadge } from './costParts'
+import {
+  CostDataFreshnessBadge,
+  CostSourceKindBadge,
+  FreshnessBadge,
+  ProviderStatusBadge,
+  RuntimeCoverageBadge,
+} from './costParts'
 import { styles } from './monitoring.style'
 
 const WINDOWS: OpsWindow[] = ['1h', '24h', '7d', '30d']
@@ -41,12 +48,19 @@ const WINDOWS: OpsWindow[] = ['1h', '24h', '7d', '30d']
  * days it actually covers. Grafana is next door for anyone who needs axes.
  *
  * COST-CMS-012 (#112): this is the runtime surface for the whole provider
- * registry, not a Google page. Every registry provider has a row; one whose
- * runtime nothing in this process measures says NOT INSTRUMENTED or NO
- * TELEMETRY rather than disappearing, and one with no runtime to measure says
- * N/A. Google is one provider group; its per-service runtime table sits under
- * it. The registry is read from the Cost Center payload (`providerRows`) — the
- * one registry-keyed endpoint the CMS has — and nothing here invents telemetry.
+ * registry, not a Google page. Every registry provider has a row; Google is
+ * one provider group, and its per-service runtime table sits under it. The
+ * registry is read from the Cost Center payload (`providerRows`) — the one
+ * registry-keyed endpoint the CMS has — and nothing here invents telemetry.
+ *
+ * COST-CMS-013 (#116, ADR-0014): the row shows four dimensions GoGo-BE
+ * computes and this file never derives from one another — registry status,
+ * runtime coverage (FULL / PARTIAL / NOT INSTRUMENTED / N/A, with counts),
+ * cost source (AUTO / MANUAL / NONE) and cost-data freshness (FRESH / STALE /
+ * ERROR). Google is PARTIAL because two of its five runtime services emit
+ * nothing, and the service drill-down says which two. The old
+ * `telemetryState()` that inferred one word from status, capabilities and
+ * collector freshness is gone, and so is `NO_TELEMETRY`.
  */
 export default function MonitoringScreen() {
   const t = useT()
@@ -565,47 +579,7 @@ function ProviderRow({ row, currency }: { row: OpsProviderRow; currency: string 
   )
 }
 
-// ── registry-wide runtime telemetry (COST-CMS-012) ──────────────────────────
-
-type TelemetryState = 'INSTRUMENTED' | 'NOT_INSTRUMENTED' | 'NO_TELEMETRY' | 'NA'
-
-/**
- * Epic §6 capability names that mean "a collector reads this provider from the
- * outside" — a closed contract list, never a provider id (§44.3). A provider
- * that only costs what somebody types in, or only writes its own fixed row,
- * has no runtime to measure.
- */
-const COLLECTOR_CAPABILITIES = new Set([
-  'USAGE_COLLECTOR',
-  'ACTUAL_COST_COLLECTOR',
-  'ESTIMATED_COST',
-  'QUOTA',
-  'BUDGET',
-  'TEST_RUN_DELTA',
-])
-
-/**
- * Derived from registry facts only: which services are instrumented in this
- * process, the registry status, the declared capabilities and whether any
- * collector source exists. Nothing here knows a provider by name.
- */
-function telemetryState(provider: CmsCostProviderRow): TelemetryState {
-  if (provider.services.some((service) => service.instrumented)) return 'INSTRUMENTED'
-  if (provider.status === 'manual') return 'NA'
-  if (provider.status === 'planned') return 'NO_TELEMETRY'
-  const collected =
-    provider.capabilities.some((capability) => COLLECTOR_CAPABILITIES.has(capability)) ||
-    provider.freshness.sources.length > 0
-  return collected ? 'NOT_INSTRUMENTED' : 'NA'
-}
-
-const TELEMETRY_TONE: Record<TelemetryState, { tone: Tone; shape: BadgeShape }> = {
-  INSTRUMENTED: { tone: 'mint', shape: 'check' },
-  // Active and billed, but blind at runtime: the one state worth a warning.
-  NOT_INSTRUMENTED: { tone: 'amber', shape: 'alert' },
-  NO_TELEMETRY: { tone: 'neutral', shape: 'info' },
-  NA: { tone: 'neutral', shape: 'dot' },
-}
+// ── registry-wide runtime and cost (COST-CMS-012 → COST-CMS-013, ADR-0014) ──
 
 function RegistryTable({ rows }: { rows: CmsCostProviderRow[] }) {
   const t = useT()
@@ -616,8 +590,9 @@ function RegistryTable({ rows }: { rows: CmsCostProviderRow[] }) {
           <tr>
             <th className={styles.th}>{t('monitoring.registry.col.provider')}</th>
             <th className={styles.th}>{t('monitoring.registry.col.status')}</th>
-            <th className={styles.th}>{t('monitoring.registry.col.telemetry')}</th>
-            <th className={styles.th}>{t('monitoring.registry.col.collector')}</th>
+            <th className={styles.th}>{t('monitoring.registry.col.runtime')}</th>
+            <th className={styles.th}>{t('monitoring.registry.col.costSource')}</th>
+            <th className={styles.th}>{t('monitoring.registry.col.costData')}</th>
             <th className={styles.th}>{t('monitoring.registry.col.cost')}</th>
           </tr>
         </thead>
@@ -632,49 +607,155 @@ function RegistryTable({ rows }: { rows: CmsCostProviderRow[] }) {
   )
 }
 
+/**
+ * Which services the coverage word leaves out: every surfaced service that is
+ * not FULL. Named so the reader knows what to fix without opening the
+ * drill-down.
+ */
+function unmeasuredServices(row: CmsCostProviderRow): string[] {
+  return row.services
+    .filter((s) => s.runtime.coverage === 'PARTIAL' || s.runtime.coverage === 'NOT_INSTRUMENTED')
+    .map((s) => s.displayName)
+}
+
+function coverageDetail(row: CmsCostProviderRow, t: ReturnType<typeof useT>): string {
+  const { services } = row.runtime
+  const total = services.full + services.partial + services.notInstrumented
+  const names = unmeasuredServices(row).join(', ')
+  switch (row.runtime.coverage) {
+    case 'FULL':
+      return t('monitoring.coverage.detail.FULL', { total: String(total) })
+    case 'PARTIAL':
+      return t('monitoring.coverage.detail.PARTIAL', {
+        full: String(services.full),
+        total: String(total),
+        services: names,
+      })
+    case 'NOT_INSTRUMENTED':
+      return t('monitoring.coverage.detail.NOT_INSTRUMENTED', { services: names })
+    case 'N/A':
+      return t('monitoring.coverage.detail.N/A')
+  }
+}
+
 function RegistryRow({ row }: { row: CmsCostProviderRow }) {
   const t = useT()
   const { locale } = useI18n()
-  const state = telemetryState(row)
-  const style = TELEMETRY_TONE[state]
-  const uninstrumented = row.services
-    .filter((service) => !service.instrumented)
-    .map((service) => service.displayName)
-  const detail =
-    state === 'INSTRUMENTED'
-      ? uninstrumented.length > 0
-        ? t('monitoring.telemetry.detail.INSTRUMENTED', { services: uninstrumented.join(', ') })
-        : t('monitoring.telemetry.detail.instrumentedAll')
-      : t(`monitoring.telemetry.detail.${state}` as 'monitoring.telemetry.detail.NA')
+  const [open, setOpen] = useState(false)
+  const asOf = row.freshness.sourceAsOf ?? row.lastUpdated
+  const detailId = `registry-services-${row.providerId}`
+  return (
+    <Fragment>
+      <tr>
+        <td className={styles.td}>
+          <span className={styles.provider}>{row.displayName}</span>
+          <p className={styles.method}>{row.providerId}</p>
+        </td>
+        <td className={styles.td}>
+          <ProviderStatusBadge status={row.status} />
+        </td>
+        <td className={styles.td}>
+          <RuntimeCoverageBadge coverage={row.runtime.coverage} />
+          <p className={styles.gapDetail}>{coverageDetail(row, t)}</p>
+          {row.services.length > 0 ? (
+            <button
+              type="button"
+              className={styles.toggle}
+              aria-expanded={open}
+              aria-controls={detailId}
+              onClick={() => setOpen((v) => !v)}
+            >
+              {t(open ? 'monitoring.registry.services.hide' : 'monitoring.registry.services.show')}
+            </button>
+          ) : null}
+        </td>
+        <td className={styles.td}>
+          <CostSourceKindBadge kind={row.cost.kind} />
+        </td>
+        <td className={styles.td}>
+          <CostDataFreshnessBadge freshness={row.cost.freshness} />
+          {row.cost.freshness !== null && asOf ? (
+            <p className={styles.gapDetail}>
+              {t('monitoring.registry.asOf', { at: formatDateTime(asOf, locale) })}
+            </p>
+          ) : null}
+        </td>
+        <td className={styles.td}>
+          <Link to="/costs">{t('monitoring.registry.openCosts')}</Link>
+        </td>
+      </tr>
+      {open ? (
+        <tr id={detailId}>
+          <td className={styles.detailCell} colSpan={6}>
+            <ServiceDetail provider={row} />
+          </td>
+        </tr>
+      ) : null}
+    </Fragment>
+  )
+}
+
+/**
+ * The drill-down: one line per service, the same four dimensions plus the
+ * §23 source status the cost roll-up was made from — so an ERROR upstairs can
+ * be read as "never ran" or "failing" here without leaving the page.
+ */
+function ServiceDetail({ provider }: { provider: CmsCostProviderRow }) {
+  const t = useT()
+  return (
+    <>
+      <p className={styles.detailCaption}>
+        {t('monitoring.registry.services.caption', { provider: provider.displayName })}
+      </p>
+      <table className={styles.table}>
+        <thead>
+          <tr>
+            <th className={styles.th}>{t('monitoring.registry.svc.service')}</th>
+            <th className={styles.th}>{t('monitoring.registry.svc.surface')}</th>
+            <th className={styles.th}>{t('monitoring.registry.svc.coverage')}</th>
+            <th className={styles.thNum}>{t('monitoring.registry.svc.operations')}</th>
+            <th className={styles.th}>{t('monitoring.registry.svc.costSource')}</th>
+            <th className={styles.th}>{t('monitoring.registry.svc.costData')}</th>
+            <th className={styles.th}>{t('monitoring.registry.svc.source')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {provider.services.map((service) => (
+            <ServiceRow key={service.serviceId} service={service} />
+          ))}
+        </tbody>
+      </table>
+    </>
+  )
+}
+
+function ServiceRow({ service }: { service: CmsCostServiceRow }) {
+  const t = useT()
+  const { surface, coverage, operations } = service.runtime
   return (
     <tr>
       <td className={styles.td}>
-        <span className={styles.provider}>{row.displayName}</span>
-        <p className={styles.method}>{row.providerId}</p>
+        <span className={styles.provider}>{service.displayName}</span>
+        <p className={styles.method}>{service.serviceId}</p>
       </td>
       <td className={styles.td}>
-        <ProviderStatusBadge status={row.status} />
+        {t(`monitoring.surface.${surface}` as 'monitoring.surface.none')}
       </td>
       <td className={styles.td}>
-        <StatusBadge
-          tone={style.tone}
-          shape={style.shape}
-          label={t(`monitoring.telemetry.${state}` as 'monitoring.telemetry.NA')}
-        />
-        <p className={styles.gapDetail}>{detail}</p>
+        <RuntimeCoverageBadge coverage={coverage} />
+      </td>
+      <td className={styles.tdNum}>
+        {/* "0 / 0" is a surface with nothing registered, and reads as the gap it is. */}
+        {surface === 'none' ? <Unmeasured /> : `${operations.instrumented} / ${operations.total}`}
       </td>
       <td className={styles.td}>
-        <FreshnessBadge status={row.freshness.status} />
-        {row.freshness.sourceAsOf ? (
-          <p className={styles.gapDetail}>
-            {t('monitoring.registry.collectorAsOf', {
-              at: formatDateTime(row.freshness.sourceAsOf, locale),
-            })}
-          </p>
-        ) : null}
+        <CostSourceKindBadge kind={service.cost.kind} />
       </td>
       <td className={styles.td}>
-        <Link to="/costs">{t('monitoring.registry.openCosts')}</Link>
+        <CostDataFreshnessBadge freshness={service.cost.freshness} />
+      </td>
+      <td className={styles.td}>
+        <FreshnessBadge status={service.freshness.status} />
       </td>
     </tr>
   )

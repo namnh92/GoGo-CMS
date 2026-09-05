@@ -1654,14 +1654,83 @@ export const cmsCostMoneySchema = z.object({
 })
 export type CmsCostMoney = z.infer<typeof cmsCostMoneySchema>
 
+/**
+ * ADR-0014 (GoGo-BE#416) — four dimensions per row, computed by GoGo-BE and
+ * rendered here as told. The console derives nothing from one to say another:
+ * the registry status is not a telemetry fact, a cost collector is not a
+ * runtime metric, and a fee is never "broken".
+ */
+export const cmsRuntimeSurfaceSchema = z.enum(['in_process', 'client_sdk', 'none'])
+export type CmsRuntimeSurface = z.infer<typeof cmsRuntimeSurfaceSchema>
+
+/**
+ * `FULL`: every operation on every service with a runtime surface emits a
+ * metric. `PARTIAL`: some do. `NOT_INSTRUMENTED`: a surface exists and nothing
+ * on it emits — the one state worth attention. `N/A`: no runtime surface at
+ * all, which is not a gap and not a zero.
+ */
+export const cmsRuntimeCoverageSchema = z.enum(['FULL', 'PARTIAL', 'NOT_INSTRUMENTED', 'N/A'])
+export type CmsRuntimeCoverage = z.infer<typeof cmsRuntimeCoverageSchema>
+
+export const cmsOperationCountSchema = z.object({
+  instrumented: z.number().int(),
+  total: z.number().int(),
+})
+
+export const cmsServiceRuntimeSchema = z.object({
+  surface: cmsRuntimeSurfaceSchema,
+  coverage: cmsRuntimeCoverageSchema,
+  /** `total: 0` with a surface is NOT_INSTRUMENTED: nothing registered to measure yet. */
+  operations: cmsOperationCountSchema,
+})
+export type CmsServiceRuntime = z.infer<typeof cmsServiceRuntimeSchema>
+
+export const cmsProviderRuntimeSchema = z.object({
+  coverage: cmsRuntimeCoverageSchema,
+  /** Services with a runtime surface, by their own coverage. N/A services are not counted. */
+  services: z.object({
+    full: z.number().int(),
+    partial: z.number().int(),
+    notInstrumented: z.number().int(),
+  }),
+  operations: cmsOperationCountSchema,
+})
+export type CmsProviderRuntime = z.infer<typeof cmsProviderRuntimeSchema>
+
+/** Declared: how money gets in. `AUTO` by code, `MANUAL` by the form, `NONE` not at all. */
+export const cmsCostSourceKindSchema = z.enum(['AUTO', 'MANUAL', 'NONE'])
+export type CmsCostSourceKind = z.infer<typeof cmsCostSourceKindSchema>
+
+/**
+ * Observed: whether that money is current. `ERROR` is reserved for a
+ * collection that was attempted and failed; a source nobody has observed
+ * yet is `UNKNOWN`, never an error. The per-source §23 detail stays in
+ * `freshness.sources` for the drill-down.
+ */
+export const cmsCostDataFreshnessSchema = z.enum(['FRESH', 'STALE', 'ERROR', 'UNKNOWN'])
+export type CmsCostDataFreshness = z.infer<typeof cmsCostDataFreshnessSchema>
+
+export const cmsCostSourceSchema = z.object({
+  kind: cmsCostSourceKindSchema,
+  /**
+   * Null when there is nothing to be current: kind NONE, or MANUAL with
+   * nothing entered yet. `UNKNOWN` is different: an automatic source exists
+   * and has never been observed.
+   */
+  freshness: cmsCostDataFreshnessSchema.nullable(),
+})
+export type CmsCostSource = z.infer<typeof cmsCostSourceSchema>
+
 export const cmsCostServiceRowSchema = cmsCostMoneySchema.extend({
   serviceId: z.string(),
   providerId: z.string(),
   displayName: z.string(),
   category: z.string(),
   capabilities: z.array(z.string()).default([]),
-  /** At least one operation emits a metric. False renders as "chưa đo", never as zero. */
+  /** `runtime.coverage` is FULL or PARTIAL. False renders as "chưa đo", never as zero. */
   instrumented: z.boolean(),
+  runtime: cmsServiceRuntimeSchema,
+  cost: cmsCostSourceSchema,
   usage: z.array(cmsCostUsageLineSchema).default([]),
   /**
    * No QUOTA collector exists yet (epic §6), so the server sends `null` for
@@ -1689,7 +1758,8 @@ export const cmsCostServiceDetailSchema = cmsCostServiceRowSchema.extend({
 })
 export type CmsCostServiceDetail = z.infer<typeof cmsCostServiceDetailSchema>
 
-export const cmsCostProviderStatusSchema = z.enum(['active', 'planned', 'manual'])
+/** Integration lifecycle only (ADR-0014). How the money gets in is `cost.kind`. */
+export const cmsCostProviderStatusSchema = z.enum(['active', 'planned'])
 export type CmsCostProviderStatus = z.infer<typeof cmsCostProviderStatusSchema>
 
 export const cmsCostProviderRowSchema = cmsCostMoneySchema.extend({
@@ -1698,6 +1768,8 @@ export const cmsCostProviderRowSchema = cmsCostMoneySchema.extend({
   /** Registry status. `planned` renders as "chưa nối", not as a zero. */
   status: cmsCostProviderStatusSchema,
   capabilities: z.array(z.string()).default([]),
+  runtime: cmsProviderRuntimeSchema,
+  cost: cmsCostSourceSchema,
   billingTimezone: z.string().nullable(),
   /** Services with `costStatus: UNKNOWN` — what the unknown card counts. */
   unknownServices: z.array(z.string()).default([]),

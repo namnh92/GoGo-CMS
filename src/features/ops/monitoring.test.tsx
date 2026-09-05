@@ -151,24 +151,77 @@ describe('provider monitoring (GoGo-BE#315)', () => {
     expect(screen.getByText('Google Places')).toBeInTheDocument()
   })
 
-  it('states the telemetry situation per provider in words — never a zero, never a blank', async () => {
+  it('states four dimensions per provider, none derived from another — never a zero, never a blank', async () => {
     signInAs('ops_admin')
     render()
     const table = (await screen.findByText('Upstash')).closest('table')!
     const rowOf = (name: string) => within(table).getByText(name).closest('tr')!
 
-    // Google: measured, and the one uninstrumented service is named.
-    expect(within(rowOf('Google')).getByText('Đã đo')).toBeInTheDocument()
-    expect(within(rowOf('Google')).getByText(/Chưa đo: Maps SDK \(mobile\)/)).toBeInTheDocument()
-    // Upstash: active and read by a collector, but blind at runtime.
-    expect(within(rowOf('Upstash')).getByText('NOT INSTRUMENTED')).toBeInTheDocument()
-    expect(within(rowOf('Upstash')).getByText('Mới')).toBeInTheDocument()
-    // VIETMAP: planned — nothing integrated, nothing to measure yet.
-    expect(within(rowOf('VIETMAP')).getByText('NO TELEMETRY')).toBeInTheDocument()
-    // Apple: a fixed fee has no runtime.
-    expect(within(rowOf('Apple')).getByText('N/A')).toBeInTheDocument()
+    // Google: active, PARTIAL — three of four runtime services measured, the
+    // unmeasured one named; money arrives by code and is fresh.
+    const google = rowOf('Google')
+    expect(within(google).getByText('Đang dùng')).toBeInTheDocument()
+    expect(within(google).getByText('PARTIAL')).toBeInTheDocument()
+    expect(
+      within(google).getByText('3/4 dịch vụ đo đủ. Chưa đo: Maps SDK (mobile).'),
+    ).toBeInTheDocument()
+    expect(within(google).getByText('Tự động')).toBeInTheDocument()
+    expect(within(google).getByText('Mới')).toBeInTheDocument()
+    // Upstash: this process calls Redis and measures nothing — a runtime gap
+    // beside a working cost collector, two facts in two cells.
+    const upstash = rowOf('Upstash')
+    expect(within(upstash).getByText('NOT INSTRUMENTED')).toBeInTheDocument()
+    expect(within(upstash).getByText('Có runtime, chưa có metric nào: Redis.')).toBeInTheDocument()
+    expect(within(upstash).getByText('Tự động')).toBeInTheDocument()
+    expect(within(upstash).getByText('Mới')).toBeInTheDocument()
+    // VIETMAP: planned — no runtime, no way for money in, nothing to be current.
+    const vietmap = rowOf('VIETMAP')
+    expect(within(vietmap).getByText('Chưa nối')).toBeInTheDocument()
+    expect(within(vietmap).getByText('N/A')).toBeInTheDocument()
+    expect(within(vietmap).getByText('Không có')).toBeInTheDocument()
+    expect(within(vietmap).getByText('Không áp dụng')).toBeInTheDocument()
+    expect(screen.queryByText('NO TELEMETRY')).not.toBeInTheDocument()
+    // Apple: a fee is active (the form exists), has no runtime, and is manual.
+    const apple = rowOf('Apple')
+    expect(within(apple).getByText('Đang dùng')).toBeInTheDocument()
+    expect(within(apple).getByText('N/A')).toBeInTheDocument()
+    expect(within(apple).getByText('Nhập tay')).toBeInTheDocument()
+    expect(within(apple).getByText('Mới')).toBeInTheDocument()
     // Every row links to the financial surface.
     expect(within(table).getAllByRole('link', { name: 'Cost Center →' })).toHaveLength(6)
+  })
+
+  it('drills a provider down to its services instead of settling for one word', async () => {
+    signInAs('ops_admin')
+    render()
+    const table = (await screen.findByText('Upstash')).closest('table')!
+    const google = within(table).getByText('Google').closest('tr')!
+    const toggle = within(google).getByRole('button', { name: 'Chi tiết dịch vụ' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByText('Dịch vụ của Google')).not.toBeInTheDocument()
+
+    await userEvent.click(toggle)
+
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    const detail = screen.getByText('Dịch vụ của Google').closest('td')!
+    const sdk = within(detail).getByText('Maps SDK (mobile)').closest('tr')!
+    expect(within(sdk).getByText('SDK phía client')).toBeInTheDocument()
+    expect(within(sdk).getByText('NOT INSTRUMENTED')).toBeInTheDocument()
+    expect(within(sdk).getByText('0 / 1')).toBeInTheDocument()
+    // The cost dimension of the SDK: automatic in principle, never observed —
+    // and never called an error, which is what ERROR is reserved for.
+    expect(within(sdk).getByText('Chưa quan sát')).toBeInTheDocument()
+    expect(within(sdk).queryByText('Lỗi')).not.toBeInTheDocument()
+    const places = within(detail).getByText('Places API').closest('tr')!
+    expect(within(places).getByText('Trong process')).toBeInTheDocument()
+    expect(within(places).getByText('FULL')).toBeInTheDocument()
+    expect(within(places).getByText('2 / 2')).toBeInTheDocument()
+    // No row without a provider is invented: a planned provider has nothing to open.
+    const vietmap = within(table).getByText('VIETMAP').closest('tr')!
+    expect(within(vietmap).queryByRole('button')).not.toBeInTheDocument()
+
+    await userEvent.click(within(google).getByRole('button', { name: 'Ẩn chi tiết' }))
+    expect(screen.queryByText('Dịch vụ của Google')).not.toBeInTheDocument()
   })
 
   it('switching the window re-queries rather than repainting', async () => {

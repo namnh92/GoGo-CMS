@@ -2700,6 +2700,9 @@ export const costServices: Record<string, CmsCostServiceRow> = {
     category: 'maps',
     capabilities: ['PLACE_SEARCH', 'PLACE_DETAILS'],
     instrumented: true,
+    // ADR-0014: what is measured, and how money gets in — two facts, never one.
+    runtime: { surface: 'in_process', coverage: 'FULL', operations: { instrumented: 2, total: 2 } },
+    cost: { kind: 'AUTO', freshness: 'FRESH' },
     usage: [
       {
         meterId: 'google.placeDetails/requests',
@@ -2732,6 +2735,9 @@ export const costServices: Record<string, CmsCostServiceRow> = {
     category: 'ops',
     capabilities: ['EXPORT'],
     instrumented: true,
+    // ADR-0014: what is measured, and how money gets in — two facts, never one.
+    runtime: { surface: 'in_process', coverage: 'FULL', operations: { instrumented: 1, total: 1 } },
+    cost: { kind: 'AUTO', freshness: 'FRESH' },
     usage: [
       {
         meterId: 'google.sheetsAppend/requests',
@@ -2759,6 +2765,9 @@ export const costServices: Record<string, CmsCostServiceRow> = {
     category: 'maps',
     capabilities: ['ROUTE_MATRIX'],
     instrumented: true,
+    // ADR-0014: what is measured, and how money gets in — two facts, never one.
+    runtime: { surface: 'in_process', coverage: 'FULL', operations: { instrumented: 1, total: 1 } },
+    cost: { kind: 'AUTO', freshness: 'FRESH' },
     usage: [
       {
         meterId: 'google.routeMatrix/billable_elements',
@@ -2784,6 +2793,14 @@ export const costServices: Record<string, CmsCostServiceRow> = {
     capabilities: ['MAP_RENDER'],
     // The SDK renders on the handset; the backend sees no map load.
     instrumented: false,
+    // ADR-0014: what is measured, and how money gets in — two facts, never one.
+    runtime: {
+      surface: 'client_sdk',
+      coverage: 'NOT_INSTRUMENTED',
+      operations: { instrumented: 0, total: 1 },
+    },
+    // Never observed, not failed: the SDK has an automatic source nothing has fed.
+    cost: { kind: 'AUTO', freshness: 'UNKNOWN' },
     usage: [],
     quota: null,
     lastUpdated: null,
@@ -2805,6 +2822,9 @@ export const costServices: Record<string, CmsCostServiceRow> = {
     category: 'storage',
     capabilities: ['OBJECT_STORAGE'],
     instrumented: true,
+    // ADR-0014: what is measured, and how money gets in — two facts, never one.
+    runtime: { surface: 'in_process', coverage: 'FULL', operations: { instrumented: 1, total: 1 } },
+    cost: { kind: 'AUTO', freshness: 'STALE' },
     usage: [
       {
         meterId: 'cloudflare.r2/class_a_operations',
@@ -2829,6 +2849,9 @@ export const costServices: Record<string, CmsCostServiceRow> = {
     category: 'compute',
     capabilities: ['EDGE_COMPUTE'],
     instrumented: false,
+    // ADR-0014: what is measured, and how money gets in — two facts, never one.
+    runtime: { surface: 'none', coverage: 'N/A', operations: { instrumented: 0, total: 0 } },
+    cost: { kind: 'AUTO', freshness: 'STALE' },
     usage: [],
     quota: null,
     lastUpdated: null,
@@ -2853,6 +2876,13 @@ export const costServices: Record<string, CmsCostServiceRow> = {
     // Read from the provider's own API by a collector; this process emits no
     // runtime metric for it (COST-CMS-012 — NOT INSTRUMENTED, not absent).
     instrumented: false,
+    // ADR-0014: what is measured, and how money gets in — two facts, never one.
+    runtime: {
+      surface: 'in_process',
+      coverage: 'NOT_INSTRUMENTED',
+      operations: { instrumented: 0, total: 0 },
+    },
+    cost: { kind: 'AUTO', freshness: 'FRESH' },
     usage: [],
     quota: null,
     lastUpdated: iso(30),
@@ -2874,6 +2904,9 @@ export const costServices: Record<string, CmsCostServiceRow> = {
     category: 'store',
     capabilities: ['MANUAL_COST'],
     instrumented: false,
+    // ADR-0014: what is measured, and how money gets in — two facts, never one.
+    runtime: { surface: 'none', coverage: 'N/A', operations: { instrumented: 0, total: 0 } },
+    cost: { kind: 'MANUAL', freshness: 'FRESH' },
     usage: [],
     quota: null,
     lastUpdated: iso(60 * 6),
@@ -2893,6 +2926,9 @@ export const costServices: Record<string, CmsCostServiceRow> = {
     category: 'internal',
     capabilities: ['METRICS'],
     instrumented: true,
+    // ADR-0014: what is measured, and how money gets in — two facts, never one.
+    runtime: { surface: 'in_process', coverage: 'FULL', operations: { instrumented: 1, total: 1 } },
+    cost: { kind: 'AUTO', freshness: 'FRESH' },
     usage: [
       {
         meterId: 'gogo.metrics/active_series',
@@ -2923,6 +2959,12 @@ export const costProviderRows: CmsCostProviderRow[] = [
     providerId: 'google',
     displayName: 'Google',
     status: 'active',
+    runtime: {
+      coverage: 'PARTIAL',
+      services: { full: 3, partial: 0, notInstrumented: 1 },
+      operations: { instrumented: 4, total: 5 },
+    },
+    cost: { kind: 'AUTO', freshness: 'FRESH' },
     capabilities: ['PLACE_SEARCH', 'ROUTE_MATRIX', 'MAP_RENDER'],
     billingTimezone: 'America/Los_Angeles',
     unknownServices: ['google.routeMatrix', 'google.mapsSdk'],
@@ -2948,6 +2990,12 @@ export const costProviderRows: CmsCostProviderRow[] = [
     providerId: 'cloudflare',
     displayName: 'Cloudflare',
     status: 'active',
+    runtime: {
+      coverage: 'FULL',
+      services: { full: 1, partial: 0, notInstrumented: 0 },
+      operations: { instrumented: 1, total: 1 },
+    },
+    cost: { kind: 'AUTO', freshness: 'STALE' },
     capabilities: ['OBJECT_STORAGE', 'EDGE_COMPUTE'],
     billingTimezone: 'UTC',
     unknownServices: ['cloudflare.workers'],
@@ -2966,6 +3014,12 @@ export const costProviderRows: CmsCostProviderRow[] = [
     providerId: 'upstash',
     displayName: 'Upstash',
     status: 'active',
+    runtime: {
+      coverage: 'NOT_INSTRUMENTED',
+      services: { full: 0, partial: 0, notInstrumented: 1 },
+      operations: { instrumented: 0, total: 0 },
+    },
+    cost: { kind: 'AUTO', freshness: 'FRESH' },
     // Epic §6 capability names: a collector reads it, nothing in-process
     // instruments it — the shape every non-Google infrastructure provider has.
     capabilities: ['USAGE_COLLECTOR', 'ESTIMATED_COST'],
@@ -2985,7 +3039,14 @@ export const costProviderRows: CmsCostProviderRow[] = [
     costStatus: 'KNOWN',
     providerId: 'apple',
     displayName: 'Apple',
-    status: 'manual',
+    // Active: the manual-item form is its integration. Manual is `cost.kind`, not a status (ADR-0014).
+    status: 'active',
+    runtime: {
+      coverage: 'N/A',
+      services: { full: 0, partial: 0, notInstrumented: 0 },
+      operations: { instrumented: 0, total: 0 },
+    },
+    cost: { kind: 'MANUAL', freshness: 'FRESH' },
     capabilities: ['MANUAL_COST'],
     billingTimezone: null,
     unknownServices: [],
@@ -3004,6 +3065,12 @@ export const costProviderRows: CmsCostProviderRow[] = [
     providerId: 'gogo',
     displayName: 'GoGo (nội bộ)',
     status: 'active',
+    runtime: {
+      coverage: 'FULL',
+      services: { full: 1, partial: 0, notInstrumented: 0 },
+      operations: { instrumented: 1, total: 1 },
+    },
+    cost: { kind: 'AUTO', freshness: 'FRESH' },
     capabilities: ['METRICS'],
     billingTimezone: 'Asia/Ho_Chi_Minh',
     unknownServices: [],
@@ -3017,6 +3084,12 @@ export const costProviderRows: CmsCostProviderRow[] = [
     providerId: 'vietmap',
     displayName: 'VIETMAP',
     status: 'planned',
+    runtime: {
+      coverage: 'N/A',
+      services: { full: 0, partial: 0, notInstrumented: 0 },
+      operations: { instrumented: 0, total: 0 },
+    },
+    cost: { kind: 'NONE', freshness: null },
     capabilities: ['PLACE_SEARCH'],
     billingTimezone: null,
     unknownServices: [],
