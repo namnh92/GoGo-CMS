@@ -8,7 +8,6 @@ export const queryKeys = {
   opsKpis: ['ops', 'kpis'] as const,
   opsHealth: ['ops', 'health'] as const,
   opsQueues: ['ops', 'queues'] as const,
-  opsCosts: ['ops', 'costs'] as const,
   opsSummary: (window: string) => ['ops', 'summary', window] as const,
   opsProviders: (window: string) => ['ops', 'providers', window] as const,
   opsProvider: (provider: string, window: string) => ['ops', 'provider', provider, window] as const,
@@ -19,6 +18,8 @@ export const queryKeys = {
    * key: the rows follow it, so a shared key would show 30 days of usage under
    * a "today" heading.
    */
+  /** Prefix of every Cost Center window — what a manual-cost write invalidates. */
+  opsCostCenterAll: ['ops', 'cost-center'] as const,
   opsCostCenter: (window: string) => ['ops', 'cost-center', window] as const,
   opsCostService: (providerId: string, serviceId: string, window: string) =>
     ['ops', 'cost-service', providerId, serviceId, window] as const,

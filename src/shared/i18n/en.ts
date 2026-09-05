@@ -877,6 +877,11 @@ export const en: Partial<Record<MessageKey, string>> = {
   'dashboard.observability.title': 'Monitoring & costs',
   'dashboard.monitoring.title': 'Service health',
   'dashboard.costs.title': 'Provider costs',
+  'dashboard.costs.hint':
+    'One line per registry provider, month to date, after invoice-over-estimate precedence. No source means unknown, not zero.',
+  'dashboard.costs.footer':
+    'Month {month} · as of {at} · {providers} provider(s) with no cost source.',
+  'dashboard.costs.open': 'Open Cost Center →',
 
   'nav.group.administration': 'Administration',
   'nav.roles': 'Roles & permissions',
@@ -984,19 +989,6 @@ export const en: Partial<Record<MessageKey, string>> = {
   'dashboard.queuesOps.col.oldest': 'Oldest wait',
   'dashboard.queuesOps.outbox': 'outbox',
   'dashboard.queuesOps.age': '{minutes} min',
-  'dashboard.costsLive.hint':
-    'Only providers with a real source; every line says whether it is billed or estimated.',
-  'dashboard.costsLive.noSource':
-    'No cost source is connected. This is not zero spend — it is unmeasured.',
-  'dashboard.costsLive.empty': 'Sources are connected but no cost lines exist for the period.',
-  'dashboard.costsLive.billed': 'billed',
-  'dashboard.costsLive.estimated': 'estimated',
-  'dashboard.costsLive.mtd': 'MTD',
-  'dashboard.costsLive.units': '{units} units',
-  'dashboard.costsLive.asOf': 'As of {at} · price list {version}',
-  'dashboard.costsLive.gapsTitle': 'Not priceable',
-  'dashboard.costsLive.gap.not_instrumented': 'Not measured',
-  'dashboard.costsLive.gap.price_unknown': 'No price',
 
   'auth.change.title': 'Set a new password',
   'auth.change.subtitle': 'The temporary password must be replaced before entering the console.',

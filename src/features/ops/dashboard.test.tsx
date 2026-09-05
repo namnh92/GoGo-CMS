@@ -5,7 +5,8 @@ import { renderWithProviders, signInAs } from '@/shared/test/render'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/shared/test/server'
 import {
-  opsCostsUnmeasured,
+  costOverview,
+  costProviderRows,
   moderationReportQueue,
   moderationCheckinQueue,
   communityPlaceQueue,
@@ -88,41 +89,51 @@ describe('dashboard (CMS-035)', () => {
   })
 
   /**
-   * GoGo-BE#335 connected a durable ledger, so this card shows money. The rule
-   * it replaced is not gone: what has no amount is *named*, never folded into
-   * one.
+   * COST-CMS-011 (#111). The card summarises the registry: one line per
+   * provider, money after precedence, and an unknown that stays unknown.
+   * Places / Routes / Sheets are Google services and never appear here as
+   * providers.
    */
-  it('shows estimated spend and names what it could not price', async () => {
+  it('summarises every registry provider and never lists a Google service as one', async () => {
     signInAs('ops_admin')
     renderWithProviders(<Routed />, { route: '/' })
 
-    // 10,40 US$ month to date for Places (vi locale), from the fixture's
-    // 10_400_000 micros.
-    // The amount and its "MTD" label share one node, so the row is the unit
-    // of assertion rather than a bare text match.
-    const placesRow = (await screen.findByText('places')).closest('div')!
-    // Intl separates the number from the currency with a non-breaking space, so
-    // the assertion normalises whitespace rather than pinning U+00A0.
-    expect(placesRow.textContent?.replace(/\s/g, ' ')).toContain('10,40 US$')
-    // Routes has exact units and no verified per-element price.
-    expect(screen.getByText('google.routeMatrix')).toBeInTheDocument()
-    expect(screen.getByText('Chưa có giá')).toBeInTheDocument()
-    // The SDK renders on the handset; nothing here counts it.
-    expect(screen.getByText('google.maps_sdk_ios')).toBeInTheDocument()
-    // Freshness, so a stale figure can be recognised as one.
-    expect(screen.getByText(/bảng giá 2026-09-01/)).toBeInTheDocument()
+    // 10,40 US$ month to date for Google (vi locale), from the fixture's
+    // 10_400_000 micros. Amount and badges share the row, so the row is the
+    // unit of assertion; Intl separates number and currency with a
+    // non-breaking space, hence the whitespace normalisation.
+    const googleRow = (await screen.findByText('Google')).closest('div')!
+    expect(googleRow.textContent?.replace(/\s/g, ' ')).toContain('10,40 US$')
+    // Every registry provider is a line — including the ones with no source.
+    for (const name of ['Cloudflare', 'Apple', 'GoGo (nội bộ)', 'VIETMAP']) {
+      expect(screen.getByText(name)).toBeInTheDocument()
+    }
+    // A planned provider has no cost source: a dash and the sentence, never 0.
+    const vietmapRow = screen.getByText('VIETMAP').closest('div')!
+    expect(vietmapRow.textContent).toContain('Chưa có nguồn chi phí')
+    expect(vietmapRow.textContent).not.toMatch(/\d\s*(US\$|₫)/)
+    // The legacy Google service groups are gone from the dashboard.
+    for (const legacy of ['places', 'routes', 'sheets', 'maps_sdk', 'google.routeMatrix']) {
+      expect(screen.queryByText(legacy)).not.toBeInTheDocument()
+    }
+    expect(screen.getByRole('link', { name: /Cost Center/ })).toHaveAttribute('href', '/costs')
   })
 
-  it('renders "no cost source" without any currency figure — not as zero', async () => {
-    // The ledger switched off (`COST_LEDGER_ENABLED=false`) is the rollback
-    // path for GoGo-BE#335, and it must still read as "we do not know" rather
-    // than as nothing spent.
-    server.use(http.get('/v1/cms/ops/costs', () => HttpResponse.json(opsCostsUnmeasured)))
+  it('renders an all-unknown registry without any currency figure — not as zero', async () => {
+    server.use(
+      http.get('/v1/cms/ops/costs', () =>
+        HttpResponse.json({
+          ...costOverview,
+          providerRows: costProviderRows.filter((p) => p.costStatus === 'UNKNOWN'),
+        }),
+      ),
+    )
     signInAs('ops_admin')
     renderWithProviders(<Routed />, { route: '/' })
 
-    expect(await screen.findByText(/Chưa có nguồn chi phí nào được nối/)).toBeInTheDocument()
-    expect(screen.queryByText(/\$\d/)).not.toBeInTheDocument()
+    const row = (await screen.findByText('VIETMAP')).closest('div')!
+    expect(row.textContent).toContain('Chưa có nguồn chi phí')
+    expect(screen.queryByText(/\d\s*US\$/)).not.toBeInTheDocument()
     expect(screen.queryByText(/\d\s*₫/)).not.toBeInTheDocument()
   })
 })

@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useI18n, useT } from '@/shared/i18n/i18n'
 import { queryKeys } from '@/shared/api/queryKeys'
-import { formatDateTime, formatMoney, formatNumber, formatPercent } from '@/shared/format'
+import { formatDateTime, formatNumber, formatPercent } from '@/shared/format'
 import { PageBody, PageHeader } from '@/app/PageHeader'
 import { Card, CardBody, CardHeader, KpiCard } from '@/shared/ui/Card'
 import { Badge } from '@/shared/ui/Badge'
@@ -13,12 +13,13 @@ import { fetchModerationCounts } from '@/features/moderation/api'
 import { fetchImportJobs } from '@/features/imports/api'
 import { JobStatusBadge } from '@/features/imports/status'
 import {
-  fetchOpsCosts,
+  fetchCostOverview,
   fetchOpsHealth,
   fetchOpsKpis,
   fetchOpsQueues,
   fetchSearchAnalytics,
 } from './api'
+import { BasisBadge, CostAmount, FreshnessBadge, ProviderStatusBadge } from './costParts'
 import { styles } from './dashboard.style'
 
 /**
@@ -77,9 +78,13 @@ export default function DashboardScreen() {
     refetchInterval: 30_000,
     enabled: can('ops.dashboard'),
   })
+  // COST-CMS-011 (#111): the card summarises the registry-keyed Cost Center —
+  // `providerRows`, month to date — one line per provider, never a Google
+  // service dressed as one. The legacy #335 `providers[]` half of the same
+  // payload is read nowhere in the CMS any more.
   const costs = useQuery({
-    queryKey: queryKeys.opsCosts,
-    queryFn: ({ signal }) => fetchOpsCosts(signal),
+    queryKey: queryKeys.opsCostCenter('mtd'),
+    queryFn: ({ signal }) => fetchCostOverview('mtd', signal),
     staleTime: 5 * 60_000,
     enabled: can('ops.dashboard'),
   })
@@ -546,85 +551,50 @@ export default function DashboardScreen() {
                   <Card>
                     <CardHeader
                       title={t('dashboard.costs.title')}
-                      hint={t('dashboard.costsLive.hint')}
+                      hint={t('dashboard.costs.hint')}
                     />
                     <CardBody>
                       {costs.isError ? (
                         <p className={styles.note}>{t('dashboard.satelliteError')}</p>
-                      ) : costs.data && !costs.data.sourcesConfigured ? (
-                        /* "No source connected" is not a zero — no currency
-                           symbol may appear on this branch. Since GoGo-BE#335
-                           this means the durable ledger is switched off, which
-                           is the rollback path for that PR. */
-                        <p className={styles.costEmpty}>{t('dashboard.costsLive.noSource')}</p>
-                      ) : (costs.data?.providers.length ?? 0) === 0 &&
-                        (costs.data?.gaps.length ?? 0) === 0 ? (
-                        <p className={styles.costEmpty}>{t('dashboard.costsLive.empty')}</p>
-                      ) : (
+                      ) : costs.data ? (
                         <>
-                          {costs.data?.providers.map((line) => (
-                            <div key={line.key} className={styles.costRow}>
-                              <span className={styles.costKey}>{line.key}</span>
+                          {costs.data.providerRows.map((provider) => (
+                            <div key={provider.providerId} className={styles.costRow}>
+                              <span className={styles.costKey}>{provider.displayName}</span>
                               <span className={styles.costBasis}>
-                                <Badge tone={line.basis === 'billed' ? 'mint' : 'neutral'}>
-                                  {t(`dashboard.costsLive.${line.basis}` as const)}
-                                </Badge>
+                                <ProviderStatusBadge status={provider.status} />
                               </span>
                               <span className={styles.costQuota}>
-                                {/* The measured quantity behind the estimate.
-                                    Units are a fact; the money over them is
-                                    not, and showing both keeps that visible. */}
-                                {line.billableUnitsMonthToDate !== undefined
-                                  ? t('dashboard.costsLive.units', {
-                                      units: formatNumber(line.billableUnitsMonthToDate, locale),
-                                    })
-                                  : null}
-                              </span>
-                              <span className={styles.costValue}>
-                                {formatMoney(
-                                  { amount: line.today, currency: line.currency },
-                                  locale,
+                                {/* Where the number comes from and how fresh
+                                    the source is — both facts. A row with no
+                                    source shows no basis it does not have. */}
+                                {provider.costStatus === 'UNKNOWN' ? null : (
+                                  <BasisBadge basis={provider.basis} />
                                 )}{' '}
-                                · {t('dashboard.costsLive.mtd')}{' '}
-                                {formatMoney(
-                                  { amount: line.monthToDate, currency: line.currency },
-                                  locale,
-                                )}
+                                <FreshnessBadge status={provider.freshness.status} />
                               </span>
+                              <CostAmount
+                                className={styles.costValue}
+                                spendMicros={provider.spendMicros}
+                                currency={provider.currency}
+                                mixedCurrency={provider.mixedCurrency}
+                                costStatus={provider.costStatus}
+                              />
                             </div>
                           ))}
-                          {/*
-                            What the amounts above leave out, named rather than
-                            omitted. A provider missing from a list that says
-                            "sources connected" reads as zero spend, which is
-                            the one claim this card must never make.
-                          */}
-                          {costs.data?.gaps.map((gap) => (
-                            <div key={`${gap.kind}:${gap.key}`} className={styles.costRow}>
-                              <span className={styles.costKey}>{gap.key}</span>
-                              <span className={styles.costBasis}>
-                                <Badge tone={gap.kind === 'price_unknown' ? 'amber' : 'neutral'}>
-                                  {t(
-                                    `dashboard.costsLive.gap.${gap.kind}` as 'dashboard.costsLive.gap.price_unknown',
-                                  )}
-                                </Badge>
-                              </span>
-                              <span className={styles.costQuota} />
-                              <span className={styles.costValue}>
-                                {t('dashboard.costsLive.gapsTitle')}
-                              </span>
-                            </div>
-                          ))}
-                          {costs.data?.asOf ? (
-                            <p className={styles.note}>
-                              {t('dashboard.costsLive.asOf', {
-                                at: formatDateTime(costs.data.asOf, locale),
-                                version: costs.data.pricingVersion ?? '—',
-                              })}
-                            </p>
-                          ) : null}
+                          <p className={styles.note}>
+                            {t('dashboard.costs.footer', {
+                              month: costs.data.month,
+                              at: formatDateTime(costs.data.generatedAt, locale),
+                              providers: formatNumber(
+                                costs.data.cards.unknown.providerIds.length,
+                                locale,
+                              ),
+                            })}{' '}
+                            <Link to="/costs">{t('dashboard.costs.open')}</Link>
+                          </p>
                         </>
-                      )}
+                      ) : null}
                     </CardBody>
                   </Card>
                 </div>
