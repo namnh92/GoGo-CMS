@@ -2799,7 +2799,8 @@ export const costServices: Record<string, CmsCostServiceRow> = {
       coverage: 'NOT_INSTRUMENTED',
       operations: { instrumented: 0, total: 1 },
     },
-    cost: { kind: 'AUTO', freshness: 'ERROR' },
+    // Never observed, not failed: the SDK has an automatic source nothing has fed.
+    cost: { kind: 'AUTO', freshness: 'UNKNOWN' },
     usage: [],
     quota: null,
     lastUpdated: null,

@@ -236,7 +236,10 @@ export function CostSourceKindBadge({ kind }: { kind: CmsCostSourceKind }) {
 const COST_DATA_TONE: Record<CmsCostDataFreshness, { tone: Tone; shape: BadgeShape }> = {
   FRESH: { tone: 'mint', shape: 'check' },
   STALE: { tone: 'amber', shape: 'clock' },
+  // Only an attempt that failed gets the danger tone.
   ERROR: { tone: 'danger', shape: 'alert' },
+  // Never observed: not a failure, and never dressed as one.
+  UNKNOWN: { tone: 'neutral', shape: 'info' },
 }
 
 /** `null` is "nothing to be current" and is said in words, never left blank. */
@@ -246,7 +249,7 @@ export function CostDataFreshnessBadge({ freshness }: { freshness: CmsCostDataFr
   if (freshness === null) {
     return <StatusBadge tone="neutral" shape="dot" label={t('monitoring.costFreshness.none')} />
   }
-  const style = COST_DATA_TONE[freshness] ?? COST_DATA_TONE.ERROR
+  const style = COST_DATA_TONE[freshness] ?? COST_DATA_TONE.UNKNOWN
   return (
     <StatusBadge
       tone={style.tone}

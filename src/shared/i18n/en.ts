@@ -1387,6 +1387,7 @@ export const en: Partial<Record<MessageKey, string>> = {
   'monitoring.costFreshness.FRESH': 'Fresh',
   'monitoring.costFreshness.STALE': 'Stale',
   'monitoring.costFreshness.ERROR': 'Error',
+  'monitoring.costFreshness.UNKNOWN': 'Not observed',
   'monitoring.costFreshness.none': 'Not applicable',
   'monitoring.providers.provider': 'Provider',
   'monitoring.providers.calls': 'Calls',

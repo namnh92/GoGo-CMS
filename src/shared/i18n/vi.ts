@@ -1992,6 +1992,7 @@ export const vi = {
   'monitoring.costFreshness.FRESH': 'Mới',
   'monitoring.costFreshness.STALE': 'Cũ',
   'monitoring.costFreshness.ERROR': 'Lỗi',
+  'monitoring.costFreshness.UNKNOWN': 'Chưa quan sát',
   'monitoring.costFreshness.none': 'Không áp dụng',
   'monitoring.providers.provider': 'Provider',
   'monitoring.providers.calls': 'Lượt gọi',

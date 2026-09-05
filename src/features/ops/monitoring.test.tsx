@@ -208,8 +208,10 @@ describe('provider monitoring (GoGo-BE#315)', () => {
     expect(within(sdk).getByText('SDK phía client')).toBeInTheDocument()
     expect(within(sdk).getByText('NOT INSTRUMENTED')).toBeInTheDocument()
     expect(within(sdk).getByText('0 / 1')).toBeInTheDocument()
-    // The cost dimension of the SDK: automatic in principle, nothing delivered.
-    expect(within(sdk).getByText('Lỗi')).toBeInTheDocument()
+    // The cost dimension of the SDK: automatic in principle, never observed —
+    // and never called an error, which is what ERROR is reserved for.
+    expect(within(sdk).getByText('Chưa quan sát')).toBeInTheDocument()
+    expect(within(sdk).queryByText('Lỗi')).not.toBeInTheDocument()
     const places = within(detail).getByText('Places API').closest('tr')!
     expect(within(places).getByText('Trong process')).toBeInTheDocument()
     expect(within(places).getByText('FULL')).toBeInTheDocument()

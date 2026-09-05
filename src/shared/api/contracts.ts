@@ -1702,15 +1702,21 @@ export const cmsCostSourceKindSchema = z.enum(['AUTO', 'MANUAL', 'NONE'])
 export type CmsCostSourceKind = z.infer<typeof cmsCostSourceKindSchema>
 
 /**
- * Observed: whether that money is current. Three values on purpose — the
- * four-state §23 detail stays in `freshness.sources` for the drill-down.
+ * Observed: whether that money is current. `ERROR` is reserved for a
+ * collection that was attempted and failed; a source nobody has observed
+ * yet is `UNKNOWN`, never an error. The per-source §23 detail stays in
+ * `freshness.sources` for the drill-down.
  */
-export const cmsCostDataFreshnessSchema = z.enum(['FRESH', 'STALE', 'ERROR'])
+export const cmsCostDataFreshnessSchema = z.enum(['FRESH', 'STALE', 'ERROR', 'UNKNOWN'])
 export type CmsCostDataFreshness = z.infer<typeof cmsCostDataFreshnessSchema>
 
 export const cmsCostSourceSchema = z.object({
   kind: cmsCostSourceKindSchema,
-  /** Null when there is nothing to be current: kind NONE, or MANUAL with nothing entered yet. */
+  /**
+   * Null when there is nothing to be current: kind NONE, or MANUAL with
+   * nothing entered yet. `UNKNOWN` is different: an automatic source exists
+   * and has never been observed.
+   */
   freshness: cmsCostDataFreshnessSchema.nullable(),
 })
 export type CmsCostSource = z.infer<typeof cmsCostSourceSchema>
