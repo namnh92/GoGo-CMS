@@ -16,8 +16,10 @@ import { cn } from '@/shared/ui/cn'
 import type {
   CmsCostBudgetStatus,
   CmsCostCards,
+  CmsCostForecast,
   CmsCostOverview,
   CmsCostProviderRow,
+  CmsCostScheduledCharge,
   CmsCostServiceRow,
   CmsCostTestRun,
   CmsCostWindow,
@@ -141,6 +143,7 @@ export default function CostCenterScreen() {
               ) : null}
 
               <Cards cards={data.cards} />
+              <ForecastCard forecast={data.cards.forecast} />
               <BudgetCard budget={data.cards.budget} />
               <UnknownCard cards={data.cards} />
 
@@ -210,12 +213,17 @@ function Meta({ data }: { data: CmsCostOverview }) {
  * The §35 cards. They are month-shaped whatever the window is — a free cap and
  * an invoice are monthly — so the window selector moves the rows below, not
  * these. `null` here is "no cost row in scope", which is unknown, not zero.
+ *
+ * COST-CMS-012 (ADR-0015): "Month to date" is the **month actual** — what has
+ * been recognised so far, split by how it is billed. The forecast lives in
+ * its own card below, because a forecast is not a bigger version of this
+ * number: it is built from billing dates, not from dividing this by the days.
  */
 function Cards({ cards }: { cards: CmsCostCards }) {
   const t = useT()
   const { locale } = useI18n()
-
-  const projectedReady = cards.projected.micros != null
+  const kinds = cards.monthToDate.byKind
+  const money = (micros: number) => formatMicros(micros, cards.monthToDate.currency, locale)
 
   return (
     <div className={styles.cardGrid}>
@@ -235,7 +243,7 @@ function Cards({ cards }: { cards: CmsCostCards }) {
         })}
       />
       <KpiCard
-        label={t('cost.card.monthToDate')}
+        label={t('cost.card.monthActual')}
         value={
           <CostAmount
             spendMicros={cards.monthToDate.spendMicros}
@@ -244,27 +252,22 @@ function Cards({ cards }: { cards: CmsCostCards }) {
             costStatus={cards.monthToDate.spendMicros == null ? 'UNKNOWN' : 'KNOWN'}
           />
         }
-        sub={t('cost.card.monthSub', {
-          month: cards.monthToDate.month,
-          count: formatNumber(cards.monthToDate.services, locale),
-        })}
-      />
-      <KpiCard
-        label={t('cost.card.projected')}
-        value={
-          projectedReady ? (
-            formatMicros(cards.projected.micros, cards.projected.currency, locale)
-          ) : (
-            <span className={styles.money}>—</span>
-          )
-        }
         sub={
-          projectedReady
-            ? t('cost.card.projectedSub', { month: cards.projected.month })
-            : t('cost.card.projectedNeed', {
-                elapsed: cards.projected.elapsedDays,
-                min: cards.projected.minElapsedDays,
-              })
+          <>
+            {t('cost.card.monthSub', {
+              month: cards.monthToDate.month,
+              count: formatNumber(cards.monthToDate.services, locale),
+            })}
+            {kinds && !cards.monthToDate.mixedCurrency ? (
+              <span className="block">
+                {t('cost.forecast.actualParts', {
+                  usage: money(kinds.USAGE),
+                  recurring: money(kinds.RECURRING),
+                  oneTime: money(kinds.ONE_TIME),
+                })}
+              </span>
+            ) : null}
+          </>
         }
       />
       <KpiCard
@@ -285,6 +288,149 @@ function Cards({ cards }: { cards: CmsCostCards }) {
   )
 }
 
+/**
+ * COST-CMS-012 (GoGo-BE#415, ADR-0015) — the forecast, as three numbers that
+ * are never one number:
+ *
+ * - **End-of-month cash**: the usage projection (the only extrapolated part)
+ *   + every recurring charge billed this month + every one-off of the month.
+ *   An annual fee is here only in its renewal month.
+ * - **Normalised run-rate**: usage projection + monthly fees + annual fees ÷ 12.
+ *   One-offs never enter it.
+ *
+ * When the usage half cannot be projected yet, the cash figure is shown as a
+ * floor ("≥ the committed part") with the reason in words — never as a number
+ * the server does not have, and never as the month-to-date scaled up.
+ */
+function ForecastCard({ forecast }: { forecast: CmsCostForecast }) {
+  const t = useT()
+  const { locale } = useI18n()
+  const money = (micros: number) => formatMicros(micros, forecast.currency, locale)
+  const reason =
+    forecast.usage.reason == null
+      ? null
+      : t(`cost.forecast.usageReason.${forecast.usage.reason}` as const, {
+          min: forecast.minElapsedDays,
+          elapsed: forecast.elapsedDays,
+        })
+
+  const cashValue = forecast.mixedCurrency ? (
+    <span className={styles.unknownCell}>{t('cost.mixedCurrency')}</span>
+  ) : forecast.cash.micros != null ? (
+    money(forecast.cash.micros)
+  ) : forecast.cash.floorMicros > 0 ? (
+    <span>
+      {t('cost.forecast.floor', { amount: money(forecast.cash.floorMicros) })}
+      <span className="sr-only"> {t('cost.forecast.floorSr')}</span>
+    </span>
+  ) : (
+    <span className={styles.money}>—</span>
+  )
+  const cashSub = forecast.mixedCurrency
+    ? null
+    : forecast.cash.micros != null
+      ? t('cost.forecast.cashParts', {
+          usage: money(forecast.usage.projectedMicros ?? 0),
+          recurring: money(forecast.recurring.committedMicros),
+          oneTime: money(forecast.oneTime.landedMicros + forecast.oneTime.scheduledMicros),
+        })
+      : t('cost.forecast.partial', { reason: reason ?? '' })
+
+  const runRateValue = forecast.mixedCurrency ? (
+    <span className={styles.unknownCell}>{t('cost.mixedCurrency')}</span>
+  ) : forecast.runRate.micros != null ? (
+    money(forecast.runRate.micros)
+  ) : (
+    <span className={styles.money}>—</span>
+  )
+  const runRateSub = forecast.mixedCurrency
+    ? null
+    : forecast.runRate.micros != null
+      ? t('cost.forecast.runRateParts', {
+          usage: money(forecast.runRate.usageMicros ?? 0),
+          monthly: money(forecast.runRate.recurringMonthlyMicros),
+          annual: money(forecast.runRate.annualEquivalentMicros),
+        })
+      : t('cost.forecast.runRatePartial', { reason: reason ?? '' })
+
+  return (
+    <Card>
+      <CardHeader
+        title={t('cost.forecast.title', { month: forecast.month })}
+        hint={t('cost.forecast.hint')}
+        actions={
+          <span className={styles.cardSub}>
+            {t('cost.forecast.elapsed', {
+              elapsed: forecast.elapsedDays,
+              days: forecast.daysInMonth,
+            })}
+          </span>
+        }
+      />
+      <CardBody>
+        <div className={styles.forecastGrid}>
+          <div className={styles.forecastBlock}>
+            <p className={styles.forecastLabel}>{t('cost.forecast.cash')}</p>
+            <p className={styles.forecastValue}>{cashValue}</p>
+            {cashSub ? <p className={styles.cardSub}>{cashSub}</p> : null}
+          </div>
+          <div className={styles.forecastBlock}>
+            <p className={styles.forecastLabel}>{t('cost.forecast.runRate')}</p>
+            <p className={styles.forecastValue}>{runRateValue}</p>
+            {runRateSub ? <p className={styles.cardSub}>{runRateSub}</p> : null}
+            {forecast.runRate.oneTimeExcludedMicros > 0 && !forecast.mixedCurrency ? (
+              <p className={styles.cardSub}>
+                {t('cost.forecast.runRateExcludes', {
+                  amount: money(forecast.runRate.oneTimeExcludedMicros),
+                })}
+              </p>
+            ) : null}
+          </div>
+        </div>
+        <ScheduledCharges charges={forecast.scheduled} />
+      </CardBody>
+    </Card>
+  )
+}
+
+/** What the month still bills — the part of the cash forecast that is a date, not an average. */
+function ScheduledCharges({ charges }: { charges: CmsCostScheduledCharge[] }) {
+  const t = useT()
+  const label = useLabel()
+  const { locale } = useI18n()
+  return (
+    <div className={styles.scheduleBlock}>
+      <p className={styles.drawerLabel}>{t('cost.forecast.scheduled')}</p>
+      {charges.length === 0 ? (
+        <p className={styles.cardSub}>{t('cost.forecast.scheduledNone')}</p>
+      ) : (
+        <ul className={styles.scheduleList}>
+          {charges.map((charge) => (
+            <li key={`${charge.key}:${charge.day ?? ''}`} className={styles.scheduleRow}>
+              <span className={styles.scheduleName}>
+                <span className={styles.serviceName}>{charge.name ?? charge.serviceId}</span>
+                <span className={`block ${styles.serviceId}`}>{charge.serviceId}</span>
+              </span>
+              <Badge tone={charge.kind === 'ONE_TIME' ? 'amber' : 'neutral'}>
+                {label(`cost.kind.${charge.kind}`, charge.kind)}
+                {charge.cadence
+                  ? ` · ${label(`cost.cadence.${charge.cadence}`, charge.cadence)}`
+                  : ''}
+              </Badge>
+              <span className={styles.muted}>
+                {charge.day ?? t('cost.forecast.scheduledSpread')}
+              </span>
+              <span className={styles.money}>
+                {formatMicros(charge.amountMicros, charge.currency, locale)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 const BUDGET_TONE: Record<CmsCostBudgetStatus['state'], Tone> = {
   ok: 'mint',
   warning: 'amber',
@@ -293,8 +439,10 @@ const BUDGET_TONE: Record<CmsCostBudgetStatus['state'], Tone> = {
 }
 
 /**
- * Budgets (epic §32/§33). A month with no budget set is not a budget of zero,
- * so the card says there is none rather than drawing an empty bar.
+ * Budgets (epic §32/§33 as amended by ADR-0015). A month with no budget set
+ * is not a budget of zero, so the card says there is none rather than drawing
+ * an empty bar. The projection line is the scope's end-of-month cash; while
+ * its usage half cannot be projected, the committed floor is named instead.
  */
 function BudgetCard({ budget }: { budget: CmsCostCards['budget'] }) {
   const t = useT()
@@ -344,13 +492,31 @@ function BudgetCard({ budget }: { budget: CmsCostCards['budget'] }) {
                   })}
                 />
                 <p className={styles.cardSub}>
-                  {row.projectedMicros == null
-                    ? t('cost.budget.noProjection')
-                    : t('cost.budget.projection', {
+                  {row.projectedMicros != null
+                    ? t('cost.budget.projection', {
                         amount: formatMicros(row.projectedMicros, row.currency, locale),
                         pct: formatPercent(row.projectedPct, locale, { alreadyPercent: true }),
-                      })}
+                      })
+                    : row.projectedFloorMicros > 0
+                      ? t('cost.budget.projectionFloor', {
+                          amount: formatMicros(row.projectedFloorMicros, row.currency, locale),
+                          pct: formatPercent(
+                            row.monthMicros === 0
+                              ? null
+                              : (row.projectedFloorMicros / row.monthMicros) * 100,
+                            locale,
+                            { alreadyPercent: true },
+                          ),
+                        })
+                      : t('cost.budget.noProjection')}
                 </p>
+                {row.runRateMicros != null ? (
+                  <p className={styles.cardSub}>
+                    {t('cost.budget.runRate', {
+                      amount: formatMicros(row.runRateMicros, row.currency, locale),
+                    })}
+                  </p>
+                ) : null}
               </div>
             ))}
           </div>

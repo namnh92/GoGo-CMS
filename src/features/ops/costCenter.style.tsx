@@ -42,6 +42,15 @@ export const styles = {
   operationHead: 'flex flex-wrap items-center gap-2',
   runLink: 'font-semibold text-coral-deep underline-offset-2 hover:underline',
   totals: 'grid gap-4 sm:grid-cols-3',
+  forecastGrid: 'grid gap-4 md:grid-cols-2',
+  forecastBlock: 'rounded-compact border border-line bg-surface-muted px-4 py-3',
+  forecastLabel: 'text-xs font-semibold text-text-subtle',
+  forecastValue: 'mt-1 font-display text-2xl font-extrabold text-text tabular-nums',
+  scheduleBlock: 'mt-4 flex flex-col gap-2',
+  scheduleList: 'flex flex-col divide-y divide-line/70',
+  scheduleRow:
+    'grid items-center gap-x-3 gap-y-1 py-2 text-[13px] sm:grid-cols-[1fr_auto_auto_auto]',
+  scheduleName: 'min-w-0',
   note: 'flex items-start gap-2 rounded-compact border border-line bg-surface-muted px-3 py-2 text-xs text-text-muted',
   noteWarn:
     'flex items-start gap-2 rounded-compact border border-amber/40 bg-amber-soft px-3 py-2 text-xs text-text',

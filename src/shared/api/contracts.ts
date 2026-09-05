@@ -1328,6 +1328,16 @@ export type OpsCostGap = z.infer<typeof opsCostGapSchema>
 export const manualCostPeriodSchema = z.enum(['ONE_TIME', 'MONTHLY', 'YEARLY'])
 export type ManualCostPeriod = z.infer<typeof manualCostPeriodSchema>
 
+/**
+ * COST-CMS-012 (GoGo-BE#415, ADR-0015) — how a charge is billed. USAGE is the
+ * only kind a forecast may extrapolate; RECURRING carries a cadence; ONE_TIME
+ * is counted once and never a run-rate input.
+ */
+export const cmsCostKindSchema = z.enum(['USAGE', 'RECURRING', 'ONE_TIME'])
+export type CmsCostKind = z.infer<typeof cmsCostKindSchema>
+export const cmsBillingCadenceSchema = z.enum(['MONTHLY', 'ANNUAL'])
+export type CmsBillingCadence = z.infer<typeof cmsBillingCadenceSchema>
+
 export const cmsManualCostItemSchema = z.object({
   id: z.string(),
   environment: z.string(),
@@ -1337,10 +1347,15 @@ export const cmsManualCostItemSchema = z.object({
   amountMicros: z.number().int(),
   currency: z.string(),
   period: manualCostPeriodSchema,
-  /** `YYYY-MM-DD`, inclusive. */
+  /** Derived from `period` on the server — the classification every cost source carries. */
+  costKind: z.enum(['RECURRING', 'ONE_TIME']),
+  billingCadence: cmsBillingCadenceSchema.nullable(),
+  /** `YYYY-MM-DD`, inclusive. Also the billing anchor (day-of-month, or month-day for YEARLY). */
   effectiveFrom: z.string(),
   /** `YYYY-MM-DD`, inclusive; null = open-ended. Ignored for ONE_TIME. */
   effectiveTo: z.string().nullable(),
+  /** The first billing day on or after today; null when no charge is ahead. */
+  nextChargeDay: z.string().nullable(),
   note: z.string().nullable(),
   createdBy: z.string().nullable(),
   createdAt: z.string(),
@@ -1787,10 +1802,19 @@ export const cmsCostByBasisSchema = z.object({
 })
 export type CmsCostByBasis = z.infer<typeof cmsCostByBasisSchema>
 
+export const cmsCostByKindSchema = z.object({
+  USAGE: z.number().int(),
+  RECURRING: z.number().int(),
+  ONE_TIME: z.number().int(),
+})
+export type CmsCostByKind = z.infer<typeof cmsCostByKindSchema>
+
 export const cmsCostCardSchema = z.object({
   /** Null when no cost row is in scope — unknown, not zero. */
   spendMicros: z.number().int().nullable(),
   byBasis: cmsCostByBasisSchema.nullable(),
+  /** The same money by how it is billed (ADR-0015); null with `spendMicros`. */
+  byKind: cmsCostByKindSchema.nullable(),
   currency: z.string().nullable(),
   mixedCurrency: z.boolean(),
   /** How many services contributed a row. */
@@ -1812,26 +1836,79 @@ export const cmsCostBudgetStatusSchema = z.object({
   remainingMicros: z.number().int(),
   /** Null only when the budget is 0 and spend is positive — JSON has no infinity. */
   usedPct: z.number().nullable(),
-  /** Null under `minElapsedDays` or with no rows (epic §33). */
+  /** End-of-month cash forecast for the scope (ADR-0015); null while the usage half cannot be projected. */
   projectedMicros: z.number().int().nullable(),
   projectedPct: z.number().nullable(),
+  /** Recurring + one-time charges already known for the month — a floor under `projectedMicros`. */
+  projectedFloorMicros: z.number().int(),
+  /** Normalised monthly run-rate for the scope; annual fees ÷ 12, one-offs excluded. */
+  runRateMicros: z.number().int().nullable(),
   state: z.enum(['ok', 'warning', 'exceeded', 'projected_exceed']),
   currency: z.string(),
 })
 export type CmsCostBudgetStatus = z.infer<typeof cmsCostBudgetStatusSchema>
 
+export const cmsCostScheduledChargeSchema = z.object({
+  key: z.string(),
+  providerId: z.string(),
+  serviceId: z.string(),
+  name: z.string().nullable(),
+  kind: z.enum(['RECURRING', 'ONE_TIME']),
+  cadence: cmsBillingCadenceSchema.nullable(),
+  /** The billing date; null for a model that accrues across the month. */
+  day: z.string().nullable(),
+  amountMicros: z.number().int(),
+  currency: z.string(),
+})
+export type CmsCostScheduledCharge = z.infer<typeof cmsCostScheduledChargeSchema>
+
+/**
+ * COST-CMS-012 (GoGo-BE#415, ADR-0015) — three numbers, kept apart: `actual`
+ * (recognised so far), `cash` (what the month's invoices will total) and
+ * `runRate` (a normalised month). Only `usage.projectedMicros` is
+ * extrapolated; nothing here is derived from the MTD total.
+ */
+export const cmsCostForecastSchema = z.object({
+  month: z.string(),
+  today: z.string(),
+  elapsedDays: z.number().int(),
+  daysInMonth: z.number().int(),
+  minElapsedDays: z.number().int(),
+  actual: z.object({ micros: z.number().int(), byKind: cmsCostByKindSchema }),
+  usage: z.object({
+    mtdMicros: z.number().int(),
+    projectedMicros: z.number().int().nullable(),
+    reason: z.enum(['INSUFFICIENT_HISTORY', 'NO_USAGE_ROWS', 'NOT_APPLICABLE']).nullable(),
+  }),
+  recurring: z.object({
+    landedMicros: z.number().int(),
+    scheduledMicros: z.number().int(),
+    committedMicros: z.number().int(),
+  }),
+  oneTime: z.object({ landedMicros: z.number().int(), scheduledMicros: z.number().int() }),
+  scheduled: z.array(cmsCostScheduledChargeSchema).default([]),
+  cash: z.object({
+    micros: z.number().int().nullable(),
+    floorMicros: z.number().int(),
+    partial: z.boolean(),
+  }),
+  runRate: z.object({
+    micros: z.number().int().nullable(),
+    usageMicros: z.number().int().nullable(),
+    recurringMonthlyMicros: z.number().int(),
+    annualEquivalentMicros: z.number().int(),
+    oneTimeExcludedMicros: z.number().int(),
+  }),
+  currency: z.string().nullable(),
+  mixedCurrency: z.boolean(),
+})
+export type CmsCostForecast = z.infer<typeof cmsCostForecastSchema>
+
 /** Epic §35 overview cards. Month-shaped whatever the window. */
 export const cmsCostCardsSchema = z.object({
   today: cmsCostCardSchema.extend({ day: z.string() }),
   monthToDate: cmsCostCardSchema.extend({ month: z.string() }),
-  projected: z.object({
-    /** MTD daily average × days in the month; null under `minElapsedDays`. */
-    micros: z.number().int().nullable(),
-    month: z.string(),
-    elapsedDays: z.number().int(),
-    minElapsedDays: z.number().int(),
-    currency: z.string().nullable(),
-  }),
+  forecast: cmsCostForecastSchema,
   budget: z.object({
     total: cmsCostBudgetStatusSchema.nullable(),
     budgets: z.array(cmsCostBudgetStatusSchema).default([]),

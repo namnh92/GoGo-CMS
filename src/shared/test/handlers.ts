@@ -1898,6 +1898,11 @@ export const handlers = [
       amountMicros: Number(body.amountMicros),
       currency: String(body.currency ?? 'USD'),
       period: body.period as 'MONTHLY',
+      // COST-CMS-012: the server derives the classification and the next billing day.
+      costKind: body.period === 'ONE_TIME' ? 'ONE_TIME' : 'RECURRING',
+      billingCadence:
+        body.period === 'ONE_TIME' ? null : body.period === 'YEARLY' ? 'ANNUAL' : 'MONTHLY',
+      nextChargeDay: body.period === 'ONE_TIME' ? null : String(body.effectiveFrom),
       effectiveFrom: String(body.effectiveFrom),
       effectiveTo: (body.effectiveTo as string | null | undefined) ?? null,
       note: (body.note as string | null | undefined) ?? null,

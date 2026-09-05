@@ -1410,7 +1410,7 @@ export const en: Partial<Record<MessageKey, string>> = {
   'manualCosts.title': 'Manual costs',
   'manualCosts.breadcrumb': 'Manual costs',
   'manualCosts.hint':
-    'Fixed fees entered by hand — Apple Developer, a domain, a VPS, Play Console. Each item is spread into daily MANUAL cost rows (up to today) so the Cost Center, budgets and forecast count it; test-run deltas never do.',
+    'Fixed fees entered by hand — Apple Developer, a domain, a VPS, Play Console. Each item becomes one MANUAL cost row on its billing day, for the whole amount (never spread per day): a monthly fee on its anchor day each month, an annual fee on its renewal date, a one-off once. The Cost Center and budgets read the rows; the forecast reads the billing schedule. Test-run deltas never include these.',
   'manualCosts.denied': 'Only ops_admin and above can see costs.',
   'manualCosts.new': 'Add item',
   'manualCosts.edit': 'Edit item',
@@ -1422,11 +1422,13 @@ export const en: Partial<Record<MessageKey, string>> = {
   'manualCosts.eligibleHint':
     'Only services that declare MANUAL_COST in the registry accept a manual cost; the list comes from the server.',
   'manualCosts.formNote':
-    'The amount is the fee per period, not per day. The server spreads it over the days of each month/year; a one-off lands whole on its start day.',
+    'The amount is the fee per period, not per day. "Effective from" is also the billing anchor: a monthly fee repeats on that day each month (shorter months clamp to their last day), an annual fee on that month-day each year, a one-off lands whole on that day. An annual fee enters the cash forecast only in its renewal month; the run-rate carries it ÷ 12.',
   'manualCosts.col.name': 'Item',
   'manualCosts.col.service': 'Service',
   'manualCosts.col.amount': 'Amount',
   'manualCosts.col.window': 'Effective',
+  'manualCosts.col.next': 'Next charge',
+  'manualCosts.noNextCharge': 'none ahead',
   'manualCosts.col.updated': 'Updated',
   'manualCosts.field.service': 'Service',
   'manualCosts.field.servicePick': 'Pick a service…',
@@ -1434,15 +1436,19 @@ export const en: Partial<Record<MessageKey, string>> = {
   'manualCosts.field.amount': 'Amount',
   'manualCosts.field.amountHint': 'In currency units, dot for decimals — e.g. 99.99',
   'manualCosts.field.currency': 'Currency',
-  'manualCosts.field.period': 'Period',
-  'manualCosts.field.effectiveFrom': 'Effective from',
+  'manualCosts.field.period': 'Cost type · cadence',
+  'manualCosts.field.effectiveFrom': 'Effective from (billing anchor)',
+  'manualCosts.field.anchorHint.MONTHLY':
+    'Repeats on this day each month; shorter months clamp to their last day.',
+  'manualCosts.field.anchorHint.YEARLY':
+    'Repeats on this month-day each year (Feb 29 falls back to Feb 28).',
   'manualCosts.field.effectiveTo': 'Effective to',
   'manualCosts.field.effectiveToHint':
     'Leave empty if open-ended. A one-off counts its start day only.',
   'manualCosts.field.note': 'Note',
-  'manualCosts.period.ONE_TIME': 'One-time',
-  'manualCosts.period.MONTHLY': 'Monthly',
-  'manualCosts.period.YEARLY': 'Yearly',
+  'manualCosts.period.ONE_TIME': 'One-time (ONE_TIME)',
+  'manualCosts.period.MONTHLY': 'Recurring · monthly (RECURRING / MONTHLY)',
+  'manualCosts.period.YEARLY': 'Recurring · annual (RECURRING / ANNUAL)',
   'manualCosts.per.ONE_TIME': 'one-time',
   'manualCosts.per.MONTHLY': '/month',
   'manualCosts.per.YEARLY': '/year',
@@ -1480,16 +1486,44 @@ export const en: Partial<Record<MessageKey, string>> = {
 
   'cost.card.today': 'Today',
   'cost.card.daySub': '{day} · {count} services contributed a row',
-  'cost.card.monthToDate': 'Month to date',
+  'cost.card.monthActual': 'Month actual',
   'cost.card.monthSub': '{month} · {count} services contributed a row',
-  'cost.card.projected': 'Projected month',
-  'cost.card.projectedSub': 'Daily average for {month} × days in the month',
-  'cost.card.projectedNeed': 'Needs {min} days of data, has {elapsed}',
   'cost.card.monitoring': 'Cost of monitoring',
   'cost.card.monitoringSub': '{count} internal services',
   'cost.card.budget': 'Budget',
 
-  'cost.budget.hint': 'Monthly budget per scope, with what it has used and where it is heading.',
+  // COST-CMS-012 (GoGo-BE#415, ADR-0015) — forecast on billing semantics
+  'cost.forecast.title': 'Forecast for {month}',
+  'cost.forecast.hint':
+    'Three separate numbers. Only usage is extrapolated from the elapsed days; recurring fees count on their billing date in the month; one-offs count once; annual fees ÷ 12 appear in the run-rate only, never in cash. Nothing is derived from the month total.',
+  'cost.forecast.elapsed': 'Day {elapsed} of {days}',
+  'cost.forecast.actualParts': 'Usage {usage} · recurring {recurring} · one-time {oneTime}',
+  'cost.forecast.cash': 'End-of-month cash forecast',
+  'cost.forecast.cashParts':
+    'Usage projection {usage} + recurring this month {recurring} + one-time {oneTime}',
+  'cost.forecast.floor': '≥ {amount}',
+  'cost.forecast.floorSr': 'at least',
+  'cost.forecast.partial':
+    'The usage half cannot be projected yet — {reason}. The figure is the known floor: recurring charges of the month + one-offs.',
+  'cost.forecast.usageReason.INSUFFICIENT_HISTORY': 'needs {min} days of data, has {elapsed}',
+  'cost.forecast.usageReason.NO_USAGE_ROWS': 'no usage cost row has been priced',
+  'cost.forecast.usageReason.NOT_APPLICABLE': 'nothing in scope produces usage',
+  'cost.forecast.runRate': 'Normalised monthly run-rate',
+  'cost.forecast.runRateParts':
+    'Usage {usage} + monthly fees {monthly} + annual fees ÷ 12 {annual}',
+  'cost.forecast.runRatePartial': 'Not available — {reason}.',
+  'cost.forecast.runRateExcludes': 'Excludes {amount} of one-time charges this month.',
+  'cost.forecast.scheduled': 'Still to be billed this month',
+  'cost.forecast.scheduledNone': 'Nothing left to bill this month.',
+  'cost.forecast.scheduledSpread': 'rest of the month',
+  'cost.kind.USAGE': 'Usage',
+  'cost.kind.RECURRING': 'Recurring',
+  'cost.kind.ONE_TIME': 'One-time',
+  'cost.cadence.MONTHLY': 'monthly',
+  'cost.cadence.ANNUAL': 'annual',
+
+  'cost.budget.hint':
+    'Monthly budget per scope, with what it has used, the end-of-month cash forecast and the normalised run-rate.',
   'cost.budget.none': 'No budget set. No budget is not a budget of zero.',
   'cost.budget.scope.TOTAL': 'Everything',
   'cost.budget.state.ok': 'Within budget',
@@ -1498,8 +1532,11 @@ export const en: Partial<Record<MessageKey, string>> = {
   'cost.budget.state.projected_exceed': 'Projected over budget',
   'cost.budget.bar': 'Budget used, {scope}',
   'cost.budget.used': '{used} / {total} · {pct}',
-  'cost.budget.projection': 'Projected {amount} by month end ({pct} of budget)',
-  'cost.budget.noProjection': 'Not enough elapsed days to project.',
+  'cost.budget.projection': 'Cash forecast {amount} by month end ({pct} of budget)',
+  'cost.budget.projectionFloor':
+    'At least {amount} already committed ({pct} of budget) — the usage half cannot be projected yet',
+  'cost.budget.runRate': 'Normalised run-rate {amount}/month',
+  'cost.budget.noProjection': 'Nothing to forecast for this month yet.',
 
   'cost.unknown.title': 'No cost source',
   'cost.unknown.hint':
