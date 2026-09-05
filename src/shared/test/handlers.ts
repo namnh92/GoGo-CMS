@@ -315,6 +315,9 @@ export const handlers = [
   // returning nothing falls through to the real handler below.
   http.all(`${BASE}/*`, ({ request, cookies }) => csrfFailure(request, cookies) ?? undefined),
 
+  // CMS-031: the reachability probe. A 200 here means "the network is up".
+  http.get(`${BASE}/health`, () => HttpResponse.json({ status: 'ok' })),
+
   http.post(`${BASE}/cms/auth/login`, async ({ request }) => {
     const body = (await request.json()) as { email?: string; password?: string; totp?: string }
     if (!body.email || !body.password) return envelope(401, 'UNAUTHORIZED', 'bad credentials')
