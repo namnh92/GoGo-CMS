@@ -106,11 +106,15 @@ function formatDay(day: string, locale: Locale): string {
  * COST-CMS-010 (GoGo-BE#382) — manual / fixed costs.
  *
  * A fee somebody types in — Apple Developer, a domain, a VPS, Play Console —
- * with a period and an effective range. The server spreads it into MANUAL
- * rows up to today, so the Cost Center, budgets and forecast count it beside
- * estimated and actual spend; per-test deltas never do. The form's service
- * picker is the registry's `eligibleServices`: a new manual provider on the
- * server appears here with no change to this screen.
+ * with a period and an effective range. The period is the operator's word
+ * for the billing classification every cost source carries (COST-CMS-012,
+ * ADR-0015): ONE_TIME, or RECURRING with a MONTHLY / ANNUAL cadence. The
+ * server writes one MANUAL row per billing day at the full amount (never a
+ * daily share), so the Cost Center and budgets count it beside estimated
+ * and actual spend, and the forecast reads what it still bills this month
+ * from the item's schedule; per-test deltas never see it. The form's
+ * service picker is the registry's `eligibleServices`: a new manual
+ * provider on the server appears here with no change to this screen.
  *
  * Money crosses the wire as micros per period. The form takes major units
  * and converts with integer arithmetic (`costMoney.ts`); the table
@@ -318,6 +322,18 @@ export default function ManualCostsScreen() {
                     ? formatDay(row.original.effectiveTo, locale)
                     : t('manualCosts.openEnded')
                 }`}
+          </span>
+        ),
+        enableSorting: false,
+      },
+      {
+        id: 'next',
+        header: () => t('manualCosts.col.next'),
+        cell: ({ row }) => (
+          <span className={styles.muted}>
+            {row.original.nextChargeDay
+              ? formatDay(row.original.nextChargeDay, locale)
+              : t('manualCosts.noNextCharge')}
           </span>
         ),
         enableSorting: false,
@@ -532,6 +548,11 @@ export default function ManualCostsScreen() {
             label={t('manualCosts.field.effectiveFrom')}
             required
             type="date"
+            hint={
+              draft.period === 'ONE_TIME'
+                ? undefined
+                : t(`manualCosts.field.anchorHint.${draft.period}` as const)
+            }
             error={errors.effectiveFrom}
             value={draft.effectiveFrom}
             onChange={(event) => set('effectiveFrom', event.target.value)}

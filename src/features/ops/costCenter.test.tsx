@@ -127,15 +127,71 @@ describe('Cost Center (COST-CMS-009)', () => {
     expect(await screen.findByText(/Sổ chi phí trong tiến trình đang tắt/)).toBeInTheDocument()
   })
 
-  it('withholds the forecast until the month has enough days behind it', async () => {
+  it('keeps month actual, end-of-month cash and normalised run-rate as three numbers (COST-CMS-012)', async () => {
     signInAs('ops_admin')
+    renderWithProviders(<CostCenterScreen />, { route: '/costs' })
+
+    // Month actual: what landed, split by how it is billed — never a forecast input.
+    const actual = (await screen.findByText('Thực chi tháng này')).closest('div') as HTMLElement
+    expect(within(actual).getByText(/20[,.]54/)).toBeInTheDocument()
+    expect(
+      within(actual).getByText(/Usage 12[,.]29 .* · định kỳ 12[,.]00 .* · một lần 25[,.]00/),
+    ).toBeInTheDocument()
+
+    const forecast = screen.getByText('Dự báo tháng 2026-09').closest('section') as HTMLElement
+    // Cash: usage projection + this month's recurring charges + one-offs — 86.87,
+    // not the old MTD × days (20.54 ÷ 10 × 30 = 61.62).
+    const cash = within(forecast)
+      .getByText('Dự báo tiền mặt cuối tháng')
+      .closest('div') as HTMLElement
+    expect(within(cash).getByText(/^86[,.]87/)).toBeInTheDocument()
+    expect(within(forecast).queryByText(/61[,.]62/)).not.toBeInTheDocument()
+    // Run-rate: annual fees as a twelfth, one-offs named as excluded.
+    const runRate = within(forecast)
+      .getByText('Run-rate tháng (chuẩn hoá)')
+      .closest('div') as HTMLElement
+    expect(within(runRate).getByText(/^60[,.]95/)).toBeInTheDocument()
+    expect(within(runRate).getByText(/Không gồm 25[,.]00 .* phí một lần/)).toBeInTheDocument()
+    // What is still to bill is listed by date, with its kind.
+    expect(within(forecast).getByText('VPS (backup)')).toBeInTheDocument()
+    expect(within(forecast).getByText('2026-09-20')).toBeInTheDocument()
+    expect(within(forecast).getByText('Định kỳ · hàng năm')).toBeInTheDocument()
+
+    // The budget line is the cash forecast, with the run-rate beside it.
+    expect(screen.getByText(/Dự báo tiền mặt hết tháng 86[,.]87/)).toBeInTheDocument()
+    expect(screen.getByText(/Run-rate chuẩn hoá 60[,.]95 .*\/tháng/)).toBeInTheDocument()
+  })
+
+  it('shows the cash forecast as a known floor, with the reason, until the usage half can be projected', async () => {
+    signInAs('ops_admin')
+    const { forecast, budget } = costOverview.cards
     server.use(
       http.get('/v1/cms/ops/costs', () =>
         HttpResponse.json(
           costsBody({
             cards: {
               ...costOverview.cards,
-              projected: { ...costOverview.cards.projected, micros: null, elapsedDays: 2 },
+              forecast: {
+                ...forecast,
+                elapsedDays: 2,
+                usage: {
+                  mtdMicros: 2_000_000,
+                  projectedMicros: null,
+                  reason: 'INSUFFICIENT_HISTORY',
+                },
+                cash: { micros: null, floorMicros: 50_000_000, partial: true },
+                runRate: { ...forecast.runRate, micros: null, usageMicros: null },
+              },
+              budget: {
+                ...budget,
+                total: {
+                  ...budget.total!,
+                  projectedMicros: null,
+                  projectedPct: null,
+                  projectedFloorMicros: 50_000_000,
+                  runRateMicros: null,
+                },
+              },
             },
           }),
         ),
@@ -143,7 +199,12 @@ describe('Cost Center (COST-CMS-009)', () => {
     )
     renderWithProviders(<CostCenterScreen />, { route: '/costs' })
 
-    expect(await screen.findByText('Cần ít nhất 3 ngày dữ liệu, mới có 2')).toBeInTheDocument()
+    expect(await screen.findByText(/≥ 50[,.]00/)).toBeInTheDocument()
+    // The reason is stated beside both the cash and the run-rate figure.
+    expect(screen.getAllByText(/cần ít nhất 3 ngày dữ liệu, mới có 2/)).toHaveLength(2)
+    // No invented number: the old formula would have printed 30.00 here.
+    expect(screen.queryByText(/\b30[,.]00\b/)).not.toBeInTheDocument()
+    expect(screen.getByText(/Đã cam kết ít nhất 50[,.]00/)).toBeInTheDocument()
   })
 
   it('refuses to sum two currencies into one figure', async () => {
