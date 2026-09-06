@@ -83,14 +83,35 @@ export function PublishChecklist({
         <p role="status" className={styles.blocked}>
           <span aria-hidden="true">⚠</span>
           {t('publishChecklist.blocked', {
-            reason: blocking
-              .map((item) => t(`publishChecklist.item.${item.id}` as const))
-              .join(', '),
+            reason: blocking.map((item) => reason(item, t)).join(', '),
           })}
         </p>
       ) : null}
     </div>
   )
+}
+
+/**
+ * Why an item blocks, phrased as a failure.
+ *
+ * The list labels (`publishChecklist.item.*`) are written affirmatively because
+ * `Row` shows them beside ✓/○ and a "Chưa đạt" badge, where that reads
+ * correctly. Joining those same labels after "Chưa xuất bản được:" produced a
+ * sentence that contradicted itself — "cannot publish: the current status
+ * allows a move to Published" (#138). Only `transition` and `permission` can
+ * ever block, so only those two need a reason.
+ */
+function reason(item: ChecklistItem, t: ReturnType<typeof useT>): string {
+  if (item.id === 'permission') return t('publishChecklist.reason.permission')
+  if (item.id === 'transition') {
+    return t('publishChecklist.reason.transition', {
+      from: t(`placeStatus.${item.detail?.from as PlaceStatus}` as const),
+      to: t(`placeStatus.${item.detail?.to as PlaceStatus}` as const),
+    })
+  }
+  // A suggested item never reaches `blockingFailures`, but if that ever changes
+  // the label is a better answer than an empty string.
+  return t(`publishChecklist.item.${item.id}` as const)
 }
 
 function Row({ item, t }: { item: ChecklistItem; t: ReturnType<typeof useT> }) {
