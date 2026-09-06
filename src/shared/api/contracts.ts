@@ -163,20 +163,68 @@ export const placeSourceSchema = z.object({
 })
 export type PlaceSource = z.infer<typeof placeSourceSchema>
 
+/** The three decisions `cmsUpdatePlaceMedia` accepts on a photo. */
+export const placeMediaModerationSchema = z.enum(['pending', 'approved', 'rejected'])
+export type PlaceMediaModeration = z.infer<typeof placeMediaModerationSchema>
+
 /**
- * Media is a storage key plus its moderation state — not a display URL. The
- * console shows what exists and whether it passed moderation; it cannot render
- * the bytes until a signed-read endpoint exists.
+ * `CmsPlaceMedia` (GoGo-BE#191).
+ *
+ * `moderation` and `sourceType` are read back as open strings on purpose: the
+ * response side of the contract leaves both unconstrained — narrowing a
+ * response property reads as breaking to the compatibility gate — and a value
+ * this client has never heard of must not fail the whole editor at the
+ * boundary. `useLabel` falls back to the raw key, so an unknown value shows
+ * itself rather than a blank cell. Writes DO constrain the decision:
+ * `placeMediaModerationSchema` above.
+ *
+ * `url` is nullable and that is an answer, not a gap: media hosting is not
+ * configured in every environment, and the console renders that absence
+ * instead of a broken image — deciding on a photo you cannot see is not
+ * moderation.
  */
 export const placeMediaSchema = z.object({
   id: z.string(),
   storageKey: z.string(),
+  url: z.string().nullish(),
   width: z.number().int().nullish(),
   height: z.number().int().nullish(),
   sortOrder: z.number().int().default(0),
   moderation: z.string(),
+  moderationReason: z.string().nullish(),
+  caption: z.string().nullish(),
+  /** Provider terms travel with a provider photo (FR-INGEST-014). */
+  attribution: z.string().nullish(),
+  isCover: z.boolean().default(false),
+  sourceType: z.string().default('editorial'),
+  createdAt: z.string().nullish(),
 })
 export type PlaceMedia = z.infer<typeof placeMediaSchema>
+
+/**
+ * `cmsListAttachableMedia` — the caller's OWN staff `place_image` uploads that
+ * are still unclaimed, plus the ones already on this place.
+ *
+ * Never a consumer purpose: a member's `checkin_photo` is their picture of
+ * their evening and does not become catalog art because an editor can see a
+ * list. The empty state says so, because "no photos" and "no photos of yours"
+ * are different facts.
+ */
+export const attachableMediaSchema = z.object({
+  id: z.string(),
+  storageKey: z.string(),
+  contentType: z.string(),
+  contentLength: z.number().int(),
+  status: z.string(),
+  attachedHere: z.boolean(),
+  url: z.string().nullish(),
+  createdAt: z.string(),
+})
+export type AttachableMedia = z.infer<typeof attachableMediaSchema>
+
+export const attachableMediaListSchema = z.object({
+  items: z.array(attachableMediaSchema).default([]),
+})
 
 /**
  * `CmsPlaceListItem` — deliberately lean: the list is a keyset-paged index,
@@ -1084,7 +1132,12 @@ export type CmsSafetyRulePage = z.infer<typeof cmsSafetyRulePageSchema>
  * server cannot report the image's pixel dimensions here — nothing has read
  * the object yet.
  */
-export const cmsUploadPurposeSchema = z.enum(['banner_image', 'campaign_image'])
+/**
+ * `place_image` (GoGo-BE#191) is deliberately not the consumer `place_photo`:
+ * the same kind of picture, a different kind of claim. Merging them would let
+ * the console attach a key a member uploaded for their own check-in.
+ */
+export const cmsUploadPurposeSchema = z.enum(['banner_image', 'campaign_image', 'place_image'])
 export type CmsUploadPurpose = z.infer<typeof cmsUploadPurposeSchema>
 
 /** Exactly what the presigner will sign for. Anything else is refused. */

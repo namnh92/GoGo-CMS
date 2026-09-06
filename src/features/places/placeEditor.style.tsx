@@ -18,11 +18,6 @@ export const styles = {
     'flex items-center justify-between gap-2 border-b border-line py-2 text-[13px] last:border-b-0',
   priceValue: 'font-semibold tabular-nums text-text',
   priceMeta: 'text-[11px] text-text-subtle',
-  mediaRow: 'flex flex-col gap-2',
-  mediaItem:
-    'flex items-center justify-between gap-2 rounded-compact border border-line bg-surface-muted px-2.5 py-2',
-  mediaKey: 'min-w-0 truncate font-mono text-[11px] text-text-muted',
-  mediaDims: 'shrink-0 text-[11px] tabular-nums text-text-subtle',
   mapFrame: 'relative mb-3 h-36 overflow-hidden rounded-compact bg-surface-sunken',
   mapPin:
     'absolute left-1/2 top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-neutral-0 bg-coral',

@@ -89,6 +89,8 @@ export const queryKeys = {
       ['places', 'list', filters] as const,
     detail: (id: string) => ['places', 'detail', id] as const,
     audit: (id: string) => ['places', 'audit', id] as const,
+    /** Staff uploads this actor may still attach to that place (GoGo-BE#191). */
+    attachableMedia: (id: string) => ['places', 'media', 'attachable', id] as const,
     stale: (days: number) => ['places', 'stale', days] as const,
     duplicates: ['places', 'duplicates'] as const,
   },

@@ -44,6 +44,7 @@ import {
   updatePlace,
   verifyFreshness,
 } from './api'
+import { PlaceMediaCard } from './placeMedia.view'
 import { PLACE_STATUSES, PLACE_TRANSITIONS } from './status'
 import { AreaCombobox } from './areaCombobox'
 import { HoursEditor } from './hoursEditor.view'
@@ -1067,48 +1068,14 @@ export default function PlaceEditorScreen() {
                     </CardBody>
                   </Card>
 
-                  <Card>
-                    <CardHeader title={t('placeEditor.media')} />
-                    <CardBody>
-                      {/*
-                        The API returns a storage key and a moderation state,
-                        not a display URL, and there is no CMS route that
-                        uploads or attaches one. So this lists what exists and
-                        what state it is in; it does not offer an add button
-                        that could only fail. Tracked in the README.
-                      */}
-                      {detail.media.length === 0 ? (
-                        <p className="text-xs text-text-subtle">{t('placeEditor.mediaEmpty')}</p>
-                      ) : (
-                        <ul className={styles.mediaRow}>
-                          {detail.media.map((media) => (
-                            <li key={media.id} className={styles.mediaItem}>
-                              <span className={styles.mediaKey}>{media.storageKey}</span>
-                              <span className="flex shrink-0 items-center gap-2">
-                                {media.width && media.height ? (
-                                  <span className={styles.mediaDims}>
-                                    {media.width}×{media.height}
-                                  </span>
-                                ) : null}
-                                <Badge
-                                  tone={
-                                    media.moderation === 'approved'
-                                      ? 'mint'
-                                      : media.moderation === 'rejected'
-                                        ? 'danger'
-                                        : 'amber'
-                                  }
-                                >
-                                  {label(`mediaModeration.${media.moderation}`, media.moderation)}
-                                </Badge>
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                      <p className={styles.attribution}>{t('placeEditor.mediaAttribution')}</p>
-                    </CardBody>
-                  </Card>
+                  {/*
+                    CMS-046 (#125). The card used to live here inline, listing
+                    storage keys under a comment saying no write route existed.
+                    GoGo-BE#191 shipped those routes, so the card is a feature
+                    of its own now — upload, attach, order, caption, moderate,
+                    detach — and the editor only says where it goes.
+                  */}
+                  <PlaceMediaCard placeId={id} media={detail.media} canWrite={canWrite} />
 
                   <Card>
                     <CardHeader title={t('placeEditor.sources')} />

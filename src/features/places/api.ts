@@ -1,16 +1,21 @@
 import { apiFetch, apiFetchParsed, newIdempotencyKey } from '@/shared/api/client'
 import {
+  attachableMediaListSchema,
   auditPageSchema,
   cmsAreaListSchema,
   cmsPlaceDetailSchema,
   duplicateListSchema,
   placeListSchema,
+  placeMediaSchema,
   staleListSchema,
+  type AttachableMedia,
   type AuditPage,
   type CmsArea,
   type CmsPlaceDetail,
   type DuplicatePair,
   type PlaceHourInput,
+  type PlaceMedia,
+  type PlaceMediaModeration,
   type PlaceSort,
   type PlaceSourceFilter,
   type PlaceStatus,
@@ -218,6 +223,82 @@ export function verifyFreshness(id: string) {
     method: 'POST',
     idempotencyKey: newIdempotencyKey(),
   })
+}
+
+/*
+ * Place media (GoGo-BE#191). Bytes never pass through these routes: the
+ * browser asks `POST /cms/uploads` for a presigned PUT, sends the file
+ * straight to storage, and hands only the key to `attachPlaceMedia`.
+ */
+
+/**
+ * `cmsListAttachableMedia` — the caller's own unclaimed `place_image` keys,
+ * plus what is already on this place. Never a consumer photo.
+ */
+export function fetchAttachableMedia(
+  placeId: string,
+  signal?: AbortSignal,
+): Promise<AttachableMedia[]> {
+  return apiFetchParsed(attachableMediaListSchema, `/cms/places/${placeId}/media/attachable`, {
+    signal,
+  }).then((page) => page.items)
+}
+
+export type AttachPlaceMediaInput = {
+  storageKey: string
+  caption?: string | null
+  attribution?: string | null
+  isCover?: boolean
+  width?: number | null
+  height?: number | null
+}
+
+/**
+ * Attach an authorized key. Idempotency-keyed because the failure this retries
+ * past is a lost 201, and replaying the attach unkeyed would come back
+ * `409 PLACE_MEDIA_EXISTS` for work that in fact succeeded.
+ */
+export function attachPlaceMedia(
+  placeId: string,
+  input: AttachPlaceMediaInput,
+): Promise<PlaceMedia> {
+  return apiFetchParsed(placeMediaSchema, `/cms/places/${placeId}/media`, {
+    method: 'POST',
+    body: input,
+    idempotencyKey: newIdempotencyKey(),
+  })
+}
+
+/**
+ * Reorder, caption, choose the cover, decide moderation.
+ *
+ * `moderationReason` is mandatory whenever `moderation` changes — the server
+ * answers `400` with `field_errors[0].field === 'moderationReason'` otherwise,
+ * and rejecting a photo clears `isCover` server-side.
+ */
+export type UpdatePlaceMediaInput = {
+  sortOrder?: number
+  moderation?: PlaceMediaModeration
+  moderationReason?: string
+  caption?: string | null
+  attribution?: string | null
+  isCover?: boolean
+}
+
+export function updatePlaceMedia(
+  placeId: string,
+  mediaId: string,
+  patch: UpdatePlaceMediaInput,
+): Promise<PlaceMedia> {
+  return apiFetchParsed(placeMediaSchema, `/cms/places/${placeId}/media/${mediaId}`, {
+    method: 'PATCH',
+    body: patch,
+  })
+}
+
+/** Detach is not delete: the row goes, the object in storage stays. */
+export function detachPlaceMedia(placeId: string, mediaId: string) {
+  return apiFetch(`/cms/places/${placeId}/media/${mediaId}`, { method: 'DELETE' })
 }
 
 /** References move to `id`; the duplicate is archived, never deleted. */

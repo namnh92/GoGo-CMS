@@ -307,7 +307,61 @@ export const places: CmsPlaceDetail[] = [
         fetchedAt: iso(60 * 24 * 3),
       },
     ],
-    media: [],
+    /*
+     * Place photos (GoGo-BE#191). Every moderation state is present so the
+     * console's three branches are reachable without editing data, and `url`
+     * is null on the last row — media hosting is not configured everywhere,
+     * and the console must render that absence rather than a broken image and
+     * refuse to moderate a photo nobody can see.
+     */
+    media: [
+      {
+        id: 'pm-chao-ban-1',
+        storageKey: 'cms/place_image/adm-editor/chao-ban-front.jpg',
+        url: 'https://images.gogo.test/places/chao-ban-front.jpg',
+        width: 1600,
+        height: 1067,
+        sortOrder: 0,
+        moderation: 'approved',
+        moderationReason: 'Ảnh mặt tiền rõ, không lộ mặt khách.',
+        caption: 'Mặt tiền quán buổi tối',
+        attribution: null,
+        isCover: true,
+        sourceType: 'editorial',
+        createdAt: iso(60 * 24 * 5),
+      },
+      {
+        id: 'pm-chao-ban-2',
+        storageKey: 'cms/place_image/adm-editor/chao-ban-counter.jpg',
+        url: 'https://images.gogo.test/places/chao-ban-counter.jpg',
+        width: 1200,
+        height: 900,
+        sortOrder: 1,
+        moderation: 'pending',
+        moderationReason: null,
+        caption: null,
+        attribution: null,
+        isCover: false,
+        sourceType: 'editorial',
+        createdAt: iso(60 * 6),
+      },
+      {
+        id: 'pm-chao-ban-3',
+        storageKey: 'google/place_photo/chao-ban-interior.jpg',
+        url: null,
+        width: null,
+        height: null,
+        sortOrder: 2,
+        moderation: 'pending',
+        moderationReason: null,
+        caption: null,
+        // FR-INGEST-014: a provider photo carries its terms wherever it goes.
+        attribution: 'Ảnh © Google Maps contributor',
+        isCover: false,
+        sourceType: 'provider',
+        createdAt: iso(60 * 24 * 20),
+      },
+    ],
   },
   {
     id: 'pl-pho-bat-dan',
