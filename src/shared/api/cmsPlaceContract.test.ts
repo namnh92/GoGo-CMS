@@ -32,7 +32,12 @@ describe('CMS place write contract', () => {
     expect(PLACE_FIELD_LIMITS.curatedRank).toMatchObject({ min: 0, integer: true })
     expect(PLACE_FIELD_LIMITS.taxonomyIds.max).toBe(30)
     expect(PLACE_HOURS_LIMITS).toMatchObject({
-      maxRows: 21,
+      // Raised from 21 by GoGo-BE#425, when a day gained the right to hold
+      // more than one service. This assertion failing is the mirror doing its
+      // job: the number moved on the server, so it moves here deliberately.
+      maxRows: 28,
+      maxIntervalsPerDay: 4,
+      kinds: ['interval', 'closed', 'open_24h'],
       dayOfWeek: { min: 0, max: 6 },
       minuteOfDay: { min: 0, max: 1439 },
     })

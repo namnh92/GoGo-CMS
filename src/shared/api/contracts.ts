@@ -116,8 +116,21 @@ export const placePriceSchema = z.object({
 export type PlacePrice = z.infer<typeof placePriceSchema>
 
 /** `dayOfWeek` follows `getUTCDay()`: 0 = Sunday, matching BE's `vnDayMinute()`. */
+/**
+ * GoGo-BE#425 — what a `place_hours` row asserts about its day.
+ *
+ * `interval` is a span and a day may hold several. `closed` and `open_24h`
+ * assert the whole day and carry no minutes. **There is no `unknown` kind**:
+ * a day nobody knows about simply has no row, because "we have no data" is not
+ * something a row asserts about a place.
+ */
+export const hoursEntryKindSchema = z.enum(['interval', 'closed', 'open_24h'])
+export type HoursEntryKind = z.infer<typeof hoursEntryKindSchema>
+
 export const placeHourSchema = z.object({
   dayOfWeek: z.number().int().min(0).max(6),
+  /** Absent on a row written before the column existed; that row is a span. */
+  kind: hoursEntryKindSchema.default('interval'),
   openMinute: z.number().int().min(0).max(1439),
   closeMinute: z.number().int().min(0).max(1439),
   isOvernight: z.boolean().default(false),
@@ -129,8 +142,15 @@ export type PlaceHour = z.infer<typeof placeHourSchema>
 /** Write body for `PUT /cms/places/{id}/hours` — narrower than what is read back. */
 export type PlaceHourInput = Pick<
   PlaceHour,
-  'dayOfWeek' | 'openMinute' | 'closeMinute' | 'isOvernight'
->
+  'dayOfWeek' | 'kind' | 'openMinute' | 'closeMinute' | 'isOvernight'
+> & {
+  /**
+   * Omitted means `editor`. Send `provider` to re-save a provider row without
+   * claiming to have checked it: the server keeps its provenance and its fetch
+   * time, and the place's freshness clock does not move.
+   */
+  source?: 'provider' | 'editor' | undefined
+}
 
 /** Provider facts must be shown with their attribution (FR-INGEST-014). */
 export const placeSourceSchema = z.object({
