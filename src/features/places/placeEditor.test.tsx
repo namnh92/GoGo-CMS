@@ -69,6 +69,47 @@ describe('place editor save (GoGo-CMS#122)', () => {
     expect(body).not.toHaveProperty('lng')
   })
 
+  /*
+   * #140 — the save above reported success while the block underneath kept
+   * saying "Có thay đổi chưa lưu", on every place with a null number field.
+   *
+   * An empty `<input type="number">` reads back as `''`, and the default seeded
+   * from a null was `undefined`; react-hook-form compared the two, never found
+   * them equal, and no save could clear it. The success toast fired regardless,
+   * which is why the test above passed through the whole bug.
+   */
+  it('stops calling the block unsaved once the save lands', async () => {
+    signInAs('editor')
+    server.use(http.patch('/v1/cms/places/:id', () => HttpResponse.json(PLACE)))
+    const user = userEvent.setup()
+    open({ avgVisitMinutes: null, lat: null, lng: null })
+
+    await user.type(await screen.findByLabelText(/Quận\/Huyện/), 'Quận 3')
+    expect(screen.getAllByText('Có thay đổi chưa lưu').length).toBeGreaterThan(0)
+
+    await user.click(screen.getByRole('button', { name: 'Lưu thông tin' }))
+    expect(await screen.findByText('Đã lưu thông tin định danh')).toBeInTheDocument()
+
+    await waitFor(() => expect(screen.queryByText('Có thay đổi chưa lưu')).not.toBeInTheDocument())
+    expect(screen.getAllByText(/^Đã lưu lúc/).length).toBeGreaterThan(0)
+  })
+
+  it('lets a saved place be left without a discard warning', async () => {
+    signInAs('editor')
+    server.use(http.patch('/v1/cms/places/:id', () => HttpResponse.json(PLACE)))
+    const user = userEvent.setup()
+    open({ avgVisitMinutes: null, lat: null, lng: null })
+
+    await user.type(await screen.findByLabelText(/Quận\/Huyện/), 'Quận 3')
+    await user.click(screen.getByRole('button', { name: 'Lưu thông tin' }))
+    await screen.findByText('Đã lưu thông tin định danh')
+
+    // Offering "Rời đi và bỏ thay đổi" on a place with nothing unsaved teaches
+    // editors to click through the guard, so the real one costs them work.
+    await user.click(screen.getByRole('button', { name: 'Huỷ' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+
   it('is accepted by a mock that now enforces the server schema', async () => {
     signInAs('editor')
     const user = userEvent.setup()

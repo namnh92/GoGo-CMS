@@ -74,6 +74,28 @@ export const placeIdentitySchema = z
     })
   })
 
+/**
+ * Register options for the three optional number boxes.
+ *
+ * An empty `<input type="number">` reads back as `''`, so react-hook-form kept
+ * `''` in `_formValues` while `applyIdentity` had seeded the default as
+ * `undefined`. The two are never equal, which made `isDirty` true forever on
+ * any place with a null `avgVisitMinutes`, `lat` or `lng`: a successful save
+ * still said "Có thay đổi chưa lưu", and the leave guard offered to discard
+ * changes that did not exist (#140). `reset()` could not clear it either — it
+ * restored the `undefined` default, and the empty box immediately reported
+ * `''` again.
+ *
+ * Mapping the empty box to `undefined` at the point react-hook-form reads it
+ * puts both sides in the same vocabulary. Anything non-empty is handed on
+ * untouched, so `optionalNumber` still does the parsing and still reports "not
+ * a number" against what was typed.
+ */
+export const numberFieldRegister = {
+  setValueAs: (value: unknown): unknown =>
+    value === '' || value === null || value === undefined ? undefined : value,
+}
+
 export type PlaceIdentityForm = z.infer<typeof placeIdentitySchema>
 
 /** The fields `PATCH /cms/places/{id}` shares with this form, by wire name. */
