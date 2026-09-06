@@ -18,10 +18,6 @@ export const styles = {
     'flex items-center justify-between gap-2 border-b border-line py-2 text-[13px] last:border-b-0',
   priceValue: 'font-semibold tabular-nums text-text',
   priceMeta: 'text-[11px] text-text-subtle',
-  mapFrame: 'relative mb-3 h-36 overflow-hidden rounded-compact bg-surface-sunken',
-  mapPin:
-    'absolute left-1/2 top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-neutral-0 bg-coral',
-  mapNote: 'absolute bottom-1 left-2 text-[10px] text-text-subtle',
   saveBar:
     'sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface px-5 py-3',
   saveState: 'flex items-center gap-1.5 text-xs text-text-muted',
