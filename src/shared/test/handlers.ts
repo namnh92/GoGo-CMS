@@ -569,14 +569,14 @@ export const handlers = [
     if (body.role && row.displayName === displayName) {
       return envelope(403, 'SELF_ROLE_CHANGE', 'another super_admin must change your role')
     }
-    if (
-      body.role &&
-      body.role !== 'super_admin' &&
-      row.role === 'super_admin' &&
-      db.admins.filter((admin) => admin.role === 'super_admin' && admin.status === 'active')
-        .length <= 1
-    ) {
-      return envelope(409, 'LAST_SUPER_ADMIN', 'the console would have no administrator')
+    // ADR-0018: an environment has exactly one super admin. Granting the role is
+    // refused outright, and so is giving it up — not counted, because there can
+    // never be a second holder to count.
+    if (body.role === 'super_admin') {
+      return envelope(409, 'SUPER_ADMIN_SINGLETON', 'a second super_admin cannot be created')
+    }
+    if (body.role && row.role === 'super_admin') {
+      return envelope(409, 'LAST_SUPER_ADMIN', 'the super_admin role cannot be given up')
     }
     if (body.role) row.role = body.role as typeof row.role
     if (body.displayName) row.displayName = body.displayName
@@ -594,12 +594,9 @@ export const handlers = [
     if (row.displayName === displayName) {
       return envelope(403, 'SELF_SUSPEND', 'you cannot suspend your own account')
     }
-    if (
-      row.role === 'super_admin' &&
-      db.admins.filter((admin) => admin.role === 'super_admin' && admin.status === 'active')
-        .length <= 1
-    ) {
-      return envelope(409, 'LAST_SUPER_ADMIN', 'the only active super_admin cannot be suspended')
+    // Suspending it is demotion by another name (ADR-0018).
+    if (row.role === 'super_admin') {
+      return envelope(409, 'LAST_SUPER_ADMIN', 'the super_admin cannot be suspended')
     }
     row.status = 'suspended'
     return HttpResponse.json(row, { status: 201 })
@@ -699,6 +696,12 @@ export const handlers = [
       password?: string
       displayName?: string
       role?: AdminRole
+    }
+    // ADR-0018 — the bootstrapped account is not created here. The server's
+    // request enum still lists the value (narrowing it is a breaking change),
+    // so this refusal is what a client sending it actually meets.
+    if (body.role === 'super_admin') {
+      return envelope(409, 'SUPER_ADMIN_SINGLETON', 'a second super_admin cannot be created')
     }
     if (!body.password || body.password.length < 12) {
       return HttpResponse.json(
