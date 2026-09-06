@@ -2400,40 +2400,6 @@ export const opsLatencySemantics = {
   p99MinSamples: 100,
 }
 
-export const opsCostModel = {
-  kind: 'estimated' as const,
-  estimatedCost: 1_040,
-  estimatedCostMicros: 10_400_000,
-  currency: 'USD',
-  basis: 'ESTIMATED',
-  confidence: 'MEDIUM',
-  pricingVersion: '2026-09-01',
-  freeCapApplied: false,
-  costComplete: false,
-  unpricedOperations: ['google.routeMatrix'],
-  measurementGaps: [
-    {
-      key: 'google.routeMatrix',
-      provider: 'routes',
-      kind: 'price_unknown' as const,
-      detail: 'Billed per matrix element; no per-element list price verified.',
-    },
-    {
-      key: 'google.maps_sdk_ios',
-      provider: 'maps_sdk',
-      kind: 'not_instrumented' as const,
-      detail: 'The SDK renders on the handset; the backend sees no map load.',
-    },
-    {
-      key: 'google.maps_sdk_android',
-      provider: 'maps_sdk',
-      kind: 'not_instrumented' as const,
-      detail: 'The SDK renders on the handset; the backend sees no map load.',
-    },
-  ],
-  note: 'Ước tính theo bảng giá niêm yết Google, chưa trừ hạn mức miễn phí. Không phải hóa đơn.',
-}
-
 const opsTrendSeries = (base: number) =>
   Array.from({ length: 12 }, (_, i) => ({
     t: new Date(Date.UTC(2026, 8, 1, 0, i * 5)).toISOString(),
@@ -2458,11 +2424,7 @@ export const opsSummary = {
     latency: { p50: 0.175, p95: 0.44, p99: null },
     rejectedLatency: { p50: 0.03, p95: 0.05 },
     billableUnits: 512,
-    estimatedCost: 1_040,
-    estimatedCostMicros: 10_400_000,
     // Routes is measured and unpriced, so the total is a floor.
-    costComplete: false,
-    unpricedOperations: ['google.routeMatrix'],
   },
   trends: {
     stepSeconds: 300,
@@ -2473,7 +2435,6 @@ export const opsSummary = {
       costUnits: opsTrendSeries(3),
     },
   },
-  costModel: opsCostModel,
   latencySemantics: opsLatencySemantics,
 }
 
@@ -2495,10 +2456,7 @@ export const opsProviders = {
       successRate: 0.97,
       latency: { p50: 0.175, p95: 0.44, p99: null },
       billableUnits: 500,
-      estimatedCost: 1_040,
-      estimatedCostMicros: 10_400_000,
-      costComplete: true,
-      unpricedOperations: [],
+      costCenter: { providerId: 'google', serviceId: 'google.places' },
     },
     {
       provider: 'routes' as const,
@@ -2510,11 +2468,8 @@ export const opsProviders = {
       successRate: 0.6,
       latency: { p50: 0.21, p95: 0.6, p99: null },
       billableUnits: 12,
+      costCenter: { providerId: 'google', serviceId: 'google.routes' },
       // Units exact, price unverified. Never rendered as free.
-      estimatedCost: null,
-      estimatedCostMicros: null,
-      costComplete: false,
-      unpricedOperations: ['google.routeMatrix'],
     },
     {
       // No metric at all. Never a zero.
@@ -2527,10 +2482,7 @@ export const opsProviders = {
       successRate: null,
       latency: { p50: null, p95: null, p99: null },
       billableUnits: null,
-      estimatedCost: null,
-      estimatedCostMicros: null,
-      costComplete: true,
-      unpricedOperations: [],
+      costCenter: { providerId: 'google', serviceId: 'google.sheets' },
     },
     {
       // #335 — the handset renders the map; nothing here counts it.
@@ -2543,13 +2495,9 @@ export const opsProviders = {
       successRate: null,
       latency: { p50: null, p95: null, p99: null },
       billableUnits: null,
-      estimatedCost: null,
-      estimatedCostMicros: null,
-      costComplete: false,
-      unpricedOperations: [],
+      costCenter: { providerId: 'google', serviceId: null },
     },
   ],
-  costModel: opsCostModel,
   latencySemantics: opsLatencySemantics,
 }
 

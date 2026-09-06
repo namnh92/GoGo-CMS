@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useI18n, useT } from '@/shared/i18n/i18n'
 import { queryKeys } from '@/shared/api/queryKeys'
-import { formatDateTime, formatMoney, formatNumber, formatPercent } from '@/shared/format'
+import { formatDateTime, formatNumber, formatPercent } from '@/shared/format'
 import { PageBody, PageHeader } from '@/app/PageHeader'
 import { Card, CardBody, CardHeader, KpiCard } from '@/shared/ui/Card'
 import { Badge } from '@/shared/ui/Badge'
@@ -14,8 +14,7 @@ import { useSession } from '@/shared/auth/session'
 import type {
   CmsCostProviderRow,
   CmsCostServiceRow,
-  OpsCostGap,
-  OpsCostModel,
+  OpsCostCenterRef,
   OpsProviderRow,
   OpsProviders,
   OpsSummary,
@@ -250,11 +249,6 @@ function Seconds({ value }: { value: number | null }) {
  * absences, and neither may render as `$0.00`. A measured zero is a number and
  * renders as one.
  */
-function Money({ value, currency }: { value: number | null | undefined; currency: string | null }) {
-  const { locale } = useI18n()
-  if (value === null || value === undefined || !currency) return <Unmeasured />
-  return <>{formatMoney({ amount: value, currency }, locale)}</>
-}
 
 function Rate({ value }: { value: number | null }) {
   const { locale } = useI18n()
@@ -322,8 +316,6 @@ function Overview({ data }: { data: OpsSummary }) {
         />
       </div>
 
-      <CostOverview costModel={data.costModel} />
-
       <Card>
         <CardHeader title={t('monitoring.reliability.title')} />
         <CardBody>
@@ -361,73 +353,6 @@ function Overview({ data }: { data: OpsSummary }) {
         </CardBody>
       </Card>
     </>
-  )
-}
-
-/**
- * The money, and everything the money leaves out.
- *
- * GoGo-BE#335 gave this screen a price list, and the whole risk of doing that
- * is a plausible-looking total. Three things guard against it, in view rather
- * than in a comment:
- *
- * - the amount is labelled as a list-price estimate with no free tier removed,
- *   and carries the price-list version it came from;
- * - when an operation in view has no verified price, the figure is announced
- *   as a floor and the operation is named;
- * - the two kinds of gap — nothing counted, and nothing priced — get their own
- *   panel with their own words, because they are fixed by different people.
- */
-function CostOverview({ costModel }: { costModel: OpsCostModel }) {
-  const t = useT()
-  const partial = costModel.costComplete === false && costModel.unpricedOperations.length > 0
-  return (
-    <>
-      <div className={styles.kpiGrid}>
-        <KpiCard
-          label={t('monitoring.kpi.cost')}
-          value={<Money value={costModel.estimatedCost} currency={costModel.currency} />}
-          tone={partial ? 'negative' : 'neutral'}
-          sub={
-            partial
-              ? t('monitoring.kpi.costPartial', {
-                  operations: costModel.unpricedOperations.join(', '),
-                })
-              : t('monitoring.kpi.costSub', { version: costModel.pricingVersion ?? '—' })
-          }
-        />
-      </div>
-      <p className={styles.note}>
-        <span aria-hidden="true">ℹ</span>
-        {t('monitoring.cost.estimateOnly')} {costModel.note}
-      </p>
-      <CostGaps gaps={costModel.measurementGaps} />
-    </>
-  )
-}
-
-function CostGaps({ gaps }: { gaps: OpsCostGap[] }) {
-  const t = useT()
-  if (gaps.length === 0) return null
-  return (
-    <Card>
-      <CardHeader title={t('monitoring.cost.gapsTitle')} />
-      <CardBody>
-        <div className={styles.gapList}>
-          {gaps.map((gap) => (
-            <div key={`${gap.kind}:${gap.key}`} className={styles.gapRow}>
-              {/* Colour alone never carries this: the badge says which kind. */}
-              <Badge tone={gap.kind === 'not_instrumented' ? 'neutral' : 'amber'}>
-                {t(`monitoring.cost.gap.${gap.kind}` as 'monitoring.cost.gap.not_instrumented')}
-              </Badge>
-              <span className={styles.gapKey}>{gap.key}</span>
-              <span className={styles.gapDetail}>{gap.detail}</span>
-            </div>
-          ))}
-        </div>
-        <p className={styles.note}>{t('monitoring.cost.gapsNote')}</p>
-      </CardBody>
-    </Card>
   )
 }
 
@@ -510,21 +435,31 @@ function ProviderTable({ data }: { data: OpsProviders }) {
             <th className={styles.thNum}>{t('monitoring.providers.p50')}</th>
             <th className={styles.thNum}>{t('monitoring.providers.p95')}</th>
             <th className={styles.thNum}>{t('monitoring.providers.units')}</th>
-            <th className={styles.thNum}>{t('monitoring.providers.cost')}</th>
+            <th className={styles.th}>{t('monitoring.providers.cost')}</th>
           </tr>
         </thead>
         <tbody>
           {data.providers.map((p) => (
-            <ProviderRow key={p.provider} row={p} currency={data.costModel.currency} />
+            <ProviderRow key={p.provider} row={p} />
           ))}
         </tbody>
       </table>
-      <p className={styles.note}>{data.costModel.note}</p>
     </div>
   )
 }
 
-function ProviderRow({ row, currency }: { row: OpsProviderRow; currency: string | null }) {
+/**
+ * COST-CMS-014 (#119), ADR-0014 amendment — the Cost Center row for an ops
+ * row. `/monitoring` states no amount; this is where the money is. A backend
+ * from before COST-BE-035 sends no pointer, and the link falls back to
+ * `/costs` itself.
+ */
+function costsHref(ref: OpsCostCenterRef | undefined): string {
+  if (!ref) return '/costs'
+  return ref.serviceId ? `/costs#service-${ref.serviceId}` : `/costs#provider-${ref.providerId}`
+}
+
+function ProviderRow({ row }: { row: OpsProviderRow }) {
   const t = useT()
   const { locale } = useI18n()
   const name = t(`monitoring.provider.${row.provider}` as 'monitoring.provider.places')
@@ -541,7 +476,8 @@ function ProviderRow({ row, currency }: { row: OpsProviderRow; currency: string 
           is how a dashboard becomes the last place to learn something.
         */}
         <td className={styles.td} colSpan={8}>
-          <Badge tone="neutral">{t('monitoring.providers.notInstrumented')}</Badge>
+          <Badge tone="neutral">{t('monitoring.providers.notInstrumented')}</Badge>{' '}
+          <Link to={costsHref(row.costCenter)}>{t('monitoring.registry.openCosts')}</Link>
         </td>
       </tr>
     )
@@ -567,13 +503,8 @@ function ProviderRow({ row, currency }: { row: OpsProviderRow; currency: string 
       <td className={styles.tdNum}>
         {row.billableUnits === null ? <Unmeasured /> : formatNumber(row.billableUnits, locale)}
       </td>
-      <td className={styles.tdNum}>
-        {/*
-          Routes measures its units exactly and has no verified per-element
-          list price, so this cell is "chưa đo" beside a real call count. That
-          combination is the point: the units are a fact and the money is not.
-        */}
-        <Money value={row.estimatedCost} currency={currency} />
+      <td className={styles.td}>
+        <Link to={costsHref(row.costCenter)}>{t('monitoring.registry.openCosts')}</Link>
       </td>
     </tr>
   )
@@ -681,7 +612,9 @@ function RegistryRow({ row }: { row: CmsCostProviderRow }) {
           ) : null}
         </td>
         <td className={styles.td}>
-          <Link to="/costs">{t('monitoring.registry.openCosts')}</Link>
+          <Link to={costsHref({ providerId: row.providerId, serviceId: null })}>
+            {t('monitoring.registry.openCosts')}
+          </Link>
         </td>
       </tr>
       {open ? (

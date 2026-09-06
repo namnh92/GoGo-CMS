@@ -1427,31 +1427,17 @@ export const opsEnvelopeSchema = z.object({
  * `estimatedCost` is integer USD **minor units**, which is what `formatMoney`
  * takes. `null` is "chưa đo" and must never be rendered as `$0.00`.
  */
-export const opsCostModelSchema = z.object({
-  kind: z.enum(['units_only', 'estimated']),
-  estimatedCost: z.number().nullable(),
-  estimatedCostMicros: z.number().nullable().optional(),
-  currency: z.string().nullable(),
-  basis: z.string(),
-  confidence: z.string().nullish(),
-  pricingVersion: z.string().nullish(),
-  /**
-   * False on the windowed surface: a free cap is monthly and the window is
-   * 1h–30d. Month-to-date spend with the cap applied lives on the dashboard's
-   * cost card, from `/cms/ops/costs`.
-   */
-  freeCapApplied: z.boolean().optional(),
-  /**
-   * False when an operation in view has no verified price. The amount shown is
-   * then a floor, not a total, and the screen has to say so — `unpricedOperations`
-   * names them.
-   */
-  costComplete: z.boolean().optional(),
-  unpricedOperations: z.array(z.string()).default([]),
-  measurementGaps: z.array(opsCostGapSchema).default([]),
-  note: z.string(),
+/**
+ * COST-CMS-014 (#119), ADR-0014 amendment — where the money for an ops row
+ * lives. `/monitoring` states no amount; this is the `/costs` row to link to.
+ * Optional so the screen tolerates a backend from before COST-BE-035 (#420)
+ * for one release: without it the link falls back to `/costs`.
+ */
+export const opsCostCenterRefSchema = z.object({
+  providerId: z.string(),
+  serviceId: z.string().nullable(),
 })
-export type OpsCostModel = z.infer<typeof opsCostModelSchema>
+export type OpsCostCenterRef = z.infer<typeof opsCostCenterRefSchema>
 
 export const opsLatencySemanticsSchema = z.object({
   unit: z.literal('seconds'),
@@ -1484,10 +1470,6 @@ export const opsTotalsSchema = z.object({
   latency: opsPercentilesSchema,
   rejectedLatency: z.object({ p50: z.number().nullable(), p95: z.number().nullable() }),
   billableUnits: z.number(),
-  estimatedCost: z.number().nullable().optional(),
-  estimatedCostMicros: z.number().nullable().optional(),
-  costComplete: z.boolean().optional(),
-  unpricedOperations: z.array(z.string()).default([]),
 })
 
 export const opsProviderSchema = z.object({
@@ -1508,11 +1490,8 @@ export const opsProviderSchema = z.object({
   latency: opsPercentilesSchema,
   /** Null where the provider has no SKU counter — Sheets is quota-limited. */
   billableUnits: z.number().nullable(),
-  /** USD minor units at list price. Null = no verified price here, not free. */
-  estimatedCost: z.number().nullable().optional(),
-  estimatedCostMicros: z.number().nullable().optional(),
-  costComplete: z.boolean().optional(),
-  unpricedOperations: z.array(z.string()).default([]),
+  /** Where the money is (COST-CMS-014). Absent from a backend before COST-BE-035. */
+  costCenter: opsCostCenterRefSchema.optional(),
 })
 export type OpsProviderRow = z.infer<typeof opsProviderSchema>
 
@@ -1524,14 +1503,12 @@ export type OpsOperationRow = z.infer<typeof opsOperationSchema>
 export const opsSummarySchema = opsEnvelopeSchema.extend({
   totals: opsTotalsSchema.nullable(),
   trends: opsTrendsSchema.nullable(),
-  costModel: opsCostModelSchema,
   latencySemantics: opsLatencySemanticsSchema,
 })
 export type OpsSummary = z.infer<typeof opsSummarySchema>
 
 export const opsProvidersSchema = opsEnvelopeSchema.extend({
   providers: z.array(opsProviderSchema).default([]),
-  costModel: opsCostModelSchema,
   latencySemantics: opsLatencySemanticsSchema,
 })
 export type OpsProviders = z.infer<typeof opsProvidersSchema>
@@ -1541,7 +1518,6 @@ export const opsProviderDetailSchema = opsEnvelopeSchema.extend({
     .extend({ operations: z.array(opsOperationSchema).default([]) })
     .nullable(),
   trends: opsTrendsSchema.nullable(),
-  costModel: opsCostModelSchema,
   latencySemantics: opsLatencySemanticsSchema,
 })
 export type OpsProviderDetail = z.infer<typeof opsProviderDetailSchema>
