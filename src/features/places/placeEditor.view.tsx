@@ -48,6 +48,7 @@ import { PlaceMediaCard } from './placeMedia.view'
 import { PLACE_STATUSES, PLACE_TRANSITIONS } from './status'
 import { AreaCombobox } from './areaCombobox'
 import { HoursEditor } from './hoursEditor.view'
+import { GoogleLinkPanel } from './googleLink.view'
 import { PlaceLocationPanel } from './placeLocation.view'
 import { PublishChecklist } from './publishChecklist.view'
 import { emptyWeek, parseWeek, weekFromServer, weekSignature, type WeekDraft } from './hoursModel'
@@ -1134,6 +1135,13 @@ export default function PlaceEditorScreen() {
                       >
                         {t('placeEditor.verifyFreshness')}
                       </Button>
+                    </CardBody>
+                  </Card>
+
+                  <Card>
+                    <CardHeader title={t('googleLink.title')} />
+                    <CardBody>
+                      <GoogleLinkPanel sources={detail.sources} />
                     </CardBody>
                   </Card>
                 </div>
