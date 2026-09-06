@@ -3,6 +3,9 @@ export const styles = {
   search: 'w-full max-w-xs',
   filterInput:
     'min-h-11 w-40 rounded-compact border border-line-strong bg-surface px-3 text-[13px] text-text placeholder:text-text-subtle',
+  // The area picker needs room for a label and a popup; the bare filter boxes
+  // beside it do not.
+  filterCombobox: 'w-52',
   tableCard: 'overflow-hidden',
   cover: 'h-10 w-10 shrink-0 rounded-compact object-cover',
   coverFallback:

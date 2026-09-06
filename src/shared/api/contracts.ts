@@ -176,6 +176,43 @@ export const cmsPlaceSchema = z.object({
 })
 export type CmsPlace = z.infer<typeof cmsPlaceSchema>
 
+/**
+ * `cmsListAreas` (GoGo-BE#425) — the vocabulary behind `areaKey`.
+ *
+ * `known: false` is the row that matters: `places.area_key` has never been a
+ * foreign key, so a place can hold a key `service_areas` does not list. Such a
+ * row comes back with `name: null`, because the key is then the only label
+ * that exists and inventing one would put a display string into data.
+ */
+export const cmsAreaSchema = z.object({
+  key: z.string(),
+  name: z.string().nullish(),
+  city: z.string().nullish(),
+  isActive: z.boolean(),
+  known: z.boolean(),
+  placeCount: z.number().int().default(0),
+  centerLat: z.number().nullish(),
+  centerLng: z.number().nullish(),
+  radiusM: z.number().int().nullish(),
+})
+export type CmsArea = z.infer<typeof cmsAreaSchema>
+
+export const cmsAreaListSchema = z.object({ items: z.array(cmsAreaSchema).default([]) })
+
+/**
+ * Per-field origin (GoGo-BE#425). `sourceType` is read as a plain string on
+ * purpose: the client is not the place to assume the server's enum is closed,
+ * and an unrecognised value must render as itself rather than as a blank or a
+ * guessed default. **A field absent from this map has no recorded origin** —
+ * which the UI has to say in words, never fill in with "GoGo".
+ */
+export const placeProvenanceSchema = z.object({
+  sourceType: z.string(),
+  sourceReference: z.string().nullish(),
+  verifiedAt: z.string().nullish(),
+})
+export type PlaceProvenance = z.infer<typeof placeProvenanceSchema>
+
 /** `CmsPlaceDetail` (GoGo-BE#157) — every field `cmsUpdatePlace` accepts, plus relations. */
 export const cmsPlaceDetailSchema = z.object({
   id: z.string(),
@@ -183,7 +220,12 @@ export const cmsPlaceDetailSchema = z.object({
   description: z.string().nullish(),
   status: placeStatusSchema,
   addressText: z.string().nullish(),
+  /** The discovery area — a `service_areas` key, never the postal address. */
   areaKey: z.string().nullish(),
+  /** Administrative address, free text. Separate from `areaKey` by design. */
+  city: z.string().nullish(),
+  /** Optional: an address with no district is valid (GoGo-BE ADR-0016). */
+  district: z.string().nullish(),
   lat: z.number().nullish(),
   lng: z.number().nullish(),
   phone: z.string().nullish(),
@@ -198,6 +240,8 @@ export const cmsPlaceDetailSchema = z.object({
   taxonomyIds: z.array(z.string()).default([]),
   /** Sent alongside the ids so a chip has a label; writes still send ids. */
   taxonomyKeys: z.array(z.string()).default([]),
+  /** Keyed by the contract's own field names; absent key = no recorded origin. */
+  provenance: z.record(placeProvenanceSchema).default({}),
   hours: z.array(placeHourSchema).default([]),
   prices: z.array(placePriceSchema).default([]),
   sources: z.array(placeSourceSchema).default([]),

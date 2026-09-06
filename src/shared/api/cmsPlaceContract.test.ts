@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  PLACE_CLEARABLE_FIELDS,
   PLACE_FIELD_LIMITS,
   PLACE_HOURS_LIMITS,
   cmsPlaceEditSchema,
@@ -20,6 +21,11 @@ describe('CMS place write contract', () => {
     expect(PLACE_FIELD_LIMITS.description.max).toBe(4000)
     expect(PLACE_FIELD_LIMITS.addressText.max).toBe(400)
     expect(PLACE_FIELD_LIMITS.areaKey.max).toBe(64)
+    // GoGo-BE#425 made the administrative address and the contact writable.
+    expect(PLACE_FIELD_LIMITS.city.max).toBe(120)
+    expect(PLACE_FIELD_LIMITS.district.max).toBe(120)
+    expect(PLACE_FIELD_LIMITS.phone.max).toBe(40)
+    expect(PLACE_FIELD_LIMITS.website.max).toBe(500)
     expect(PLACE_FIELD_LIMITS.lat).toMatchObject({ min: -90, max: 90 })
     expect(PLACE_FIELD_LIMITS.lng).toMatchObject({ min: -180, max: 180 })
     expect(PLACE_FIELD_LIMITS.avgVisitMinutes).toMatchObject({ min: 10, max: 720, integer: true })
@@ -47,6 +53,26 @@ describe('CMS place write contract', () => {
 
   it('accepts a body with no optional field at all', () => {
     expect(cmsPlaceEditSchema.safeParse({}).success).toBe(true)
+  })
+
+  it('takes null on every clearable field, and only on those', () => {
+    // `null` clears, an absent key leaves it alone (GoGo-BE#425). Getting this
+    // wrong is not a type error anywhere — it is a value that cannot be erased.
+    for (const field of PLACE_CLEARABLE_FIELDS) {
+      expect(cmsPlaceEditSchema.safeParse({ [field]: null }).success).toBe(true)
+    }
+    // `name` is required, so empty is a rejection rather than an instruction,
+    // and a coordinate has no null in the contract: a pin moves, never leaves.
+    expect(cmsPlaceEditSchema.safeParse({ name: null }).success).toBe(false)
+    expect(cmsPlaceEditSchema.safeParse({ lat: null }).success).toBe(false)
+    expect(cmsPlaceEditSchema.safeParse({ lng: null }).success).toBe(false)
+  })
+
+  it('takes the loaded version as expectedUpdatedAt, and only an ISO one', () => {
+    expect(
+      cmsPlaceEditSchema.safeParse({ expectedUpdatedAt: '2026-03-02T10:30:00.000Z' }).success,
+    ).toBe(true)
+    expect(cmsPlaceEditSchema.safeParse({ expectedUpdatedAt: '2026-03-02' }).success).toBe(false)
   })
 
   it('reports a nested path the way ZodValidationPipe does', () => {

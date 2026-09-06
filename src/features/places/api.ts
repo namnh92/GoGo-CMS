@@ -1,11 +1,13 @@
 import { apiFetch, apiFetchParsed, newIdempotencyKey } from '@/shared/api/client'
 import {
   auditPageSchema,
+  cmsAreaListSchema,
   cmsPlaceDetailSchema,
   duplicateListSchema,
   placeListSchema,
   staleListSchema,
   type AuditPage,
+  type CmsArea,
   type CmsPlaceDetail,
   type DuplicatePair,
   type PlaceHourInput,
@@ -53,6 +55,31 @@ export function fetchPlaces(filters: PlaceListFilters, signal?: AbortSignal) {
 /** `cmsGetPlace` — every field the editor writes, plus hours/prices/sources/media. */
 export function fetchPlace(id: string, signal?: AbortSignal): Promise<CmsPlaceDetail> {
   return apiFetchParsed(cmsPlaceDetailSchema, `/cms/places/${id}`, { signal })
+}
+
+export type AreaFilters = {
+  q?: string
+  city?: string
+  /**
+   * Retired areas. Asked for whenever a value a place already holds has to be
+   * rendered: a place filed under a retired area must still resolve its label,
+   * and dropping it would make the picker hide the very value it exists to
+   * show.
+   */
+  includeInactive?: boolean
+}
+
+/** `cmsListAreas` (GoGo-BE#425) — the vocabulary behind `areaKey`. */
+export async function fetchAreas(filters: AreaFilters, signal?: AbortSignal): Promise<CmsArea[]> {
+  const { items } = await apiFetchParsed(cmsAreaListSchema, '/cms/areas', {
+    query: {
+      q: filters.q,
+      city: filters.city,
+      includeInactive: filters.includeInactive ? 'true' : undefined,
+    },
+    signal,
+  })
+  return items
 }
 
 /** The endpoint returns raw snake_case rows; normalize at the boundary. */
@@ -106,19 +133,34 @@ export function fetchPlaceAudit(
   })
 }
 
-/** Body mirrors `cmsUpdatePlace` in openapi/gogo.v1.yaml exactly. */
+/**
+ * Body mirrors `cmsUpdatePlace` in openapi/gogo.v1.yaml exactly.
+ *
+ * `null` and `undefined` are different instructions here (GoGo-BE#425): `null`
+ * clears the column, an absent key leaves it — and its recorded provenance —
+ * untouched. `?: T | null` is therefore the type, never `?: T`.
+ */
 export type UpdatePlaceInput = {
   name?: string
-  description?: string
-  addressText?: string
-  areaKey?: string
+  description?: string | null
+  addressText?: string | null
+  /** A `cmsListAreas` key: the discovery area, not the postal address. */
+  areaKey?: string | null
+  city?: string | null
+  district?: string | null
+  /** Sent as typed; GoGo-BE normalizes to E.164 and answers on `phone`. */
+  phone?: string | null
+  /** Sent as typed; GoGo-BE enforces http(s) and answers on `website`. */
+  website?: string | null
   lat?: number
   lng?: number
-  avgVisitMinutes?: number
+  avgVisitMinutes?: number | null
   suitability?: Record<string, number>
   isLodging?: boolean
   curatedRank?: number | null
   taxonomyIds?: string[]
+  /** Optimistic concurrency; a mismatch answers `409 PLACE_MODIFIED`. */
+  expectedUpdatedAt?: string
 }
 
 export function updatePlace(id: string, input: UpdatePlaceInput) {

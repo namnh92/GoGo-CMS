@@ -14,12 +14,22 @@ import { z } from 'zod'
  *
  * Change GoGo-BE, change this file, and `cmsPlaceContract.test.ts` tells you
  * whether the two still agree.
+ *
+ * GoGo-BE#425 added the half of the contract that makes an editor able to
+ * *undo* a value: `null` clears a field, an absent key leaves it alone. Every
+ * clearable field is therefore `.nullable().optional()` here, and the two are
+ * not interchangeable — sending `undefined` where `null` was meant is exactly
+ * the bug that made a filled box impossible to empty again.
  */
 export type PlaceFieldName =
   | 'name'
   | 'description'
   | 'addressText'
   | 'areaKey'
+  | 'city'
+  | 'district'
+  | 'phone'
+  | 'website'
   | 'lat'
   | 'lng'
   | 'avgVisitMinutes'
@@ -39,12 +49,42 @@ export const PLACE_FIELD_LIMITS = {
   description: { kind: 'text', max: 4000 },
   addressText: { kind: 'text', max: 400 },
   areaKey: { kind: 'text', max: 64 },
+  city: { kind: 'text', max: 120 },
+  district: { kind: 'text', max: 120 },
+  phone: { kind: 'text', max: 40 },
+  website: { kind: 'text', max: 500 },
   lat: { kind: 'number', min: -90, max: 90 },
   lng: { kind: 'number', min: -180, max: 180 },
   avgVisitMinutes: { kind: 'number', min: 10, max: 720, integer: true },
   curatedRank: { kind: 'number', min: 0, integer: true },
   taxonomyIds: { kind: 'list', max: 30 },
 } as const satisfies Record<PlaceFieldName, PlaceFieldLimit>
+
+/**
+ * The fields where `null` means *clear this*, and an absent key means *leave
+ * it alone* (GoGo-BE#425). `name` is not among them: it is required, so
+ * "empty" is a rejection, not an instruction.
+ *
+ * `lat`/`lng` are not among them either, and deliberately so — the contract
+ * has no null for a coordinate, so a pin cannot be removed through this
+ * endpoint, only moved.
+ */
+export const PLACE_CLEARABLE_FIELDS = [
+  'description',
+  'addressText',
+  'areaKey',
+  'city',
+  'district',
+  'phone',
+  'website',
+  'avgVisitMinutes',
+] as const satisfies readonly PlaceFieldName[]
+
+export type PlaceClearableField = (typeof PLACE_CLEARABLE_FIELDS)[number]
+
+export function isClearableField(field: string): field is PlaceClearableField {
+  return (PLACE_CLEARABLE_FIELDS as readonly string[]).includes(field)
+}
 
 /** `PUT /cms/places/{id}/hours` — a whole week, replaced in one call. */
 export const PLACE_HOURS_LIMITS = {
@@ -85,9 +125,13 @@ const L = PLACE_FIELD_LIMITS
 function buildPlaceEditSchema(taxonomyId: z.ZodType<string>) {
   return z.object({
     name: z.string().trim().min(L.name.min).max(L.name.max).optional(),
-    description: z.string().max(L.description.max).optional(),
-    addressText: z.string().max(L.addressText.max).optional(),
-    areaKey: z.string().max(L.areaKey.max).optional(),
+    description: z.string().max(L.description.max).nullable().optional(),
+    addressText: z.string().max(L.addressText.max).nullable().optional(),
+    areaKey: z.string().trim().max(L.areaKey.max).nullable().optional(),
+    city: z.string().trim().max(L.city.max).nullable().optional(),
+    district: z.string().trim().max(L.district.max).nullable().optional(),
+    phone: z.string().trim().max(L.phone.max).nullable().optional(),
+    website: z.string().trim().max(L.website.max).nullable().optional(),
     lat: z.number().min(L.lat.min).max(L.lat.max).optional(),
     lng: z.number().min(L.lng.min).max(L.lng.max).optional(),
     avgVisitMinutes: z
@@ -95,11 +139,14 @@ function buildPlaceEditSchema(taxonomyId: z.ZodType<string>) {
       .int()
       .min(L.avgVisitMinutes.min)
       .max(L.avgVisitMinutes.max)
+      .nullable()
       .optional(),
     suitability: z.record(z.string(), z.number().min(0).max(1)).optional(),
     isLodging: z.boolean().optional(),
     curatedRank: z.number().int().min(L.curatedRank.min).nullable().optional(),
     taxonomyIds: z.array(taxonomyId).max(L.taxonomyIds.max).optional(),
+    /** Optimistic concurrency — the `updatedAt` the form was loaded from. */
+    expectedUpdatedAt: z.string().datetime({ offset: true }).optional(),
   })
 }
 

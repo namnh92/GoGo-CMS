@@ -39,7 +39,7 @@ GoGo-CMS/
 │   ├── features/
 │   │   ├── auth/               # login.view + TOTP, xử lý MFA_REQUIRED
 │   │   ├── ops/                # dashboard.view — KPI, provider health, alert
-│   │   ├── places/             # placeList / placeEditor / duplicateQueue + status
+│   │   ├── places/             # placeList / placeEditor / duplicateQueue / areaCombobox + status
 │   │   ├── imports/            # importList / importWizard / jobDetail / candidateDrawer
 │   │   ├── moderation/         # moderationQueue.view — review, report, check-in, submission
 │   │   ├── taxonomy/           # taxonomy.view — key, nhãn i18n, synonym
@@ -49,7 +49,7 @@ GoGo-CMS/
 │   ├── shared/
 │   │   ├── api/                # client, error envelope, contracts (zod), generated types
 │   │   ├── auth/               # session (cookie-first), permission map, token in-memory
-│   │   ├── ui/                 # primitives, DataTable, Drawer/Modal, State, Toast
+│   │   ├── ui/                 # primitives, DataTable, Combobox, Drawer/Modal, State, Toast
 │   │   ├── i18n/               # vi mặc định, en phụ
 │   │   ├── format/             # tiền (minor units), ngày giờ, phần trăm
 │   │   └── test/               # MSW handlers, fixtures, render helper
@@ -92,20 +92,20 @@ Bắt buộc: WCAG 2.2 AA trên mọi luồng chính, thao tác bàn phím đầ
 
 41 path dưới `/v1/cms/*`, đã live và có trong Swagger (`/v1/docs`). Nhóm theo màn hình:
 
-| Nhóm            | Endpoint chính                                                                                                                                                         |
-| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Auth            | `POST /cms/auth/login` · `POST /cms/auth/refresh` · `POST /cms/auth/totp/setup\|confirm` · `POST /cms/auth/admins`                                                     |
-| Places          | `GET /cms/places` · `GET/PATCH /cms/places/{id}` · `PATCH .../status` · `PUT .../hours` · `POST .../prices` · `POST .../verify-freshness` · `GET /cms/places/stale`    |
-| Duplicates      | `GET /cms/places/duplicates` · `POST /cms/places/{id}/merge`                                                                                                           |
-| Bulk import     | `POST /cms/place-imports` (multipart) · `POST .../google-sheet` · `GET /cms/place-imports` · `GET .../{jobId}` · `GET .../{jobId}/rows` · `POST .../start              | cancel | retry | publish`·`POST .../rows/{rowId}/confirm-candidate | merge | skip`·`GET .../{jobId}/error-report` |
-| Submissions     | `GET /cms/place-submissions` · `POST /cms/place-submissions/{id}/decide`                                                                                               |
-| Taxonomy        | `GET/POST /cms/taxonomies` · `PATCH /cms/taxonomies/{id}` · `POST /cms/taxonomies/{id}/synonyms`                                                                       |
-| Collections     | `GET/POST /cms/collections` · `PATCH .../status` · `GET/PUT .../{id}/items`                                                                                            |
-| Moderation      | `GET /cms/moderation` · `POST /cms/moderation/reviews\|reports\|checkins/{id}`                                                                                         |
-| Ranking & flags | `GET/POST /cms/ranking-configs` · `GET .../{id}/evaluate` · `POST .../{id}/approve\|activate` · `POST .../{key}/rollback` · `GET /cms/feature-flags` · `PUT .../{key}` |
-| Thử nghiệm A/B  | `GET /cms/experiments` · `PUT /cms/experiments/{key}`                                                                                                                  |
-| Audit           | `GET /cms/audit` · `GET /cms/places/{id}/audit`                                                                                                                        |
-| Ops             | `GET /cms/ops/kpis` · `GET /cms/search-analytics`                                                                                                                      |
+| Nhóm            | Endpoint chính                                                                                                                                                                         |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Auth            | `POST /cms/auth/login` · `POST /cms/auth/refresh` · `POST /cms/auth/totp/setup\|confirm` · `POST /cms/auth/admins`                                                                     |
+| Places          | `GET /cms/places` · `GET/PATCH /cms/places/{id}` · `PATCH .../status` · `PUT .../hours` · `POST .../prices` · `POST .../verify-freshness` · `GET /cms/places/stale` · `GET /cms/areas` |
+| Duplicates      | `GET /cms/places/duplicates` · `POST /cms/places/{id}/merge`                                                                                                                           |
+| Bulk import     | `POST /cms/place-imports` (multipart) · `POST .../google-sheet` · `GET /cms/place-imports` · `GET .../{jobId}` · `GET .../{jobId}/rows` · `POST .../start                              | cancel | retry | publish`·`POST .../rows/{rowId}/confirm-candidate | merge | skip`·`GET .../{jobId}/error-report` |
+| Submissions     | `GET /cms/place-submissions` · `POST /cms/place-submissions/{id}/decide`                                                                                                               |
+| Taxonomy        | `GET/POST /cms/taxonomies` · `PATCH /cms/taxonomies/{id}` · `POST /cms/taxonomies/{id}/synonyms`                                                                                       |
+| Collections     | `GET/POST /cms/collections` · `PATCH .../status` · `GET/PUT .../{id}/items`                                                                                                            |
+| Moderation      | `GET /cms/moderation` · `POST /cms/moderation/reviews\|reports\|checkins/{id}`                                                                                                         |
+| Ranking & flags | `GET/POST /cms/ranking-configs` · `GET .../{id}/evaluate` · `POST .../{id}/approve\|activate` · `POST .../{key}/rollback` · `GET /cms/feature-flags` · `PUT .../{key}`                 |
+| Thử nghiệm A/B  | `GET /cms/experiments` · `PUT /cms/experiments/{key}`                                                                                                                                  |
+| Audit           | `GET /cms/audit` · `GET /cms/places/{id}/audit`                                                                                                                                        |
+| Ops             | `GET /cms/ops/kpis` · `GET /cms/search-analytics`                                                                                                                                      |
 
 Chi tiết từng operation: đọc `openapi/gogo.v1.yaml` hoặc Swagger UI tại `/v1/docs` của môi trường tương ứng. **Không viết tay DTO.**
 
@@ -232,22 +232,22 @@ Backend cho toàn bộ nhóm này **đã xong và đang chạy** (GoGo-BE `devel
 
 ## Màn hình đã dựng
 
-| Route             | Màn                                                                                    | WBS                             |
-| ----------------- | -------------------------------------------------------------------------------------- | ------------------------------- |
-| `/login`          | Đăng nhập + TOTP, xử lý `MFA_REQUIRED` / `MFA_SETUP_REQUIRED`                          | CMS-001                         |
-| `/`               | Dashboard vận hành: KPI, xu hướng, provider health, activity, alert                    | CMS-010                         |
-| `/places`         | Danh sách catalog: tab trạng thái + `Cần xác minh lại` + `Trùng lặp`, lọc, bulk action | CMS-002, CMS-003, CMS-004       |
-| `/places/:id`     | Editor: định danh, phân loại, geo, giờ, giá, nguồn, freshness, audit diff              | CMS-002, CMS-003                |
-| `/imports`        | Lịch sử phiên nhập, tiến trình, start/cancel/retry, báo cáo lỗi                        | PI-CMS-001, PI-CMS-003, CMS-009 |
-| `/imports/new`    | Wizard: nguồn → ánh xạ cột (preview CSV) → chế độ ghi                                  | PI-CMS-001, PI-CMS-002          |
-| `/imports/:jobId` | Chi tiết phiên: tổng quan, lọc dòng, xác nhận/gộp/bỏ qua, publish                      | PI-CMS-003..006                 |
-| `/moderation`     | Hàng chờ: đánh giá, báo cáo, địa điểm người dùng gửi, check-in                         | CMS-007, PI-CMS-007             |
-| `/taxonomy`       | Khoá phân loại theo nhóm, nhãn vi/en, synonym, bật/tắt                                 | CMS-005                         |
-| `/collections`    | Bộ sưu tập biên tập: form, trạng thái, đọc/ghi thứ tự địa điểm                         | CMS-006, CMS-012                |
-| `/audit`          | Nhật ký kiểm toán: lọc, rà soát gỡ khẩn cấp, diff before/after                         | CMS-014                         |
-| `/search-quality` | Chất lượng tìm kiếm: tỷ lệ zero-result kèm mẫu số, truy vấn hỏng                       | CMS-015                         |
-| `/settings`       | Cờ tính năng, trọng số ranking (bốn mắt + rollback), thử nghiệm A/B, đánh giá offline  | CMS-008, CMS-013                |
-| `/costs/manual`   | Chi phí thủ công: phí cố định nhập tay → dòng MANUAL trong Cost Center, có audit       | COST-CMS-010                    |
+| Route             | Màn                                                                                                                                               | WBS                             |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| `/login`          | Đăng nhập + TOTP, xử lý `MFA_REQUIRED` / `MFA_SETUP_REQUIRED`                                                                                     | CMS-001                         |
+| `/`               | Dashboard vận hành: KPI, xu hướng, provider health, activity, alert                                                                               | CMS-010                         |
+| `/places`         | Danh sách catalog: tab trạng thái + `Cần xác minh lại` + `Trùng lặp`, lọc, bulk action                                                            | CMS-002, CMS-003, CMS-004       |
+| `/places/:id`     | Editor: định danh, khu vực khám phá, địa chỉ hành chính + liên hệ, phân loại, geo, giờ, giá, nguồn, provenance từng trường, freshness, audit diff | CMS-002, CMS-003, CMS-044       |
+| `/imports`        | Lịch sử phiên nhập, tiến trình, start/cancel/retry, báo cáo lỗi                                                                                   | PI-CMS-001, PI-CMS-003, CMS-009 |
+| `/imports/new`    | Wizard: nguồn → ánh xạ cột (preview CSV) → chế độ ghi                                                                                             | PI-CMS-001, PI-CMS-002          |
+| `/imports/:jobId` | Chi tiết phiên: tổng quan, lọc dòng, xác nhận/gộp/bỏ qua, publish                                                                                 | PI-CMS-003..006                 |
+| `/moderation`     | Hàng chờ: đánh giá, báo cáo, địa điểm người dùng gửi, check-in                                                                                    | CMS-007, PI-CMS-007             |
+| `/taxonomy`       | Khoá phân loại theo nhóm, nhãn vi/en, synonym, bật/tắt                                                                                            | CMS-005                         |
+| `/collections`    | Bộ sưu tập biên tập: form, trạng thái, đọc/ghi thứ tự địa điểm                                                                                    | CMS-006, CMS-012                |
+| `/audit`          | Nhật ký kiểm toán: lọc, rà soát gỡ khẩn cấp, diff before/after                                                                                    | CMS-014                         |
+| `/search-quality` | Chất lượng tìm kiếm: tỷ lệ zero-result kèm mẫu số, truy vấn hỏng                                                                                  | CMS-015                         |
+| `/settings`       | Cờ tính năng, trọng số ranking (bốn mắt + rollback), thử nghiệm A/B, đánh giá offline                                                             | CMS-008, CMS-013                |
+| `/costs/manual`   | Chi phí thủ công: phí cố định nhập tay → dòng MANUAL trong Cost Center, có audit                                                                  | COST-CMS-010                    |
 
 ## Trạng thái
 
@@ -262,14 +262,16 @@ Sáu thứ CMS cần đọc trước đây chỉ có đường ghi; UI chạy tr
 MSW. GoGo-BE#175 đã mở hết, và **shape thật khác shape đã đoán ở nhiều chỗ** —
 nên đây là việc đọc lại contract, không phải đổi URL:
 
-| Endpoint                                          | Điều làm UI phải sửa theo                                                                                                                                         |
-| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /cms/places/{id}` → `CmsPlaceDetail`         | Hai rating tách riêng, **không** có điểm tổng hợp; hours/prices mang nguồn + lần xác minh; sources mang attribution; media là storage key + trạng thái kiểm duyệt |
-| `GET /cms/audit`, `GET /cms/places/{id}/audit`    | `actorRole`, `breakGlass`, `authorizationPath`, `requestId`, cursor                                                                                               |
-| `GET /cms/taxonomies` → `CmsTaxonomy[]`           | Trả cả khoá đang tắt, kèm `usageCount`                                                                                                                            |
-| `GET /cms/ranking-configs` → `CmsRankingConfig[]` | `bounds` đi kèm từng version; `createdBy`/`approvedBy` là object                                                                                                  |
-| `GET /cms/feature-flags` → `CmsFeatureFlag[]`     | Có `payload` và người sửa cuối; không có rollout %                                                                                                                |
-| `GET /cms/collections/{id}/items`                 | Đọc được danh sách trước khi `PUT` ghi đè toàn bộ                                                                                                                 |
+| Endpoint                                          | Điều làm UI phải sửa theo                                                                                                                                                                                                                                                                                                                                     |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /cms/places/{id}` → `CmsPlaceDetail`         | Hai rating tách riêng, **không** có điểm tổng hợp; hours/prices mang nguồn + lần xác minh; sources mang attribution; media là storage key + trạng thái kiểm duyệt; `provenance` là map theo tên trường — **trường vắng mặt là chưa ghi nhận nguồn**, không được mặc định thành GoGo                                                                           |
+| `PATCH /cms/places/{id}`                          | `null` xoá một trường, thiếu khoá là giữ nguyên — chỉ gửi khoá thật sự đổi để không nhận vơ provenance; `expectedUpdatedAt` là optimistic concurrency, lệch thì `409 PLACE_MODIFIED` kèm `updatedAt` hiện tại trong `field_errors[0].message`; `phone`/`website` do máy chủ chuẩn hoá (E.164, http/https) — client gửi nguyên văn rồi hiển thị `field_errors` |
+| `GET /cms/areas` → `CmsArea[]`                    | Từ vựng của `areaKey` (`service_areas`), **không phải taxonomy**; `known: false` là khoá địa điểm đang giữ mà danh mục không có (cột chưa bao giờ là khoá ngoại); `includeInactive=true` để hiện lại khu vực đã ngừng                                                                                                                                         |
+| `GET /cms/audit`, `GET /cms/places/{id}/audit`    | `actorRole`, `breakGlass`, `authorizationPath`, `requestId`, cursor                                                                                                                                                                                                                                                                                           |
+| `GET /cms/taxonomies` → `CmsTaxonomy[]`           | Trả cả khoá đang tắt, kèm `usageCount`                                                                                                                                                                                                                                                                                                                        |
+| `GET /cms/ranking-configs` → `CmsRankingConfig[]` | `bounds` đi kèm từng version; `createdBy`/`approvedBy` là object                                                                                                                                                                                                                                                                                              |
+| `GET /cms/feature-flags` → `CmsFeatureFlag[]`     | Có `payload` và người sửa cuối; không có rollout %                                                                                                                                                                                                                                                                                                            |
+| `GET /cms/collections/{id}/items`                 | Đọc được danh sách trước khi `PUT` ghi đè toàn bộ                                                                                                                                                                                                                                                                                                             |
 
 Không còn schema `⚠ Aspirational` nào trong `src/`.
 

@@ -32,6 +32,7 @@ import type {
 } from '@/shared/api/contracts'
 import { fetchPlaces, fetchStalePlaces, transitionPlace, verifyFreshness } from './api'
 import { PLACE_TRANSITIONS, PlaceStatusBadge } from './status'
+import { AreaCombobox } from './areaCombobox'
 import { DuplicateQueue } from './duplicateQueue.view'
 import { styles } from './placeList.style'
 
@@ -450,15 +451,21 @@ export default function PlaceListScreen() {
                 }}
                 className={styles.search}
               />
-              <input
-                aria-label={t('places.filter.area')}
+              {/*
+                The same vocabulary as the editor, from the same endpoint: a
+                free text box here could filter on a key no place holds and
+                answer "0 kết quả" for a typo (GoGo-BE ADR-0016).
+              */}
+              <AreaCombobox
+                label={t('places.filter.area')}
+                labelHidden
                 placeholder={t('places.filter.areaHint')}
-                value={areaKey}
-                onChange={(event) => {
-                  setAreaKey(event.target.value)
+                value={areaKey || null}
+                onChange={(next) => {
+                  setAreaKey(next ?? '')
                   resetPaging()
                 }}
-                className={styles.filterInput}
+                className={styles.filterCombobox}
               />
               <input
                 aria-label={t('places.filter.category')}

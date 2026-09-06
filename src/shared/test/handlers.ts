@@ -15,6 +15,7 @@ import {
   costTestRunDetails,
   costTestRuns,
   auditEntries,
+  cmsAreas,
   collectionItems,
   collections,
   decidedSubmissions,
@@ -87,6 +88,7 @@ function csrfFailure(request: Request, cookies: Record<string, string>) {
  */
 const db = {
   places: places.map((place) => ({ ...place })),
+  areas: cmsAreas.map((area) => ({ ...area })),
   taxonomies: taxonomies.map((item) => ({ ...item })),
   collections: collections.map((item) => ({ ...item })),
   flags: featureFlags.map((flag) => ({ ...flag })),
@@ -182,6 +184,86 @@ function validationEnvelope(issues: readonly z.ZodIssue[]) {
     },
     { status: 400 },
   )
+}
+
+/**
+ * The Vietnamese folding `normalizeVietnamese` does in GoGo-BE, enough of it
+ * that "quan 1" matches "Quận 1, TP.HCM".
+ */
+function foldVietnamese(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .trim()
+    .toLowerCase()
+}
+
+type ContactIssue = { field: string; code: string; message: string }
+type Normalized = { ok: true; value: string } | { ok: false; issue: ContactIssue }
+
+/**
+ * `normalizePhone` from `GoGo-BE/libs/modules/cms/domain/place-contact.ts`.
+ *
+ * Lives in the mock, not in the app: the console must send what the editor
+ * typed and render whatever the server answers. A second normalizer in the
+ * browser would accept values the server refuses and refuse values it accepts,
+ * and neither client would ever hear about the difference.
+ */
+function mockNormalizePhone(raw: string): Normalized {
+  const trimmed = raw.trim()
+  const invalid: ContactIssue = {
+    field: 'phone',
+    code: 'invalid',
+    message: 'Số điện thoại không hợp lệ',
+  }
+  if (trimmed === '') return { ok: false, issue: invalid }
+  const cleaned = trimmed.replace(/[\s().\-–—]/g, '')
+  if (!/^\+?\d+$/.test(cleaned)) return { ok: false, issue: invalid }
+  const digits = cleaned.startsWith('+') ? cleaned.slice(1) : cleaned
+
+  let e164: string
+  if (cleaned.startsWith('+')) e164 = digits
+  else if (digits.startsWith('00')) e164 = digits.slice(2)
+  else if (digits.startsWith('0')) e164 = `84${digits.slice(1)}`
+  else if (digits.startsWith('84')) e164 = digits
+  else {
+    // A bare subscriber number could belong to any country; guessing one would
+    // invent a fact about the place.
+    return {
+      ok: false,
+      issue: { field: 'phone', code: 'no_country', message: 'Thiếu mã quốc gia hoặc số 0 đầu' },
+    }
+  }
+  if (e164.length < 8 || e164.length > 15) return { ok: false, issue: invalid }
+  return { ok: true, value: `+${e164}` }
+}
+
+/** `normalizeWebsite` from the same file: `http(s)` only, bare host upgraded. */
+function mockNormalizeWebsite(raw: string): Normalized {
+  const trimmed = raw.trim()
+  const invalid: ContactIssue = {
+    field: 'website',
+    code: 'invalid',
+    message: 'Website phải là địa chỉ http hoặc https hợp lệ',
+  }
+  if (trimmed === '') return { ok: false, issue: invalid }
+  const candidate = /^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(trimmed) ? trimmed : `https://${trimmed}`
+  let url: URL
+  try {
+    url = new URL(candidate)
+  } catch {
+    return { ok: false, issue: invalid }
+  }
+  // An allowlist, not a denylist: the value is rendered as an href in three
+  // clients, so `javascript:` and `data:` are the whole point.
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return { ok: false, issue: invalid }
+  if (url.hostname === '' || !url.hostname.includes('.')) return { ok: false, issue: invalid }
+  if (url.href.length > 500) {
+    return { ok: false, issue: { field: 'website', code: 'too_long', message: 'Website quá dài' } }
+  }
+  return { ok: true, value: url.href }
 }
 
 /** Mirrors `PLACE_TRANSITIONS` in `cms-catalog.service.ts`. */
@@ -673,12 +755,89 @@ export const handlers = [
     return HttpResponse.json(place)
   }),
 
+  /**
+   * `cmsListAreas` (GoGo-BE#425). Filtering happens the way the service does
+   * it — Vietnamese-normalized over name *and* key, so "quan 1" finds
+   * "Quận 1, TP.HCM" — because a mock that only does `includes()` would let
+   * the console ship a search box that answers nothing in production.
+   */
+  http.get(`${BASE}/cms/areas`, ({ request }) => {
+    const url = new URL(request.url)
+    const q = url.searchParams.get('q')
+    const city = url.searchParams.get('city')
+    const includeInactive = url.searchParams.get('includeInactive') === 'true'
+
+    let items = db.areas
+    // A retired area is not offered as a new choice; it is still returned when
+    // the console is resolving a value a place already holds.
+    if (!includeInactive) items = items.filter((area) => area.isActive)
+    if (city) items = items.filter((area) => area.city === city)
+    if (q?.trim()) {
+      const needle = foldVietnamese(q)
+      items = items.filter((area) =>
+        foldVietnamese(`${area.name ?? ''} ${area.key}`).includes(needle),
+      )
+    }
+    return HttpResponse.json({ items })
+  }),
+
   http.patch(`${BASE}/cms/places/:id`, async ({ params, request }) => {
     const place = db.places.find((item) => item.id === params.id)
     if (!place) return envelope(404, 'NOT_FOUND', 'place not found')
     const parsed = cmsPlaceEditMockSchema.safeParse(await request.json())
     if (!parsed.success) return validationEnvelope(parsed.error.issues)
-    Object.assign(place, parsed.data)
+    const { expectedUpdatedAt, ...input } = parsed.data
+
+    // Optimistic concurrency, byte for byte: the code, and the *current*
+    // `updatedAt` in the first field error, are what the console diffs against.
+    if (
+      expectedUpdatedAt &&
+      new Date(expectedUpdatedAt).getTime() !== Date.parse(place.updatedAt)
+    ) {
+      return HttpResponse.json(
+        {
+          code: 'PLACE_MODIFIED',
+          message: 'This place changed after the form was loaded',
+          field_errors: [{ field: 'updatedAt', code: 'stale', message: place.updatedAt }],
+          request_id: 'mock-place-modified',
+          retryable: false,
+        },
+        { status: 409 },
+      )
+    }
+
+    /*
+     * The server is the only normalizer (GoGo-BE `place-contact.ts`), so the
+     * mock has to be one too. A mock that stored `0283 822 9999` verbatim would
+     * let the console ship a phone field whose saved value never matches what
+     * comes back on the next read — and would never exercise the field errors
+     * the editor has to render.
+     */
+    const fieldErrors: { field: string; code: string; message: string }[] = []
+    if (typeof input.phone === 'string') {
+      const result = mockNormalizePhone(input.phone)
+      if (result.ok) input.phone = result.value
+      else fieldErrors.push(result.issue)
+    }
+    if (typeof input.website === 'string') {
+      const result = mockNormalizeWebsite(input.website)
+      if (result.ok) input.website = result.value
+      else fieldErrors.push(result.issue)
+    }
+    if (fieldErrors.length > 0) {
+      return HttpResponse.json(
+        {
+          code: 'VALIDATION_FAILED',
+          message: 'Request validation failed',
+          field_errors: fieldErrors,
+          request_id: 'mock-validation-failed',
+          retryable: false,
+        },
+        { status: 400 },
+      )
+    }
+
+    Object.assign(place, input)
     place.updatedAt = new Date().toISOString()
     return HttpResponse.json(place)
   }),

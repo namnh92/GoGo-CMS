@@ -436,6 +436,39 @@ export const en: Partial<Record<MessageKey, string>> = {
   'places.bulk.keptSelection': 'The ones that failed stay selected so you can retry.',
   'places.bulk.illegal': 'One of the selected places cannot move to this status from where it is.',
 
+  'placeEditor.address': 'Address (free text)',
+  'placeEditor.areaKey': 'Discovery area',
+  'placeEditor.areaKeyHint':
+    'A key from the area catalog; it drives search and filtering, and is not the administrative address.',
+  'placeEditor.contact': 'Administrative address and contact',
+  'placeEditor.contactHint':
+    'The administrative address is separate from the discovery area; emptying a box clears the stored value.',
+  'placeEditor.city': 'City / province',
+  'placeEditor.district': 'District',
+  'placeEditor.districtHint': 'Optional — an address with no district is valid.',
+  'placeEditor.phoneHint':
+    'The server normalises to E.164. Keep the leading 0 or the country code, e.g. 028 3822 9999.',
+  'placeEditor.websiteHint':
+    'http or https only. A bare host is fine — the server upgrades it to https://.',
+  'placeEditor.websiteOpen': 'Open the stored website',
+  'placeEditor.provenance': 'Where each field came from',
+  'placeEditor.provenanceHint': 'Saving one field does not re-verify the place.',
+  'placeEditor.provenanceNone': 'No recorded origin',
+  'placeEditor.provenanceVerified': 'verified {time}',
+  'placeEditor.provenanceUnverified': 'no verification timestamp',
+  'placeEditor.conflictTitle': 'Somebody else saved this place',
+  'placeEditor.conflictBody':
+    'The server copy changed at {time}, after you opened the form. Nothing you typed was lost.',
+  'placeEditor.conflictDiff': 'Fields that differ from the server copy:',
+  'placeEditor.conflictNoDiff': 'None of your fields differ from the server copy.',
+  'placeEditor.conflictMine': 'Yours',
+  'placeEditor.conflictTheirs': 'Server',
+  'placeEditor.conflictEmpty': '(empty)',
+  'placeEditor.conflictReload': 'Reload',
+  'placeEditor.conflictOverwrite': 'Overwrite',
+  'placeEditor.conflictReloadTitle': 'Reload and discard your changes?',
+  'placeEditor.conflictReloadBody':
+    'The form takes the server values back; what you just typed is lost.',
   'placeEditor.lastChanged': 'Last changed {time}',
   'placeEditor.blockFailed': 'Save failed',
   'placeEditor.saveIdentity': 'Save details',
@@ -462,6 +495,31 @@ export const en: Partial<Record<MessageKey, string>> = {
   'placeEditor.error.coordinatePair':
     'Latitude and longitude travel together; leave both empty when there are no coordinates.',
 
+  'fieldSource.editorial': 'GoGo editor',
+  'fieldSource.provider': 'Provider',
+  'fieldSource.community': 'Community',
+  'fieldSource.google_derived': 'Applied from a Google preview',
+
+  'combobox.loading': 'Loading the catalog…',
+  'combobox.error': 'The catalog could not be loaded',
+  'combobox.empty': 'The catalog has no rows yet.',
+  'combobox.noMatch': 'Nothing matches “{query}”.',
+  'combobox.clear': 'Clear the selection',
+  'combobox.count': '{count} entries',
+  'combobox.deniedHint': 'Your account cannot read this catalog.',
+
+  'areaPicker.placeholder': 'Search an area by name or key…',
+  'areaPicker.placeCount': '{count} places',
+  'areaPicker.noCity': 'No city recorded',
+  'areaPicker.retiredBadge': 'retired',
+  'areaPicker.unknownBadge': 'not in the catalog',
+  'areaPicker.unknownHint': 'this key is not in the area catalog',
+  'areaPicker.empty': 'The area catalog has no rows yet.',
+  'areaPicker.noMatch': 'No area matches “{query}”.',
+
+  'places.filter.area': 'Discovery area',
+  'places.filter.areaHint': 'Search an area…',
+
   'unsaved.title': 'Leave with unsaved changes?',
   'unsaved.description': 'The changes below are lost if you leave this page.',
   'unsaved.pending': 'Unsaved',
@@ -470,6 +528,7 @@ export const en: Partial<Record<MessageKey, string>> = {
 
   'error.VALIDATION_FAILED': 'The server rejected this data. Details are under each field.',
   'error.INVALID_PLACE_TRANSITION': 'That status cannot follow the current one.',
+  'error.PLACE_MODIFIED': 'Somebody else saved this place while you were editing.',
 
   'imports.title': 'Bulk import management',
   'imports.new': 'New import',
