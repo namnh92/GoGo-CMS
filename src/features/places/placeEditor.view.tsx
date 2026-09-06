@@ -60,6 +60,7 @@ import {
   usePlaceFieldError,
   type PlaceEditBaseline,
   type PlaceIdentityForm,
+  numberFieldRegister,
 } from './placeForm'
 import { styles } from './placeEditor.style'
 
@@ -695,7 +696,7 @@ export default function PlaceEditorScreen() {
                           hint={t('placeEditor.avgVisitHint')}
                           disabled={!canWrite}
                           error={fieldError('avgVisitMinutes')}
-                          {...register('avgVisitMinutes')}
+                          {...register('avgVisitMinutes', numberFieldRegister)}
                         />
                         <div className="flex items-end gap-2">
                           <Badge tone="neutral">
@@ -1019,14 +1020,14 @@ export default function PlaceEditorScreen() {
                           inputMode="decimal"
                           disabled={!canWrite}
                           error={fieldError('lat')}
-                          {...register('lat')}
+                          {...register('lat', numberFieldRegister)}
                         />
                         <TextInput
                           label={t('placeEditor.lng')}
                           inputMode="decimal"
                           disabled={!canWrite}
                           error={fieldError('lng')}
-                          {...register('lng')}
+                          {...register('lng', numberFieldRegister)}
                         />
                       </div>
                       <p className={styles.attribution}>{t('placeEditor.geoHint')}</p>
