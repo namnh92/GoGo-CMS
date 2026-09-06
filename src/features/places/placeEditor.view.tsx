@@ -48,6 +48,8 @@ import { PlaceMediaCard } from './placeMedia.view'
 import { PLACE_STATUSES, PLACE_TRANSITIONS } from './status'
 import { AreaCombobox } from './areaCombobox'
 import { HoursEditor } from './hoursEditor.view'
+import { PlaceLocationPanel } from './placeLocation.view'
+import { PublishChecklist } from './publishChecklist.view'
 import { emptyWeek, parseWeek, weekFromServer, weekSignature, type WeekDraft } from './hoursModel'
 import {
   diffAgainstServer,
@@ -994,15 +996,22 @@ export default function PlaceEditorScreen() {
 
                 <div className={styles.side}>
                   <Card>
+                    <CardHeader
+                      title={t('publishChecklist.title')}
+                      hint={t('publishChecklist.hint')}
+                    />
+                    <CardBody>
+                      <PublishChecklist
+                        place={detail}
+                        canTransition={can('place.transition') && online}
+                      />
+                    </CardBody>
+                  </Card>
+
+                  <Card>
                     <CardHeader title={t('placeEditor.geo')} />
                     <CardBody>
-                      <div className={styles.mapFrame}>
-                        <span className={styles.mapPin} aria-hidden="true" />
-                        {/* Exact origin coordinates are operator data, not a public map. */}
-                        <span className={styles.mapNote}>
-                          {detail.lat?.toFixed(5) ?? '—'}, {detail.lng?.toFixed(5) ?? '—'}
-                        </span>
-                      </div>
+                      <PlaceLocationPanel lat={detail.lat} lng={detail.lng} name={detail.name} />
                       <div className={styles.fieldRow}>
                         <TextInput
                           label={t('placeEditor.lat')}
