@@ -2835,6 +2835,12 @@ export const costServices: Record<string, CmsCostServiceRow> = {
       surface: 'in_process',
       coverage: 'NOT_INSTRUMENTED',
       operations: { instrumented: 0, total: 0 },
+      // COST-CMS-015 (#129): how the serving API's one boot-time connect ended.
+      connection: {
+        operation: 'upstash.redis.rate_limit.connect',
+        status: 'ok',
+        observedAt: '2026-09-06T03:00:02.000Z',
+      },
     },
     cost: { kind: 'AUTO', freshness: 'FRESH' },
     usage: [],

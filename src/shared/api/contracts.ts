@@ -1668,11 +1668,25 @@ export const cmsOperationCountSchema = z.object({
   total: z.number().int(),
 })
 
+/**
+ * COST-CMS-015 (#129) — how the API process's one boot-time connect for this
+ * service ended (GoGo-BE#427, `upstash.redis.rate_limit.connect`). A closed
+ * set, never a message. Optional so a backend from before #427 still parses;
+ * `null` when the service has no boot-time connect or none was recorded.
+ */
+export const cmsCostRuntimeConnectionSchema = z.object({
+  operation: z.string(),
+  status: z.enum(['ok', 'unavailable', 'timeout']),
+  observedAt: z.string(),
+})
+export type CmsCostRuntimeConnection = z.infer<typeof cmsCostRuntimeConnectionSchema>
+
 export const cmsServiceRuntimeSchema = z.object({
   surface: cmsRuntimeSurfaceSchema,
   coverage: cmsRuntimeCoverageSchema,
   /** `total: 0` with a surface is NOT_INSTRUMENTED: nothing registered to measure yet. */
   operations: cmsOperationCountSchema,
+  connection: cmsCostRuntimeConnectionSchema.nullish(),
 })
 export type CmsServiceRuntime = z.infer<typeof cmsServiceRuntimeSchema>
 
