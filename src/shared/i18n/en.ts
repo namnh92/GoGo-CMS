@@ -417,6 +417,9 @@ export const en: Partial<Record<MessageKey, string>> = {
 
   'places.title': 'Places management',
   'places.breadcrumb': 'Places',
+  'places.addUnavailable': 'Add place: not available',
+  'places.addUnavailableWhy':
+    'The server has no create-place route. Places enter the catalogue through bulk import or a community submission.',
   'places.add': 'Add place',
   'places.bulkImport': 'Bulk import',
   'places.tab.all': 'All',

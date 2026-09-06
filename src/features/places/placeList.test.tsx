@@ -20,7 +20,13 @@ describe('place list, by role', () => {
     renderWithProviders(<PlaceListScreen />)
 
     expect(await screen.findByText('Chào Bạn Cafe & Space')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Thêm địa điểm/ })).toBeEnabled()
+    // Writing shows up in the row actions. "Thêm địa điểm" is not one of them:
+    // GoGo-BE has no create-place route, so the control says so for every role
+    // rather than being enabled for an editor and then 404-ing (GoGo-CMS#128).
+    for (const button of screen.getAllByRole('button', { name: 'Sửa' })) {
+      expect(button).toBeEnabled()
+    }
+    expect(screen.getByRole('button', { name: /Thêm địa điểm: chưa mở/ })).toBeDisabled()
   })
 
   it('lets a moderator read the catalog but not change it', async () => {
@@ -29,7 +35,9 @@ describe('place list, by role', () => {
 
     // Reading is allowed now — this used to be a permission-denied screen.
     expect(await screen.findByText('Chào Bạn Cafe & Space')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Thêm địa điểm/ })).toBeDisabled()
+    for (const button of screen.getAllByRole('button', { name: 'Sửa' })) {
+      expect(button).toBeDisabled()
+    }
   })
 
   it('lets an ops admin read the catalog but not edit places', async () => {
@@ -38,7 +46,6 @@ describe('place list, by role', () => {
 
     await waitFor(() => expect(screen.getByText('Chào Bạn Cafe & Space')).toBeInTheDocument())
     // ops_admin publishes imports that create places, and still cannot edit one.
-    expect(screen.getByRole('button', { name: /Thêm địa điểm/ })).toBeDisabled()
     for (const button of screen.getAllByRole('button', { name: 'Sửa' })) {
       expect(button).toBeDisabled()
     }

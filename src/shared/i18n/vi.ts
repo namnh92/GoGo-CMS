@@ -415,6 +415,9 @@ export const vi = {
     'API KPI hiện chỉ trả về sáu số tổng hợp trên cửa sổ cố định — chưa có chuỗi thời gian, tình trạng từng nhà cung cấp hay dòng hoạt động. Màn này hiển thị đúng những gì đo được.',
   'places.title': 'Quản lý địa điểm',
   'places.breadcrumb': 'Địa điểm',
+  'places.addUnavailable': 'Thêm địa điểm: chưa mở',
+  'places.addUnavailableWhy':
+    'Máy chủ chưa có route tạo địa điểm. Địa điểm vào catalog qua nhập hàng loạt hoặc đề xuất từ app.',
   'places.add': 'Thêm địa điểm',
   'places.bulkImport': 'Nhập hàng loạt',
   'places.searchPlaceholder': 'Tìm theo tên hoặc địa chỉ…',

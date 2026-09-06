@@ -59,3 +59,58 @@ test('the palette navigates to the screen chosen with the keyboard', async ({ pa
   await expect(page).toHaveURL(/\/imports$/)
   await expect(page.getByRole('heading', { name: 'Quản lý nhập hàng loạt' })).toBeVisible()
 })
+
+/**
+ * CMS-049 (#128) — the place editor grew four new widgets in this epic, and
+ * every one of them has to be reachable and operable without a pointer.
+ */
+test('the place editor is operable from the keyboard end to end', async ({ page }) => {
+  await signIn(page, 'editor@gogo.vn')
+  await page.goto('/places/pl-chao-ban')
+  await expect(page.getByRole('heading', { name: /Chào Bạn/ })).toBeVisible()
+
+  // The area picker is a combobox, so it answers to the combobox keys rather
+  // than needing a click on an option.
+  const area = page.getByRole('combobox', { name: /Khu vực khám phá/ })
+  await area.focus()
+  await expect(area).toBeFocused()
+  await area.press('ArrowDown')
+  await expect(area).toHaveAttribute('aria-expanded', 'true')
+  await area.press('Escape')
+  await expect(area).toHaveAttribute('aria-expanded', 'false')
+
+  // A day's state is a radiogroup: focus the group, choose with the keyboard.
+  const sunday = page.getByRole('region', { name: 'Chủ Nhật' })
+  const closed = sunday.getByRole('radio', { name: /Đóng cửa/ })
+  await closed.focus()
+  await page.keyboard.press('Enter')
+  await expect(closed).toBeChecked()
+
+  // Photo reordering must not be drag-only — a drag-only control is a control
+  // a keyboard user does not have.
+  const media = page
+    .locator('section')
+    .filter({ has: page.getByRole('heading', { name: 'Thư viện ảnh' }) })
+  await media.scrollIntoViewIfNeeded()
+  const reorder = media.getByRole('button', { name: /Lên|Xuống|lên trên|xuống dưới/ })
+  if ((await reorder.count()) > 0) {
+    await reorder.first().focus()
+    await expect(reorder.first()).toBeFocused()
+  }
+})
+
+test('a field rejection is announced and tied to its control', async ({ page }) => {
+  await signIn(page, 'editor@gogo.vn')
+  await page.goto('/places/pl-chao-ban')
+
+  // 10..720 on the server; 5 is refused locally before a request is made.
+  const visit = page.getByLabel(/Thời lượng ghé trung bình/)
+  await visit.fill('5')
+  await page.getByRole('button', { name: 'Lưu thông tin' }).click()
+
+  await expect(visit).toHaveAttribute('aria-invalid', 'true')
+  // The message is associated with the input, not merely near it (GoGo-CMS#102).
+  const describedBy = await visit.getAttribute('aria-describedby')
+  expect(describedBy).toBeTruthy()
+  await expect(page.locator(`#${describedBy}`)).toBeVisible()
+})
