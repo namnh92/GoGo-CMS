@@ -13,6 +13,7 @@ import { cn } from '@/shared/ui/cn'
 import { useSession } from '@/shared/auth/session'
 import type {
   CmsCostProviderRow,
+  CmsCostRuntimeConnection,
   CmsCostServiceRow,
   OpsCostCenterRef,
   OpsProviderRow,
@@ -512,6 +513,29 @@ function ProviderRow({ row }: { row: OpsProviderRow }) {
 
 // ── registry-wide runtime and cost (COST-CMS-012 → COST-CMS-013, ADR-0014) ──
 
+/**
+ * COST-CMS-015 (#129) — how this API process's one boot-time connect ended
+ * (`upstash.redis.rate_limit.connect`, GoGo-BE#427). A failure is a warning:
+ * the store fails open to memory and the row's status and coverage do not
+ * move, so the badge is amber and the words say "fail-open", never "down".
+ */
+function ConnectionLine({ connection }: { connection: CmsCostRuntimeConnection | null }) {
+  const t = useT()
+  const { locale } = useI18n()
+  if (!connection) return null
+  const ok = connection.status === 'ok'
+  return (
+    <p className={styles.gapDetail} data-testid="runtime-connection">
+      <span className={styles.method}>{t('monitoring.registry.svc.connection')}: </span>
+      <Badge tone={ok ? 'mint' : 'amber'}>
+        {t(`monitoring.connection.${connection.status}` as 'monitoring.connection.ok')}
+      </Badge>{' '}
+      {t('monitoring.connection.at', { at: formatDateTime(connection.observedAt, locale) })}
+      {ok ? null : <> · {t('monitoring.connection.failOpen')}</>}
+    </p>
+  )
+}
+
 function RegistryTable({ rows }: { rows: CmsCostProviderRow[] }) {
   const t = useT()
   return (
@@ -676,6 +700,7 @@ function ServiceRow({ service }: { service: CmsCostServiceRow }) {
       </td>
       <td className={styles.td}>
         <RuntimeCoverageBadge coverage={coverage} />
+        <ConnectionLine connection={service.runtime.connection ?? null} />
       </td>
       <td className={styles.tdNum}>
         {/* "0 / 0" is a surface with nothing registered, and reads as the gap it is. */}

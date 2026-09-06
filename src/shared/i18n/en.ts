@@ -1359,6 +1359,13 @@ export const en: Partial<Record<MessageKey, string>> = {
   'monitoring.registry.svc.costSource': 'Cost source',
   'monitoring.registry.svc.costData': 'Cost data',
   'monitoring.registry.svc.source': '§23 source',
+  'monitoring.registry.svc.connection': 'Connection at boot',
+  'monitoring.connection.ok': 'Connected',
+  'monitoring.connection.unavailable': 'Unreachable',
+  'monitoring.connection.timeout': 'Timed out',
+  'monitoring.connection.failOpen':
+    'fail-open — limits kept in memory until it reconnects; not a service outage',
+  'monitoring.connection.at': 'at {at}',
   'monitoring.coverage.FULL': 'FULL',
   'monitoring.coverage.PARTIAL': 'PARTIAL',
   'monitoring.coverage.NOT_INSTRUMENTED': 'NOT INSTRUMENTED',

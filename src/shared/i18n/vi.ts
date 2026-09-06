@@ -1966,6 +1966,13 @@ export const vi = {
   'monitoring.registry.svc.costSource': 'Nguồn chi phí',
   'monitoring.registry.svc.costData': 'Dữ liệu chi phí',
   'monitoring.registry.svc.source': 'Nguồn §23',
+  'monitoring.registry.svc.connection': 'Kết nối lúc khởi động',
+  'monitoring.connection.ok': 'Đã kết nối',
+  'monitoring.connection.unavailable': 'Không kết nối được',
+  'monitoring.connection.timeout': 'Quá hạn chờ',
+  'monitoring.connection.failOpen':
+    'fail-open — giới hạn tạm trong bộ nhớ đến khi kết nối lại; không phải sự cố dịch vụ',
+  'monitoring.connection.at': 'lúc {at}',
   'monitoring.coverage.FULL': 'FULL',
   'monitoring.coverage.PARTIAL': 'PARTIAL',
   'monitoring.coverage.NOT_INSTRUMENTED': 'NOT INSTRUMENTED',

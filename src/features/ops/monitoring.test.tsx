@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { renderWithProviders, signInAs } from '@/shared/test/render'
 import { server } from '@/shared/test/server'
-import { opsLatencySemantics, opsProviders, opsSummary } from '@/shared/test/fixtures'
+import { costOverview, opsLatencySemantics, opsProviders, opsSummary } from '@/shared/test/fixtures'
 import MonitoringScreen from './monitoring.view'
 
 const BASE = '*/v1'
@@ -182,6 +182,64 @@ describe('provider monitoring (GoGo-BE#315)', () => {
     expect(within(apple).getByText('Mới')).toBeInTheDocument()
     // Every row links to the financial surface.
     expect(within(table).getAllByRole('link', { name: 'Cost Center →' })).toHaveLength(6)
+  })
+
+  /**
+   * COST-CMS-015 (#129). The API connects its rate-limit Redis client at boot
+   * (GoGo-BE#424/#427) and reports how that went on the service row. A bad
+   * outcome is a warning — the store fails open to memory — so it must never
+   * read as the provider being down: same registry status, same coverage.
+   */
+  it('shows the boot-time Redis connection in the Upstash drill-down, as a warning when it failed', async () => {
+    signInAs('ops_admin')
+    render()
+    const table = (await screen.findByText('Upstash')).closest('table')!
+    const upstash = within(table).getByText('Upstash').closest('tr')!
+    await userEvent.click(within(upstash).getByRole('button', { name: 'Chi tiết dịch vụ' }))
+    const detail = screen.getByText('Dịch vụ của Upstash').closest('td')!
+    const line = within(detail).getByTestId('runtime-connection')
+    expect(within(line).getByText('Đã kết nối')).toBeInTheDocument()
+    expect(within(line).queryByText(/fail-open/)).not.toBeInTheDocument()
+  })
+
+  it('a failed boot-time connection is amber and says fail-open, not down', async () => {
+    server.use(
+      http.get(`${BASE}/cms/ops/costs`, () =>
+        HttpResponse.json({
+          ...costOverview,
+          providerRows: costOverview.providerRows.map((p) =>
+            p.providerId !== 'upstash'
+              ? p
+              : {
+                  ...p,
+                  services: p.services.map((s) => ({
+                    ...s,
+                    runtime: {
+                      ...s.runtime,
+                      connection: {
+                        operation: 'upstash.redis.rate_limit.connect',
+                        status: 'unavailable',
+                        observedAt: '2026-09-06T03:00:02.000Z',
+                      },
+                    },
+                  })),
+                },
+          ),
+        }),
+      ),
+    )
+    signInAs('ops_admin')
+    render()
+    const table = (await screen.findByText('Upstash')).closest('table')!
+    const upstash = within(table).getByText('Upstash').closest('tr')!
+    // The provider row itself is untouched by the failure.
+    expect(within(upstash).getByText('Đang dùng')).toBeInTheDocument()
+    await userEvent.click(within(upstash).getByRole('button', { name: 'Chi tiết dịch vụ' }))
+    const detail = screen.getByText('Dịch vụ của Upstash').closest('td')!
+    const line = within(detail).getByTestId('runtime-connection')
+    expect(within(line).getByText('Không kết nối được')).toBeInTheDocument()
+    expect(within(line).getByText(/fail-open/)).toBeInTheDocument()
+    expect(within(detail).queryByText('Lỗi')).not.toBeInTheDocument()
   })
 
   it('drills a provider down to its services instead of settling for one word', async () => {
