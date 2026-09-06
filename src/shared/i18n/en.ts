@@ -328,7 +328,8 @@ export const en: Partial<Record<MessageKey, string>> = {
   'admins.field.password': 'Initial password',
   'admins.field.passwordHint': 'At least 12 characters. The server sets this floor, not the form.',
   'admins.field.role': 'Role',
-  'admins.field.roleHint': 'The four roles the server grants. The CMS invents none.',
+  'admins.field.roleHint':
+    'The three roles this console grants. The super admin is bootstrapped once per environment and is never created here.',
   'admins.error.displayName': 'Enter a display name.',
   'admins.error.email': 'That email is not valid.',
   'admins.error.password': 'Password must be at least 12 characters.',
@@ -1315,7 +1316,11 @@ export const en: Partial<Record<MessageKey, string>> = {
   'admins.error.selfRole': 'You cannot change your own role — another super admin must.',
   'admins.error.selfSuspend': 'You cannot suspend your own account.',
   'admins.error.lastSuperAdmin':
-    'This is the last active super admin — demoting or suspending them leaves the console with no administrator.',
+    'The super admin role cannot be given up: an environment has exactly one, and demoting or suspending it leaves the console with no administrator.',
+  'admins.error.superAdminSingleton':
+    'An environment has exactly one super admin. A second cannot be created, and no account can be promoted into the role.',
+  'admins.superAdminLocked':
+    'The super admin account: its role is fixed and it cannot be suspended. Its password is not frozen — use a password change or a temporary password.',
   'admins.temp.title': 'Temporary password — shown exactly once',
   'admins.temp.warn':
     'This password cannot be viewed again and exists nowhere else. Hand it to the account holder over a secure channel before closing.',

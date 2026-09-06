@@ -5,7 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useT } from '@/shared/i18n/i18n'
 import { RoleGate } from '@/app/RequireAuth'
 import { PageBody, PageHeader } from '@/app/PageHeader'
-import { adminRoleSchema } from '@/shared/api/contracts'
+import { adminAssignableRoleSchema } from '@/shared/api/contracts'
 import { ApiError } from '@/shared/api/errors'
 import { Card, CardBody, CardHeader } from '@/shared/ui/Card'
 import { Button } from '@/shared/ui/Button'
@@ -175,8 +175,11 @@ function NewAccountForm() {
         {...register('role')}
       >
         {/* Straight off the contract enum, so the picker cannot drift from the
-            roles the server actually grants. */}
-        {adminRoleSchema.options.map((role) => (
+            roles the server actually grants. `super_admin` is not among them:
+            an environment has one, it is bootstrapped, and the API answers 409
+            SUPER_ADMIN_SINGLETON to a request that asks for a second
+            (ADR-0018). */}
+        {adminAssignableRoleSchema.options.map((role) => (
           <option key={role} value={role}>
             {t(`role.${role}` as const)}
           </option>

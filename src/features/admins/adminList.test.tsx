@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import userEvent from '@testing-library/user-event'
 import { screen, waitFor, within } from '@testing-library/react'
+import { http, HttpResponse } from 'msw'
+import { server } from '@/shared/test/server'
 import { renderWithProviders, signInAs } from '@/shared/test/render'
+import { cmsAdmins } from '@/shared/test/fixtures'
+import { AdminActionDialog } from './adminActions.view'
 import AdminListScreen from './adminList.view'
 
 describe('AdminListScreen (CMS-021)', () => {
@@ -126,6 +130,116 @@ describe('AdminListScreen (CMS-021)', () => {
     expect(await screen.findByText(/hiện đúng một lần/)).toBeInTheDocument()
     expect(screen.getByText(/^tmp-/)).toBeInTheDocument()
     expect(screen.getByText(/không xem lại được/)).toBeInTheDocument()
+  })
+
+  /*
+   * CMS-031 (#142) — an environment has exactly one super admin, bootstrapped
+   * rather than created (GoGo-BE ADR-0018). The console stops offering what the
+   * API refuses, without hiding the account itself.
+   */
+  it('still shows the super admin — the list must not lie about who holds the role', async () => {
+    signInAs('super_admin', 'Someone Else')
+    renderWithProviders(<AdminListScreen />)
+
+    const table = await screen.findByRole('table')
+    const row = within(table).getByText('boss@gogo.vn').closest('tr')!
+    expect(within(row).getByText('Quản trị tối cao')).toBeInTheDocument()
+  })
+
+  it('keeps super_admin in the role filter — reading is not writing', async () => {
+    signInAs('super_admin')
+    const user = userEvent.setup()
+    renderWithProviders(<AdminListScreen />)
+
+    await screen.findByRole('table')
+    const filter = screen.getByLabelText('Vai')
+    expect(
+      Array.from(filter.querySelectorAll('option')).map((o) => o.getAttribute('value')),
+    ).toContain('super_admin')
+
+    await user.selectOptions(filter, 'super_admin')
+    await waitFor(() =>
+      expect(screen.getByText(/Trang này 1 · tổng 1 khớp bộ lọc/)).toBeInTheDocument(),
+    )
+  })
+
+  it('locks role change and suspend on the super admin row, whoever is signed in', async () => {
+    // Signed in as a *different* name, so this is the role check and not the
+    // SELF_* check that happens to cover the same row for its holder.
+    signInAs('super_admin', 'Someone Else')
+    renderWithProviders(<AdminListScreen />)
+
+    const table = await screen.findByRole('table')
+    const row = within(table).getByText('boss@gogo.vn').closest('tr')!
+    const edit = within(row).getByRole('button', { name: 'Đổi vai' })
+    const suspend = within(row).getByRole('button', { name: 'Đình chỉ' })
+    expect(edit).toBeDisabled()
+    expect(suspend).toBeDisabled()
+    expect(edit).toHaveAttribute('title', expect.stringContaining('vai cố định'))
+    // Credentials are not frozen: rotating this account's password is supported.
+    expect(within(row).getByRole('button', { name: 'Reset mật khẩu' })).toBeEnabled()
+  })
+
+  it("offers only assignable roles when changing someone else's role", async () => {
+    signInAs('super_admin', 'Minh Anh Ng.')
+    const user = userEvent.setup()
+    renderWithProviders(<AdminListScreen />)
+
+    const table = await screen.findByRole('table')
+    const row = within(table).getByText('ops@gogo.vn').closest('tr')!
+    await user.click(within(row).getByRole('button', { name: 'Đổi vai' }))
+
+    const dialog = await screen.findByRole('dialog')
+    const select = within(dialog).getByLabelText('Vai')
+    expect(
+      Array.from(select.querySelectorAll('option')).map((o) => o.getAttribute('value')),
+    ).toEqual(['editor', 'moderator', 'ops_admin'])
+  })
+
+  it('the edit dialog on the super admin explains itself and cannot be submitted', async () => {
+    // Rendered directly: the list already refuses to open this, and the dialog
+    // must refuse it too — a submit whose only outcome is a 409 is a dead
+    // control wherever it is reached from.
+    signInAs('super_admin', 'Someone Else')
+    const boss = { ...cmsAdmins.find((a) => a.role === 'super_admin')!, lastLoginAt: undefined }
+    renderWithProviders(<AdminActionDialog action="edit" admin={boss} onClose={() => {}} />)
+
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText(/vai cố định/)).toBeInTheDocument()
+    // No picker: there is no value it could hold.
+    expect(within(dialog).queryByLabelText('Vai')).not.toBeInTheDocument()
+    expect(within(dialog).getAllByRole('button', { name: 'Đổi vai' }).at(-1)!).toBeDisabled()
+  })
+
+  it('renders SUPER_ADMIN_SINGLETON as the rule it is, not a raw server message', async () => {
+    // The console no longer sends the role, so this refusal should be
+    // unreachable from here. It is mapped anyway: the API is the control, and a
+    // refusal a user can meet must read as a sentence rather than a code.
+    server.use(
+      http.patch('/v1/cms/auth/admins/:id', () =>
+        HttpResponse.json(
+          {
+            code: 'SUPER_ADMIN_SINGLETON',
+            message: 'a second super_admin cannot be created',
+            request_id: 'test',
+            retryable: false,
+          },
+          { status: 409 },
+        ),
+      ),
+    )
+    signInAs('super_admin', 'Minh Anh Ng.')
+    const user = userEvent.setup()
+    renderWithProviders(<AdminListScreen />)
+
+    const table = await screen.findByRole('table')
+    const row = within(table).getByText('ops@gogo.vn').closest('tr')!
+    await user.click(within(row).getByRole('button', { name: 'Đổi vai' }))
+    const dialog = await screen.findByRole('dialog')
+    await user.type(within(dialog).getByLabelText(/Lý do/), 'thử đổi vai')
+    await user.click(within(dialog).getAllByRole('button', { name: 'Đổi vai' }).at(-1)!)
+
+    expect(await within(dialog).findByText(/chỉ có đúng một super admin/i)).toBeInTheDocument()
   })
 
   it('refuses every role below super admin, and says why', async () => {

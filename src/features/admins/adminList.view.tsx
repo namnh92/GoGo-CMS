@@ -167,6 +167,19 @@ export default function AdminListScreen() {
         cell: ({ row }) => {
           if (!canCreate) return null
           const self = row.original.displayName === session?.displayName
+          /**
+           * The bootstrapped `super_admin` (ADR-0018). Its role cannot be given
+           * up and it cannot be suspended — the server refuses both with
+           * `LAST_SUPER_ADMIN`, because there is by construction no second
+           * holder to administer the console afterwards. Said here rather than
+           * discovered from a 409.
+           *
+           * Independent of `self`, which happens to cover the same row today:
+           * that check matches on display name and is about separation of
+           * duties, this one is about the role, and they must not rely on each
+           * other.
+           */
+          const locked = row.original.role === 'super_admin'
           return (
             <div className={styles.actions}>
               <Button
@@ -174,7 +187,8 @@ export default function AdminListScreen() {
                 variant="ghost"
                 // Your own role is changed by another super_admin — the server
                 // refuses SELF_ROLE_CHANGE; the button says so up front.
-                disabled={self}
+                disabled={self || locked}
+                title={locked ? t('admins.superAdminLocked') : undefined}
                 onClick={() => setDialog({ action: 'edit', admin: row.original })}
               >
                 {t('admins.action.edit')}
@@ -183,7 +197,8 @@ export default function AdminListScreen() {
                 <Button
                   size="sm"
                   variant="ghost"
-                  disabled={self}
+                  disabled={self || locked}
+                  title={locked ? t('admins.superAdminLocked') : undefined}
                   onClick={() => setDialog({ action: 'suspend', admin: row.original })}
                 >
                   {t('admins.action.suspend')}

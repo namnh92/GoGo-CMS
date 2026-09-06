@@ -310,7 +310,8 @@ export const vi = {
   'admins.field.password': 'Mật khẩu khởi tạo',
   'admins.field.passwordHint': 'Tối thiểu 12 ký tự. Server áp ngưỡng này, không phải form.',
   'admins.field.role': 'Vai',
-  'admins.field.roleHint': 'Bốn vai server cấp. CMS không tự thêm vai nào khác.',
+  'admins.field.roleHint':
+    'Ba vai console cấp được. Super admin do bootstrap tạo một lần cho mỗi environment, không tạo từ đây.',
   'admins.error.displayName': 'Nhập tên hiển thị.',
   'admins.error.email': 'Email không hợp lệ.',
   'admins.error.password': 'Mật khẩu phải từ 12 ký tự.',
@@ -1927,7 +1928,11 @@ export const vi = {
   'admins.error.selfRole': 'Bạn không tự đổi vai mình — cần một super admin khác thao tác.',
   'admins.error.selfSuspend': 'Bạn không tự đình chỉ tài khoản của mình.',
   'admins.error.lastSuperAdmin':
-    'Đây là super admin đang hoạt động cuối cùng — hạ vai hay đình chỉ sẽ khiến console không còn ai quản trị.',
+    'Vai super admin không bỏ được: mỗi environment chỉ có đúng một, hạ vai hay đình chỉ sẽ khiến console không còn ai quản trị.',
+  'admins.error.superAdminSingleton':
+    'Mỗi environment chỉ có đúng một super admin. Không tạo mới và không thăng cấp tài khoản nào vào vai này.',
+  'admins.superAdminLocked':
+    'Tài khoản super admin: vai cố định, không đình chỉ được. Mật khẩu thì vẫn đổi được — dùng đổi mật khẩu hoặc cấp mật khẩu tạm.',
   'admins.temp.title': 'Mật khẩu tạm — hiện đúng một lần',
   'admins.temp.warn':
     'Mật khẩu này không xem lại được và không nằm ở đâu khác. Chuyển cho chủ tài khoản qua kênh an toàn trước khi đóng.',

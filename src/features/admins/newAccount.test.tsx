@@ -20,15 +20,22 @@ async function fillForm(
 }
 
 describe('NewAccountScreen (CMS-020)', () => {
-  it('offers only the four roles the server grants', async () => {
+  it('offers only the roles this console can grant — never super_admin', async () => {
     signInAs('super_admin')
     renderWithProviders(<NewAccountScreen />)
 
     const select = await screen.findByLabelText(/^Vai/)
     const values = Array.from(select.querySelectorAll('option')).map((o) => o.getAttribute('value'))
-    // The design showed seven. The contract enum has four, and the picker is
-    // built from that enum so it cannot drift.
-    expect(values).toEqual(['editor', 'moderator', 'ops_admin', 'super_admin'])
+    // The design showed seven. The contract's assignable enum has three, and the
+    // picker is built from that enum so it cannot drift.
+    //
+    // `super_admin` is absent because an environment has exactly one and it is
+    // bootstrapped, not created (GoGo-BE ADR-0018). The server still accepts the
+    // value in its request enum — narrowing that is a breaking change waiting on
+    // this deploy — and answers 409 SUPER_ADMIN_SINGLETON to it. Offering an
+    // option whose only outcome is a 409 is a dead control.
+    expect(values).toEqual(['editor', 'moderator', 'ops_admin'])
+    expect(values).not.toContain('super_admin')
   })
 
   it('creates the account and never echoes the password back', async () => {

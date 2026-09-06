@@ -23,6 +23,27 @@ export const adminRoleSchema = z.enum(['editor', 'moderator', 'ops_admin', 'supe
 export type AdminRole = z.infer<typeof adminRoleSchema>
 
 /**
+ * The roles this console can hand out (GoGo-BE ADR-0018).
+ *
+ * An environment holds at most one `super_admin` before it is bootstrapped and
+ * exactly one after. That account comes from the bootstrap command, not from
+ * here: creating a second or promoting anyone into the role is refused by the
+ * API with `409 SUPER_ADMIN_SINGLETON`, and by a unique index behind it.
+ *
+ * Deliberately separate from `adminRoleSchema` rather than a narrowing of it.
+ * **Reading is unaffected** — the account list still shows, filters and badges a
+ * `super_admin`, because one exists and hiding it would make the list lie. Only
+ * the two *write* paths, create and role-change, use this.
+ *
+ * The server's request enum still lists all four values: removing one is a
+ * breaking contract change and it waits until no client sends it. This is the
+ * client half of that sequence, so the console stops offering a value the API
+ * answers 409 to.
+ */
+export const adminAssignableRoleSchema = z.enum(['editor', 'moderator', 'ops_admin'])
+export type AdminAssignableRole = z.infer<typeof adminAssignableRoleSchema>
+
+/**
  * `GET /cms/auth/admins` (GoGo-BE#220).
  *
  * Two states, because two is what the guard enforces: a `suspended` account

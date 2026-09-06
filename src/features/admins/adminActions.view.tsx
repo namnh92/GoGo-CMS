@@ -7,7 +7,11 @@ import { Button } from '@/shared/ui/Button'
 import { Select, TextArea } from '@/shared/ui/Field'
 import { Modal } from '@/shared/ui/Overlay'
 import { useToast } from '@/shared/ui/Toast'
-import { adminRoleSchema, type AdminRole, type CmsAdmin } from '@/shared/api/contracts'
+import {
+  adminAssignableRoleSchema,
+  type AdminAssignableRole,
+  type CmsAdmin,
+} from '@/shared/api/contracts'
 import {
   reactivateAdmin,
   resetAdminPassword,
@@ -22,8 +26,9 @@ export type AdminAction = 'edit' | 'suspend' | 'reactivate' | 'reset'
 /**
  * The four staff-account mutations (#248), each behind a dialog that demands
  * the reason the audit log will carry. Server refusals the model declares —
- * `SELF_ROLE_CHANGE`, `SELF_SUSPEND`, `LAST_SUPER_ADMIN` — render as their own
- * explanations rather than a generic failure.
+ * `SELF_ROLE_CHANGE`, `SELF_SUSPEND`, `LAST_SUPER_ADMIN`,
+ * `SUPER_ADMIN_SINGLETON` — render as their own explanations rather than a
+ * generic failure.
  */
 export function AdminActionDialog({
   action,
@@ -39,7 +44,29 @@ export function AdminActionDialog({
   const queryClient = useQueryClient()
 
   const [reason, setReason] = useState('')
-  const [role, setRole] = useState<AdminRole>(admin.role)
+  /**
+   * The role a change would move this account *to*. A `super_admin` subject has
+   * no such value — the role cannot be given up (ADR-0018) — so the picker is
+   * not rendered for one and this falls back to the first assignable role,
+   * which nothing reads in that case.
+   */
+  const [role, setRole] = useState<AdminAssignableRole>(() =>
+    admin.role === 'super_admin' ? adminAssignableRoleSchema.options[0] : admin.role,
+  )
+  /** The bootstrapped account: its role is fixed, its credentials are not. */
+  const isSuperAdmin = admin.role === 'super_admin'
+  /**
+   * Two actions have nothing to do on that account and the server refuses both
+   * (`LAST_SUPER_ADMIN`): its role cannot be given up and it cannot be
+   * suspended, because there is by construction no second super admin to
+   * administer the console afterwards. The list does not offer them; this
+   * refuses them again rather than sending a request whose only outcome is a
+   * 409 — a submit that can only fail is a dead control.
+   *
+   * Reset and reactivate stay available: credentials are not frozen, and
+   * rotating this account's password is the supported path (ADR-0018).
+   */
+  const refused = isSuperAdmin && (action === 'edit' || action === 'suspend')
   const [error, setError] = useState<string | null>(null)
   const [tempPassword, setTempPassword] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
@@ -51,6 +78,7 @@ export function AdminActionDialog({
       if (cause.code === 'SELF_ROLE_CHANGE') return t('admins.error.selfRole')
       if (cause.code === 'SELF_SUSPEND') return t('admins.error.selfSuspend')
       if (cause.code === 'LAST_SUPER_ADMIN') return t('admins.error.lastSuperAdmin')
+      if (cause.code === 'SUPER_ADMIN_SINGLETON') return t('admins.error.superAdminSingleton')
       return cause.message
     }
     return t('error.UNKNOWN')
@@ -81,6 +109,7 @@ export function AdminActionDialog({
 
   const submit = () => {
     setError(null)
+    if (refused) return
     if (reason.trim().length < 3) {
       setError(t('admins.reasonRequired'))
       return
@@ -130,6 +159,7 @@ export function AdminActionDialog({
           <Button
             variant={action === 'suspend' || action === 'reset' ? 'danger' : 'primary'}
             loading={mutation.isPending}
+            disabled={refused}
             onClick={submit}
           >
             {t(`admins.action.${action}` as const)}
@@ -141,15 +171,27 @@ export function AdminActionDialog({
         <p className={styles.dialogTarget}>
           {admin.displayName} · <span className={styles.email}>{admin.email}</span>
         </p>
-        <p className={styles.dialogHint}>{t(`admins.actionHint.${action}` as const)}</p>
+        {refused ? null : (
+          <p className={styles.dialogHint}>{t(`admins.actionHint.${action}` as const)}</p>
+        )}
 
-        {action === 'edit' ? (
+        {refused ? (
+          // No picker and no disabled one: there is no value it could hold. The
+          // role is fixed for the life of the environment, and saying so is
+          // more use than an empty control.
+          <p role="alert" className={styles.dialogError}>
+            <span aria-hidden="true">⚠</span>
+            {t('admins.superAdminLocked')}
+          </p>
+        ) : null}
+
+        {action === 'edit' && !isSuperAdmin ? (
           <Select
             label={t('admins.col.role')}
             value={role}
-            onChange={(event) => setRole(event.target.value as AdminRole)}
+            onChange={(event) => setRole(event.target.value as AdminAssignableRole)}
           >
-            {adminRoleSchema.options.map((value) => (
+            {adminAssignableRoleSchema.options.map((value) => (
               <option key={value} value={value}>
                 {t(`role.${value}` as const)}
               </option>
