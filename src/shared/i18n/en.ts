@@ -11,6 +11,7 @@ export const en: Partial<Record<MessageKey, string>> = {
   'app.skipToContent': 'Skip to main content',
   'app.notifications': 'Notifications',
   'app.signOut': 'Sign out',
+  'app.changePassword': 'Change password',
   'app.mainNav': 'Main navigation',
   'app.shortcut.cmdK': '⌘K',
   'app.shortcut.ctrlK': 'Ctrl K',
@@ -1290,6 +1291,18 @@ export const en: Partial<Record<MessageKey, string>> = {
   'auth.change.tooShort': 'The new password needs at least 12 characters.',
   'auth.change.mismatch': 'The two entries do not match.',
   'auth.change.unchanged': 'The new password must differ from the temporary one.',
+  'account.password.title': 'Change password',
+  'account.password.subtitle':
+    'Change your own password. No reset needed and no reason required — this is routine, not an incident.',
+  'account.password.current': 'Current password',
+  'account.password.currentHint':
+    'Required: it proves the person typing owns the account, rather than someone who got hold of a session.',
+  'account.password.sessionNote':
+    'This session — this tab — is kept. Every other session of your account, on other devices or browsers, is revoked immediately. The change is written to the audit log.',
+  'account.password.submit': 'Change password',
+  'account.password.done': 'Password changed.',
+  'account.password.doneHint':
+    'The new password is live. You are still signed in here; every other session has been revoked and must sign in again with the new password.',
 
   'admins.col.mfa': 'MFA',
   'admins.col.obligation': 'Obligation',

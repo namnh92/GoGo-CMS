@@ -9,6 +9,7 @@ export const vi = {
   'app.skipToContent': 'Bỏ qua tới nội dung chính',
   'app.notifications': 'Thông báo',
   'app.signOut': 'Đăng xuất',
+  'app.changePassword': 'Đổi mật khẩu',
   'app.mainNav': 'Điều hướng chính',
   'app.shortcut.cmdK': '⌘K',
   'app.shortcut.ctrlK': 'Ctrl K',
@@ -1902,6 +1903,18 @@ export const vi = {
   'auth.change.tooShort': 'Mật khẩu mới cần tối thiểu 12 ký tự.',
   'auth.change.mismatch': 'Hai lần nhập không khớp.',
   'auth.change.unchanged': 'Mật khẩu mới phải khác mật khẩu tạm.',
+  'account.password.title': 'Đổi mật khẩu',
+  'account.password.subtitle':
+    'Đổi mật khẩu của chính bạn. Không cần ai reset, không cần lý do — đây là việc bình thường, không phải sự cố.',
+  'account.password.current': 'Mật khẩu hiện tại',
+  'account.password.currentHint':
+    'Bắt buộc: nó chứng minh người đang gõ là chủ tài khoản, chứ không phải ai đó mượn được phiên đăng nhập.',
+  'account.password.sessionNote':
+    'Phiên hiện tại (tab này) được giữ nguyên. Mọi phiên khác của tài khoản — thiết bị khác, trình duyệt khác — bị thu hồi ngay. Thay đổi được ghi vào audit log.',
+  'account.password.submit': 'Đổi mật khẩu',
+  'account.password.done': 'Đã đổi mật khẩu.',
+  'account.password.doneHint':
+    'Mật khẩu mới có hiệu lực ngay. Bạn vẫn đang đăng nhập ở tab này; mọi phiên khác đã bị thu hồi và phải đăng nhập lại bằng mật khẩu mới.',
 
   'admins.col.mfa': 'MFA',
   'admins.col.obligation': 'Nghĩa vụ',

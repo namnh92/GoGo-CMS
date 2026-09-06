@@ -7,7 +7,6 @@ import { useI18n, useT } from '@/shared/i18n/i18n'
 import { useSession } from '@/shared/auth/session'
 import { landingPathFor } from '@/shared/auth/permissions'
 import { getAppEnvironment } from '@/shared/config/env'
-import { changeOwnPassword } from '@/features/admins/api'
 import { ApiError } from '@/shared/api/errors'
 import { Button, IconButton } from '@/shared/ui/Button'
 import { TextInput } from '@/shared/ui/Field'
@@ -19,6 +18,7 @@ import {
   LockIcon,
   LogoMark,
 } from '@/shared/ui/icons'
+import { useChangeOwnPassword } from './useChangeOwnPassword'
 import { styles } from './login.style'
 
 // One schema, used by the form resolver. Never duplicated for the request.
@@ -64,9 +64,10 @@ export default function LoginScreen() {
   const [step, setStep] = useState<Step>('credentials')
   const [formError, setFormError] = useState<string | null>(null)
   const [showPassword, setShowPassword] = useState(false)
-  const [newPassword, setNewPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
-  const [changing, setChanging] = useState(false)
+  // Shared with the self-service screen (CMS-032): same floor, same
+  // confirmation, same refusals — the only difference is where the current
+  // password comes from.
+  const changePassword = useChangeOwnPassword()
   /** Where to land once the obligation is cleared. */
   const pendingDestination = useRef<string>('/')
   const otpRef = useRef<HTMLInputElement | null>(null)
@@ -144,35 +145,10 @@ export default function LoginScreen() {
   const submitChangePassword = async (event: React.FormEvent) => {
     event.preventDefault()
     setFormError(null)
-    if (newPassword.length < 12) {
-      setFormError(t('auth.change.tooShort'))
-      return
-    }
-    if (newPassword !== confirmPassword) {
-      setFormError(t('auth.change.mismatch'))
-      return
-    }
-    setChanging(true)
-    try {
-      await changeOwnPassword({
-        // The temporary password the operator just signed in with proves the
-        // caller is the person it was handed to.
-        currentPassword: getValues('password'),
-        newPassword,
-      })
+    // The temporary password the operator just signed in with proves the caller
+    // is the person it was handed to.
+    if (await changePassword.submit(getValues('password'))) {
       navigate(pendingDestination.current, { replace: true })
-    } catch (error) {
-      if (error instanceof ApiError && error.code === 'PASSWORD_UNCHANGED') {
-        setFormError(t('auth.change.unchanged'))
-      } else if (error instanceof ApiError && error.status === 401) {
-        setFormError(t('auth.badCredentials'))
-      } else if (error instanceof ApiError) {
-        setFormError(error.message)
-      } else {
-        setFormError(t('error.UNKNOWN'))
-      }
-    } finally {
-      setChanging(false)
     }
   }
 
@@ -261,26 +237,26 @@ export default function LoginScreen() {
                   autoComplete="new-password"
                   required
                   hint={t('auth.change.hint')}
-                  value={newPassword}
-                  onChange={(event) => setNewPassword(event.target.value)}
+                  value={changePassword.newPassword}
+                  onChange={(event) => changePassword.setNewPassword(event.target.value)}
                 />
                 <TextInput
                   label={t('auth.change.confirmPassword')}
                   type="password"
                   autoComplete="new-password"
                   required
-                  value={confirmPassword}
-                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  value={changePassword.confirmPassword}
+                  onChange={(event) => changePassword.setConfirmPassword(event.target.value)}
                 />
               </div>
-              {formError ? (
+              {(changePassword.error ?? formError) ? (
                 <p role="alert" className={`${styles.alertDanger} mt-4`}>
                   <span aria-hidden="true">⚠</span>
-                  {formError}
+                  {changePassword.error ?? formError}
                 </p>
               ) : null}
               <div className="mt-4 flex flex-col gap-2">
-                <Button type="submit" variant="primary" loading={changing}>
+                <Button type="submit" variant="primary" loading={changePassword.pending}>
                   {t('auth.change.submit')}
                 </Button>
               </div>
