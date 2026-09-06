@@ -232,22 +232,22 @@ Backend cho toàn bộ nhóm này **đã xong và đang chạy** (GoGo-BE `devel
 
 ## Màn hình đã dựng
 
-| Route             | Màn                                                                                                                                               | WBS                             |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
-| `/login`          | Đăng nhập + TOTP, xử lý `MFA_REQUIRED` / `MFA_SETUP_REQUIRED`                                                                                     | CMS-001                         |
-| `/`               | Dashboard vận hành: KPI, xu hướng, provider health, activity, alert                                                                               | CMS-010                         |
-| `/places`         | Danh sách catalog: tab trạng thái + `Cần xác minh lại` + `Trùng lặp`, lọc, bulk action                                                            | CMS-002, CMS-003, CMS-004       |
-| `/places/:id`     | Editor: định danh, khu vực khám phá, địa chỉ hành chính + liên hệ, phân loại, geo, giờ, giá, nguồn, provenance từng trường, freshness, audit diff | CMS-002, CMS-003, CMS-044       |
-| `/imports`        | Lịch sử phiên nhập, tiến trình, start/cancel/retry, báo cáo lỗi                                                                                   | PI-CMS-001, PI-CMS-003, CMS-009 |
-| `/imports/new`    | Wizard: nguồn → ánh xạ cột (preview CSV) → chế độ ghi                                                                                             | PI-CMS-001, PI-CMS-002          |
-| `/imports/:jobId` | Chi tiết phiên: tổng quan, lọc dòng, xác nhận/gộp/bỏ qua, publish                                                                                 | PI-CMS-003..006                 |
-| `/moderation`     | Hàng chờ: đánh giá, báo cáo, địa điểm người dùng gửi, check-in                                                                                    | CMS-007, PI-CMS-007             |
-| `/taxonomy`       | Khoá phân loại theo nhóm, nhãn vi/en, synonym, bật/tắt                                                                                            | CMS-005                         |
-| `/collections`    | Bộ sưu tập biên tập: form, trạng thái, đọc/ghi thứ tự địa điểm                                                                                    | CMS-006, CMS-012                |
-| `/audit`          | Nhật ký kiểm toán: lọc, rà soát gỡ khẩn cấp, diff before/after                                                                                    | CMS-014                         |
-| `/search-quality` | Chất lượng tìm kiếm: tỷ lệ zero-result kèm mẫu số, truy vấn hỏng                                                                                  | CMS-015                         |
-| `/settings`       | Cờ tính năng, trọng số ranking (bốn mắt + rollback), thử nghiệm A/B, đánh giá offline                                                             | CMS-008, CMS-013                |
-| `/costs/manual`   | Chi phí thủ công: phí cố định nhập tay → dòng MANUAL trong Cost Center, có audit                                                                  | COST-CMS-010                    |
+| Route             | Màn                                                                                                                                                                                            | WBS                                                  |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `/login`          | Đăng nhập + TOTP, xử lý `MFA_REQUIRED` / `MFA_SETUP_REQUIRED`                                                                                                                                  | CMS-001                                              |
+| `/`               | Dashboard vận hành: KPI, xu hướng, provider health, activity, alert                                                                                                                            | CMS-010                                              |
+| `/places`         | Danh sách catalog: tab trạng thái + `Cần xác minh lại` + `Trùng lặp`, lọc, bulk action                                                                                                         | CMS-002, CMS-003, CMS-004                            |
+| `/places/:id`     | Editor: định danh, khu vực khám phá, địa chỉ hành chính + liên hệ, phân loại, toạ độ, giờ mở cửa theo nhóm ngày, giá, ảnh, nguồn, provenance từng trường, checklist trước xuất bản, audit diff | CMS-002, CMS-003, CMS-044, CMS-045, CMS-046, CMS-048 |
+| `/imports`        | Lịch sử phiên nhập, tiến trình, start/cancel/retry, báo cáo lỗi                                                                                                                                | PI-CMS-001, PI-CMS-003, CMS-009                      |
+| `/imports/new`    | Wizard: nguồn → ánh xạ cột (preview CSV) → chế độ ghi                                                                                                                                          | PI-CMS-001, PI-CMS-002                               |
+| `/imports/:jobId` | Chi tiết phiên: tổng quan, lọc dòng, xác nhận/gộp/bỏ qua, publish                                                                                                                              | PI-CMS-003..006                                      |
+| `/moderation`     | Hàng chờ: đánh giá, báo cáo, địa điểm người dùng gửi, check-in                                                                                                                                 | CMS-007, PI-CMS-007                                  |
+| `/taxonomy`       | Khoá phân loại theo nhóm, nhãn vi/en, synonym, bật/tắt                                                                                                                                         | CMS-005                                              |
+| `/collections`    | Bộ sưu tập biên tập: form, trạng thái, đọc/ghi thứ tự địa điểm                                                                                                                                 | CMS-006, CMS-012                                     |
+| `/audit`          | Nhật ký kiểm toán: lọc, rà soát gỡ khẩn cấp, diff before/after                                                                                                                                 | CMS-014                                              |
+| `/search-quality` | Chất lượng tìm kiếm: tỷ lệ zero-result kèm mẫu số, truy vấn hỏng                                                                                                                               | CMS-015                                              |
+| `/settings`       | Cờ tính năng, trọng số ranking (bốn mắt + rollback), thử nghiệm A/B, đánh giá offline                                                                                                          | CMS-008, CMS-013                                     |
+| `/costs/manual`   | Chi phí thủ công: phí cố định nhập tay → dòng MANUAL trong Cost Center, có audit                                                                                                               | COST-CMS-010                                         |
 
 ## Trạng thái
 
@@ -264,7 +264,7 @@ nên đây là việc đọc lại contract, không phải đổi URL:
 
 | Endpoint                                          | Điều làm UI phải sửa theo                                                                                                                                                                                                                                                                                                                                     |
 | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /cms/places/{id}` → `CmsPlaceDetail`         | Hai rating tách riêng, **không** có điểm tổng hợp; hours/prices mang nguồn + lần xác minh; sources mang attribution; media là storage key + trạng thái kiểm duyệt; `provenance` là map theo tên trường — **trường vắng mặt là chưa ghi nhận nguồn**, không được mặc định thành GoGo                                                                           |
+| `GET /cms/places/{id}` → `CmsPlaceDetail`         | Hai rating tách riêng, **không** có điểm tổng hợp; hours/prices mang nguồn + lần xác minh; sources mang attribution; `media[]` là `CmsPlaceMedia` (ảnh bìa trước, `url` null khi môi trường chưa cấu hình lưu trữ); `provenance` là map theo tên trường — **trường vắng mặt là chưa ghi nhận nguồn**, không được mặc định thành GoGo                          |
 | `PATCH /cms/places/{id}`                          | `null` xoá một trường, thiếu khoá là giữ nguyên — chỉ gửi khoá thật sự đổi để không nhận vơ provenance; `expectedUpdatedAt` là optimistic concurrency, lệch thì `409 PLACE_MODIFIED` kèm `updatedAt` hiện tại trong `field_errors[0].message`; `phone`/`website` do máy chủ chuẩn hoá (E.164, http/https) — client gửi nguyên văn rồi hiển thị `field_errors` |
 | `GET /cms/areas` → `CmsArea[]`                    | Từ vựng của `areaKey` (`service_areas`), **không phải taxonomy**; `known: false` là khoá địa điểm đang giữ mà danh mục không có (cột chưa bao giờ là khoá ngoại); `includeInactive=true` để hiện lại khu vực đã ngừng                                                                                                                                         |
 | `GET /cms/audit`, `GET /cms/places/{id}/audit`    | `actorRole`, `breakGlass`, `authorizationPath`, `requestId`, cursor                                                                                                                                                                                                                                                                                           |
@@ -303,6 +303,34 @@ Ba màn mới mở khoá theo:
   boundary. Điều kiện gỡ ở
   [`docs/adr/0002-boundary-validation.md`](docs/adr/0002-boundary-validation.md).
 
+### Ảnh địa điểm (CMS-046)
+
+Đường đi của một tấm ảnh là **tải lên → gắn → kiểm duyệt → hiển thị**, và ba
+bước đầu đều nằm trong Place Editor:
+
+- `POST /cms/uploads` cấp một PUT đã ký với `purpose: place_image`; trình duyệt
+  gửi byte **thẳng lên kho lưu trữ**, byte không đi qua API. Dung lượng được
+  khai trước nên ảnh quá 10 MB bị từ chối _trước khi_ có URL — console kiểm tra
+  ngay tại chỗ và nói rõ tệp nào, không tốn một vòng gọi.
+- Hàng đợi tải lên chạy **độc lập từng tệp**: mỗi tệp có ảnh thu nhỏ, tiến độ,
+  lỗi và nút thử lại riêng. Một tệp hỏng không kéo theo những tệp đã xong.
+- `POST /cms/places/{placeId}/media` nhận **khoá**, không nhận byte. Khoá lạ,
+  hết hạn, sai mục đích hay đã dùng đều bị từ chối giống hệt nhau
+  (`INVALID_UPLOAD_KEY`), nên người gọi chỉ biết khoá _của mình_ không dùng
+  được — không biết khoá của người khác có tồn tại hay không.
+- Ảnh vừa gắn **luôn ở trạng thái chờ duyệt**: người tải lên không mặc nhiên là
+  người quyết định ảnh được công bố. Đổi trạng thái bắt buộc kèm lý do (≥ 3 ký
+  tự); từ chối một ảnh sẽ tự bỏ vai trò ảnh bìa của nó, vì người dùng cuối chỉ
+  thấy ảnh đã duyệt.
+- `url` **null** nghĩa là môi trường chưa cấu hình kho ảnh — một sự vắng mặt
+  trung thực, không phải lỗi. Console hiển thị đúng như thế và **khoá** nút kiểm
+  duyệt kèm lý do: quyết định về một tấm ảnh không nhìn thấy được thì không phải
+  kiểm duyệt.
+- Sắp xếp thao tác được **bằng bàn phím** (nút lên/xuống ghi `sortOrder`), không
+  chỉ bằng kéo thả. Gỡ ảnh là **gỡ chứ không xoá**: hàng `place_media` biến mất,
+  tệp trong kho ở lại — dialog xác nhận nói đúng như vậy.
+- `sourceType` và `attribution` luôn hiển thị cùng ảnh (FR-INGEST-014).
+
 ### Gỡ khẩn cấp (break-glass, SEC-001)
 
 Ba route `/cms/emergency/*` (GoGo-BE#149) đã có UI (#19). Thiết kế cố ý bất đối
@@ -321,8 +349,3 @@ nói thẳng rằng thao tác được ghi audit kèm vai/IP/request id và bắ
 ### Chưa dựng UI
 
 - SSO chờ IdP ([GoGo-BE#62](https://github.com/namnh92/GoGo-BE/issues/62)); hiện chỉ mật khẩu + TOTP.
-- **Thêm/sửa ảnh địa điểm.** `CmsPlaceDetail` đọc được media (storage key +
-  trạng thái kiểm duyệt) nhưng không có route CMS nào tải lên hay gắn ảnh vào
-  place: `POST /uploads` là endpoint của người dùng cuối và `PATCH /cms/places/{id}`
-  không nhận media. Place Editor vì thế **liệt kê** media chứ không mời một nút
-  chỉ có thể thất bại. → [GoGo-BE#191](https://github.com/namnh92/GoGo-BE/issues/191)

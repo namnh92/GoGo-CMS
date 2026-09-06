@@ -117,9 +117,38 @@ export const PLACE_HOUR_FIELD_LIMITS = {
   closeMinute: { kind: 'number', min: H.minuteOfDay.min, max: H.minuteOfDay.max, integer: true },
 } as const satisfies Record<string, PlaceFieldLimit>
 
+/**
+ * `POST|PATCH /cms/places/{placeId}/media` (GoGo-BE#191).
+ *
+ * `maxUploadBytes` is the presigner's ceiling, mirrored here because the size
+ * is declared to `POST /cms/uploads` up front: an oversized file is refused
+ * *before* a URL exists, so checking it in the browser saves a round-trip and
+ * lets the refusal name the file it is about.
+ */
+export const PLACE_MEDIA_LIMITS = {
+  maxUploadBytes: 10 * 1024 * 1024,
+  storageKey: { max: 400 },
+  caption: { max: 300 },
+  attribution: { max: 300 },
+  /** A decision with a two-character reason is not auditable, hence min 3. */
+  moderationReason: { min: 3, max: 500 },
+  sortOrder: { min: 0, max: 999 },
+} as const
+
+const M = PLACE_MEDIA_LIMITS
+
+export const PLACE_MEDIA_FIELD_LIMITS = {
+  storageKey: { kind: 'text', max: M.storageKey.max },
+  caption: { kind: 'text', max: M.caption.max },
+  attribution: { kind: 'text', max: M.attribution.max },
+  moderationReason: { kind: 'text', min: M.moderationReason.min, max: M.moderationReason.max },
+  sortOrder: { kind: 'number', min: M.sortOrder.min, max: M.sortOrder.max, integer: true },
+} as const satisfies Record<string, PlaceFieldLimit>
+
 const LIMITS_BY_NAME: Record<string, PlaceFieldLimit> = {
   ...PLACE_FIELD_LIMITS,
   ...PLACE_HOUR_FIELD_LIMITS,
+  ...PLACE_MEDIA_FIELD_LIMITS,
 }
 
 /**
@@ -196,6 +225,51 @@ export const cmsPlaceHoursSchema = z.object({
     .max(H.maxRows),
   expectedUpdatedAt: z.string().datetime({ offset: true }).optional(),
 })
+
+/** `POST /cms/places/{placeId}/media` — a key, never bytes. */
+export const cmsPlaceMediaAttachSchema = z.object({
+  storageKey: z.string().min(1).max(M.storageKey.max),
+  caption: z.string().max(M.caption.max).nullish(),
+  attribution: z.string().max(M.attribution.max).nullish(),
+  isCover: z.boolean().optional(),
+  width: z.number().int().nullish(),
+  height: z.number().int().nullish(),
+})
+
+/**
+ * `PATCH /cms/places/{placeId}/media/{mediaId}`.
+ *
+ * `minProperties: 1` in the spec: an empty patch is refused rather than
+ * writing an audit row that records nothing. The moderation-needs-a-reason
+ * rule is NOT here, because the server applies it only when the decision
+ * actually changes — that needs the row's current value, which a body schema
+ * does not have. `moderationReasonMissing` below is that check.
+ */
+export const cmsPlaceMediaPatchSchema = z
+  .object({
+    sortOrder: z.number().int().min(M.sortOrder.min).max(M.sortOrder.max).optional(),
+    moderation: z.enum(['pending', 'approved', 'rejected']).optional(),
+    moderationReason: z.string().min(M.moderationReason.min).max(M.moderationReason.max).optional(),
+    caption: z.string().max(M.caption.max).nullish(),
+    attribution: z.string().max(M.attribution.max).nullish(),
+    isCover: z.boolean().optional(),
+  })
+  .refine((body) => Object.keys(body).length > 0, {
+    message: 'At least one property is required',
+  })
+
+/**
+ * True when this patch changes the decision and carries no usable reason —
+ * exactly the branch `CmsPlaceMediaService#update` answers `400` on, with
+ * `field_errors[0].field === 'moderationReason'`.
+ */
+export function moderationReasonMissing(
+  current: string,
+  patch: { moderation?: string | undefined; moderationReason?: string | undefined },
+): boolean {
+  if (patch.moderation === undefined || patch.moderation === current) return false
+  return (patch.moderationReason?.trim().length ?? 0) < M.moderationReason.min
+}
 
 /**
  * The rules `validateWeek` enforces on GoGo-BE beyond the row shape

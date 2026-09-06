@@ -669,6 +669,89 @@ export const vi = {
   'mediaModeration.pending': 'Chờ duyệt',
   'mediaModeration.approved': 'Đã duyệt',
   'mediaModeration.rejected': 'Đã từ chối',
+
+  /* Nguồn ảnh — điều khoản của nhà cung cấp đi kèm ảnh ở mọi nơi (FR-INGEST-014). */
+  'mediaSource.editorial': 'Biên tập',
+  'mediaSource.provider': 'Nhà cung cấp',
+  'mediaSource.community': 'Cộng đồng',
+  'mediaSource.google_derived': 'Từ dữ liệu Google',
+
+  /* CMS-046 — thư viện ảnh địa điểm */
+  'placeMedia.hint':
+    'Ảnh tải thẳng lên kho lưu trữ rồi mới gắn vào địa điểm. Chỉ ảnh đã duyệt mới hiển thị cho người dùng.',
+  'placeMedia.drop.title': 'Kéo thả ảnh vào đây',
+  'placeMedia.drop.hint':
+    'JPEG, PNG, WebP hoặc HEIC, tối đa {max} mỗi ảnh. Chọn được nhiều ảnh cùng lúc; mỗi ảnh tải lên độc lập.',
+  'placeMedia.drop.choose': 'Chọn ảnh từ máy',
+  'placeMedia.drop.pick': 'Chọn từ ảnh GoGo',
+  'placeMedia.queue.title': 'Đang xử lý {count} ảnh',
+  'placeMedia.queue.clear': 'Dọn danh sách đã xong',
+  'placeMedia.queue.uploading': 'Đang tải lên kho lưu trữ',
+  'placeMedia.queue.attaching': 'Đang gắn vào địa điểm',
+  'placeMedia.queue.done': 'Đã thêm vào địa điểm',
+  'placeMedia.queue.failed': 'Không thêm được',
+  'placeMedia.queue.retry': 'Thử lại',
+  'placeMedia.queue.remove': 'Bỏ {name} khỏi danh sách',
+  'placeMedia.queue.progress': 'Tiến độ tải {name}',
+  'placeMedia.error.tooLarge':
+    'Ảnh vượt quá {max}. Máy chủ từ chối trước khi cấp đường dẫn tải lên.',
+  'placeMedia.error.reasonRequired': 'Quyết định kiểm duyệt phải có lý do.',
+  'placeMedia.error.reasonTooShort': 'Lý do cần ít nhất {min} ký tự.',
+  'placeMedia.photoUncaptioned': 'Ảnh địa điểm, chưa có chú thích mô tả',
+  'placeMedia.noStorage': 'Chưa có kho ảnh',
+  'placeMedia.noStorageReason':
+    'Chưa cấu hình lưu trữ ảnh ở môi trường này, nên không xem được ảnh — và không quyết định kiểm duyệt được thứ mình không nhìn thấy.',
+  'placeMedia.cover': 'Ảnh bìa',
+  'placeMedia.setCover': 'Đặt làm ảnh bìa',
+  'placeMedia.coverRejected': 'Ảnh đã bị từ chối thì không làm ảnh bìa được.',
+  'placeMedia.moveUp': 'Đưa ảnh thứ {position} lên trước',
+  'placeMedia.moveDown': 'Đưa ảnh thứ {position} xuống sau',
+  'placeMedia.moderate': 'Kiểm duyệt',
+  'placeMedia.moderationTitle': 'Quyết định kiểm duyệt ảnh',
+  'placeMedia.moderationCurrent': 'Trạng thái hiện tại:',
+  'placeMedia.moderationDecision': 'Quyết định',
+  'placeMedia.moderationReason': 'Lý do',
+  'placeMedia.moderationReasonHint':
+    'Lý do được ghi vào nhật ký cùng người quyết định và thời điểm, để người sau biết ảnh bị từ chối vì mờ hay vì lộ mặt người.',
+  'placeMedia.moderationReasonRequired': 'Bắt buộc, tối thiểu 3 ký tự.',
+  'placeMedia.moderationSubmit': 'Ghi quyết định',
+  'placeMedia.moderationNoChange': 'Quyết định đang chọn trùng trạng thái hiện tại.',
+  'placeMedia.moderationClearsCover': 'Từ chối ảnh này sẽ bỏ luôn vai trò ảnh bìa của nó.',
+  'placeMedia.moderationSaved': 'Đã ghi quyết định kiểm duyệt',
+  'placeMedia.reasonLabel': 'Lý do:',
+  'placeMedia.whoWhen': 'Ai quyết định và lúc nào: xem Nhật ký thay đổi của địa điểm.',
+  'placeMedia.details': 'Chú thích & nguồn',
+  'placeMedia.detailsHint': 'Chú thích hiển thị cho người dùng; nguồn ảnh đi kèm ảnh ở mọi nơi.',
+  'placeMedia.caption': 'Chú thích',
+  'placeMedia.captionEmpty': 'Chưa có chú thích',
+  'placeMedia.attribution': 'Nguồn / điều khoản',
+  'placeMedia.attributionHint':
+    'Ảnh của nhà cung cấp phải mang theo điều khoản của họ ở mọi nơi được hiển thị.',
+  'placeMedia.detach': 'Gỡ khỏi địa điểm',
+  'placeMedia.detachTitle': 'Gỡ ảnh khỏi địa điểm',
+  'placeMedia.detachDescription':
+    'Gỡ chứ không xoá: ảnh biến mất khỏi địa điểm này, tệp trong kho lưu trữ vẫn còn.',
+  'placeMedia.detachConfirm': 'Gỡ khỏi địa điểm',
+  'placeMedia.detachChangeLabel': 'Ảnh bị gỡ',
+  'placeMedia.detachCoverNote': 'Đây đang là ảnh bìa; địa điểm sẽ không còn ảnh bìa.',
+  'placeMedia.detachNoteLabel': 'Tệp trong kho lưu trữ',
+  'placeMedia.detachNote': 'Vẫn được giữ lại và có thể gắn lại sau.',
+  'placeMedia.detached': 'Đã gỡ ảnh khỏi địa điểm',
+  'placeMedia.attached': 'Đã thêm ảnh vào địa điểm',
+  'placeMedia.saved': 'Đã lưu chú thích và nguồn ảnh',
+  'placeMedia.pickTitle': 'Ảnh GoGo có thể gắn',
+  'placeMedia.pickDescription':
+    'Chỉ ảnh do chính bạn tải lên cho mục đích biên tập. Ảnh check-in của người dùng không nằm ở đây.',
+  'placeMedia.pickEmpty': 'Bạn chưa có ảnh nào chờ gắn',
+  'placeMedia.pickEmptyHint':
+    'Danh sách chỉ gồm ảnh do chính tài khoản này tải lên cho mục đích biên tập và chưa gắn ở đâu. Tải ảnh mới ở khung phía trên.',
+  'placeMedia.pickAttached': 'Đã có trên địa điểm',
+  'placeMedia.pickAttach': 'Gắn ảnh này',
+  'placeMedia.deniedHint':
+    'Vai trò của bạn xem được danh sách ảnh nhưng không tải lên, kiểm duyệt hay gỡ ảnh. Cần vai trò biên tập viên.',
+  'placeMedia.offlineHint': 'Mất kết nối tới máy chủ — thao tác ghi tạm khoá cho tới khi có lại.',
+  'placeMedia.pendingNote':
+    'Ảnh vừa gắn luôn ở trạng thái chờ duyệt: người tải lên không mặc nhiên là người quyết định ảnh được công bố.',
   'priceUnit.per_person': 'mỗi người',
   'priceUnit.per_item': 'mỗi món',
   'priceUnit.per_hour': 'mỗi giờ',
@@ -1366,6 +1449,14 @@ export const vi = {
 
   'error.SHEET_PERMISSION_DENIED': 'GoGo không có quyền đọc bảng tính này.',
   'error.UNKNOWN': 'Đã xảy ra lỗi không xác định.',
+  'error.INVALID_UPLOAD_KEY':
+    'Ảnh này không dùng được: khoá tải lên không phải của bạn, đã hết hạn, sai mục đích hoặc đã gắn ở nơi khác. Tải lại ảnh rồi thử lại.',
+  'error.PLACE_MEDIA_EXISTS': 'Ảnh này đã có trên địa điểm.',
+  'error.PLACE_MEDIA_NOT_FOUND': 'Không tìm thấy ảnh trên địa điểm này.',
+  'error.FILE_TOO_LARGE': 'Ảnh vượt quá dung lượng tối đa.',
+  'error.UNSUPPORTED_CONTENT_TYPE':
+    'Định dạng ảnh không được hỗ trợ. Dùng JPEG, PNG, WebP hoặc HEIC.',
+  'error.UPLOAD_NOT_CONFIGURED': 'Môi trường này chưa cấu hình kho lưu trữ ảnh.',
 
   'nav.banners': 'Banner',
 

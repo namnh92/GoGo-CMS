@@ -3,8 +3,12 @@ import {
   PLACE_CLEARABLE_FIELDS,
   PLACE_FIELD_LIMITS,
   PLACE_HOURS_LIMITS,
+  PLACE_MEDIA_LIMITS,
   cmsPlaceEditSchema,
   cmsPlaceHoursSchema,
+  cmsPlaceMediaAttachSchema,
+  cmsPlaceMediaPatchSchema,
+  moderationReasonMissing,
   placeFieldLimit,
   toFieldErrors,
 } from './cmsPlaceContract'
@@ -104,5 +108,47 @@ describe('CMS place write contract', () => {
     expect(result.success).toBe(false)
     if (result.success) return
     expect(toFieldErrors(result.error.issues)[0]?.field).toBe('(root)')
+  })
+})
+
+/**
+ * `POST|PATCH /cms/places/{placeId}/media` (GoGo-BE#191). Same discipline: the
+ * numbers are GoGo-BE's, spelled out so a change on either side fails a test
+ * rather than turning up as a rejected save nobody can explain.
+ */
+describe('CMS place media write contract', () => {
+  it('states the limits GoGo-BE enforces', () => {
+    expect(PLACE_MEDIA_LIMITS.maxUploadBytes).toBe(10 * 1024 * 1024)
+    expect(PLACE_MEDIA_LIMITS.storageKey.max).toBe(400)
+    expect(PLACE_MEDIA_LIMITS.caption.max).toBe(300)
+    expect(PLACE_MEDIA_LIMITS.attribution.max).toBe(300)
+    expect(PLACE_MEDIA_LIMITS.moderationReason).toMatchObject({ min: 3, max: 500 })
+    expect(PLACE_MEDIA_LIMITS.sortOrder).toMatchObject({ min: 0, max: 999 })
+  })
+
+  it('refuses an empty patch rather than writing an audit row for nothing', () => {
+    expect(cmsPlaceMediaPatchSchema.safeParse({}).success).toBe(false)
+    expect(cmsPlaceMediaPatchSchema.safeParse({ sortOrder: 3 }).success).toBe(true)
+  })
+
+  it('needs a reason only when the decision actually changes', () => {
+    // Re-sending the state a photo is already in is not a decision.
+    expect(moderationReasonMissing('pending', { moderation: 'pending' })).toBe(false)
+    expect(moderationReasonMissing('pending', { moderation: 'approved' })).toBe(true)
+    expect(
+      moderationReasonMissing('pending', { moderation: 'approved', moderationReason: 'ok' }),
+    ).toBe(true)
+    expect(
+      moderationReasonMissing('pending', { moderation: 'approved', moderationReason: 'quá mờ' }),
+    ).toBe(false)
+    // Reordering touches no decision, so it needs no reason.
+    expect(moderationReasonMissing('approved', {})).toBe(false)
+  })
+
+  it('takes a key, never bytes', () => {
+    expect(cmsPlaceMediaAttachSchema.safeParse({ storageKey: '' }).success).toBe(false)
+    expect(
+      cmsPlaceMediaAttachSchema.safeParse({ storageKey: 'cms/place_image/a/b.jpg' }).success,
+    ).toBe(true)
   })
 })

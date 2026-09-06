@@ -4,7 +4,10 @@ import type { AdminRole, CollectionStatus, PlaceStatus } from '@/shared/api/cont
 import {
   cmsPlaceEditMockSchema,
   cmsPlaceHoursSchema,
+  cmsPlaceMediaAttachSchema,
+  cmsPlaceMediaPatchSchema,
   mockHoursIssues,
+  moderationReasonMissing,
   toFieldErrors,
 } from '@/shared/api/cmsPlaceContract'
 import { ALLOWED_ACTIONS, ALLOWED_TRIGGERS } from '@/features/safety/conditions'
@@ -87,44 +90,98 @@ function csrfFailure(request: Request, cookies: Record<string, string>) {
  * Mutable copies so the mocked CMS behaves like a real one: a toggle stays
  * toggled, a merged duplicate leaves the queue, a published row moves state.
  */
-const db = {
-  places: places.map((place) => ({ ...place })),
-  areas: cmsAreas.map((area) => ({ ...area })),
-  taxonomies: taxonomies.map((item) => ({ ...item })),
-  collections: collections.map((item) => ({ ...item })),
-  flags: featureFlags.map((flag) => ({ ...flag })),
-  configs: rankingConfigs.map((config) => ({ ...config })),
-  jobs: importJobs.map((job) => ({ ...job })),
-  rows: JSON.parse(JSON.stringify(importRows)) as Record<string, ImportRow[]>,
-  duplicates: duplicateRows.map((row) => ({ ...row })),
-  reports: moderationReportQueue.map((row) => ({ ...row })),
-  checkins: moderationCheckinQueue.map((row) => ({ ...row })),
-  communityPlaces: communityPlaceQueue.map((row) => ({ ...row })),
-  reviewQueue: JSON.parse(JSON.stringify(moderationReviewQueue)) as typeof moderationReviewQueue,
-  submissions: placeSubmissions.map((item) => ({ ...item })),
-  experiments: experiments.map((item) => ({ ...item })),
-  items: JSON.parse(JSON.stringify(collectionItems)) as typeof collectionItems,
-  decidedSubmissions: decidedSubmissions.map((item) => ({ ...item })),
-  /** Upload keys issued this session; a banner may only reference one of them. */
-  uploads: [] as string[],
-  /** Counts break-glass calls so the burst limit is reachable in dev. */
-  takedowns: 0,
-  /** Audit entries written during this session, newest first. */
-  audit: [] as (typeof auditEntries)[number][],
-  /** Emails already taken, so the duplicate branch of admin creation is reachable. */
-  adminEmails: ['boss@gogo.vn', 'ops@gogo.vn', 'editor@gogo.vn', 'moderator@gogo.vn'],
-  admins: cmsAdmins.map((admin) => ({ ...admin })),
-  recommendations: JSON.parse(JSON.stringify(cmsRecommendations)) as typeof cmsRecommendations,
-  planTemplates: JSON.parse(JSON.stringify(cmsPlanTemplates)) as typeof cmsPlanTemplates,
-  safetyRules: JSON.parse(JSON.stringify(cmsSafetyRules)) as typeof cmsSafetyRules,
-  banners: JSON.parse(JSON.stringify(cmsBanners)) as typeof cmsBanners,
-  appUsers: JSON.parse(JSON.stringify(cmsAppUsers)) as typeof cmsAppUsers,
-  roomGuests: JSON.parse(JSON.stringify(cmsRoomGuests)) as typeof cmsRoomGuests,
-  privacy: JSON.parse(JSON.stringify(privacyRequests)) as typeof privacyRequests,
-  campaigns: JSON.parse(JSON.stringify(cmsCampaigns)) as typeof cmsCampaigns,
-  manualCosts: JSON.parse(JSON.stringify(cmsManualCostItems)) as typeof cmsManualCostItems,
-  /** Idempotency-Key → the item it created, so a replay returns that one. */
-  manualCostKeys: new Map<string, (typeof cmsManualCostItems)[number]>(),
+/**
+ * A `media_uploads` row, as much of it as the console can observe.
+ *
+ * `owner` stands in for `actor_id`: the mock has no user ids, and the display
+ * name is what `currentActor()` can tell apart, which is all the attach check
+ * needs to refuse somebody else's key.
+ */
+type MockUpload = {
+  id: string
+  key: string
+  purpose: string
+  contentType: string
+  contentLength: number
+  status: 'pending' | 'attached'
+  owner: string
+  createdAt: string
+}
+
+/**
+ * Where an object is readable. Mirrors `CmsPlaceMediaService#readUrl`: a base
+ * URL configured for the environment, or null — an honest absence rather than
+ * a URL that would 404.
+ */
+const MEDIA_PUBLIC_BASE_URL = 'https://images.gogo.test'
+
+function mediaReadUrl(storageKey: string): string | null {
+  if (!MEDIA_PUBLIC_BASE_URL) return null
+  return `${MEDIA_PUBLIC_BASE_URL}/${storageKey.replace(/^\//, '')}`
+}
+
+function seedDb() {
+  return {
+    places: places.map((place) => ({ ...place, media: place.media.map((row) => ({ ...row })) })),
+    areas: cmsAreas.map((area) => ({ ...area })),
+    taxonomies: taxonomies.map((item) => ({ ...item })),
+    collections: collections.map((item) => ({ ...item })),
+    flags: featureFlags.map((flag) => ({ ...flag })),
+    configs: rankingConfigs.map((config) => ({ ...config })),
+    jobs: importJobs.map((job) => ({ ...job })),
+    rows: JSON.parse(JSON.stringify(importRows)) as Record<string, ImportRow[]>,
+    duplicates: duplicateRows.map((row) => ({ ...row })),
+    reports: moderationReportQueue.map((row) => ({ ...row })),
+    checkins: moderationCheckinQueue.map((row) => ({ ...row })),
+    communityPlaces: communityPlaceQueue.map((row) => ({ ...row })),
+    reviewQueue: JSON.parse(JSON.stringify(moderationReviewQueue)) as typeof moderationReviewQueue,
+    submissions: placeSubmissions.map((item) => ({ ...item })),
+    experiments: experiments.map((item) => ({ ...item })),
+    items: JSON.parse(JSON.stringify(collectionItems)) as typeof collectionItems,
+    decidedSubmissions: decidedSubmissions.map((item) => ({ ...item })),
+    /**
+     * Uploads authorized this session.
+     *
+     * A banner may reference only one of these keys, and attaching a photo to a
+     * place goes through the same check GoGo-BE runs in `UploadsService#attach`:
+     * the key must be **this actor's**, for **that purpose**, and unclaimed.
+     * Keeping the actor and the purpose here is what makes a foreign or
+     * wrong-purpose key reachable in a test instead of only in production.
+     */
+    uploads: [] as MockUpload[],
+    /** Counts break-glass calls so the burst limit is reachable in dev. */
+    takedowns: 0,
+    /** Audit entries written during this session, newest first. */
+    audit: [] as (typeof auditEntries)[number][],
+    /** Emails already taken, so the duplicate branch of admin creation is reachable. */
+    adminEmails: ['boss@gogo.vn', 'ops@gogo.vn', 'editor@gogo.vn', 'moderator@gogo.vn'],
+    admins: cmsAdmins.map((admin) => ({ ...admin })),
+    recommendations: JSON.parse(JSON.stringify(cmsRecommendations)) as typeof cmsRecommendations,
+    planTemplates: JSON.parse(JSON.stringify(cmsPlanTemplates)) as typeof cmsPlanTemplates,
+    safetyRules: JSON.parse(JSON.stringify(cmsSafetyRules)) as typeof cmsSafetyRules,
+    banners: JSON.parse(JSON.stringify(cmsBanners)) as typeof cmsBanners,
+    appUsers: JSON.parse(JSON.stringify(cmsAppUsers)) as typeof cmsAppUsers,
+    roomGuests: JSON.parse(JSON.stringify(cmsRoomGuests)) as typeof cmsRoomGuests,
+    privacy: JSON.parse(JSON.stringify(privacyRequests)) as typeof privacyRequests,
+    campaigns: JSON.parse(JSON.stringify(cmsCampaigns)) as typeof cmsCampaigns,
+    manualCosts: JSON.parse(JSON.stringify(cmsManualCostItems)) as typeof cmsManualCostItems,
+    /** Idempotency-Key → the item it created, so a replay returns that one. */
+    manualCostKeys: new Map<string, (typeof cmsManualCostItems)[number]>(),
+  }
+}
+
+let db = seedDb()
+
+/**
+ * Put the mock catalogue back to the fixtures.
+ *
+ * `server.resetHandlers()` restores the *handlers*, never what they wrote, so
+ * a suite that attaches, reorders and detaches photos would hand the next test
+ * a place it never set up. Opt in from a `beforeEach` where that matters —
+ * suites that deliberately build state across cases are left alone.
+ */
+export function resetMockDb(): void {
+  db = seedDb()
 }
 
 /**
@@ -335,6 +392,29 @@ function requireOpsAdmin(message = 'safety rules are ops_admin only') {
   const { role } = currentActor()
   if (role === 'ops_admin' || role === 'super_admin') return null
   return envelope(403, 'FORBIDDEN', message)
+}
+
+/**
+ * `CmsCatalogController` — `@RequireRole('editor')`, and writes are exact:
+ * a moderator reads the catalogue and an ops_admin outranks it, but neither
+ * writes to it. Hiding the button in the console is not the check.
+ */
+function requireEditor(message = 'the catalogue is editor only') {
+  const { role } = currentActor()
+  if (role === 'editor' || role === 'super_admin') return null
+  return envelope(403, 'FORBIDDEN', message)
+}
+
+/**
+ * The order `cmsGetPlace` returns photos in: the cover first, then `sortOrder`.
+ * Cover-first is what a consumer needs; the console re-sorts by `sortOrder`,
+ * because that is the field its reorder controls actually write.
+ */
+function sortedMedia(place: (typeof places)[number]) {
+  return [...place.media].sort((left, right) => {
+    if (left.isCover !== right.isCover) return left.isCover ? -1 : 1
+    return left.sortOrder - right.sortOrder
+  })
 }
 
 /** Editing is only meaningful while nothing has been sent. */
@@ -753,7 +833,8 @@ export const handlers = [
   http.get(`${BASE}/cms/places/:id`, ({ params }) => {
     const place = db.places.find((item) => item.id === params.id)
     if (!place) return envelope(404, 'NOT_FOUND', 'place not found')
-    return HttpResponse.json(place)
+    // Cover first, then sort order — the read order `cmsGetPlace` promises.
+    return HttpResponse.json({ ...place, media: sortedMedia(place) })
   }),
 
   /**
@@ -909,6 +990,169 @@ export const handlers = [
     }
     place.updatedAt = verifiedAt
     return HttpResponse.json(place)
+  }),
+
+  /*
+   * Place media (GoGo-BE#191), mirroring `CmsPlaceMediaService`.
+   *
+   * `/attachable` is declared before `:mediaId` for the same reason Nest needs
+   * it first: both are four segments, and the router matches in order.
+   */
+  http.get(`${BASE}/cms/places/:placeId/media/attachable`, ({ params }) => {
+    const place = db.places.find((item) => item.id === params.placeId)
+    if (!place) return envelope(404, 'PLACE_NOT_FOUND', 'place not found')
+    const owner = currentActor().displayName
+    // Never a consumer purpose, and never somebody else's key: a member's
+    // check-in photo does not become catalog art because an editor can see a
+    // list.
+    const items = db.uploads
+      .filter((upload) => upload.purpose === 'place_image' && upload.owner === owner)
+      .filter(
+        (upload) =>
+          upload.status === 'pending' || place.media.some((row) => row.storageKey === upload.key),
+      )
+      .map((upload) => ({
+        id: upload.id,
+        storageKey: upload.key,
+        contentType: upload.contentType,
+        contentLength: upload.contentLength,
+        status: upload.status,
+        attachedHere: place.media.some((row) => row.storageKey === upload.key),
+        url: mediaReadUrl(upload.key),
+        createdAt: upload.createdAt,
+      }))
+    return HttpResponse.json({ items })
+  }),
+
+  http.post(`${BASE}/cms/places/:placeId/media`, async ({ params, request }) => {
+    const denied = requireEditor('place media is editor only')
+    if (denied) return denied
+    const place = db.places.find((item) => item.id === params.placeId)
+    if (!place) return envelope(404, 'PLACE_NOT_FOUND', 'place not found')
+
+    const parsed = cmsPlaceMediaAttachSchema.safeParse(await request.json())
+    if (!parsed.success) return validationEnvelope(parsed.error.issues)
+    const input = parsed.data
+
+    if (place.media.some((row) => row.storageKey === input.storageKey)) {
+      return envelope(409, 'PLACE_MEDIA_EXISTS', 'That image is already on this place')
+    }
+
+    /*
+     * `UploadsService#attach`, in one condition. Unknown, expired, foreign,
+     * wrong-purpose and already-claimed are refused **identically**, so a
+     * caller learns only that their own key is unusable — never whether
+     * somebody else's exists.
+     */
+    const upload = db.uploads.find(
+      (candidate) =>
+        candidate.key === input.storageKey &&
+        candidate.purpose === 'place_image' &&
+        candidate.owner === currentActor().displayName &&
+        candidate.status === 'pending',
+    )
+    if (!upload) return envelope(400, 'INVALID_UPLOAD_KEY', 'upload key is not usable')
+    upload.status = 'attached'
+
+    const nextSort = place.media.reduce((max, row) => Math.max(max, row.sortOrder), -1) + 1
+    if (input.isCover === true) {
+      for (const row of place.media) row.isCover = false
+    }
+    const created = {
+      id: `pm-${place.id}-${place.media.length + 100}`,
+      storageKey: input.storageKey,
+      url: mediaReadUrl(input.storageKey),
+      width: input.width ?? null,
+      height: input.height ?? null,
+      sortOrder: nextSort,
+      // Pending, always: the person who uploads is not automatically the
+      // person who decides the photo may be published.
+      moderation: 'pending',
+      moderationReason: null,
+      caption: input.caption ?? null,
+      attribution: input.attribution ?? null,
+      isCover: input.isCover ?? false,
+      sourceType: 'editorial',
+      createdAt: new Date().toISOString(),
+    }
+    place.media = [...place.media, created]
+    place.updatedAt = created.createdAt
+    return HttpResponse.json(created, { status: 201 })
+  }),
+
+  http.patch(`${BASE}/cms/places/:placeId/media/:mediaId`, async ({ params, request }) => {
+    const denied = requireEditor('place media is editor only')
+    if (denied) return denied
+    const place = db.places.find((item) => item.id === params.placeId)
+    if (!place) return envelope(404, 'PLACE_NOT_FOUND', 'place not found')
+    const row = place.media.find((item) => item.id === params.mediaId)
+    // Scoped by place as well as id: a media id from another place is a
+    // not-found here, never a 403.
+    if (!row) return envelope(404, 'PLACE_MEDIA_NOT_FOUND', 'media not found on this place')
+
+    const parsed = cmsPlaceMediaPatchSchema.safeParse(await request.json())
+    if (!parsed.success) return validationEnvelope(parsed.error.issues)
+    const patch = parsed.data
+
+    // A rejection with no recorded reason is not auditable, and the next
+    // editor cannot tell "blurry" from "somebody's face".
+    if (moderationReasonMissing(row.moderation, patch)) {
+      return HttpResponse.json(
+        {
+          code: 'VALIDATION_FAILED',
+          message: 'Request validation failed',
+          field_errors: [
+            {
+              field: 'moderationReason',
+              code: 'required',
+              message: 'Quyết định kiểm duyệt phải có lý do',
+            },
+          ],
+          request_id: 'mock-validation-failed',
+          retryable: false,
+        },
+        { status: 400 },
+      )
+    }
+
+    // Consumers filter on `approved`, so a rejected cover would leave the
+    // place with no lead image and nothing on screen saying why.
+    const isCover = patch.moderation === 'rejected' ? false : patch.isCover
+    if (isCover === true) {
+      for (const other of place.media) if (other.id !== row.id) other.isCover = false
+    }
+    if (patch.sortOrder !== undefined) row.sortOrder = patch.sortOrder
+    if (patch.caption !== undefined) row.caption = patch.caption ?? null
+    if (patch.attribution !== undefined) row.attribution = patch.attribution ?? null
+    if (isCover !== undefined) row.isCover = isCover
+    if (patch.moderation !== undefined) {
+      row.moderation = patch.moderation
+      row.moderationReason = patch.moderationReason ?? null
+    }
+    place.updatedAt = new Date().toISOString()
+    return HttpResponse.json(row)
+  }),
+
+  http.delete(`${BASE}/cms/places/:placeId/media/:mediaId`, ({ params }) => {
+    const denied = requireEditor('place media is editor only')
+    if (denied) return denied
+    const place = db.places.find((item) => item.id === params.placeId)
+    if (!place) return envelope(404, 'PLACE_NOT_FOUND', 'place not found')
+    const row = place.media.find((item) => item.id === params.mediaId)
+    if (!row) return envelope(404, 'PLACE_MEDIA_NOT_FOUND', 'media not found on this place')
+
+    place.media = place.media.filter((item) => item.id !== row.id)
+    // Detach is not delete: the object stays, and the upload only returns to
+    // `pending` once nothing references the key any more.
+    const stillReferenced = db.places.some((other) =>
+      other.media.some((item) => item.storageKey === row.storageKey),
+    )
+    if (!stillReferenced) {
+      const upload = db.uploads.find((candidate) => candidate.key === row.storageKey)
+      if (upload) upload.status = 'pending'
+    }
+    place.updatedAt = new Date().toISOString()
+    return HttpResponse.json({ detached: true })
   }),
 
   http.post(`${BASE}/cms/places/:id/prices`, async ({ params, request }) => {
@@ -1610,7 +1854,16 @@ export const handlers = [
     const id = `up-${db.uploads.length + 1}`
     // Server-generated from actor + a UUID, never anything the client sent.
     const key = `cms/${body.purpose}/adm-mock/${id}`
-    db.uploads.push(key)
+    db.uploads.push({
+      id,
+      key,
+      purpose: String(body.purpose ?? ''),
+      contentType: body.contentType,
+      contentLength: Number(body.contentLength ?? 0),
+      status: 'pending',
+      owner: currentActor().displayName,
+      createdAt: new Date().toISOString(),
+    })
     return HttpResponse.json(
       {
         id,
@@ -1671,7 +1924,7 @@ export const handlers = [
     const imageKey = String(body.imageKey ?? '')
     // A key must have been issued by this session's upload call; anything else
     // would become a broken image.
-    if (!imageKey || !db.uploads.includes(imageKey)) {
+    if (!imageKey || !db.uploads.some((upload) => upload.key === imageKey)) {
       return envelope(400, 'INVALID_UPLOAD_KEY', 'image key is not usable')
     }
     const created = {
