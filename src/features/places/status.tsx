@@ -30,6 +30,16 @@ export const PLACE_STATUSES: PlaceStatus[] = [
   'archived',
 ]
 
+/** FR-CMS-002; mirrors cms-catalog.service.ts. */
+export const PLACE_TRANSITIONS: Record<PlaceStatus, readonly PlaceStatus[]> = {
+  draft: ['review', 'archived'],
+  community_submitted: ['review', 'published', 'archived'],
+  review: ['published', 'draft', 'archived'],
+  published: ['suspended', 'archived'],
+  suspended: ['published', 'archived'],
+  archived: [],
+}
+
 export function PlaceStatusBadge({ status }: { status: PlaceStatus }) {
   const t = useT()
   return (

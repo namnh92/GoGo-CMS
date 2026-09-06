@@ -1,5 +1,11 @@
 import { http, HttpResponse } from 'msw'
+import type { z } from 'zod'
 import type { AdminRole, CollectionStatus, PlaceStatus } from '@/shared/api/contracts'
+import {
+  cmsPlaceEditMockSchema,
+  cmsPlaceHoursSchema,
+  toFieldErrors,
+} from '@/shared/api/cmsPlaceContract'
 import { ALLOWED_ACTIONS, ALLOWED_TRIGGERS } from '@/features/safety/conditions'
 import type { ImportRow } from '@/shared/api/contracts-import'
 import {
@@ -154,6 +160,38 @@ function envelope(status: number, code: string, message: string) {
     },
     { status },
   )
+}
+
+/**
+ * What GoGo-BE's `ZodValidationPipe` returns for a body its schema refuses —
+ * status, code, message and per-field paths, byte for byte.
+ *
+ * Until CMS-043 the place handlers did `Object.assign(place, await
+ * request.json())` and accepted anything, so the CMS could drift away from
+ * `placeEditSchema` (`avgVisitMinutes` 0..1440 here against 10..720 there)
+ * with a green test suite and a broken save button.
+ */
+function validationEnvelope(issues: readonly z.ZodIssue[]) {
+  return HttpResponse.json(
+    {
+      code: 'VALIDATION_FAILED',
+      message: 'Request validation failed',
+      field_errors: toFieldErrors(issues),
+      request_id: 'mock-validation-failed',
+      retryable: false,
+    },
+    { status: 400 },
+  )
+}
+
+/** Mirrors `PLACE_TRANSITIONS` in `cms-catalog.service.ts`. */
+const MOCK_PLACE_TRANSITIONS: Record<PlaceStatus, PlaceStatus[]> = {
+  draft: ['review', 'archived'],
+  community_submitted: ['review', 'published', 'archived'],
+  review: ['published', 'draft', 'archived'],
+  published: ['suspended', 'archived'],
+  suspended: ['published', 'archived'],
+  archived: [],
 }
 
 /*
@@ -638,7 +676,9 @@ export const handlers = [
   http.patch(`${BASE}/cms/places/:id`, async ({ params, request }) => {
     const place = db.places.find((item) => item.id === params.id)
     if (!place) return envelope(404, 'NOT_FOUND', 'place not found')
-    Object.assign(place, await request.json())
+    const parsed = cmsPlaceEditMockSchema.safeParse(await request.json())
+    if (!parsed.success) return validationEnvelope(parsed.error.issues)
+    Object.assign(place, parsed.data)
     place.updatedAt = new Date().toISOString()
     return HttpResponse.json(place)
   }),
@@ -647,20 +687,30 @@ export const handlers = [
     const place = db.places.find((item) => item.id === params.id)
     if (!place) return envelope(404, 'NOT_FOUND', 'place not found')
     const body = (await request.json()) as { status: PlaceStatus }
+    // The state machine is server-side (`cms-catalog.service.ts`); a UI that
+    // offers an illegal target must fail here, not quietly succeed.
+    if (!MOCK_PLACE_TRANSITIONS[place.status].includes(body.status)) {
+      return envelope(
+        409,
+        'INVALID_PLACE_TRANSITION',
+        `${place.status} → ${body.status} is not allowed`,
+      )
+    }
     place.status = body.status
+    place.updatedAt = new Date().toISOString()
     return HttpResponse.json(place)
   }),
 
   http.put(`${BASE}/cms/places/:id/hours`, async ({ params, request }) => {
     const place = db.places.find((item) => item.id === params.id)
     if (!place) return envelope(404, 'NOT_FOUND', 'place not found')
-    const body = (await request.json()) as {
-      hours: Omit<(typeof place.hours)[number], 'source' | 'verifiedAt'>[]
-    }
+    const parsed = cmsPlaceHoursSchema.safeParse(await request.json())
+    if (!parsed.success) return validationEnvelope(parsed.error.issues)
     // The server stamps provenance; the client never sends it.
     const verifiedAt = new Date().toISOString()
-    place.hours = body.hours.map((hour) => ({ ...hour, source: 'editor', verifiedAt }))
+    place.hours = parsed.data.hours.map((hour) => ({ ...hour, source: 'editor', verifiedAt }))
     place.freshnessCheckedAt = verifiedAt
+    place.updatedAt = verifiedAt
     return HttpResponse.json(place)
   }),
 

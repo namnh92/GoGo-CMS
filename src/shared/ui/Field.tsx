@@ -14,6 +14,14 @@ const CONTROL =
   'hover:border-neutral-500 disabled:cursor-not-allowed disabled:bg-surface-sunken disabled:text-text-subtle ' +
   'aria-[invalid=true]:border-danger'
 
+/**
+ * The id a control must point `aria-describedby` at so its message is
+ * announced with it. Derived from the control id so the two cannot drift.
+ */
+function describedById(controlId: string, kind: 'error' | 'hint'): string {
+  return `${controlId}-${kind}`
+}
+
 export function Field({
   label,
   hint,
@@ -31,6 +39,10 @@ export function Field({
   children: ReactNode
   className?: string
 }) {
+  // Without an id on the message and `aria-describedby` on the control, a
+  // screen reader announces the field and stops — the reason it was rejected
+  // sits next to it visually and nowhere at all in the accessibility tree.
+  const messageId = htmlFor ? describedById(htmlFor, error ? 'error' : 'hint') : undefined
   return (
     <div className={cn('flex flex-col gap-1.5', className)}>
       <label htmlFor={htmlFor} className="text-xs font-semibold text-text-muted">
@@ -44,15 +56,41 @@ export function Field({
       {children}
       {error ? (
         // Error carries an icon glyph as well as colour.
-        <p role="alert" className="flex items-start gap-1 text-xs font-medium text-danger">
+        <p
+          id={messageId}
+          role="alert"
+          className="flex items-start gap-1 text-xs font-medium text-danger"
+        >
           <span aria-hidden="true">⚠</span>
           {error}
         </p>
       ) : hint ? (
-        <p className="text-xs text-text-subtle">{hint}</p>
+        <p id={messageId} className="text-xs text-text-subtle">
+          {hint}
+        </p>
       ) : null}
     </div>
   )
+}
+
+/**
+ * The `aria-describedby` a control needs so its error (or, failing that, its
+ * hint) is announced with it — merged with whatever the caller already passed,
+ * never replacing it.
+ */
+function describedBy(
+  inputId: string,
+  error: string | undefined,
+  hint: ReactNode,
+  own: string | undefined,
+): string | undefined {
+  const message = error
+    ? describedById(inputId, 'error')
+    : hint
+      ? describedById(inputId, 'hint')
+      : undefined
+  const ids = [own, message].filter(Boolean)
+  return ids.length > 0 ? ids.join(' ') : undefined
 }
 
 export type TextInputProps = InputHTMLAttributes<HTMLInputElement> & {
@@ -62,7 +100,7 @@ export type TextInputProps = InputHTMLAttributes<HTMLInputElement> & {
 }
 
 export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(function TextInput(
-  { label, hint, error, className, id, required, ...props },
+  { label, hint, error, className, id, required, 'aria-describedby': ownDescribedBy, ...props },
   ref,
 ) {
   const generatedId = useId()
@@ -80,6 +118,7 @@ export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(function T
         ref={ref}
         id={inputId}
         aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy(inputId, error, hint, ownDescribedBy)}
         required={required}
         className={CONTROL}
         {...props}
@@ -95,7 +134,17 @@ export type TextAreaProps = TextareaHTMLAttributes<HTMLTextAreaElement> & {
 }
 
 export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(function TextArea(
-  { label, hint, error, className, id, required, rows = 3, ...props },
+  {
+    label,
+    hint,
+    error,
+    className,
+    id,
+    required,
+    rows = 3,
+    'aria-describedby': ownDescribedBy,
+    ...props
+  },
   ref,
 ) {
   const generatedId = useId()
@@ -114,6 +163,7 @@ export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(function 
         id={inputId}
         rows={rows}
         aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy(inputId, error, hint, ownDescribedBy)}
         required={required}
         className={cn(CONTROL, 'resize-y')}
         {...props}
@@ -129,7 +179,17 @@ export type SelectProps = SelectHTMLAttributes<HTMLSelectElement> & {
 }
 
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select(
-  { label, hint, error, className, id, required, children, ...props },
+  {
+    label,
+    hint,
+    error,
+    className,
+    id,
+    required,
+    children,
+    'aria-describedby': ownDescribedBy,
+    ...props
+  },
   ref,
 ) {
   const generatedId = useId()
@@ -147,6 +207,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
         ref={ref}
         id={inputId}
         aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy(inputId, error, hint, ownDescribedBy)}
         required={required}
         className={cn(CONTROL, 'pr-8')}
         {...props}

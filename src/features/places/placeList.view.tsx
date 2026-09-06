@@ -31,7 +31,7 @@ import type {
   StalePlace,
 } from '@/shared/api/contracts'
 import { fetchPlaces, fetchStalePlaces, transitionPlace, verifyFreshness } from './api'
-import { PlaceStatusBadge } from './status'
+import { PLACE_TRANSITIONS, PlaceStatusBadge } from './status'
 import { DuplicateQueue } from './duplicateQueue.view'
 import { styles } from './placeList.style'
 
@@ -114,16 +114,43 @@ export default function PlaceListScreen() {
     setSelected([])
   }
 
+  /*
+   * A bulk transition is N independent requests, so it can half-succeed: the
+   * server accepts `published → suspended` and refuses `draft → suspended` in
+   * the same click. `Promise.all` rejected on the first failure and the screen
+   * then showed one error toast over a list that had partly changed. Settle
+   * every call, report what actually happened, and refetch either way.
+   */
   const transition = useMutation({
-    mutationFn: ({ ids, status }: { ids: string[]; status: PlaceStatus }) =>
-      Promise.all(ids.map((id) => transitionPlace(id, status))),
-    onSuccess: (_result, variables) => {
-      toast.success(
-        t(`placeStatus.${variables.status}` as const),
-        t('places.selected', { count: variables.ids.length }),
+    mutationFn: async ({ ids, status }: { ids: string[]; status: PlaceStatus }) => {
+      const results = await Promise.allSettled(ids.map((id) => transitionPlace(id, status)))
+      const failed = results.flatMap((result, index) =>
+        result.status === 'rejected' ? [{ id: ids[index]!, reason: result.reason as unknown }] : [],
       )
-      setSelected([])
-      void queryClient.invalidateQueries({ queryKey: queryKeys.places.all })
+      return { applied: ids.length - failed.length, total: ids.length, failed }
+    },
+    // Whatever happened, the table on screen is now a guess. Refetch.
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: queryKeys.places.all }),
+    onSuccess: (result, variables) => {
+      const status = t(`placeStatus.${variables.status}` as const)
+      if (result.failed.length === 0) {
+        toast.success(t('places.bulk.done', { count: result.applied, status }))
+        setSelected([])
+        return
+      }
+      const detail = `${describeError(result.failed[0]!.reason)} · ${t('places.bulk.keptSelection')}`
+      toast.error(
+        result.applied === 0
+          ? t('places.bulk.allFailed', { status })
+          : t('places.bulk.partial', {
+              applied: result.applied,
+              total: result.total,
+              status,
+            }),
+        detail,
+      )
+      // Keep exactly the rows that did not move, so a retry is one click.
+      setSelected(result.failed.map((entry) => entry.id))
     },
     onError: (error) => toast.error(describeError(error)),
   })
@@ -138,6 +165,22 @@ export default function PlaceListScreen() {
   })
 
   const rows = listQuery.data?.items ?? []
+
+  /**
+   * Only a transition the server would accept for *every* selected row is
+   * offered. `cms-catalog.service.ts` answers 409 INVALID_PLACE_TRANSITION per
+   * place, so a mixed selection used to fire N requests to discover that.
+   */
+  const canBulkTransition = (target: PlaceStatus) =>
+    canTransition &&
+    online &&
+    !transition.isPending &&
+    !listQuery.isFetching &&
+    selected.length > 0 &&
+    selected.every((id) => {
+      const place = rows.find((row) => row.id === id)
+      return place !== undefined && PLACE_TRANSITIONS[place.status].includes(target)
+    })
 
   const columns = useMemo<ColumnDef<CmsPlace, unknown>[]>(
     () => [
@@ -541,8 +584,17 @@ export default function PlaceListScreen() {
             >
               <Button
                 size="sm"
+                variant="secondary"
+                disabled={!canBulkTransition('review')}
+                loading={transition.isPending && transition.variables?.status === 'review'}
+                onClick={() => transition.mutate({ ids: selected, status: 'review' })}
+              >
+                {t('placeStatus.review')}
+              </Button>
+              <Button
+                size="sm"
                 variant="success"
-                disabled={!canTransition || !online}
+                disabled={!canBulkTransition('published')}
                 loading={transition.isPending && transition.variables?.status === 'published'}
                 onClick={() => transition.mutate({ ids: selected, status: 'published' })}
               >
@@ -551,7 +603,8 @@ export default function PlaceListScreen() {
               <Button
                 size="sm"
                 variant="secondary"
-                disabled={!canTransition || !online}
+                disabled={!canBulkTransition('suspended')}
+                loading={transition.isPending && transition.variables?.status === 'suspended'}
                 onClick={() => transition.mutate({ ids: selected, status: 'suspended' })}
               >
                 {t('places.bulk.suspend')}
@@ -559,7 +612,8 @@ export default function PlaceListScreen() {
               <Button
                 size="sm"
                 variant="danger"
-                disabled={!canTransition || !online}
+                disabled={!canBulkTransition('archived')}
+                loading={transition.isPending && transition.variables?.status === 'archived'}
                 onClick={() => transition.mutate({ ids: selected, status: 'archived' })}
               >
                 {t('places.bulk.archive')}
