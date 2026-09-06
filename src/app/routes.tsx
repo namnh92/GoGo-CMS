@@ -46,6 +46,7 @@ const AppControlScreen = lazy(() => import('@/features/appControl/appControl.vie
 const SettingsScreen = lazy(() => import('@/features/ranking/settings.view'))
 const NewAccountScreen = lazy(() => import('@/features/admins/newAccount.view'))
 const AdminListScreen = lazy(() => import('@/features/admins/adminList.view'))
+const ChangePasswordScreen = lazy(() => import('@/features/auth/changePassword.view'))
 const RolesPermissionsScreen = lazy(() => import('@/features/administration/rolesPermissions.view'))
 const AuditLogScreen = lazy(() => import('@/features/audit/auditLog.view'))
 const SearchQualityScreen = lazy(() => import('@/features/search/searchQuality.view'))
@@ -122,6 +123,9 @@ export const router = createBrowserRouter([
           { path: 'settings', element: <SettingsScreen /> },
           { path: 'settings/accounts', element: <AdminListScreen /> },
           { path: 'settings/accounts/new', element: <NewAccountScreen /> },
+          // No role gate: everyone has a password, and this screen is about the
+          // caller rather than a resource (CMS-032).
+          { path: 'account/password', element: <ChangePasswordScreen /> },
           { path: 'search-quality', element: <SearchQualityScreen /> },
           { path: 'roles', element: <RolesPermissionsScreen /> },
           { path: 'audit', element: <AuditLogScreen /> },

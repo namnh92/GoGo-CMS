@@ -1,10 +1,10 @@
 import { useCallback, useId, useState } from 'react'
-import { NavLink, useLocation } from 'react-router-dom'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useT } from '@/shared/i18n/i18n'
 import { useSession } from '@/shared/auth/session'
 import { isLeafActive, NAV_ENTRIES, type NavEntry, type NavLeaf } from './nav'
-import { ChevronRightIcon, LogoMark, LogoutIcon } from '@/shared/ui/icons'
+import { ChevronRightIcon, LockIcon, LogoMark, LogoutIcon } from '@/shared/ui/icons'
 import { IconButton } from '@/shared/ui/Button'
 import { EnvBadge } from '@/shared/ui/EnvBadge'
 import { fetchModerationCounts } from '@/features/moderation/api'
@@ -47,6 +47,7 @@ export function Sidebar() {
   const t = useT()
   const { pathname } = useLocation()
   const { session, can, logout } = useSession()
+  const navigate = useNavigate()
   const regionPrefix = useId()
 
   /**
@@ -217,6 +218,13 @@ export function Sidebar() {
             {session ? t(`role.${session.role}` as const) : ''}
           </p>
         </div>
+        <IconButton
+          label={t('app.changePassword')}
+          className="h-9 w-9"
+          onClick={() => navigate('/account/password')}
+        >
+          <LockIcon size={15} />
+        </IconButton>
         <IconButton label={t('app.signOut')} className="h-9 w-9" onClick={logout}>
           <LogoutIcon size={15} />
         </IconButton>
