@@ -1313,17 +1313,8 @@ export const en: Partial<Record<MessageKey, string>> = {
   'monitoring.kpi.p95': 'p95 latency',
   'monitoring.kpi.p95Sub': 'excluding status {statuses}',
   'monitoring.kpi.units': 'Billable units',
-  'monitoring.kpi.unitsSub': 'Measured SKU units. The money is in the card beside it.',
-  'monitoring.kpi.cost': 'Estimated cost',
-  'monitoring.kpi.costSub': 'List price, no free tier deducted · price list {version}',
-  'monitoring.kpi.costPartial': 'A floor, not a total — {operations} has no price',
-  'monitoring.cost.estimateOnly':
-    'An estimate from our own counters against Google list prices. Not an invoice.',
-  'monitoring.cost.gapsTitle': 'Not priceable',
-  'monitoring.cost.gap.not_instrumented': 'Not measured',
-  'monitoring.cost.gap.price_unknown': 'No price',
-  'monitoring.cost.gapsNote':
-    'Two different absences: "Not measured" means no units were counted, and adding a price would not help; "No price" means the units are exact and the list price is unverified. Neither is shown as 0.',
+  'monitoring.kpi.unitsSub':
+    'Measured SKU units — a count, not money. The money is in the Cost Center.',
   'monitoring.reliability.title': 'Reliability',
   'monitoring.reliability.failures': 'Provider failures',
   'monitoring.reliability.failuresHint': 'Google could not serve us: auth, quota, upstream.',
@@ -1397,7 +1388,7 @@ export const en: Partial<Record<MessageKey, string>> = {
   'monitoring.providers.p50': 'p50',
   'monitoring.providers.p95': 'p95',
   'monitoring.providers.units': 'Units',
-  'monitoring.providers.cost': 'Estimated',
+  'monitoring.providers.cost': 'Cost',
   'monitoring.providers.notInstrumented': 'Not measured — no metric exists for this provider yet',
   'monitoring.provider.places': 'Google Places',
   'monitoring.provider.routes': 'Google Routes',

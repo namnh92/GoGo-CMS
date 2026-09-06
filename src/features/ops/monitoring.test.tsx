@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { renderWithProviders, signInAs } from '@/shared/test/render'
 import { server } from '@/shared/test/server'
-import { opsCostModel, opsLatencySemantics, opsProviders, opsSummary } from '@/shared/test/fixtures'
+import { opsLatencySemantics, opsProviders, opsSummary } from '@/shared/test/fixtures'
 import MonitoringScreen from './monitoring.view'
 
 const BASE = '*/v1'
@@ -82,45 +82,38 @@ describe('provider monitoring (GoGo-BE#315)', () => {
     render()
     const places = (await screen.findByText('Google Places')).closest('tr')!
     expect(within(places).getByText('500')).toBeInTheDocument()
-    expect(screen.getByText(opsCostModel.note)).toBeInTheDocument()
   })
 
   /**
-   * GoGo-BE#335 gave this screen a price list, so it prints money. The rule it
-   * replaced — never a number nobody measured — did not go away; it moved.
+   * COST-CMS-014 (#119), ADR-0014 amendment. /monitoring is the runtime
+   * surface and states no amount: the estimate that used to sit here (list
+   * price, no free tier) disagreed with the Cost Center (ledger, free tier
+   * applied) for the same service on the same day. The column is now a link
+   * to the row that does the arithmetic, and nothing on this page is money.
    */
-  it('prints money as an estimate, and never for something unpriced', async () => {
+  it('prints no money anywhere and links each provider row to its Cost Center row', async () => {
     signInAs('ops_admin')
     render()
     await screen.findByText('512')
-    // 10,40 US$ (vi locale) from the fixture's 10_400_000 micros, labelled as
-    // a list-price estimate.
-    // Intl puts a non-breaking space before the currency; match on normalised
-    // text rather than pinning U+00A0.
-    // The KPI card and the Places row both carry it, which is the point: one
-    // total and one per-provider figure, from the same price list.
-    expect(
-      (await screen.findAllByText((_, el) => el?.textContent?.replace(/\s/g, ' ') === '10,40 US$'))
-        .length,
-    ).toBeGreaterThan(0)
-    // The qualification appears under the KPI and again under the provider
-    // table — both places a reader might stop.
-    expect(screen.getAllByText(/chưa trừ hạn mức miễn phí/).length).toBeGreaterThan(0)
-    // Routes is measured and unpriced, so the total is announced as a floor
-    // and the operation is named rather than silently dropped.
-    expect(screen.getByText(/Sàn, không phải tổng/)).toBeInTheDocument()
-  })
-
-  it('separates "nobody counted it" from "nobody priced it"', async () => {
-    signInAs('ops_admin')
-    render()
-    await screen.findByText('512')
-    // Two absences, two words. They are fixed by different people: one needs
-    // client telemetry, the other needs a number in the pricing registry.
-    expect(await screen.findByText('Chưa có giá')).toBeInTheDocument()
-    expect(screen.getAllByText('Chưa đo').length).toBeGreaterThan(0)
-    expect(screen.getByText('google.maps_sdk_ios')).toBeInTheDocument()
-    expect(screen.getByText('google.routeMatrix')).toBeInTheDocument()
+    expect(screen.queryByText(/US\$/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/chưa trừ hạn mức miễn phí/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Chưa có giá')).not.toBeInTheDocument()
+    expect(screen.queryByText('Chi phí ước tính')).not.toBeInTheDocument()
+    const places = (await screen.findByText('Google Places')).closest('tr')!
+    expect(within(places).getByRole('link', { name: 'Cost Center →' })).toHaveAttribute(
+      'href',
+      '/costs#service-google.places',
+    )
+    // Units are a count, not a price — they stay.
+    expect(within(places).getByText('500')).toBeInTheDocument()
+    // Two SDKs behind one console group: the link lands on the provider, and
+    // the uninstrumented row still says so in words.
+    const sdk = (await screen.findByText('Google Maps SDK (app)')).closest('tr')!
+    expect(within(sdk).getByRole('link', { name: 'Cost Center →' })).toHaveAttribute(
+      'href',
+      '/costs#provider-google',
+    )
+    expect(within(sdk).getByText(/Chưa đo/)).toBeInTheDocument()
   })
 
   it('lists the Maps SDK as a provider row rather than leaving it out', async () => {

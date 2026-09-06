@@ -19,16 +19,13 @@ export const styles = {
   provider: 'font-semibold text-text',
   method: 'font-mono text-[12px] text-text-muted',
   unmeasured: 'text-[12px] italic text-text-subtle',
+  // The small line under a badge (registry table: 'số liệu tới …').
+  gapDetail: 'text-[11px] leading-relaxed text-text-muted',
   trendGrid: 'grid gap-4 sm:grid-cols-2',
   trendCard: 'rounded-card border border-line bg-surface p-4',
   trendLabel: 'text-xs font-semibold text-text-subtle',
   trendValue: 'mt-0.5 font-display text-xl font-extrabold tabular-nums text-text',
   scroller: 'overflow-x-auto',
-  gapList: 'flex flex-col gap-2',
-  gapRow:
-    'flex flex-wrap items-baseline gap-2 rounded-compact border border-line bg-surface-muted px-3 py-2',
-  gapKey: 'font-mono text-[12px] text-text',
-  gapDetail: 'text-[11px] leading-relaxed text-text-muted',
   toggle:
     'mt-1 text-[11px] font-semibold text-coral-deep underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-coral',
   detailCell: 'border-b border-line/70 bg-surface-muted px-3 py-2',

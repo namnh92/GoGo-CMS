@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { useI18n, useLabel, useT } from '@/shared/i18n/i18n'
 import { queryKeys } from '@/shared/api/queryKeys'
 import { useSession } from '@/shared/auth/session'
@@ -84,6 +84,27 @@ export default function CostCenterScreen() {
     staleTime: 60_000,
     enabled: allowed,
   })
+
+  // COST-CMS-014 (#119) — `/monitoring` links here by registry id instead of
+  // printing money: `#service-<id>` opens that service's drawer,
+  // `#provider-<id>` scrolls to its card. Acted on once per hash, and only
+  // once the rows exist — on first paint there is nothing to land on yet.
+  const { hash } = useLocation()
+  const landedHash = useRef<string | null>(null)
+  useEffect(() => {
+    const rows = overview.data?.providerRows
+    if (!rows || landedHash.current === hash) return
+    landedHash.current = hash
+    if (hash.startsWith('#service-')) {
+      const serviceId = decodeURIComponent(hash.slice('#service-'.length))
+      const owner = rows.find((p) => p.services.some((s) => s.serviceId === serviceId))
+      if (owner) setSelected({ providerId: owner.providerId, serviceId })
+      return
+    }
+    if (hash.startsWith('#provider-')) {
+      document.getElementById(hash.slice(1))?.scrollIntoView()
+    }
+  }, [hash, overview.data])
 
   const runs = useQuery({
     queryKey: queryKeys.opsCostTestRuns(RUN_LIMIT),
@@ -618,7 +639,7 @@ function ProviderCard({
   const { locale } = useI18n()
 
   return (
-    <Card>
+    <Card id={`provider-${provider.providerId}`}>
       <CardHeader
         title={
           <span className={styles.providerHead}>
@@ -693,7 +714,7 @@ function ServiceRow({ service, onSelect }: { service: CmsCostServiceRow; onSelec
   const t = useT()
   const { locale } = useI18n()
   return (
-    <tr>
+    <tr id={`service-${service.serviceId}`}>
       <td className={styles.td}>
         <button type="button" className={styles.rowButton} onClick={onSelect}>
           <span className={`block ${styles.serviceName}`}>{service.displayName}</span>

@@ -2,9 +2,18 @@ import type { ReactNode } from 'react'
 import { cn } from './cn'
 
 /** Opaque panel. The CMS never puts glass behind data. */
-export function Card({ className, children }: { className?: string; children: ReactNode }) {
+export function Card({
+  id,
+  className,
+  children,
+}: {
+  /** An anchor another screen can link to (`/costs#provider-google`). */
+  id?: string
+  className?: string
+  children: ReactNode
+}) {
   return (
-    <section className={cn('rounded-card border border-line bg-surface', className)}>
+    <section id={id} className={cn('rounded-card border border-line bg-surface', className)}>
       {children}
     </section>
   )
