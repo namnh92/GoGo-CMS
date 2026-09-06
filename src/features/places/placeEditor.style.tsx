@@ -29,8 +29,14 @@ export const styles = {
   mapNote: 'absolute bottom-1 left-2 text-[10px] text-text-subtle',
   saveBar:
     'sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface px-5 py-3',
-  saveState: 'flex items-center gap-2 text-xs text-text-muted',
+  saveState: 'flex items-center gap-1.5 text-xs text-text-muted',
   dot: 'h-2 w-2 rounded-full',
+  errorPanel: 'rounded-compact border border-danger/40 bg-danger-soft/50 px-3 py-2.5',
+  errorTitle: 'flex items-center gap-1 text-[13px] font-semibold text-danger',
+  errorText: 'mt-1 text-xs text-text-muted',
+  errorList: 'mt-1.5 flex flex-col gap-1 text-xs text-text-muted',
+  errorField: 'font-mono text-[11px] font-semibold text-danger',
+  requestId: 'select-all rounded bg-surface-sunken px-1 py-0.5 font-mono text-[11px] text-text',
   duplicateCard: 'rounded-card border border-amber/45 bg-surface',
   duplicateBody:
     'flex flex-wrap items-center justify-between gap-3 rounded-compact bg-surface-muted p-3',

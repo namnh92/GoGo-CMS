@@ -46,6 +46,30 @@ Kết quả: `openapi-typescript` chỉ có thể suy ra `unknown`. Các nhóm c
 4. `pnpm api:check` chặn CI khi spec vendored lệch version hoặc khi
    `schema.d.ts` cũ so với spec.
 
+## Bổ sung 2026-09-06 (CMS-043, GoGo-CMS#122): giới hạn của request body
+
+Điểm 1 nói về **shape**, và shape của request body vẫn lấy từ type generated.
+Nhưng OpenAPI vendored chỉ mô tả kiểu, **không mô tả giới hạn**:
+
+```yaml
+avgVisitMinutes: { type: integer } # không có minimum/maximum
+addressText: { type: string } # không có maxLength
+```
+
+Trong khi `placeEditSchema` ở `cms.controllers.ts` bắt `avgVisitMinutes` trong
+`10..720` và `addressText` tối đa 400 ký tự. Vì spec không diễn đạt được, CMS
+đã tự chép giới hạn vào form và chép sai (`0..1440`, `300`, `80`) — sai lệch
+này chỉ lộ ra thành `400 VALIDATION_FAILED` trước mặt biên tập viên.
+
+Nên: giới hạn của request body cho `/cms/places` sống **một chỗ duy nhất**,
+`src/shared/api/cmsPlaceContract.ts`, mirror một-một từ `cms.controllers.ts`
+đúng như điểm 3. Form dựng rule từ đó, mock MSW validate theo đó và trả đúng
+envelope `VALIDATION_FAILED` của `ZodValidationPipe`, và
+`cmsPlaceContract.test.ts` viết thẳng các con số ra để lệch là đỏ test.
+
+Gỡ bỏ khi OpenAPI khai báo `minimum`/`maximum`/`maxLength` cho các body này —
+lúc đó giới hạn sinh ra được từ spec và bản mirror thành thừa.
+
 ## Shape "khát vọng" — đã hết
 
 Trước GoGo-BE#175, năm schema mô tả endpoint **chưa tồn tại** và được đánh dấu

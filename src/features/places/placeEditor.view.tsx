@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
 import { useI18n, useLabel, useT } from '@/shared/i18n/i18n'
 import { queryKeys } from '@/shared/api/queryKeys'
 import { useSession } from '@/shared/auth/session'
@@ -27,9 +26,11 @@ import { AsyncBoundary, PermissionDeniedState, useErrorMessage } from '@/shared/
 import { AuditTrail } from '@/shared/ui/AuditTrail'
 import { useToast } from '@/shared/ui/Toast'
 import { CloseIcon, PlusIcon, ShieldOffIcon } from '@/shared/ui/icons'
+import { UnsavedChangesDialog, UnsavedChangesGuard } from '@/shared/ui/UnsavedChangesGuard'
 import { TakedownDialog } from '@/features/emergency/takedownDialog.view'
 import { fetchTaxonomies } from '@/features/taxonomy/api'
 import type { PlaceHourInput, PlaceStatus, PriceUnit } from '@/shared/api/contracts'
+import { toApiError, type FieldError } from '@/shared/api/errors'
 import {
   addPlacePrice,
   fetchPlace,
@@ -40,7 +41,14 @@ import {
   updatePlace,
   verifyFreshness,
 } from './api'
-import { PLACE_STATUSES } from './status'
+import { PLACE_STATUSES, PLACE_TRANSITIONS } from './status'
+import {
+  placeIdentitySchema,
+  splitFieldErrors,
+  toPlaceEditBody,
+  usePlaceFieldError,
+  type PlaceIdentityForm,
+} from './placeForm'
 import { styles } from './placeEditor.style'
 
 /**
@@ -51,18 +59,32 @@ import { styles } from './placeEditor.style'
 const DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
 const WEEKDAY_BASE_DATE = Date.UTC(2024, 0, 7)
 
-const identitySchema = z.object({
-  name: z.string().min(1).max(200),
-  addressText: z.string().max(300).optional(),
-  areaKey: z.string().max(80).optional(),
-  description: z.string().max(4000).optional(),
-  avgVisitMinutes: z.coerce.number().int().min(0).max(1440).optional(),
-  lat: z.coerce.number().min(-90).max(90).optional(),
-  lng: z.coerce.number().min(-180).max(180).optional(),
-})
-type IdentityForm = z.infer<typeof identitySchema>
-
 const PRICE_UNITS: PriceUnit[] = ['per_person', 'per_item', 'per_hour', 'per_night']
+
+/**
+ * A block is a screen area with its own request. "Đã lưu" belongs to the block
+ * whose own call answered 2xx — one toast used to claim success for the whole
+ * page after a single PATCH (GoGo-CMS#122).
+ */
+type BlockTone = 'clean' | 'dirty' | 'saved' | 'failed'
+
+const BLOCK_DOT: Record<BlockTone, string> = {
+  clean: 'bg-neutral-400',
+  dirty: 'bg-amber',
+  saved: 'bg-mint',
+  failed: 'bg-danger',
+}
+
+/** Colour is never the only signal, so each tone also carries a glyph. */
+const BLOCK_GLYPH: Record<BlockTone, string> = {
+  clean: '•',
+  dirty: '●',
+  saved: '✓',
+  failed: '⚠',
+}
+
+/** What a rejected save leaves behind for the operator to act on. */
+type BlockError = { message: string; requestId: string; unmapped: FieldError[] }
 
 /**
  * What the editor holds while a week is being edited. `source` and `verifiedAt`
@@ -84,12 +106,22 @@ export default function PlaceEditorScreen() {
   const label = useLabel()
   const describeError = useErrorMessage()
 
+  const describeField = usePlaceFieldError()
+
   const canWrite = can('place.write')
   const [auditOpen, setAuditOpen] = useState(false)
   const [takedownOpen, setTakedownOpen] = useState(false)
+  const [leaveOpen, setLeaveOpen] = useState(false)
   const [mergeTarget, setMergeTarget] = useState<{ id: string; name: string } | null>(null)
   const [hours, setHours] = useState<HourDraft[]>([])
+  const [hoursBaseline, setHoursBaseline] = useState<string | null>(null)
   const [taxonomyIds, setTaxonomyIds] = useState<string[]>([])
+  const [taxonomyBaseline, setTaxonomyBaseline] = useState<string | null>(null)
+  const [identityError, setIdentityError] = useState<BlockError | null>(null)
+  const [hoursError, setHoursError] = useState<BlockError | null>(null)
+  const [statusError, setStatusError] = useState<string | null>(null)
+  const [identitySavedAt, setIdentitySavedAt] = useState<string | null>(null)
+  const [hoursSavedAt, setHoursSavedAt] = useState<string | null>(null)
   const [newPrice, setNewPrice] = useState({
     priceMin: '',
     priceMax: '',
@@ -116,18 +148,49 @@ export default function PlaceEditorScreen() {
     enabled: auditOpen && Boolean(id),
   })
 
-  const form = useForm<IdentityForm>({ resolver: zodResolver(identitySchema) })
+  const form = useForm<PlaceIdentityForm>({ resolver: zodResolver(placeIdentitySchema) })
   const {
     register,
     handleSubmit,
     reset,
+    setError,
     formState: { errors, isDirty },
   } = form
 
   const place = placeQuery.data
 
+  const hoursDirty = useMemo(
+    () => hoursBaseline !== null && hoursSignature(hours) !== hoursBaseline,
+    [hours, hoursBaseline],
+  )
+  const taxonomyDirty = useMemo(
+    () => taxonomyBaseline !== null && taxonomySignature(taxonomyIds) !== taxonomyBaseline,
+    [taxonomyIds, taxonomyBaseline],
+  )
+  // Taxonomy travels in the identity PATCH, so it belongs to that block.
+  const identityDirty = isDirty || taxonomyDirty
+
+  /*
+   * The two blocks are refreshed independently.
+   *
+   * Every mutation on this screen invalidates the place, so before the split a
+   * successful *hours* save refetched the detail and `reset()` threw away
+   * whatever the editor had typed in the identity fields. A block only takes
+   * server values when it has nothing of its own at stake.
+   */
+  const identityDirtyRef = useRef(false)
+  identityDirtyRef.current = identityDirty
+  const hoursDirtyRef = useRef(false)
+  hoursDirtyRef.current = hoursDirty
+  const identityAppliedRef = useRef('')
+  const hoursAppliedRef = useRef('')
+
   useEffect(() => {
     if (!place) return
+    const revision = `${place.id}:${place.updatedAt}`
+    if (identityAppliedRef.current === revision) return
+    if (identityAppliedRef.current !== '' && identityDirtyRef.current) return
+    identityAppliedRef.current = revision
     reset({
       name: place.name,
       addressText: place.addressText ?? '',
@@ -137,9 +200,19 @@ export default function PlaceEditorScreen() {
       lat: place.lat ?? undefined,
       lng: place.lng ?? undefined,
     })
-    setHours(place.hours)
     setTaxonomyIds(place.taxonomyIds)
+    setTaxonomyBaseline(taxonomySignature(place.taxonomyIds))
   }, [place, reset])
+
+  useEffect(() => {
+    if (!place) return
+    const revision = `${place.id}:${place.updatedAt}`
+    if (hoursAppliedRef.current === revision) return
+    if (hoursAppliedRef.current !== '' && hoursDirtyRef.current) return
+    hoursAppliedRef.current = revision
+    setHours(place.hours)
+    setHoursBaseline(hoursSignature(place.hours))
+  }, [place])
 
   const taxonomyById = useMemo(() => {
     const map = new Map<string, { key: string; labels: Record<string, string> }>()
@@ -152,32 +225,63 @@ export default function PlaceEditorScreen() {
     void queryClient.invalidateQueries({ queryKey: queryKeys.places.all })
   }
 
+  /** Everything a rejected save gives the operator, request id included. */
+  const asBlockError = useCallback(
+    (error: unknown, unmapped?: FieldError[]): BlockError => {
+      const apiError = toApiError(error)
+      return {
+        message: describeError(apiError),
+        requestId: apiError.requestId,
+        unmapped: unmapped ?? apiError.fieldErrors,
+      }
+    },
+    [describeError],
+  )
+
   const saveIdentity = useMutation({
-    mutationFn: (values: IdentityForm) =>
-      updatePlace(id, {
-        name: values.name,
-        addressText: values.addressText || undefined,
-        areaKey: values.areaKey || undefined,
-        description: values.description || undefined,
-        avgVisitMinutes: values.avgVisitMinutes,
-        lat: values.lat,
-        lng: values.lng,
-        taxonomyIds,
-      }),
-    onSuccess: () => {
-      toast.success(t('action.save'))
+    mutationFn: (values: PlaceIdentityForm) =>
+      updatePlace(id, toPlaceEditBody(values, taxonomyIds)),
+    onSuccess: (_result, values) => {
+      setIdentityError(null)
+      setIdentitySavedAt(new Date().toISOString())
+      // Keep exactly what was typed, but stop calling it unsaved.
+      reset(values)
+      setTaxonomyBaseline(taxonomySignature(taxonomyIds))
+      toast.success(t('placeEditor.savedIdentity'))
       invalidate()
     },
-    onError: (error) => toast.error(describeError(error)),
+    onError: (error) => {
+      const apiError = toApiError(error)
+      const { mapped, unmapped } = splitFieldErrors(apiError.fieldErrors)
+      // Every rejected field lands back on its own control; the first one takes
+      // focus, so the fix starts where the problem is.
+      mapped.forEach((fieldError, index) =>
+        setError(
+          fieldError.field,
+          { type: fieldError.code, message: fieldError.message },
+          { shouldFocus: index === 0 },
+        ),
+      )
+      setIdentitySavedAt(null)
+      setIdentityError(asBlockError(apiError, unmapped))
+      toast.error(describeError(apiError), apiError.requestId || undefined)
+    },
   })
 
   const saveHours = useMutation({
     mutationFn: () => setPlaceHours(id, hours),
     onSuccess: () => {
-      toast.success(t('placeEditor.hours'))
+      setHoursError(null)
+      setHoursSavedAt(new Date().toISOString())
+      setHoursBaseline(hoursSignature(hours))
+      toast.success(t('placeEditor.savedHours'))
       invalidate()
     },
-    onError: (error) => toast.error(describeError(error)),
+    onError: (error) => {
+      setHoursSavedAt(null)
+      setHoursError(asBlockError(error))
+      toast.error(describeError(error), toApiError(error).requestId || undefined)
+    },
   })
 
   const addPrice = useMutation({
@@ -198,11 +302,15 @@ export default function PlaceEditorScreen() {
 
   const changeStatus = useMutation({
     mutationFn: (status: PlaceStatus) => transitionPlace(id, status),
-    onSuccess: () => {
-      toast.success(t('placeEditor.status'))
+    onSuccess: (_result, status) => {
+      setStatusError(null)
+      toast.success(t('placeEditor.statusChanged', { status: t(`placeStatus.${status}` as const) }))
       invalidate()
     },
-    onError: (error) => toast.error(describeError(error)),
+    onError: (error) => {
+      setStatusError(describeError(error))
+      toast.error(describeError(error), toApiError(error).requestId || undefined)
+    },
   })
 
   const freshness = useMutation({
@@ -223,6 +331,26 @@ export default function PlaceEditorScreen() {
     },
     onError: (error) => toast.error(describeError(error)),
   })
+
+  /** Vietnamese text for a field the form — or the server — rejected. */
+  const fieldError = (name: keyof PlaceIdentityForm): string | undefined => {
+    const error = errors[name]
+    if (!error) return undefined
+    return describeField(name, {
+      code: String(error.type ?? ''),
+      message: String(error.message ?? ''),
+    })
+  }
+
+  const pendingBlocks = [
+    ...(identityDirty ? [t('placeEditor.identity')] : []),
+    ...(hoursDirty ? [t('placeEditor.hours')] : []),
+  ]
+
+  const leave = () => {
+    setLeaveOpen(false)
+    navigate('/places')
+  }
 
   if (!can('place.read')) {
     return (
@@ -279,29 +407,74 @@ export default function PlaceEditorScreen() {
           onRetry={() => void placeQuery.refetch()}
         >
           {(detail) => (
-            <form onSubmit={handleSubmit((values) => saveIdentity.mutate(values))}>
+            <form
+              onSubmit={handleSubmit((values) => {
+                setIdentityError(null)
+                saveIdentity.mutate(values)
+              })}
+            >
               <div className={styles.grid}>
                 <div className={styles.main}>
                   <Card>
-                    <CardHeader title={t('placeEditor.identity')} />
+                    <CardHeader
+                      title={t('placeEditor.identity')}
+                      actions={
+                        <BlockState
+                          tone={blockTone(identityDirty, identityError, identitySavedAt)}
+                          text={blockText(
+                            t,
+                            locale,
+                            identityDirty,
+                            identityError,
+                            identitySavedAt,
+                            detail.updatedAt,
+                          )}
+                        />
+                      }
+                    />
                     <CardBody className="flex flex-col gap-4">
+                      {identityError ? (
+                        <SaveErrorPanel
+                          title={t('placeEditor.saveRejected')}
+                          error={identityError}
+                        />
+                      ) : null}
                       <div className={styles.fieldRow}>
                         <TextInput
                           label={t('placeEditor.name')}
                           required
                           disabled={!canWrite}
-                          error={errors.name ? t('state.error') : undefined}
+                          error={fieldError('name')}
                           {...register('name')}
                         />
                         <Select
                           label={t('placeEditor.status')}
                           value={detail.status}
-                          disabled={!can('place.transition') || !online}
+                          // Only the transitions `cms-catalog.service.ts` accepts
+                          // are offered: the list used to carry every status, so
+                          // a draft could be sent straight to `published` and
+                          // come back 409 INVALID_PLACE_TRANSITION.
+                          disabled={
+                            !can('place.transition') ||
+                            !online ||
+                            changeStatus.isPending ||
+                            PLACE_TRANSITIONS[detail.status].length === 0
+                          }
+                          hint={
+                            PLACE_TRANSITIONS[detail.status].length === 0
+                              ? t('placeEditor.statusTerminal')
+                              : t('placeEditor.statusHint')
+                          }
+                          error={statusError ?? undefined}
                           onChange={(event) =>
                             changeStatus.mutate(event.target.value as PlaceStatus)
                           }
                         >
-                          {PLACE_STATUSES.map((status) => (
+                          {PLACE_STATUSES.filter(
+                            (status) =>
+                              status === detail.status ||
+                              PLACE_TRANSITIONS[detail.status].includes(status),
+                          ).map((status) => (
                             <option key={status} value={status}>
                               {t(`placeStatus.${status}` as const)}
                             </option>
@@ -312,12 +485,14 @@ export default function PlaceEditorScreen() {
                         <TextInput
                           label={t('placeEditor.address')}
                           disabled={!canWrite}
+                          error={fieldError('addressText')}
                           {...register('addressText')}
                         />
                         <TextInput
                           label={t('placeEditor.areaKey')}
                           hint={t('placeEditor.taxonomyHint')}
                           disabled={!canWrite}
+                          error={fieldError('areaKey')}
                           {...register('areaKey')}
                         />
                       </div>
@@ -325,6 +500,7 @@ export default function PlaceEditorScreen() {
                         label={t('placeEditor.description')}
                         rows={4}
                         disabled={!canWrite}
+                        error={fieldError('description')}
                         {...register('description')}
                       />
                       <div className={styles.fieldRow}>
@@ -332,7 +508,9 @@ export default function PlaceEditorScreen() {
                           label={t('placeEditor.avgVisit')}
                           type="number"
                           inputMode="numeric"
+                          hint={t('placeEditor.avgVisitHint')}
                           disabled={!canWrite}
+                          error={fieldError('avgVisitMinutes')}
                           {...register('avgVisitMinutes')}
                         />
                         <div className="flex items-end gap-2">
@@ -584,15 +762,20 @@ export default function PlaceEditorScreen() {
                       <div className={styles.fieldRow}>
                         <TextInput
                           label={t('placeEditor.lat')}
+                          inputMode="decimal"
                           disabled={!canWrite}
+                          error={fieldError('lat')}
                           {...register('lat')}
                         />
                         <TextInput
                           label={t('placeEditor.lng')}
+                          inputMode="decimal"
                           disabled={!canWrite}
+                          error={fieldError('lng')}
                           {...register('lng')}
                         />
                       </div>
+                      <p className={styles.attribution}>{t('placeEditor.geoHint')}</p>
                     </CardBody>
                   </Card>
 
@@ -606,13 +789,32 @@ export default function PlaceEditorScreen() {
                           variant="secondary"
                           disabled={!canWrite || !online}
                           loading={saveHours.isPending}
-                          onClick={() => saveHours.mutate()}
+                          onClick={() => {
+                            setHoursError(null)
+                            saveHours.mutate()
+                          }}
                         >
                           {t('action.save')}
                         </Button>
                       }
                     />
                     <CardBody>
+                      <div className="mb-2">
+                        <BlockState
+                          tone={blockTone(hoursDirty, hoursError, hoursSavedAt)}
+                          text={blockText(
+                            t,
+                            locale,
+                            hoursDirty,
+                            hoursError,
+                            hoursSavedAt,
+                            detail.updatedAt,
+                          )}
+                        />
+                      </div>
+                      {hoursError ? (
+                        <SaveErrorPanel title={t('placeEditor.hoursRejected')} error={hoursError} />
+                      ) : null}
                       {DAY_KEYS.map((dayKey, dayIndex) => {
                         const entry = hours.find((hour) => hour.dayOfWeek === dayIndex)
                         return (
@@ -776,17 +978,22 @@ export default function PlaceEditorScreen() {
               </div>
 
               <div className={`${styles.saveBar} mt-5`}>
-                <p className={styles.saveState}>
-                  <span
-                    className={`${styles.dot} ${isDirty ? 'bg-amber' : 'bg-mint'}`}
-                    aria-hidden="true"
-                  />
-                  {isDirty
-                    ? t('placeEditor.unsaved')
-                    : t('placeEditor.saved', { time: formatRelative(detail.updatedAt, locale) })}
-                </p>
+                <BlockState
+                  tone={blockTone(identityDirty, identityError, identitySavedAt)}
+                  text={blockText(
+                    t,
+                    locale,
+                    identityDirty,
+                    identityError,
+                    identitySavedAt,
+                    detail.updatedAt,
+                  )}
+                />
                 <div className="flex items-center gap-2">
-                  <Button variant="secondary" onClick={() => navigate('/places')}>
+                  <Button
+                    variant="secondary"
+                    onClick={() => (pendingBlocks.length > 0 ? setLeaveOpen(true) : leave())}
+                  >
                     {t('action.cancel')}
                   </Button>
                   <Button
@@ -795,7 +1002,7 @@ export default function PlaceEditorScreen() {
                     disabled={!canWrite || !online}
                     loading={saveIdentity.isPending}
                   >
-                    {saveIdentity.isPending ? t('action.saving') : t('action.save')}
+                    {saveIdentity.isPending ? t('action.saving') : t('placeEditor.saveIdentity')}
                   </Button>
                 </div>
               </div>
@@ -846,8 +1053,98 @@ export default function PlaceEditorScreen() {
         tone="primary"
         loading={merge.isPending}
       />
+
+      {/* Reload, tab close, and any in-app navigation the router owns. */}
+      <UnsavedChangesGuard when={pendingBlocks.length > 0} pending={pendingBlocks} />
+      {/* The screen's own exit, which the router blocker cannot see under a
+          non-data router (and which reads better as a direct question). */}
+      <UnsavedChangesDialog
+        open={leaveOpen}
+        pending={pendingBlocks}
+        onStay={() => setLeaveOpen(false)}
+        onLeave={leave}
+      />
     </>
   )
+}
+
+function BlockState({ tone, text }: { tone: BlockTone; text: string }) {
+  return (
+    <p className={styles.saveState}>
+      <span className={`${styles.dot} ${BLOCK_DOT[tone]}`} aria-hidden="true" />
+      <span aria-hidden="true">{BLOCK_GLYPH[tone]}</span>
+      {text}
+    </p>
+  )
+}
+
+function blockTone(dirty: boolean, error: BlockError | null, savedAt: string | null): BlockTone {
+  if (error) return 'failed'
+  if (dirty) return 'dirty'
+  return savedAt ? 'saved' : 'clean'
+}
+
+function blockText(
+  t: ReturnType<typeof useT>,
+  locale: 'vi' | 'en',
+  dirty: boolean,
+  error: BlockError | null,
+  savedAt: string | null,
+  updatedAt: string,
+): string {
+  if (error) return t('placeEditor.blockFailed')
+  if (dirty) return t('placeEditor.unsaved')
+  // "Đã lưu" is only ever this block's own answer; anything else is the row's
+  // last server-side change, which is a different claim and says so.
+  if (savedAt) return t('placeEditor.saved', { time: formatRelative(savedAt, locale) })
+  return t('placeEditor.lastChanged', { time: formatRelative(updatedAt, locale) })
+}
+
+/**
+ * What the server refused, in Vietnamese, plus the `request_id` — the one
+ * string an operator can hand to whoever reads the logs.
+ */
+function SaveErrorPanel({ title, error }: { title: string; error: BlockError }) {
+  const t = useT()
+  const describeField = usePlaceFieldError()
+  return (
+    <div role="alert" className={styles.errorPanel}>
+      <p className={styles.errorTitle}>
+        <span aria-hidden="true">⚠</span> {title}
+      </p>
+      <p className={styles.errorText}>{error.message}</p>
+      {error.unmapped.length > 0 ? (
+        // A path this form has no control for is still shown: an error nobody
+        // renders leaves an editor staring at a form that looks fine.
+        <ul className={styles.errorList}>
+          {error.unmapped.map((fieldError) => (
+            <li key={`${fieldError.field}:${fieldError.code}`}>
+              <span className={styles.errorField}>{fieldError.field}</span>{' '}
+              {describeField(fieldError.field, fieldError)}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {error.requestId ? (
+        <p className={styles.errorText}>
+          {t('placeEditor.requestId')} <code className={styles.requestId}>{error.requestId}</code>
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
+/** Order-independent identity of a week, so "changed" means changed. */
+function hoursSignature(rows: HourDraft[]): string {
+  return JSON.stringify(
+    [...rows]
+      .sort((a, b) => a.dayOfWeek - b.dayOfWeek)
+      .map((hour) => [hour.dayOfWeek, hour.openMinute, hour.closeMinute, hour.isOvernight]),
+  )
+}
+
+function taxonomySignature(ids: string[]): string {
+  return [...ids].sort().join(',')
 }
 
 function upsertHour(
