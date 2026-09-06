@@ -180,15 +180,23 @@ export function transitionPlace(id: string, status: PlaceStatus) {
  * not writable — the server stamps them as editor-verified, which is the point
  * of the endpoint (it also bumps freshness).
  */
-export function setPlaceHours(id: string, hours: PlaceHourInput[]) {
+export function setPlaceHours(id: string, hours: PlaceHourInput[], expectedUpdatedAt?: string) {
   return apiFetch(`/cms/places/${id}/hours`, {
     method: 'PUT',
     body: {
+      // Optimistic concurrency (GoGo-BE#425): a week built on a stale form is
+      // refused `409 PLACE_MODIFIED` rather than silently winning.
+      ...(expectedUpdatedAt ? { expectedUpdatedAt } : {}),
       hours: hours.map((hour) => ({
         dayOfWeek: hour.dayOfWeek,
+        kind: hour.kind,
         openMinute: hour.openMinute,
         closeMinute: hour.closeMinute,
         isOvernight: hour.isOvernight,
+        // Absent means `editor`. Only sent for a row being carried back
+        // unchanged, so re-saving a provider week is not recorded as a
+        // verification nobody performed (GoGo-BE#425).
+        ...(hour.source ? { source: hour.source } : {}),
       })),
     },
   })

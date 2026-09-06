@@ -88,10 +88,24 @@ export function isClearableField(field: string): field is PlaceClearableField {
 
 /** `PUT /cms/places/{id}/hours` — a whole week, replaced in one call. */
 export const PLACE_HOURS_LIMITS = {
-  /** Three windows a day at most; the server counts rows, not days. */
-  maxRows: 21,
+  /**
+   * Seven days x at most four services. Raised from 21 by GoGo-BE#425, when a
+   * day gained the right to hold more than one window; the server still counts
+   * rows, not days.
+   */
+  maxRows: 28,
+  /** Per day, enforced by `validateWeek` in GoGo-BE, not by the row count. */
+  maxIntervalsPerDay: 4,
   dayOfWeek: { min: 0, max: 6 },
   minuteOfDay: { min: 0, max: 1439 },
+  /**
+   * A day asserts one of these, or has no row at all. **There is no `unknown`
+   * kind** — GoGo-BE is explicit that "we have no data" is not something a row
+   * asserts about a place (ADR-0016), so unknown is the absence of a row.
+   */
+  kinds: ['interval', 'closed', 'open_24h'] as const,
+  /** Omitted on write means `editor`. */
+  sources: ['provider', 'editor'] as const,
 } as const
 
 const H = PLACE_HOURS_LIMITS
@@ -166,15 +180,125 @@ export const cmsPlaceEditMockSchema = buildPlaceEditSchema(z.string().min(1))
 export const cmsPlaceHoursSchema = z.object({
   hours: z
     .array(
-      z.object({
-        dayOfWeek: z.number().int().min(H.dayOfWeek.min).max(H.dayOfWeek.max),
-        openMinute: z.number().int().min(H.minuteOfDay.min).max(H.minuteOfDay.max),
-        closeMinute: z.number().int().min(H.minuteOfDay.min).max(H.minuteOfDay.max),
-        isOvernight: z.boolean().default(false),
-      }),
+      z
+        .object({
+          dayOfWeek: z.number().int().min(H.dayOfWeek.min).max(H.dayOfWeek.max),
+          kind: z.enum(H.kinds).default('interval'),
+          openMinute: z.number().int().min(H.minuteOfDay.min).max(H.minuteOfDay.max).default(0),
+          closeMinute: z.number().int().min(H.minuteOfDay.min).max(H.minuteOfDay.max).default(0),
+          isOvernight: z.boolean().default(false),
+          source: z.enum(H.sources).optional(),
+        })
+        // `.strict()` mirrors GoGo-BE: an unknown key is a client that thinks
+        // this endpoint accepts something it does not.
+        .strict(),
     )
     .max(H.maxRows),
+  expectedUpdatedAt: z.string().datetime({ offset: true }).optional(),
 })
+
+/**
+ * The rules `validateWeek` enforces on GoGo-BE beyond the row shape
+ * (`libs/modules/cms/domain/place-hours.ts`). Mirrored here so the mock rejects
+ * a week the real server would reject — an accepted-locally, refused-in-dev
+ * week is exactly the class of drift GoGo-CMS#122 was about.
+ *
+ * Codes are the server's codes; the console renders both through one path.
+ */
+export function mockHoursIssues(
+  hours: readonly {
+    dayOfWeek: number
+    kind: 'interval' | 'closed' | 'open_24h'
+    openMinute: number
+    closeMinute: number
+    isOvernight: boolean
+  }[],
+): { field: string; code: string; message: string }[] {
+  const issues: { field: string; code: string; message: string }[] = []
+  const byDay = new Map<number, number[]>()
+
+  hours.forEach((hour, index) => {
+    byDay.set(hour.dayOfWeek, [...(byDay.get(hour.dayOfWeek) ?? []), index])
+    if (hour.kind !== 'interval') {
+      if (hour.openMinute !== 0 || hour.closeMinute !== 0 || hour.isOvernight) {
+        issues.push({
+          field: `hours.${index}.kind`,
+          code: 'minutes_not_allowed',
+          message: 'whole-day row carries minutes',
+        })
+      }
+      return
+    }
+    if (hour.isOvernight) {
+      if (hour.closeMinute > hour.openMinute) {
+        issues.push({
+          field: `hours.${index}.isOvernight`,
+          code: 'not_overnight',
+          message: 'ends the same day',
+        })
+      }
+    } else if (hour.closeMinute <= hour.openMinute) {
+      issues.push({
+        field: `hours.${index}.closeMinute`,
+        code: 'not_after_open',
+        message: 'close is not after open',
+      })
+    }
+  })
+
+  for (const [, indexes] of byDay) {
+    const wholeDay = indexes.filter((i) => hours[i]!.kind !== 'interval')
+    if (wholeDay.length > 0 && indexes.length > 1) {
+      issues.push({
+        field: `hours.${wholeDay[0]}.kind`,
+        code: 'conflicting_day',
+        message: 'day is both whole-day and a span',
+      })
+    }
+    if (indexes.length > PLACE_HOURS_LIMITS.maxIntervalsPerDay) {
+      issues.push({
+        field: `hours.${indexes[PLACE_HOURS_LIMITS.maxIntervalsPerDay]}`,
+        code: 'too_many_intervals',
+        message: 'too many services in one day',
+      })
+    }
+  }
+
+  if (issues.length > 0) return issues
+
+  // The wrapped minute-of-week line, so a Saturday-night span colliding with
+  // Sunday morning is caught the same way the server catches it.
+  const DAY = 1440
+  const WEEK = 7 * DAY
+  const spans = hours.flatMap((hour, index) => {
+    if (hour.kind === 'closed') return []
+    const start = hour.dayOfWeek * DAY + (hour.kind === 'open_24h' ? 0 : hour.openMinute)
+    const length =
+      hour.kind === 'open_24h'
+        ? DAY
+        : hour.isOvernight
+          ? DAY - hour.openMinute + hour.closeMinute
+          : hour.closeMinute - hour.openMinute
+    return [{ index, start, end: start + length }]
+  })
+  for (let i = 0; i < spans.length; i += 1) {
+    for (let j = i + 1; j < spans.length; j += 1) {
+      const a = spans[i]!
+      const b = spans[j]!
+      const hit = [-WEEK, 0, WEEK].some(
+        (shift) => a.start < b.end + shift && b.start + shift < a.end,
+      )
+      if (hit) {
+        issues.push({
+          field: `hours.${Math.max(a.index, b.index)}`,
+          code: 'overlapping',
+          message: 'two services overlap',
+        })
+      }
+    }
+  }
+  return issues
+}
 
 /**
  * The shape `ZodValidationPipe` turns a rejected body into

@@ -4,6 +4,7 @@ import type { AdminRole, CollectionStatus, PlaceStatus } from '@/shared/api/cont
 import {
   cmsPlaceEditMockSchema,
   cmsPlaceHoursSchema,
+  mockHoursIssues,
   toFieldErrors,
 } from '@/shared/api/cmsPlaceContract'
 import { ALLOWED_ACTIONS, ALLOWED_TRIGGERS } from '@/features/safety/conditions'
@@ -865,10 +866,47 @@ export const handlers = [
     if (!place) return envelope(404, 'NOT_FOUND', 'place not found')
     const parsed = cmsPlaceHoursSchema.safeParse(await request.json())
     if (!parsed.success) return validationEnvelope(parsed.error.issues)
-    // The server stamps provenance; the client never sends it.
+
+    // GoGo-BE#425 — the rules `validateWeek` enforces beyond the shape. Mocked
+    // here so a week the server would refuse is refused in tests too, rather
+    // than passing locally and failing as a toast in dev.
+    const semantic = mockHoursIssues(parsed.data.hours)
+    if (semantic.length > 0) {
+      return HttpResponse.json(
+        {
+          code: 'VALIDATION_FAILED',
+          message: 'Request validation failed',
+          field_errors: semantic,
+          request_id: `req-${Math.random().toString(36).slice(2, 10)}`,
+          retryable: false,
+        },
+        { status: 400 },
+      )
+    }
+
     const verifiedAt = new Date().toISOString()
-    place.hours = parsed.data.hours.map((hour) => ({ ...hour, source: 'editor', verifiedAt }))
-    place.freshnessCheckedAt = verifiedAt
+    /*
+     * Provenance is the server's to stamp, and it does not stamp every row.
+     * A row declared `provider` keeps that source and the `verifiedAt` of the
+     * row it replaces; only an `editor` row is verified now, and only an
+     * editor row moves the place's freshness clock (GoGo-BE#425).
+     */
+    const before = place.hours
+    place.hours = parsed.data.hours.map((hour) => {
+      const source = hour.source ?? 'editor'
+      if (source === 'editor') return { ...hour, source, verifiedAt }
+      const carried = before.find(
+        (row) =>
+          row.dayOfWeek === hour.dayOfWeek &&
+          (row.kind ?? 'interval') === hour.kind &&
+          row.openMinute === hour.openMinute &&
+          row.closeMinute === hour.closeMinute,
+      )
+      return { ...hour, source, verifiedAt: carried?.verifiedAt ?? null }
+    })
+    if (parsed.data.hours.some((hour) => (hour.source ?? 'editor') === 'editor')) {
+      place.freshnessCheckedAt = verifiedAt
+    }
     place.updatedAt = verifiedAt
     return HttpResponse.json(place)
   }),

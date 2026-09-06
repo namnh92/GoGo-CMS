@@ -9,17 +9,15 @@ import { useSession } from '@/shared/auth/session'
 import { useOnline } from '@/shared/ui/useOnline'
 import {
   formatDateTime,
-  formatMinuteOfDay,
   formatMoneyRange,
   formatNumber,
   formatPercent,
   formatRelative,
-  parseMinuteOfDay,
 } from '@/shared/format'
 import { PageBody, PageHeader } from '@/app/PageHeader'
 import { Card, CardBody, CardHeader } from '@/shared/ui/Card'
 import { Button } from '@/shared/ui/Button'
-import { Select, TextArea, TextInput, Toggle } from '@/shared/ui/Field'
+import { Select, TextArea, TextInput } from '@/shared/ui/Field'
 import { Badge } from '@/shared/ui/Badge'
 import { Drawer, ConfirmDialog, type ChangeLine } from '@/shared/ui/Overlay'
 import { AsyncBoundary, PermissionDeniedState, useErrorMessage } from '@/shared/ui/State'
@@ -31,12 +29,11 @@ import { TakedownDialog } from '@/features/emergency/takedownDialog.view'
 import { fetchTaxonomies } from '@/features/taxonomy/api'
 import type {
   CmsPlaceDetail,
-  PlaceHourInput,
   PlaceProvenance,
   PlaceStatus,
   PriceUnit,
 } from '@/shared/api/contracts'
-import { toApiError, type FieldError } from '@/shared/api/errors'
+import { ApiError, toApiError, type FieldError } from '@/shared/api/errors'
 import {
   addPlacePrice,
   fetchPlace,
@@ -49,6 +46,8 @@ import {
 } from './api'
 import { PLACE_STATUSES, PLACE_TRANSITIONS } from './status'
 import { AreaCombobox } from './areaCombobox'
+import { HoursEditor } from './hoursEditor.view'
+import { emptyWeek, parseWeek, weekFromServer, weekSignature, type WeekDraft } from './hoursModel'
 import {
   diffAgainstServer,
   placeIdentitySchema,
@@ -59,14 +58,6 @@ import {
   type PlaceIdentityForm,
 } from './placeForm'
 import { styles } from './placeEditor.style'
-
-/**
- * `dayOfWeek` on the wire is 0 = Sunday … 6 = Saturday — the convention
- * GoGo-BE derives from `Date#getUTCDay()` in `vnDayMinute()`. 2024-01-07 is a
- * Sunday, so it is the base date the weekday labels are formatted from.
- */
-const DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
-const WEEKDAY_BASE_DATE = Date.UTC(2024, 0, 7)
 
 const PRICE_UNITS: PriceUnit[] = ['per_person', 'per_item', 'per_hour', 'per_night']
 
@@ -118,14 +109,6 @@ function isStoredWebUrl(value: string | null | undefined): value is string {
   return typeof value === 'string' && /^https?:\/\//i.test(value)
 }
 
-/**
- * What the editor holds while a week is being edited. `source` and `verifiedAt`
- * are read-only server stamps, so a row typed here has neither until it is
- * saved — the row says "not saved yet" rather than borrowing a provenance it
- * does not have.
- */
-type HourDraft = PlaceHourInput & { source?: string; verifiedAt?: string | null }
-
 export default function PlaceEditorScreen() {
   const t = useT()
   const { locale } = useI18n()
@@ -145,8 +128,14 @@ export default function PlaceEditorScreen() {
   const [takedownOpen, setTakedownOpen] = useState(false)
   const [leaveOpen, setLeaveOpen] = useState(false)
   const [mergeTarget, setMergeTarget] = useState<{ id: string; name: string } | null>(null)
-  const [hours, setHours] = useState<HourDraft[]>([])
+  /**
+   * GoGo-CMS#124 — the week as a form holds it: per day, with the typed string
+   * kept until save. `HoursEditor` owns the shape; see `hoursModel.ts` for why
+   * it is not the wire's flat row list.
+   */
+  const [week, setWeek] = useState<WeekDraft>(() => emptyWeek())
   const [hoursBaseline, setHoursBaseline] = useState<string | null>(null)
+  const [hoursFieldErrors, setHoursFieldErrors] = useState<FieldError[]>([])
   const [taxonomyIds, setTaxonomyIds] = useState<string[]>([])
   const [taxonomyBaseline, setTaxonomyBaseline] = useState<string | null>(null)
   const [identityError, setIdentityError] = useState<BlockError | null>(null)
@@ -207,8 +196,8 @@ export default function PlaceEditorScreen() {
   const cityValue = useWatch({ control: form.control, name: 'city' })
 
   const hoursDirty = useMemo(
-    () => hoursBaseline !== null && hoursSignature(hours) !== hoursBaseline,
-    [hours, hoursBaseline],
+    () => hoursBaseline !== null && weekSignature(week) !== hoursBaseline,
+    [week, hoursBaseline],
   )
   const taxonomyDirty = useMemo(
     () => taxonomyBaseline !== null && taxonomySignature(taxonomyIds) !== taxonomyBaseline,
@@ -283,8 +272,10 @@ export default function PlaceEditorScreen() {
     if (hoursAppliedRef.current === revision) return
     if (hoursAppliedRef.current !== '' && hoursDirtyRef.current) return
     hoursAppliedRef.current = revision
-    setHours(place.hours)
-    setHoursBaseline(hoursSignature(place.hours))
+    const draft = weekFromServer(place.hours)
+    setWeek(draft)
+    setHoursBaseline(weekSignature(draft))
+    setHoursFieldErrors([])
   }, [place])
 
   const taxonomyById = useMemo(() => {
@@ -376,19 +367,53 @@ export default function PlaceEditorScreen() {
     },
   })
 
+  /**
+   * The week is validated here before it is sent, against the same rules
+   * `validateWeek` applies on GoGo-BE and with the same issue codes — so an
+   * overlapping pair of services is pointed at in the form instead of coming
+   * back as a toast. A rejected save never touches the draft: the acceptance
+   * criterion is that a failed PUT does not cost the editor their work.
+   */
   const saveHours = useMutation({
-    mutationFn: () => setPlaceHours(id, hours),
+    mutationFn: () => {
+      const { rows, issues } = parseWeek(week)
+      if (issues.length > 0) {
+        setHoursFieldErrors(issues)
+        return Promise.reject(
+          new ApiError({
+            code: 'VALIDATION_FAILED',
+            message: t('placeEditor.hours.error.blocked'),
+            status: 400,
+            fieldErrors: issues,
+          }),
+        )
+      }
+      setHoursFieldErrors([])
+      return setPlaceHours(id, rows, place?.updatedAt)
+    },
     onSuccess: () => {
       setHoursError(null)
       setHoursSavedAt(new Date().toISOString())
-      setHoursBaseline(hoursSignature(hours))
+      setHoursBaseline(weekSignature(week))
       toast.success(t('placeEditor.savedHours'))
       invalidate()
     },
     onError: (error) => {
+      const apiError = toApiError(error)
       setHoursSavedAt(null)
-      setHoursError(asBlockError(error))
-      toast.error(describeError(error), toApiError(error).requestId || undefined)
+      // Server field errors land on the rows that produced them, exactly like
+      // the local ones — the paths are the same because the contract is.
+      setHoursFieldErrors(apiError.fieldErrors)
+      // The week renders every `hours.*` path against the row that produced it,
+      // so the panel lists only what it cannot place. Showing both would print
+      // the same sentence twice for one mistake.
+      setHoursError(
+        asBlockError(
+          apiError,
+          apiError.fieldErrors.filter((error) => !error.field.startsWith('hours.')),
+        ),
+      )
+      toast.error(describeError(apiError), apiError.requestId || undefined)
     },
   })
 
@@ -1033,69 +1058,12 @@ export default function PlaceEditorScreen() {
                       {hoursError ? (
                         <SaveErrorPanel title={t('placeEditor.hoursRejected')} error={hoursError} />
                       ) : null}
-                      {DAY_KEYS.map((dayKey, dayIndex) => {
-                        const entry = hours.find((hour) => hour.dayOfWeek === dayIndex)
-                        return (
-                          <div key={dayKey} className={styles.hoursRow}>
-                            <span className={styles.dayLabel}>
-                              {new Intl.DateTimeFormat(locale === 'en' ? 'en-US' : 'vi-VN', {
-                                weekday: 'short',
-                                timeZone: 'UTC',
-                              }).format(new Date(WEEKDAY_BASE_DATE + dayIndex * 86_400_000))}
-                            </span>
-                            <input
-                              className={styles.timeInput}
-                              aria-label={`${dayKey} open`}
-                              disabled={!canWrite}
-                              value={entry ? formatMinuteOfDay(entry.openMinute) : ''}
-                              placeholder={t('placeEditor.closed')}
-                              onChange={(event) => {
-                                const minute = parseMinuteOfDay(event.target.value)
-                                if (minute == null) return
-                                setHours((current) =>
-                                  upsertHour(current, dayIndex, { openMinute: minute }),
-                                )
-                              }}
-                            />
-                            <input
-                              className={styles.timeInput}
-                              aria-label={`${dayKey} close`}
-                              disabled={!canWrite}
-                              value={entry ? formatMinuteOfDay(entry.closeMinute) : ''}
-                              placeholder={t('placeEditor.closed')}
-                              onChange={(event) => {
-                                const minute = parseMinuteOfDay(event.target.value)
-                                if (minute == null) return
-                                setHours((current) =>
-                                  upsertHour(current, dayIndex, { closeMinute: minute }),
-                                )
-                              }}
-                            />
-                            <Toggle
-                              label={`${dayKey} ${t('placeEditor.overnight')}`}
-                              checked={entry?.isOvernight ?? false}
-                              disabled={!canWrite || !entry}
-                              onChange={(checked) =>
-                                setHours((current) =>
-                                  upsertHour(current, dayIndex, { isOvernight: checked }),
-                                )
-                              }
-                            />
-                            {entry ? (
-                              <p className={styles.hourMeta}>
-                                {entry.source
-                                  ? t('placeEditor.hoursSource', {
-                                      source: entry.source,
-                                      time: entry.verifiedAt
-                                        ? formatDateTime(entry.verifiedAt, locale)
-                                        : t('placeEditor.unverified'),
-                                    })
-                                  : t('placeEditor.hoursUnsaved')}
-                              </p>
-                            ) : null}
-                          </div>
-                        )
-                      })}
+                      <HoursEditor
+                        week={week}
+                        onChange={setWeek}
+                        disabled={!canWrite}
+                        serverIssues={hoursFieldErrors}
+                      />
                     </CardBody>
                   </Card>
 
@@ -1518,29 +1486,6 @@ function ConflictPanel({
 }
 
 /** Order-independent identity of a week, so "changed" means changed. */
-function hoursSignature(rows: HourDraft[]): string {
-  return JSON.stringify(
-    [...rows]
-      .sort((a, b) => a.dayOfWeek - b.dayOfWeek)
-      .map((hour) => [hour.dayOfWeek, hour.openMinute, hour.closeMinute, hour.isOvernight]),
-  )
-}
-
 function taxonomySignature(ids: string[]): string {
   return [...ids].sort().join(',')
-}
-
-function upsertHour(
-  current: HourDraft[],
-  dayOfWeek: number,
-  patch: Partial<HourDraft>,
-): HourDraft[] {
-  const existing = current.find((hour) => hour.dayOfWeek === dayOfWeek)
-  if (!existing) {
-    return [
-      ...current,
-      { dayOfWeek, openMinute: 480, closeMinute: 1320, isOvernight: false, ...patch },
-    ].sort((a, b) => a.dayOfWeek - b.dayOfWeek)
-  }
-  return current.map((hour) => (hour.dayOfWeek === dayOfWeek ? { ...hour, ...patch } : hour))
 }

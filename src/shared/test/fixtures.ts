@@ -214,6 +214,7 @@ export const places: CmsPlaceDetail[] = [
     hours: [
       {
         dayOfWeek: 0,
+        kind: 'interval' as const,
         openMinute: 480,
         closeMinute: 1350,
         isOvernight: false,
@@ -222,6 +223,7 @@ export const places: CmsPlaceDetail[] = [
       },
       {
         dayOfWeek: 1,
+        kind: 'interval' as const,
         openMinute: 420,
         closeMinute: 1350,
         isOvernight: false,
@@ -230,6 +232,7 @@ export const places: CmsPlaceDetail[] = [
       },
       {
         dayOfWeek: 2,
+        kind: 'interval' as const,
         openMinute: 420,
         closeMinute: 1350,
         isOvernight: false,
@@ -238,6 +241,7 @@ export const places: CmsPlaceDetail[] = [
       },
       {
         dayOfWeek: 3,
+        kind: 'interval' as const,
         openMinute: 420,
         closeMinute: 1350,
         isOvernight: false,
@@ -246,6 +250,7 @@ export const places: CmsPlaceDetail[] = [
       },
       {
         dayOfWeek: 4,
+        kind: 'interval' as const,
         openMinute: 420,
         closeMinute: 1350,
         isOvernight: false,
@@ -254,6 +259,7 @@ export const places: CmsPlaceDetail[] = [
       },
       {
         dayOfWeek: 5,
+        kind: 'interval' as const,
         openMinute: 420,
         closeMinute: 1380,
         isOvernight: false,
@@ -262,6 +268,7 @@ export const places: CmsPlaceDetail[] = [
       },
       {
         dayOfWeek: 6,
+        kind: 'interval' as const,
         openMinute: 480,
         closeMinute: 1380,
         isOvernight: false,
