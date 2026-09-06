@@ -145,13 +145,37 @@ describe('the checklist on screen', () => {
     expect(card.getAllByText(/Đủ|Chưa có|Chưa đạt/).length).toBeGreaterThan(5)
   })
 
-  it('names what is blocking when the status cannot reach published', async () => {
+  /*
+   * #138 — this assertion used to accept the bug it was meant to catch. The
+   * summary joined the list labels, which are written affirmatively because
+   * `Row` shows them beside ✓/○, so the sentence read "Chưa xuất bản được:
+   * Trạng thái hiện tại cho phép chuyển sang Đã xuất bản" — cannot publish
+   * because publishing is allowed. A reason has to be phrased as a failure.
+   */
+  it('names what is blocking, phrased as a failure', async () => {
     signInAs('editor')
     open({ status: 'archived' })
     await screen.findByText('Trước khi xuất bản')
-    expect(
-      await screen.findByText(/Chưa xuất bản được:.*Trạng thái hiện tại cho phép/),
-    ).toBeInTheDocument()
+
+    const blocked = await screen.findByText(/Chưa xuất bản được:/)
+    expect(blocked).toHaveTextContent(
+      'Chưa xuất bản được: trạng thái Lưu trữ không chuyển thẳng sang Đã xuất bản được',
+    )
+    // The affirmative label belongs to the row, never to the reason.
+    expect(blocked).not.toHaveTextContent('cho phép')
+  })
+
+  it('phrases a missing permission as a failure too', async () => {
+    // A moderator reads the editor and cannot transition, so `permission` is
+    // the blocking item — the other half of the same bug.
+    signInAs('moderator')
+    open({ status: 'review' })
+    await screen.findByText('Trước khi xuất bản')
+
+    const blocked = await screen.findByText(/Chưa xuất bản được:/)
+    expect(blocked).toHaveTextContent('tài khoản không có quyền chuyển trạng thái')
+    // Not the row label, which says the opposite ("Tài khoản có quyền …").
+    expect(blocked).not.toHaveTextContent('Tài khoản có quyền')
   })
 })
 

@@ -535,6 +535,8 @@ export const en: Partial<Record<MessageKey, string>> = {
   'publishChecklist.missingRequired': 'Not met',
   'publishChecklist.missingSuggested': 'Missing',
   'publishChecklist.blocked': 'Cannot publish yet: {reason}',
+  'publishChecklist.reason.transition': 'a place in {from} cannot move straight to {to}',
+  'publishChecklist.reason.permission': 'this account may not change the status',
   'publishChecklist.lastChecked': 'Last verified {time}',
   'publishChecklist.item.transition': 'The current status allows a move to Published',
   'publishChecklist.item.permission': 'This account may change the status',

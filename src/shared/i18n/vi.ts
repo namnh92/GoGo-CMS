@@ -586,6 +586,14 @@ export const vi = {
   'publishChecklist.missingRequired': 'Chưa đạt',
   'publishChecklist.missingSuggested': 'Chưa có',
   'publishChecklist.blocked': 'Chưa xuất bản được: {reason}',
+  /*
+   * Lý do chặn phải viết ở thể phủ định. Nhãn `publishChecklist.item.*`
+   * viết ở thể khẳng định vì trong danh sách chúng đi kèm dấu ✓/○ và badge
+   * "Chưa đạt"; ghép thẳng nhãn đó vào sau "Chưa xuất bản được:" làm câu
+   * tự mâu thuẫn (#138).
+   */
+  'publishChecklist.reason.transition': 'trạng thái {from} không chuyển thẳng sang {to} được',
+  'publishChecklist.reason.permission': 'tài khoản không có quyền chuyển trạng thái',
   'publishChecklist.lastChecked': 'Xác minh gần nhất {time}',
   'publishChecklist.item.transition': 'Trạng thái hiện tại cho phép chuyển sang Đã xuất bản',
   'publishChecklist.item.permission': 'Tài khoản có quyền chuyển trạng thái',
