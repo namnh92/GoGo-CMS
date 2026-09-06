@@ -49,7 +49,9 @@ describe('place list, by role', () => {
     renderWithProviders(<PlaceListScreen />)
 
     await screen.findByText('Chào Bạn Cafe & Space')
-    expect(screen.getByLabelText('Mã khu vực')).toBeInTheDocument()
+    // CMS-044: the area filter is now the same combobox the editor uses, over
+    // the same `cmsListAreas` vocabulary — one filter, one list of keys.
+    expect(screen.getByRole('combobox', { name: 'Khu vực khám phá' })).toBeInTheDocument()
     expect(screen.getByLabelText('Khoá nhóm')).toBeInTheDocument()
     expect(screen.getByLabelText('Nguồn dữ liệu')).toBeInTheDocument()
     expect(screen.getByLabelText('Sắp xếp')).toBeInTheDocument()

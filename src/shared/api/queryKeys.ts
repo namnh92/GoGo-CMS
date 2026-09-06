@@ -93,6 +93,16 @@ export const queryKeys = {
     duplicates: ['places', 'duplicates'] as const,
   },
 
+  /**
+   * `cmsListAreas` (GoGo-BE#425). The query is part of the key because the
+   * server does the Vietnamese-aware matching — "quan 1" finding "Quận 1"
+   * cannot be reproduced by filtering a cached page in the browser.
+   */
+  areas: {
+    all: ['areas'] as const,
+    list: (filters: Record<string, unknown>) => ['areas', 'list', filters] as const,
+  },
+
   taxonomies: {
     all: ['taxonomies'] as const,
     byKind: (kind: TaxonomyKind) => ['taxonomies', kind] as const,

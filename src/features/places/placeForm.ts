@@ -45,6 +45,17 @@ export const placeIdentitySchema = z
     name: z.string().trim().min(L.name.min, 'placeEditor.error.required').max(L.name.max),
     addressText: z.string().max(L.addressText.max).optional(),
     areaKey: z.string().max(L.areaKey.max).optional(),
+    city: z.string().max(L.city.max).optional(),
+    district: z.string().max(L.district.max).optional(),
+    /*
+     * Neither is validated for shape here. GoGo-BE normalizes a phone to E.164
+     * and a website to `http(s)`, and a second, slightly different rule in the
+     * browser would refuse values the server accepts (and accept ones it
+     * refuses). The editor sends what was typed and renders the server's
+     * `field_errors` — one normalizer, on the side that stores the value.
+     */
+    phone: z.string().max(L.phone.max).optional(),
+    website: z.string().max(L.website.max).optional(),
     description: z.string().max(L.description.max).optional(),
     avgVisitMinutes: optionalNumber(
       z.number().int().min(L.avgVisitMinutes.min).max(L.avgVisitMinutes.max),
@@ -70,6 +81,10 @@ export const PLACE_IDENTITY_FIELDS = [
   'name',
   'addressText',
   'areaKey',
+  'city',
+  'district',
+  'phone',
+  'website',
   'description',
   'avgVisitMinutes',
   'lat',
@@ -101,21 +116,126 @@ export function splitFieldErrors(fieldErrors: readonly FieldError[]): {
   return { mapped, unmapped }
 }
 
-/** The PATCH body. `undefined` keys drop out of the JSON — that is the point. */
+/**
+ * What the form was loaded with — the other half of every "did this change?"
+ * question the body builder has to answer.
+ */
+export type PlaceEditBaseline = {
+  values: PlaceIdentityForm
+  taxonomyIds: string[]
+  /** The `updatedAt` the form was loaded from; travels as `expectedUpdatedAt`. */
+  updatedAt: string
+}
+
+/** `'  '`, `''` and `undefined` are all "the editor left this box empty". */
+function textOf(value: string | undefined): string {
+  return (value ?? '').trim()
+}
+
+function sameIds(a: string[], b: string[]): boolean {
+  return [...a].sort().join(',') === [...b].sort().join(',')
+}
+
+/**
+ * The PATCH body.
+ *
+ * Three states, not two (GoGo-BE#425):
+ *
+ *  - **absent key** — the editor did not touch this field. The server leaves
+ *    it alone, and does not record a provenance claim over a value nobody
+ *    edited: saving a phone number must not re-stamp the description as
+ *    editorial.
+ *  - **`null`** — the editor emptied a box that had something in it. Before
+ *    #425 this arrived as an absent key, so a value could be filled once and
+ *    never removed.
+ *  - **a value** — what was typed.
+ *
+ * Without `baseline` there is nothing to diff against, so every filled box is
+ * sent and nothing is cleared: that is the safe reading of "we do not know
+ * what this form started from".
+ */
 export function toPlaceEditBody(
   values: PlaceIdentityForm,
   taxonomyIds: string[],
+  baseline?: PlaceEditBaseline,
 ): UpdatePlaceInput {
-  return {
-    name: values.name.trim(),
-    addressText: values.addressText?.trim() || undefined,
-    areaKey: values.areaKey?.trim() || undefined,
-    description: values.description || undefined,
-    avgVisitMinutes: values.avgVisitMinutes,
-    lat: values.lat,
-    lng: values.lng,
-    taxonomyIds,
+  const body: UpdatePlaceInput = {}
+
+  const text = (field: 'addressText' | 'areaKey' | 'city' | 'district' | 'phone' | 'website') => {
+    const next = textOf(values[field])
+    if (!baseline) {
+      if (next) body[field] = next
+      return
+    }
+    const before = textOf(baseline.values[field])
+    if (next === before) return
+    // Empty against a value that existed is the clear; empty against empty is
+    // no change at all, and sending `null` for it would claim an edit.
+    body[field] = next === '' ? null : next
   }
+
+  // `description` keeps its whitespace — a paragraph break is content there.
+  const nextDescription = values.description ?? ''
+  const nextName = values.name.trim()
+  if (!baseline) {
+    if (nextName) body.name = nextName
+    if (nextDescription) body.description = nextDescription
+  } else {
+    if (nextName !== baseline.values.name.trim()) body.name = nextName
+    const beforeDescription = baseline.values.description ?? ''
+    if (nextDescription !== beforeDescription) {
+      body.description = nextDescription === '' ? null : nextDescription
+    }
+  }
+
+  text('addressText')
+  text('areaKey')
+  text('city')
+  text('district')
+  text('phone')
+  text('website')
+
+  if (!baseline) {
+    if (values.avgVisitMinutes !== undefined) body.avgVisitMinutes = values.avgVisitMinutes
+  } else if (values.avgVisitMinutes !== baseline.values.avgVisitMinutes) {
+    body.avgVisitMinutes = values.avgVisitMinutes ?? null
+  }
+
+  /*
+   * Coordinates are the one pair with no `null` in the contract, so an emptied
+   * box cannot ask for a pin to be removed — only for one to be moved. They
+   * also travel together or not at all: the server ignores a lone value, and
+   * `placeIdentitySchema` refuses to let one leave here on its own.
+   */
+  if (values.lat !== undefined && values.lng !== undefined) {
+    if (!baseline || values.lat !== baseline.values.lat || values.lng !== baseline.values.lng) {
+      body.lat = values.lat
+      body.lng = values.lng
+    }
+  }
+
+  if (!baseline || !sameIds(taxonomyIds, baseline.taxonomyIds)) body.taxonomyIds = taxonomyIds
+  if (baseline) body.expectedUpdatedAt = baseline.updatedAt
+
+  return body
+}
+
+/**
+ * The fields whose current value differs from what the server now holds —
+ * what a `409 PLACE_MODIFIED` needs to show, because "somebody else saved" is
+ * useless without "and here is what you would have overwritten".
+ */
+export function diffAgainstServer(
+  values: PlaceIdentityForm,
+  server: Partial<Record<PlaceIdentityField, string | number | null | undefined>>,
+): { field: PlaceIdentityField; mine: string; theirs: string }[] {
+  const out: { field: PlaceIdentityField; mine: string; theirs: string }[] = []
+  for (const field of PLACE_IDENTITY_FIELDS) {
+    const mine = String(values[field] ?? '').trim()
+    const theirs = String(server[field] ?? '').trim()
+    if (mine !== theirs) out.push({ field, mine, theirs })
+  }
+  return out
 }
 
 /**

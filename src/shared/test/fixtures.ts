@@ -1,5 +1,6 @@
 import type {
   AuditEntry,
+  CmsArea,
   Collection,
   CollectionItem,
   CmsPlaceDetail,
@@ -164,7 +165,10 @@ export const places: CmsPlaceDetail[] = [
     name: 'Chào Bạn Cafe & Space',
     status: 'published',
     areaKey: 'hcm_q3',
-    phone: '+84 28 3930 1234',
+    city: 'TP.HCM',
+    district: 'Quận 3',
+    // Already E.164, because that is the only shape the server stores.
+    phone: '+842839301234',
     website: 'https://chaoban.cafe',
     priceLevel: 2,
     confidence: 0.92,
@@ -182,6 +186,26 @@ export const places: CmsPlaceDetail[] = [
     curatedRank: 3,
     taxonomyKeys: ['cafe', 'work_friendly', 'quiet_peaceful'],
     taxonomyIds: ['tx-cat-cafe', 'tx-set-workfriendly', 'tx-mood-quiet'],
+    /*
+     * Deliberately partial. `city`, `district` and `website` are absent, which
+     * is the case the UI has to say out loud: a field with no row here has no
+     * recorded origin, and defaulting it to GoGo would manufacture the very
+     * claim this map exists to keep honest.
+     */
+    provenance: {
+      name: { sourceType: 'editorial', sourceReference: null, verifiedAt: iso(60 * 24 * 3) },
+      addressText: {
+        sourceType: 'provider',
+        sourceReference: 'google:ChIJ_chao_ban',
+        verifiedAt: iso(60 * 24 * 30),
+      },
+      phone: {
+        sourceType: 'google_derived',
+        sourceReference: 'google:ChIJ_chao_ban',
+        verifiedAt: null,
+      },
+      areaKey: { sourceType: 'editorial', sourceReference: null, verifiedAt: iso(60 * 24 * 9) },
+    },
     ratings: {
       provider: { rating: 4.8, count: 1240 },
       gogo: { rating: 4.9, count: 86 },
@@ -283,6 +307,8 @@ export const places: CmsPlaceDetail[] = [
     name: 'Phở Bát Đàn',
     status: 'published',
     areaKey: 'hn_hoankiem',
+    city: 'Hà Nội',
+    district: 'Hoàn Kiếm',
     confidence: 0.78,
     freshnessCheckedAt: iso(60 * 24 * 14),
     createdAt: iso(60 * 24 * 180),
@@ -297,6 +323,9 @@ export const places: CmsPlaceDetail[] = [
     curatedRank: null,
     taxonomyKeys: ['street_food'],
     taxonomyIds: ['tx-cat-street-food'],
+    provenance: {
+      name: { sourceType: 'community', sourceReference: 'submission:sub-114', verifiedAt: null },
+    },
     ratings: {
       provider: { rating: 4.5, count: 8210 },
       gogo: { rating: 4.7, count: 41 },
@@ -320,6 +349,8 @@ export const places: CmsPlaceDetail[] = [
     name: 'Tây Hồ Sunset SUP Club',
     status: 'review',
     areaKey: 'hn_tayho',
+    city: 'Hà Nội',
+    district: null,
     confidence: 0.44,
     freshnessCheckedAt: null,
     createdAt: iso(60 * 24 * 20),
@@ -334,6 +365,8 @@ export const places: CmsPlaceDetail[] = [
     curatedRank: null,
     taxonomyKeys: ['high_energy'],
     taxonomyIds: ['tx-mood-energetic'],
+    // Nothing recorded at all: every field reads "Chưa ghi nhận nguồn".
+    provenance: {},
     ratings: {
       provider: { rating: 4.2, count: 310 },
       gogo: { count: 0 },
@@ -348,6 +381,8 @@ export const places: CmsPlaceDetail[] = [
     name: 'GoPlay Entertainment',
     status: 'suspended',
     areaKey: 'hcm_q10',
+    city: 'TP.HCM',
+    district: 'Quận 10',
     confidence: 0.35,
     freshnessCheckedAt: iso(60 * 24 * 120),
     createdAt: iso(60 * 24 * 300),
@@ -362,6 +397,9 @@ export const places: CmsPlaceDetail[] = [
     curatedRank: null,
     taxonomyKeys: ['high_energy'],
     taxonomyIds: ['tx-mood-energetic'],
+    provenance: {
+      name: { sourceType: 'editorial', sourceReference: null, verifiedAt: iso(60 * 24 * 40) },
+    },
     ratings: {
       provider: { rating: 4.1, count: 520 },
       gogo: { rating: 3.5, count: 12 },
@@ -376,6 +414,8 @@ export const places: CmsPlaceDetail[] = [
     name: 'Cơm Tấm Ba Ghiền',
     status: 'community_submitted',
     areaKey: 'hcm_phunhuan',
+    city: 'TP.HCM',
+    district: 'Phú Nhuận',
     confidence: 0.5,
     freshnessCheckedAt: null,
     createdAt: iso(60 * 5),
@@ -390,6 +430,9 @@ export const places: CmsPlaceDetail[] = [
     curatedRank: null,
     taxonomyKeys: ['street_food'],
     taxonomyIds: ['tx-cat-street-food'],
+    provenance: {
+      name: { sourceType: 'community', sourceReference: 'submission:sub-118', verifiedAt: null },
+    },
     ratings: {
       provider: { rating: 4.4, count: 4100 },
       gogo: { count: 0 },
@@ -398,6 +441,87 @@ export const places: CmsPlaceDetail[] = [
     prices: [],
     sources: [],
     media: [],
+  },
+]
+
+/**
+ * `cmsListAreas` (GoGo-BE#425) — the vocabulary behind `areaKey`.
+ *
+ * Three kinds of row, because the picker has to survive all three:
+ *
+ *  - an ordinary active area,
+ *  - a **retired** one (`hcm_q10`), still held by `pl-goplay`: it is not
+ *    offered as a new choice, and it must still resolve its label,
+ *  - a key **no catalog row exists for** (`hcm_phunhuan`, held by
+ *    `pl-com-tam-ba-ghien`): `area_key` has never been a foreign key, so
+ *    `known: false` with no `name` is a real answer, not a bug.
+ */
+export const cmsAreas: CmsArea[] = [
+  {
+    key: 'hcm_q1',
+    name: 'Quận 1, TP.HCM',
+    city: 'TP.HCM',
+    isActive: true,
+    known: true,
+    placeCount: 41,
+    centerLat: 10.7769,
+    centerLng: 106.7009,
+    radiusM: 3000,
+  },
+  {
+    key: 'hcm_q3',
+    name: 'Quận 3, TP.HCM',
+    city: 'TP.HCM',
+    isActive: true,
+    known: true,
+    placeCount: 18,
+    centerLat: 10.7797,
+    centerLng: 106.6873,
+    radiusM: 2500,
+  },
+  {
+    key: 'hn_hoankiem',
+    name: 'Hoàn Kiếm, Hà Nội',
+    city: 'Hà Nội',
+    isActive: true,
+    known: true,
+    placeCount: 12,
+    centerLat: 21.0287,
+    centerLng: 105.8524,
+    radiusM: 2000,
+  },
+  {
+    key: 'hn_tayho',
+    name: 'Tây Hồ, Hà Nội',
+    city: 'Hà Nội',
+    isActive: true,
+    known: true,
+    placeCount: 7,
+    centerLat: 21.0705,
+    centerLng: 105.8221,
+    radiusM: 3500,
+  },
+  {
+    key: 'hcm_q10',
+    name: 'Quận 10, TP.HCM',
+    city: 'TP.HCM',
+    isActive: false,
+    known: true,
+    placeCount: 1,
+    centerLat: 10.7712,
+    centerLng: 106.6702,
+    radiusM: 2200,
+  },
+  {
+    key: 'hcm_phunhuan',
+    name: null,
+    city: null,
+    isActive: false,
+    known: false,
+    placeCount: 1,
+    centerLat: null,
+    centerLng: null,
+    radiusM: null,
   },
 ]
 

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm, useWatch, type Control } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useI18n, useLabel, useT } from '@/shared/i18n/i18n'
 import { queryKeys } from '@/shared/api/queryKeys'
@@ -21,7 +21,7 @@ import { Card, CardBody, CardHeader } from '@/shared/ui/Card'
 import { Button } from '@/shared/ui/Button'
 import { Select, TextArea, TextInput, Toggle } from '@/shared/ui/Field'
 import { Badge } from '@/shared/ui/Badge'
-import { Drawer, ConfirmDialog } from '@/shared/ui/Overlay'
+import { Drawer, ConfirmDialog, type ChangeLine } from '@/shared/ui/Overlay'
 import { AsyncBoundary, PermissionDeniedState, useErrorMessage } from '@/shared/ui/State'
 import { AuditTrail } from '@/shared/ui/AuditTrail'
 import { useToast } from '@/shared/ui/Toast'
@@ -29,7 +29,13 @@ import { CloseIcon, PlusIcon, ShieldOffIcon } from '@/shared/ui/icons'
 import { UnsavedChangesDialog, UnsavedChangesGuard } from '@/shared/ui/UnsavedChangesGuard'
 import { TakedownDialog } from '@/features/emergency/takedownDialog.view'
 import { fetchTaxonomies } from '@/features/taxonomy/api'
-import type { PlaceHourInput, PlaceStatus, PriceUnit } from '@/shared/api/contracts'
+import type {
+  CmsPlaceDetail,
+  PlaceHourInput,
+  PlaceProvenance,
+  PlaceStatus,
+  PriceUnit,
+} from '@/shared/api/contracts'
 import { toApiError, type FieldError } from '@/shared/api/errors'
 import {
   addPlacePrice,
@@ -42,11 +48,14 @@ import {
   verifyFreshness,
 } from './api'
 import { PLACE_STATUSES, PLACE_TRANSITIONS } from './status'
+import { AreaCombobox } from './areaCombobox'
 import {
+  diffAgainstServer,
   placeIdentitySchema,
   splitFieldErrors,
   toPlaceEditBody,
   usePlaceFieldError,
+  type PlaceEditBaseline,
   type PlaceIdentityForm,
 } from './placeForm'
 import { styles } from './placeEditor.style'
@@ -87,6 +96,29 @@ const BLOCK_GLYPH: Record<BlockTone, string> = {
 type BlockError = { message: string; requestId: string; unmapped: FieldError[] }
 
 /**
+ * The fields `place_field_provenance` records an origin for (GoGo-BE#425).
+ *
+ * A field missing from the map has **no recorded origin**, which is a fact in
+ * its own right and gets said in words. Filling it in with "GoGo" would
+ * manufacture exactly the claim the map exists to keep honest.
+ */
+const PROVENANCE_FIELDS = [
+  { name: 'name', labelKey: 'placeEditor.name' },
+  { name: 'description', labelKey: 'placeEditor.description' },
+  { name: 'addressText', labelKey: 'placeEditor.address' },
+  { name: 'areaKey', labelKey: 'placeEditor.areaKey' },
+  { name: 'city', labelKey: 'placeEditor.city' },
+  { name: 'district', labelKey: 'placeEditor.district' },
+  { name: 'phone', labelKey: 'placeEditor.phone' },
+  { name: 'website', labelKey: 'placeEditor.website' },
+] as const
+
+/** Only a stored `http(s)` URL is rendered as a link — never a typed fragment. */
+function isStoredWebUrl(value: string | null | undefined): value is string {
+  return typeof value === 'string' && /^https?:\/\//i.test(value)
+}
+
+/**
  * What the editor holds while a week is being edited. `source` and `verifiedAt`
  * are read-only server stamps, so a row typed here has neither until it is
  * saved — the row says "not saved yet" rather than borrowing a provenance it
@@ -119,6 +151,13 @@ export default function PlaceEditorScreen() {
   const [taxonomyBaseline, setTaxonomyBaseline] = useState<string | null>(null)
   const [identityError, setIdentityError] = useState<BlockError | null>(null)
   const [hoursError, setHoursError] = useState<BlockError | null>(null)
+  /** What the identity form was loaded from — the other half of every diff. */
+  const [identityBaseline, setIdentityBaseline] = useState<PlaceEditBaseline | null>(null)
+  /** Set by a `409 PLACE_MODIFIED`; carries the server's current `updatedAt`. */
+  const [conflict, setConflict] = useState<{ serverUpdatedAt: string } | null>(null)
+  const [reloadOpen, setReloadOpen] = useState(false)
+  /** What reloading would discard — named, so the dialog is not a bare "sure?". */
+  const [reloadChanges, setReloadChanges] = useState<ChangeLine[]>([])
   const [statusError, setStatusError] = useState<string | null>(null)
   const [identitySavedAt, setIdentitySavedAt] = useState<string | null>(null)
   const [hoursSavedAt, setHoursSavedAt] = useState<string | null>(null)
@@ -159,6 +198,14 @@ export default function PlaceEditorScreen() {
 
   const place = placeQuery.data
 
+  /*
+   * The area picker groups by city, so the city currently in the form floats
+   * its own areas to the top. It is a hint, not a server filter: `city` is
+   * free text an editor may have spelled differently from the catalog, and
+   * filtering on a typo would hide the rows the picker exists to offer.
+   */
+  const cityValue = useWatch({ control: form.control, name: 'city' })
+
   const hoursDirty = useMemo(
     () => hoursBaseline !== null && hoursSignature(hours) !== hoursBaseline,
     [hours, hoursBaseline],
@@ -185,24 +232,50 @@ export default function PlaceEditorScreen() {
   const identityAppliedRef = useRef('')
   const hoursAppliedRef = useRef('')
 
+  /**
+   * Take the server's values, and remember them as the baseline.
+   *
+   * The baseline is what makes `null` sayable: a box that is empty *now* only
+   * means "clear this field" if it had something in it when the form loaded.
+   * It also carries the `updatedAt` every save sends back as
+   * `expectedUpdatedAt`.
+   */
+  const applyIdentity = useCallback(
+    (detail: CmsPlaceDetail) => {
+      const values: PlaceIdentityForm = {
+        name: detail.name,
+        addressText: detail.addressText ?? '',
+        areaKey: detail.areaKey ?? '',
+        city: detail.city ?? '',
+        district: detail.district ?? '',
+        // Whatever the server normalized the last save to — E.164, `https://…`.
+        phone: detail.phone ?? '',
+        website: detail.website ?? '',
+        description: detail.description ?? '',
+        avgVisitMinutes: detail.avgVisitMinutes ?? undefined,
+        lat: detail.lat ?? undefined,
+        lng: detail.lng ?? undefined,
+      }
+      identityAppliedRef.current = `${detail.id}:${detail.updatedAt}`
+      reset(values)
+      setTaxonomyIds(detail.taxonomyIds)
+      setTaxonomyBaseline(taxonomySignature(detail.taxonomyIds))
+      setIdentityBaseline({
+        values,
+        taxonomyIds: detail.taxonomyIds,
+        updatedAt: detail.updatedAt,
+      })
+    },
+    [reset],
+  )
+
   useEffect(() => {
     if (!place) return
     const revision = `${place.id}:${place.updatedAt}`
     if (identityAppliedRef.current === revision) return
     if (identityAppliedRef.current !== '' && identityDirtyRef.current) return
-    identityAppliedRef.current = revision
-    reset({
-      name: place.name,
-      addressText: place.addressText ?? '',
-      areaKey: place.areaKey ?? '',
-      description: place.description ?? '',
-      avgVisitMinutes: place.avgVisitMinutes ?? undefined,
-      lat: place.lat ?? undefined,
-      lng: place.lng ?? undefined,
-    })
-    setTaxonomyIds(place.taxonomyIds)
-    setTaxonomyBaseline(taxonomySignature(place.taxonomyIds))
-  }, [place, reset])
+    applyIdentity(place)
+  }, [place, applyIdentity])
 
   useEffect(() => {
     if (!place) return
@@ -239,19 +312,54 @@ export default function PlaceEditorScreen() {
   )
 
   const saveIdentity = useMutation({
-    mutationFn: (values: PlaceIdentityForm) =>
-      updatePlace(id, toPlaceEditBody(values, taxonomyIds)),
-    onSuccess: (_result, values) => {
+    mutationFn: ({
+      values,
+      baseline,
+    }: {
+      values: PlaceIdentityForm
+      baseline: PlaceEditBaseline
+    }) => updatePlace(id, toPlaceEditBody(values, taxonomyIds, baseline)),
+    onSuccess: (result, { values, baseline }) => {
       setIdentityError(null)
+      setConflict(null)
       setIdentitySavedAt(new Date().toISOString())
       // Keep exactly what was typed, but stop calling it unsaved.
       reset(values)
       setTaxonomyBaseline(taxonomySignature(taxonomyIds))
+      /*
+       * The row moved, so the `expectedUpdatedAt` this form is holding is now
+       * stale. `cmsUpdatePlace` documents no response schema, so the new stamp
+       * is taken when it is actually there and otherwise left to the refetch
+       * below — a guessed timestamp would turn the next save into a 409.
+       */
+      const updatedAt = (result as { updatedAt?: unknown } | undefined)?.updatedAt
+      setIdentityBaseline({
+        values,
+        taxonomyIds,
+        updatedAt: typeof updatedAt === 'string' ? updatedAt : baseline.updatedAt,
+      })
       toast.success(t('placeEditor.savedIdentity'))
+      // Re-reads the row, so the editor sees the *normalized* phone and
+      // website the server stored rather than the string they typed.
       invalidate()
     },
     onError: (error) => {
       const apiError = toApiError(error)
+      /*
+       * Somebody else saved between load and submit. Nothing the editor typed
+       * is thrown away: the form keeps it, the panel says which fields differ
+       * from the server's copy, and the choice between reloading and
+       * overwriting stays with the person who can tell which is right.
+       */
+      if (apiError.code === 'PLACE_MODIFIED') {
+        setIdentityError(null)
+        setIdentitySavedAt(null)
+        setConflict({ serverUpdatedAt: apiError.fieldErrors[0]?.message ?? '' })
+        // Pulls the current row so the diff below compares against real values.
+        invalidate()
+        toast.error(describeError(apiError), apiError.requestId || undefined)
+        return
+      }
       const { mapped, unmapped } = splitFieldErrors(apiError.fieldErrors)
       // Every rejected field lands back on its own control; the first one takes
       // focus, so the fix starts where the problem is.
@@ -410,7 +518,16 @@ export default function PlaceEditorScreen() {
             <form
               onSubmit={handleSubmit((values) => {
                 setIdentityError(null)
-                saveIdentity.mutate(values)
+                saveIdentity.mutate({
+                  values,
+                  // Never absent in practice: the form only renders once the
+                  // detail has loaded, and that is what sets the baseline.
+                  baseline: identityBaseline ?? {
+                    values,
+                    taxonomyIds,
+                    updatedAt: detail.updatedAt,
+                  },
+                })
               })}
             >
               <div className={styles.grid}>
@@ -437,6 +554,32 @@ export default function PlaceEditorScreen() {
                         <SaveErrorPanel
                           title={t('placeEditor.saveRejected')}
                           error={identityError}
+                        />
+                      ) : null}
+                      {conflict ? (
+                        <ConflictPanel
+                          control={form.control}
+                          server={detail}
+                          serverUpdatedAt={conflict.serverUpdatedAt}
+                          disabled={!canWrite || !online}
+                          pending={saveIdentity.isPending}
+                          onReload={(changes) => {
+                            setReloadChanges(changes)
+                            setReloadOpen(true)
+                          }}
+                          onOverwrite={() =>
+                            saveIdentity.mutate({
+                              values: form.getValues(),
+                              baseline: {
+                                // The editor's own starting point, so an
+                                // untouched field is still not claimed — but
+                                // against the row as it stands now.
+                                values: identityBaseline?.values ?? form.getValues(),
+                                taxonomyIds: identityBaseline?.taxonomyIds ?? taxonomyIds,
+                                updatedAt: detail.updatedAt,
+                              },
+                            })
+                          }
                         />
                       ) : null}
                       <div className={styles.fieldRow}>
@@ -481,21 +624,33 @@ export default function PlaceEditorScreen() {
                           ))}
                         </Select>
                       </div>
-                      <div className={styles.fieldRow}>
-                        <TextInput
-                          label={t('placeEditor.address')}
-                          disabled={!canWrite}
-                          error={fieldError('addressText')}
-                          {...register('addressText')}
-                        />
-                        <TextInput
-                          label={t('placeEditor.areaKey')}
-                          hint={t('placeEditor.taxonomyHint')}
-                          disabled={!canWrite}
-                          error={fieldError('areaKey')}
-                          {...register('areaKey')}
-                        />
-                      </div>
+                      {/*
+                        `areaKey` is the discovery area, and its vocabulary is
+                        `service_areas` — exposed by `cmsListAreas`. It used to
+                        be a free text box under a hint telling the editor to
+                        "chọn taxonomy", and there is no `area` taxonomy kind:
+                        the hint pointed at nothing and the box accepted keys
+                        the place filter could never match (GoGo-BE ADR-0016).
+                      */}
+                      <Controller
+                        control={form.control}
+                        name="areaKey"
+                        render={({ field }) => (
+                          <AreaCombobox
+                            label={t('placeEditor.areaKey')}
+                            hint={t('placeEditor.areaKeyHint')}
+                            disabled={!canWrite}
+                            error={fieldError('areaKey')}
+                            value={field.value ? field.value : null}
+                            // `''` and not `null`, because the form's own shape
+                            // is a string; the empty string becomes `null` on
+                            // the wire in `toPlaceEditBody`.
+                            onChange={(next) => field.onChange(next ?? '')}
+                            preferCity={cityValue}
+                            id="place-area-key"
+                          />
+                        )}
+                      />
                       <TextArea
                         label={t('placeEditor.description')}
                         rows={4}
@@ -525,32 +680,13 @@ export default function PlaceEditorScreen() {
                         </div>
                       </div>
                       {/*
-                        Phone, website and price level are provider facts: the
-                        catalog reads them but `cmsUpdatePlace` does not accept
+                        Price level and confidence stay read-only: they are
+                        provider-derived and `cmsUpdatePlace` does not accept
                         them, so an editable-looking field here would be a lie.
+                        Phone and website moved into the contact card below —
+                        GoGo-BE#425 made them writable.
                       */}
                       <dl className={styles.factGrid}>
-                        <div>
-                          <dt className={styles.factLabel}>{t('placeEditor.phone')}</dt>
-                          <dd className={styles.factValue}>{detail.phone ?? '—'}</dd>
-                        </div>
-                        <div>
-                          <dt className={styles.factLabel}>{t('placeEditor.website')}</dt>
-                          <dd className={styles.factValue}>
-                            {detail.website ? (
-                              <a
-                                className={styles.factLink}
-                                href={detail.website}
-                                target="_blank"
-                                rel="noreferrer noopener"
-                              >
-                                {detail.website}
-                              </a>
-                            ) : (
-                              '—'
-                            )}
-                          </dd>
-                        </div>
                         <div>
                           <dt className={styles.factLabel}>{t('placeEditor.priceLevel')}</dt>
                           <dd className={styles.factValue}>
@@ -603,6 +739,88 @@ export default function PlaceEditorScreen() {
                           </span>
                         </div>
                       </div>
+                    </CardBody>
+                  </Card>
+
+                  {/*
+                    The administrative address, kept apart from `areaKey` on
+                    purpose: one is where the place is, the other is where GoGo
+                    offers it. Every box here clears its column when emptied.
+                  */}
+                  <Card>
+                    <CardHeader
+                      title={t('placeEditor.contact')}
+                      hint={t('placeEditor.contactHint')}
+                    />
+                    <CardBody className="flex flex-col gap-4">
+                      <TextInput
+                        label={t('placeEditor.address')}
+                        disabled={!canWrite}
+                        error={fieldError('addressText')}
+                        {...register('addressText')}
+                      />
+                      <div className={styles.fieldRow}>
+                        <TextInput
+                          label={t('placeEditor.city')}
+                          disabled={!canWrite}
+                          error={fieldError('city')}
+                          {...register('city')}
+                        />
+                        <TextInput
+                          label={t('placeEditor.district')}
+                          // Not required, and the hint says so: Vietnamese
+                          // administrative units get reorganised and an address
+                          // with no district is a valid address.
+                          hint={t('placeEditor.districtHint')}
+                          disabled={!canWrite}
+                          error={fieldError('district')}
+                          {...register('district')}
+                        />
+                      </div>
+                      <div className={styles.fieldRow}>
+                        <TextInput
+                          label={t('placeEditor.phone')}
+                          type="tel"
+                          inputMode="tel"
+                          // The server normalizes to E.164 and answers on
+                          // `phone`; a second rule here would disagree with it.
+                          hint={t('placeEditor.phoneHint')}
+                          disabled={!canWrite}
+                          error={fieldError('phone')}
+                          {...register('phone')}
+                        />
+                        <div className="flex flex-col gap-1">
+                          <TextInput
+                            label={t('placeEditor.website')}
+                            /*
+                              `inputMode`, deliberately not `type="url"`: the
+                              browser's own validation refuses a bare host and
+                              blocks the submit, while the server accepts one
+                              and upgrades it to `https://`. Two rules again,
+                              and the stricter one wins before the request is
+                              even made.
+                            */
+                            inputMode="url"
+                            hint={t('placeEditor.websiteHint')}
+                            disabled={!canWrite}
+                            error={fieldError('website')}
+                            {...register('website')}
+                          />
+                          {/* A link only for a value actually stored as
+                              http(s) — never for whatever is being typed. */}
+                          {isStoredWebUrl(detail.website) ? (
+                            <a
+                              className={styles.factLink}
+                              href={detail.website}
+                              target="_blank"
+                              rel="noreferrer noopener"
+                            >
+                              {t('placeEditor.websiteOpen')}
+                            </a>
+                          ) : null}
+                        </div>
+                      </div>
+                      <ProvenanceList provenance={detail.provenance} />
                     </CardBody>
                   </Card>
 
@@ -1054,6 +1272,25 @@ export default function PlaceEditorScreen() {
         loading={merge.isPending}
       />
 
+      {/*
+        Reloading after a concurrent save throws the editor's own work away,
+        so it is a confirmation, not a button — and it says what is lost.
+      */}
+      <ConfirmDialog
+        open={reloadOpen}
+        onClose={() => setReloadOpen(false)}
+        onConfirm={() => {
+          if (place) applyIdentity(place)
+          setConflict(null)
+          setReloadOpen(false)
+        }}
+        title={t('placeEditor.conflictReloadTitle')}
+        description={t('placeEditor.conflictReloadBody')}
+        changes={reloadChanges}
+        confirmLabel={t('placeEditor.conflictReload')}
+        tone="danger"
+      />
+
       {/* Reload, tab close, and any in-app navigation the router owns. */}
       <UnsavedChangesGuard when={pendingBlocks.length > 0} pending={pendingBlocks} />
       {/* The screen's own exit, which the router blocker cannot see under a
@@ -1130,6 +1367,152 @@ function SaveErrorPanel({ title, error }: { title: string; error: BlockError }) 
           {t('placeEditor.requestId')} <code className={styles.requestId}>{error.requestId}</code>
         </p>
       ) : null}
+    </div>
+  )
+}
+
+/**
+ * Where each editable field came from.
+ *
+ * Two rules, both from `GOGO_PRODUCT_DATA_ARCHITECTURE.md`: a field with no row
+ * has **no recorded origin** and says so rather than defaulting to GoGo, and
+ * `google_derived` is not `provider` — applying a value from a preview copies
+ * it, it does not transfer ownership of it.
+ */
+function ProvenanceList({ provenance }: { provenance: Record<string, PlaceProvenance> }) {
+  const t = useT()
+  const label = useLabel()
+  const { locale } = useI18n()
+  return (
+    <section>
+      <p className={styles.factLabel}>
+        {t('placeEditor.provenance')} — {t('placeEditor.provenanceHint')}
+      </p>
+      <dl className={styles.provenanceGrid}>
+        {PROVENANCE_FIELDS.map((field) => {
+          const row = provenance[field.name]
+          return (
+            <div key={field.name} className={styles.provenanceRow}>
+              <dt className={styles.factLabel}>{t(field.labelKey)}</dt>
+              <dd className={styles.provenanceValue}>
+                {row ? (
+                  <>
+                    {/* An unknown source type renders as itself, never blank. */}
+                    {label(`fieldSource.${row.sourceType}`, row.sourceType)}
+                    <span className={styles.provenanceMeta}>
+                      {row.verifiedAt
+                        ? t('placeEditor.provenanceVerified', {
+                            time: formatDateTime(row.verifiedAt, locale),
+                          })
+                        : t('placeEditor.provenanceUnverified')}
+                      {row.sourceReference ? ` · ${row.sourceReference}` : ''}
+                    </span>
+                  </>
+                ) : (
+                  <span className={styles.provenanceEmpty}>{t('placeEditor.provenanceNone')}</span>
+                )}
+              </dd>
+            </div>
+          )
+        })}
+      </dl>
+    </section>
+  )
+}
+
+/**
+ * `409 PLACE_MODIFIED` — somebody saved this place while the form was open.
+ *
+ * The editor's work stays in the boxes. What they get is the one thing that
+ * makes the choice decidable: which of their fields differ from what the row
+ * now holds, and both values side by side.
+ */
+function ConflictPanel({
+  control,
+  server,
+  serverUpdatedAt,
+  disabled,
+  pending,
+  onReload,
+  onOverwrite,
+}: {
+  control: Control<PlaceIdentityForm>
+  server: CmsPlaceDetail
+  serverUpdatedAt: string
+  disabled: boolean
+  pending: boolean
+  onReload: (changes: ChangeLine[]) => void
+  onOverwrite: () => void
+}) {
+  const t = useT()
+  const { locale } = useI18n()
+  // Live values: the diff has to follow what is being typed while the panel is
+  // open, or it describes a form that no longer exists.
+  const values = useWatch({ control }) as PlaceIdentityForm
+  const differences = diffAgainstServer(values, {
+    name: server.name,
+    addressText: server.addressText,
+    areaKey: server.areaKey,
+    city: server.city,
+    district: server.district,
+    phone: server.phone,
+    website: server.website,
+    description: server.description,
+    avgVisitMinutes: server.avgVisitMinutes,
+    lat: server.lat,
+    lng: server.lng,
+  })
+  const empty = t('placeEditor.conflictEmpty')
+  const changes: ChangeLine[] = differences.map((difference) => ({
+    label: difference.field,
+    from: difference.mine || empty,
+    to: difference.theirs || empty,
+  }))
+
+  return (
+    <div role="alert" className={styles.conflictPanel}>
+      <p className={styles.conflictTitle}>
+        <span aria-hidden="true">⚠</span> {t('placeEditor.conflictTitle')}
+      </p>
+      <p className={styles.errorText}>
+        {t('placeEditor.conflictBody', {
+          time: serverUpdatedAt ? formatDateTime(serverUpdatedAt, locale) : '—',
+        })}
+      </p>
+      {differences.length === 0 ? (
+        <p className={styles.errorText}>{t('placeEditor.conflictNoDiff')}</p>
+      ) : (
+        <>
+          <p className={styles.errorText}>{t('placeEditor.conflictDiff')}</p>
+          <ul className={styles.errorList}>
+            {differences.map((difference) => (
+              <li key={difference.field}>
+                <span className={styles.errorField}>{difference.field}</span>{' '}
+                <span className={styles.conflictMine}>
+                  {t('placeEditor.conflictMine')}: {difference.mine || empty}
+                </span>{' '}
+                <span className={styles.conflictTheirs}>
+                  {t('placeEditor.conflictTheirs')}: {difference.theirs || empty}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <Button size="sm" variant="secondary" onClick={() => onReload(changes)}>
+          {t('placeEditor.conflictReload')}
+        </Button>
+        <Button
+          size="sm"
+          variant="danger"
+          disabled={disabled}
+          loading={pending}
+          onClick={onOverwrite}
+        >
+          {t('placeEditor.conflictOverwrite')}
+        </Button>
+      </div>
     </div>
   )
 }

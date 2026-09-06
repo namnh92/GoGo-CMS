@@ -47,6 +47,31 @@ CTA: mọi `Button` có `loading` (đặt `aria-busy`) và `disabled`.
 - Phân trang bằng cursor/offset qua `Pagination`; tổng số đọc được cho screen
   reader qua vùng `aria-live`.
 
+## Chọn từ danh mục do máy chủ sở hữu
+
+`Combobox` (`src/shared/ui/Combobox.tsx`) là lựa chọn đơn có tìm kiếm trên một
+danh mục **được fetch**. `<Select>` không làm được việc này: danh sách đến từ
+mạng nên tự nó có bốn trạng thái, và một `<select>` không có chỗ nào để nói ra
+chúng.
+
+- Bốn trạng thái phải phân biệt được bằng lời: `pending`, `success` (kể cả
+  "danh mục rỗng" và "không khớp truy vấn" — hai câu khác nhau), `error` (kèm
+  `Thử lại`) và `denied` (**không** có nút thử lại: 403 không phải lỗi để bấm
+  lại).
+- Lưu **stable key**, tìm theo nhãn tiếng Việt. Nhãn hiển thị do phía gọi
+  resolve, vì chỉ phía gọi biết một khoá không tra được là đã ngừng hay là
+  ngoài danh mục.
+- **Giá trị bản ghi đang giữ luôn hiển thị được**, kể cả khi danh mục không còn
+  liệt kê nó. Mất giá trị của chính bản ghi trong bộ chọn dựng ra để hiện nó là
+  lỗi nặng nhất của loại control này.
+- Bàn phím: Lên/Xuống/Home/End/Enter/Escape, `aria-activedescendant`,
+  `role="combobox"` + popup `role="listbox"`; lựa chọn kèm dấu ✓ chứ không chỉ
+  bằng màu.
+
+Ví dụ đang dùng: `AreaCombobox` (`src/features/places/areaCombobox.tsx`) trên
+`GET /cms/areas`, dùng chung cho editor địa điểm và bộ lọc danh sách — một từ
+vựng, một danh sách khoá.
+
 ## Xác nhận hành động phá huỷ
 
 `ConfirmDialog` **bắt buộc** nhận danh sách `changes`. Một dialog "Bạn có chắc

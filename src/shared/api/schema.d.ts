@@ -1898,6 +1898,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/cms/areas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Editor: the discovery-area vocabulary behind every areaKey
+         * @description `places.area_key` had no catalog: the console shipped it as a free text box under a hint telling the editor to pick a taxonomy, and there is no `area` taxonomy kind. The vocabulary existed all along in `service_areas` — the coverage list community import checks a submitted place against — and its keys are exactly the values the column holds, so this exposes that rather than starting a second list that would drift.
+         *
+         *     Keys present on places but absent from the catalog are returned with `known: false` and no `name`. They exist, because the column has never been a foreign key, and dropping them would make a place's own value vanish from the picker meant to show it.
+         */
+        get: operations["cmsListAreas"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/cms/places/duplicates": {
         parameters: {
             query?: never;
@@ -3962,7 +3984,7 @@ export interface components {
          */
         CmsCostSourceKind: "AUTO" | "MANUAL" | "NONE";
         /**
-         * @description ADR-0014. Observed: whether the row's money is current. For AUTO, the epic §23 roll-up over covering sources — FRESH and STALE as they are, UNAVAILABLE reads ERROR (a collection was attempted and failed), a never-attempted source reads UNKNOWN (not a failure); the per-source detail stays in `freshness.sources`. With no covering source the cost rows decide (today FRESH, older STALE, none UNKNOWN). For MANUAL, the materialised rows alone (today FRESH, older STALE). ERROR is reserved for an attempt that failed.
+         * @description ADR-0014. Observed: whether the row's money is current. For AUTO, the epic §23 roll-up over covering sources — FRESH and STALE as they are, UNAVAILABLE reads ERROR (a collection was attempted and failed), a never-attempted source reads UNKNOWN (not a failure); the per-source detail stays in `freshness.sources`. With no covering source the cost rows decide (today FRESH, older STALE, none UNKNOWN). For MANUAL, the item schedule matched by source and charge day (complete or nothing due FRESH, missing or unexpected charges STALE; no item and no rows null). ERROR is reserved for an attempt that failed.
          * @enum {string}
          */
         CmsCostDataFreshness: "FRESH" | "STALE" | "ERROR" | "UNKNOWN";
@@ -3970,6 +3992,33 @@ export interface components {
             kind: components["schemas"]["CmsCostSourceKind"];
             /** @description Null when there is nothing to be current — kind NONE, or MANUAL with nothing entered yet. UNKNOWN is different — an automatic source exists and has never been observed. */
             freshness: components["schemas"]["CmsCostDataFreshness"] | null;
+        };
+        CmsManualBillingItem: {
+            /** Format: uuid */
+            id: string;
+            providerId: string;
+            serviceId: string;
+            name?: string;
+            amountMicros: number;
+            currency: string;
+            /** @enum {string} */
+            period: "ONE_TIME" | "MONTHLY" | "YEARLY";
+            /** Format: date */
+            effectiveFrom: string;
+            /** Format: date */
+            effectiveTo: string | null;
+            /** @enum {string} */
+            basis: "MANUAL";
+            /** @enum {string} */
+            costKind: "ONE_TIME" | "RECURRING";
+            /** @enum {string|null} */
+            billingCadence: "MONTHLY" | "ANNUAL" | null;
+            /** @description Full recurring charge in currency micros; null for one-time items. */
+            periodAmountMicros: number | null;
+            /** Format: date */
+            nextChargeDay: string | null;
+            /** @description Active annual amount divided by 12 and rounded to micros, or active monthly amount. Zero for one-time or inactive items. Never cash spend. */
+            normalizedMonthlyRunRateMicros: number;
         };
         CmsCostServiceRow: components["schemas"]["CmsCostMoney"] & {
             /** @example google.places */
@@ -3984,6 +4033,8 @@ export interface components {
             instrumented: boolean;
             /** @description ADR-0014 — what is measured, from the registry alone. */
             runtime: components["schemas"]["CmsServiceRuntime"];
+            /** @description Persisted manual billing facts; retained even when no charge is due in the selected window. */
+            billingItems: components["schemas"]["CmsManualBillingItem"][];
             /** @description ADR-0014 — how money gets in and whether it is current. Independent of `runtime`. */
             cost: components["schemas"]["CmsCostSource"];
             usage: components["schemas"]["CmsCostUsageLine"][];
@@ -4020,6 +4071,8 @@ export interface components {
             capabilities: string[];
             /** @description ADR-0014 — coverage over every service with a runtime surface, with counts for the drill-down; `services[].runtime` says which. */
             runtime: components["schemas"]["CmsProviderRuntime"];
+            /** @description Persisted manual billing facts; retained even when no charge is due in the selected window. */
+            billingItems: components["schemas"]["CmsManualBillingItem"][];
             /** @description ADR-0014 — how money gets in and whether it is current. Independent of `runtime` and of `status`. */
             cost: components["schemas"]["CmsCostSource"];
             billingTimezone: string | null;
@@ -5111,9 +5164,15 @@ export interface components {
             /** @enum {string} */
             status: "draft" | "community_submitted" | "review" | "published" | "suspended" | "archived";
             addressText?: string | null;
+            /** @description Discovery area — a `service_areas` key, the same vocabulary the place-list filter sends. Not the postal address. */
             areaKey?: string | null;
+            /** @description Administrative address. */
+            city?: string | null;
+            /** @description Administrative address; optional. */
+            district?: string | null;
             lat?: number;
             lng?: number;
+            /** @description E.164. */
             phone?: string | null;
             website?: string | null;
             avgVisitMinutes?: number | null;
@@ -5138,11 +5197,30 @@ export interface components {
             taxonomyIds: string[];
             /** @description Alongside the ids so a chip can be labelled without a second call; writes still send ids. */
             taxonomyKeys?: string[];
+            /** @description Per-field origin, keyed by the field name this contract uses. A field absent from this map has **no recorded origin** — which the UI must say in words rather than defaulting it to GoGo. Not backfilled: places predating #425 have fields whose origin nothing recorded, and claiming one would manufacture the provenance this map exists to keep honest. */
+            provenance?: {
+                [key: string]: {
+                    /**
+                     * @description `editorial` is a person's own claim. `google_derived` is a value applied from a provider preview — copying does not transfer ownership (GOGO_PRODUCT_DATA_ARCHITECTURE.md), so the two stay distinct and a provider refresh may overwrite the second but not the first.
+                     * @enum {string}
+                     */
+                    sourceType: "editorial" | "provider" | "community" | "google_derived";
+                    sourceReference?: string | null;
+                    /** Format: date-time */
+                    verifiedAt?: string | null;
+                };
+            };
+            /** @description A day with no row here is *unknown*, not closed — the two are different facts and the UI must not render one as the other. */
             hours: {
                 dayOfWeek: number;
+                /** @enum {string} */
+                kind: "interval" | "closed" | "open_24h";
+                /** @description Zero on a non-interval row. */
                 openMinute: number;
+                /** @description Zero on a non-interval row. */
                 closeMinute: number;
                 isOvernight: boolean;
+                /** @description `provider` or `editor`. Left unconstrained here for the same reason as the write limits above: narrowing a response property that was previously an open string reads as breaking to the compatibility gate, even though these are the only two values `hours_source` has ever held. */
                 source: string;
                 /** Format: date-time */
                 verifiedAt?: string | null;
@@ -9594,6 +9672,46 @@ export interface operations {
             };
         };
     };
+    cmsListAreas: {
+        parameters: {
+            query?: {
+                /** @description Matched against name and key with the same Vietnamese normalization search uses, so "quan 1" finds "Quận 1, TP.HCM". */
+                q?: string;
+                city?: string;
+                /** @description Retired areas. Needed when rendering a value a place already holds — a retired area must still resolve its label. */
+                includeInactive?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Area vocabulary */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: {
+                            key: string;
+                            /** @description Null for an unknown key — the key is then the only label that exists. */
+                            name?: string | null;
+                            city?: string | null;
+                            isActive: boolean;
+                            /** @description Present in the catalog. */
+                            known: boolean;
+                            placeCount: number;
+                            centerLat?: number | null;
+                            centerLng?: number | null;
+                            radiusM?: number | null;
+                        }[];
+                    };
+                };
+            };
+        };
+    };
     cmsDuplicateCandidates: {
         parameters: {
             query?: {
@@ -9649,19 +9767,39 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
+                    /** @description Enforced: trimmed, 1..200 characters. Required to be non-empty. */
                     name?: string;
-                    description?: string;
-                    addressText?: string;
-                    areaKey?: string;
+                    /** @description Enforced: at most 4000 characters. */
+                    description?: string | null;
+                    /** @description Enforced: at most 400 characters. */
+                    addressText?: string | null;
+                    /** @description Enforced: at most 64 characters. A key from `cmsListAreas` — the discovery area, not the postal address. Not validated against the catalog: rows predating it carry keys it does not list. */
+                    areaKey?: string | null;
+                    /** @description Administrative address; free text, never a code. */
+                    city?: string | null;
+                    /** @description Optional. An address with no district is valid — Vietnamese administrative units are reorganised and not every place has one. */
+                    district?: string | null;
+                    /** @description Normalized to E.164 on write (`0283 822 9999` → `+842838229999`). A bare subscriber number with neither a trunk `0` nor a country code is refused rather than assumed Vietnamese. */
+                    phone?: string | null;
+                    /** @description `http`/`https` only, host required. A bare host is upgraded to `https://`. Other schemes are refused — the value is rendered as an href in three clients. */
+                    website?: string | null;
+                    /** @description Enforced: -90..90. Moves the pin only together with `lng`. */
                     lat?: number;
+                    /** @description Enforced: -180..180. Moves the pin only together with `lat`. */
                     lng?: number;
-                    avgVisitMinutes?: number;
+                    /** @description Enforced: 10..720, or `null` when unknown. Do not send `0` for an empty input — it fails the minimum, which is what made every save of a place without a visit duration return 400 before #425. */
+                    avgVisitMinutes?: number | null;
                     suitability?: {
                         [key: string]: number;
                     };
                     isLodging?: boolean;
                     curatedRank?: number | null;
                     taxonomyIds?: string[];
+                    /**
+                     * Format: date-time
+                     * @description Optimistic concurrency: the `updatedAt` the form was loaded from. A mismatch is refused `409 PLACE_MODIFIED`, with the current value in `field_errors[0].message` so the client can show what it would have overwritten. Omitting it skips the check.
+                     */
+                    expectedUpdatedAt?: string;
                 };
             };
         };
@@ -9673,7 +9811,9 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["BadRequest"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     cmsTransitionPlace: {
@@ -9716,24 +9856,48 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
+                    /** @description 7 days x at most 4 services each. */
                     hours: {
                         dayOfWeek: number;
-                        openMinute: number;
-                        closeMinute: number;
-                        /** @default false */
+                        /**
+                         * @description `interval` is a span and a day may hold several. `closed` and `open_24h` assert the whole day, carry no minutes, and must be the only row for their day. `open_24h` exists because the minute columns cannot express it — they stop at 1439, and `00:00–23:59` would shut the place for a minute every night.
+                         * @default interval
+                         * @enum {string}
+                         */
+                        kind?: "interval" | "closed" | "open_24h";
+                        /** @default 0 */
+                        openMinute?: number;
+                        /** @default 0 */
+                        closeMinute?: number;
+                        /**
+                         * @description The span wraps past midnight, so `closeMinute` is on the following day. Required when `closeMinute <= openMinute`, and refused when it does not.
+                         * @default false
+                         */
                         isOvernight?: boolean;
+                        /**
+                         * @description Defaults to `editor`. Send `provider` to re-save a provider-sourced row without claiming to have checked it: the row keeps provider provenance and the fetch time of the row it replaces, and the place's freshness clock does not move. Confirming what a provider said is not verification (GOGO_PRODUCT_DATA_ARCHITECTURE.md).
+                         * @enum {string}
+                         */
+                        source?: "provider" | "editor";
                     }[];
+                    /**
+                     * Format: date-time
+                     * @description Optimistic concurrency; see `cmsUpdatePlace`.
+                     */
+                    expectedUpdatedAt?: string;
                 };
             };
         };
         responses: {
-            /** @description Hours replaced */
+            /** @description Hours replaced. `verified` is true only when at least one `editor` row was written — that is also when place freshness moves. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
+            400: components["responses"]["BadRequest"];
+            409: components["responses"]["Conflict"];
         };
     };
     cmsAddPlacePrice: {
