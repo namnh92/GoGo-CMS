@@ -827,7 +827,10 @@ export const handlers = [
             googlePlaceId: placeId,
             name: 'Cà Phê Bên Đường',
             address: '9 Nguyễn Huệ, Quận 1, Hồ Chí Minh',
-            location: { lat: 10.7743, lng: 106.7038 },
+            // The doubles cms-dev answered for Landmark 81. Google publishes
+            // 10.7951153 / 106.7221002; JSON hands back the nearest double,
+            // which is a different one, and the console rounds it back (#157).
+            location: { lat: 10.795115299999999, lng: 106.72210020000001 },
             googleRating: 4.4,
             googleRatingCount: 88,
             googleScore: 71,

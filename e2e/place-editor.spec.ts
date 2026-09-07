@@ -269,8 +269,8 @@ test.describe('roles', () => {
     await page.getByRole('button', { name: 'Dùng dữ liệu này' }).click()
 
     await expect(page.getByLabel(/Tên hiển thị/)).toHaveValue('Cà Phê Bên Đường')
-    await expect(page.getByLabel(/Vĩ độ/)).toHaveValue('10.7743')
-    await expect(page.getByLabel(/Kinh độ/)).toHaveValue('106.7038')
+    await expect(page.getByLabel(/Vĩ độ/)).toHaveValue('10.7951153')
+    await expect(page.getByLabel(/Kinh độ/)).toHaveValue('106.7221002')
 
     await page.getByRole('button', { name: 'Tạo địa điểm' }).click()
     await expect(page).toHaveURL(/\/places\/created-/)
