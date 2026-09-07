@@ -62,6 +62,15 @@ import {
 
 const BASE = '/v1'
 
+/**
+ * #469 — the branches `resolve-link` offers when a link names no one place, so
+ * a picked one reads back as itself rather than as the generic fixture.
+ */
+const BRANCH_NAMES: Record<string, string> = {
+  ChIJa: 'Highlands Coffee',
+  ChIJb: 'Highlands Coffee Hai Bà Trưng',
+}
+
 const MOCK_CSRF = 'mock-csrf-token'
 const CSRF_COOKIE = 'gogo_csrf'
 const CSRF_HEADER = 'x-gogo-csrf'
@@ -804,8 +813,12 @@ export const handlers = [
    * `:id` would otherwise swallow `resolve-link`.
    */
   http.post(`${BASE}/cms/places/resolve-link`, async ({ request }) => {
-    const { url } = (await request.json()) as { url: string }
-    const placeId = /[?&](?:place_id|placeid|query_place_id)=([\w-]+)/.exec(url)?.[1]
+    const body = (await request.json()) as { url?: string; googlePlaceId?: string }
+    const url = body.url ?? ''
+    // #469 — a chosen branch resolves the same way a link naming it would, so
+    // the mock answers the same shape from whichever the client sent.
+    const placeId =
+      body.googlePlaceId ?? /[?&](?:place_id|placeid|query_place_id)=([\w-]+)/.exec(url)?.[1]
 
     if (placeId === 'ChIJalreadyhere') {
       return HttpResponse.json(
@@ -825,7 +838,7 @@ export const handlers = [
           reasonCodes: ['EXACT_PROVIDER_ID'],
           candidate: {
             googlePlaceId: placeId,
-            name: 'Cà Phê Bên Đường',
+            name: BRANCH_NAMES[placeId] ?? 'Cà Phê Bên Đường',
             address: '9 Nguyễn Huệ, Quận 1, Hồ Chí Minh',
             // The doubles cms-dev answered for Landmark 81. Google publishes
             // 10.7951153 / 106.7221002; JSON hands back the nearest double,

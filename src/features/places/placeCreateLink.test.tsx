@@ -66,6 +66,21 @@ const RESOLVED = {
   candidates: [],
 }
 
+const AMBIGUOUS = {
+  status: 'CANDIDATE_SELECTION',
+  reasonCodes: ['MULTIPLE_BRANCHES'],
+  matchConfidence: 0.62,
+  candidates: [
+    { googlePlaceId: 'ChIJa', name: 'Highlands Coffee', address: '1 Lê Lợi', confidence: 0.62 },
+    {
+      googlePlaceId: 'ChIJb',
+      name: 'Highlands Coffee',
+      address: '88 Hai Bà Trưng',
+      confidence: 0.6,
+    },
+  ],
+}
+
 const LINK = 'https://www.google.com/maps/place/?q=place_id:ChIJcafe&place_id=ChIJcafe'
 
 function resolvesTo(body: Record<string, unknown>, status = 201) {
@@ -180,7 +195,78 @@ describe('add a place by Google Maps link', () => {
     expect(navigate).toHaveBeenCalledWith('/places/11111111-2222-3333-4444-555555555555')
   })
 
-  it('names the branches and asks for the right link, rather than guessing', async () => {
+  it('lets the editor pick the branch, and resolves that one', async () => {
+    signInAs('editor')
+    const asked: unknown[] = []
+    server.use(
+      http.post('*/cms/places/resolve-link', async ({ request }) => {
+        const body = (await request.json()) as { googlePlaceId?: string }
+        asked.push(body)
+        if (body.googlePlaceId === 'ChIJb') {
+          return HttpResponse.json(
+            {
+              ...RESOLVED,
+              candidate: {
+                ...RESOLVED.candidate,
+                googlePlaceId: 'ChIJb',
+                name: 'Highlands Hai Bà Trưng',
+              },
+            },
+            { status: 201 },
+          )
+        }
+        return HttpResponse.json(AMBIGUOUS, { status: 201 })
+      }),
+    )
+    const user = userEvent.setup()
+    renderWithProviders(<PlaceCreateScreen />)
+
+    await pasteAndResolve(user, 'https://www.google.com/maps/place/Highlands+Coffee')
+    expect(await screen.findByText('Link khớp với nhiều chi nhánh')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /88 Hai Bà Trưng/ }))
+
+    // The branch that was picked is the one that comes back — not the first in
+    // the list, and not the generic fixture.
+    expect(await screen.findByText('Highlands Hai Bà Trưng')).toBeInTheDocument()
+    expect(asked[1]).toEqual({ googlePlaceId: 'ChIJb' })
+
+    await user.click(screen.getByRole('button', { name: 'Dùng dữ liệu này' }))
+    expect(screen.getByLabelText(/Tên hiển thị/)).toHaveValue('Highlands Hai Bà Trưng')
+  })
+
+  it('keeps the other branches on screen when a pick cannot be resolved', async () => {
+    signInAs('editor')
+    let calls = 0
+    server.use(
+      http.post('*/cms/places/resolve-link', async () => {
+        calls += 1
+        if (calls === 1) return HttpResponse.json(AMBIGUOUS, { status: 201 })
+        return HttpResponse.json(
+          {
+            code: 'PLACE_PROVIDER_UNAVAILABLE',
+            message: 'Chưa kiểm tra được địa điểm lúc này, thử lại sau.',
+            field_errors: [],
+            request_id: 'req-pick-503',
+            retryable: true,
+          },
+          { status: 503 },
+        )
+      }),
+    )
+    const user = userEvent.setup()
+    renderWithProviders(<PlaceCreateScreen />)
+
+    await pasteAndResolve(user, 'https://www.google.com/maps/place/Highlands+Coffee')
+    await user.click(await screen.findByRole('button', { name: /1 Lê Lợi/ }))
+
+    expect(await screen.findByText('Chưa tra được link')).toBeInTheDocument()
+    // One bad pick must not empty the panel — the other branch is still there
+    // to try, without pasting the link again.
+    expect(screen.getByRole('button', { name: /88 Hai Bà Trưng/ })).toBeInTheDocument()
+  })
+
+  it('names the branches and offers each as a choice', async () => {
     signInAs('editor')
     resolvesTo({
       status: 'CANDIDATE_SELECTION',
@@ -201,9 +287,10 @@ describe('add a place by Google Maps link', () => {
     await pasteAndResolve(user, 'https://www.google.com/maps/place/Highlands+Coffee')
 
     expect(await screen.findByText('Link khớp với nhiều chi nhánh')).toBeInTheDocument()
-    expect(screen.getByText('1 Lê Lợi')).toBeInTheDocument()
-    expect(screen.getByText('88 Hai Bà Trưng')).toBeInTheDocument()
-    // No apply button: the candidates carry no position, so one could only fail.
+    // Each branch is a control, named well enough to tell them apart.
+    expect(screen.getByRole('button', { name: /1 Lê Lợi/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /88 Hai Bà Trưng/ })).toBeInTheDocument()
+    // Nothing to apply yet: no branch has been chosen.
     expect(screen.queryByRole('button', { name: 'Dùng dữ liệu này' })).not.toBeInTheDocument()
   })
 
