@@ -765,13 +765,158 @@ export const handlers = [
     )
   }),
 
-  http.get(`${BASE}/cms/administrative-mappings`, () =>
+  // CMS #156 — per-place mapping moderation. Stateful, because the decisions
+  // change status, attribution and the approval blocker, and a fixture that
+  // answered the same thing every time would let the screen ship claiming
+  // transitions it never made.
+  http.get(`${BASE}/cms/administrative-mappings`, ({ request }) => {
+    const url = new URL(request.url)
+    const statuses = url.searchParams.get('status')?.split(',').filter(Boolean) ?? []
+    const blockedOnly = url.searchParams.get('blockedApprovalOnly') === 'true'
+    let rows = mappingRows.map(mappingListItem)
+    if (statuses.length) rows = rows.filter((r) => statuses.includes(r.mappingStatus))
+    if (blockedOnly) rows = rows.filter((r) => r.blocksApproval)
+    return HttpResponse.json({ items: rows, nextCursor: null, counts: mappingCounts() })
+  }),
+  // The reviewer's selectors read GoGo-BE's own current dataset. ADR-0019 §9.5
+  // forbids fetching administrative data from anywhere else, and the identities
+  // a reviewer picks must come from the dataset the decision is validated
+  // against.
+  http.get(`${BASE}/administrative/provinces`, () =>
     HttpResponse.json({
-      items: [],
+      items: PROVINCES.map((p) => unitDto(p, 'PROVINCE', null)),
       nextCursor: null,
-      counts: { UNMAPPED: 4, AUTO_MATCHED: 0, NEEDS_REVIEW: 2, VERIFIED: 1, REJECTED: 0, STALE: 0 },
+      datasetVersion: ACTIVE_DATASET_VERSION,
     }),
   ),
+  http.get(`${BASE}/administrative/provinces/:provinceCode/communes`, ({ params }) =>
+    HttpResponse.json({
+      items: (COMMUNES[String(params.provinceCode)] ?? []).map((c) =>
+        unitDto(c, 'COMMUNE', String(params.provinceCode)),
+      ),
+      nextCursor: null,
+      datasetVersion: ACTIVE_DATASET_VERSION,
+    }),
+  ),
+
+  http.get(`${BASE}/cms/administrative-mappings/remediation`, () =>
+    HttpResponse.json({
+      activeDatasetVersion: ACTIVE_DATASET_VERSION,
+      counts: {
+        compliant: 128,
+        unmapped: 4,
+        needs_review: 2,
+        stale: 1,
+        rejected: 0,
+        verified_against_older_version: 6,
+      },
+      samples: {},
+    }),
+  ),
+  http.get(`${BASE}/cms/places/:id/administrative-mapping`, ({ params }) => {
+    const row = mappingRows.find((r) => r.placeId === params.id)
+    if (!row) return envelope(404, 'PLACE_NOT_FOUND', 'no such place')
+    return HttpResponse.json(mappingDetail(row))
+  }),
+  http.post(`${BASE}/cms/places/:id/administrative-mapping/verify`, async ({ params, request }) => {
+    const body = (await request.json()) as {
+      provinceCode: string
+      communeCode: string
+      expectedUpdatedAt: string
+    }
+    const row = mappingRows.find((r) => r.placeId === params.id)
+    if (!row) return envelope(404, 'PLACE_NOT_FOUND', 'no such place')
+    if (body.expectedUpdatedAt !== row.updatedAt) {
+      return envelope(409, 'PLACE_MODIFIED', 'the place changed since it was read')
+    }
+    const commune = COMMUNES[body.provinceCode]?.find((c) => c.code === body.communeCode)
+    if (!commune) return envelope(400, 'HIERARCHY_INVALID', 'commune is not in that province')
+    row.status = 'VERIFIED'
+    row.provinceCode = body.provinceCode
+    row.communeCode = body.communeCode
+    // A manual verification writes no confidence: judgement is not a probability.
+    row.confidence = null
+    row.method = 'editor'
+    row.reviewer = { id: 'ad-2', displayName: 'moderator' }
+    row.updatedAt = new Date(Date.parse(row.updatedAt) + 1000).toISOString()
+    return HttpResponse.json(
+      { placeId: row.placeId, status: 'VERIFIED', datasetVersion: ACTIVE_DATASET_VERSION },
+      { status: 201 },
+    )
+  }),
+  http.post(
+    `${BASE}/cms/places/:id/administrative-mapping/correct`,
+    async ({ params, request }) => {
+      const body = (await request.json()) as {
+        provinceCode: string
+        communeCode: string
+        reason: string
+        expectedUpdatedAt: string
+      }
+      const row = mappingRows.find((r) => r.placeId === params.id)
+      if (!row) return envelope(404, 'PLACE_NOT_FOUND', 'no such place')
+      if (body.expectedUpdatedAt !== row.updatedAt) {
+        return envelope(409, 'PLACE_MODIFIED', 'the place changed since it was read')
+      }
+      row.status = 'VERIFIED'
+      row.provinceCode = body.provinceCode
+      row.communeCode = body.communeCode
+      row.confidence = null
+      row.reviewer = { id: 'ad-2', displayName: 'moderator' }
+      row.updatedAt = new Date(Date.parse(row.updatedAt) + 1000).toISOString()
+      return HttpResponse.json({ placeId: row.placeId, status: 'VERIFIED' }, { status: 201 })
+    },
+  ),
+  http.post(`${BASE}/cms/places/:id/administrative-mapping/reject`, async ({ params, request }) => {
+    const body = (await request.json()) as { reason: string; expectedUpdatedAt: string }
+    const row = mappingRows.find((r) => r.placeId === params.id)
+    if (!row) return envelope(404, 'PLACE_NOT_FOUND', 'no such place')
+    if (body.expectedUpdatedAt !== row.updatedAt) {
+      return envelope(409, 'PLACE_MODIFIED', 'the place changed since it was read')
+    }
+    row.status = 'REJECTED'
+    row.updatedAt = new Date(Date.parse(row.updatedAt) + 1000).toISOString()
+    return HttpResponse.json({ placeId: row.placeId, status: 'REJECTED' }, { status: 201 })
+  }),
+  http.post(
+    `${BASE}/cms/places/:id/administrative-mapping/rematch`,
+    async ({ params, request }) => {
+      const body = (await request.json()) as { reason: string; expectedUpdatedAt: string }
+      const row = mappingRows.find((r) => r.placeId === params.id)
+      if (!row) return envelope(404, 'PLACE_NOT_FOUND', 'no such place')
+      if (row.status === 'VERIFIED') {
+        return envelope(409, 'VERIFIED_NOT_REMATCHABLE', 'a verified mapping is not rematchable')
+      }
+      if (body.expectedUpdatedAt !== row.updatedAt) {
+        return envelope(409, 'PLACE_MODIFIED', 'the place changed since it was read')
+      }
+      row.status = 'NEEDS_REVIEW'
+      // Asking for a rematch is not verifying anything: the previous reviewer's
+      // attribution goes with the decision it belonged to.
+      row.reviewer = null
+      row.method = 'change_mapping'
+      row.updatedAt = new Date(Date.parse(row.updatedAt) + 1000).toISOString()
+      return HttpResponse.json(
+        { placeId: row.placeId, status: 'NEEDS_REVIEW', communeCode: row.communeCode },
+        { status: 201 },
+      )
+    },
+  ),
+  http.post(`${BASE}/cms/places/:id/administrative-mapping/reconcile`, ({ params }) => {
+    const row = mappingRows.find((r) => r.placeId === params.id)
+    if (!row) return envelope(404, 'PLACE_NOT_FOUND', 'no such place')
+    const verdict = staleVerdict(row)
+    // Reconciling writes only when the mapping has actually stopped holding.
+    const changed = verdict.stale && row.status !== 'STALE'
+    if (changed) {
+      row.status = 'STALE'
+      row.updatedAt = new Date(Date.parse(row.updatedAt) + 1000).toISOString()
+    }
+    return HttpResponse.json(
+      { placeId: row.placeId, changed, verdict: staleVerdict(row) },
+      { status: 201 },
+    )
+  }),
 
   http.post(`${BASE}/cms/auth/login`, async ({ request }) => {
     const body = (await request.json()) as { email?: string; password?: string; totp?: string }
@@ -3928,5 +4073,290 @@ function quarantineCounts() {
       REJECTED_DRAFT: rejected,
       SUPERSEDED: 0,
     },
+  }
+}
+
+/** CMS #156 — per-place mapping fixtures. Mutable: the decisions move them. */
+export const ACTIVE_DATASET_VERSION = 'v5.0.0+v2.4.1+7fac8c45+none+r0'
+
+type MappingFixture = {
+  placeId: string
+  name: string
+  placeStatus: string
+  status: 'UNMAPPED' | 'AUTO_MATCHED' | 'NEEDS_REVIEW' | 'VERIFIED' | 'REJECTED' | 'STALE'
+  addressText: string
+  city: string | null
+  district: string | null
+  provinceCode: string | null
+  communeCode: string | null
+  method: string | null
+  confidence: string | null
+  datasetVersion: string | null
+  reviewer: { id: string; displayName: string } | null
+  updatedAt: string
+  /** Whether the stored identity still resolves. Drives the stale verdict. */
+  identityValid: boolean
+}
+
+export const PROVINCES = [
+  { code: '01', name: 'Hà Nội', fullName: 'Thành phố Hà Nội' },
+  { code: '79', name: 'Hồ Chí Minh', fullName: 'Thành phố Hồ Chí Minh' },
+]
+
+export const COMMUNES: Record<string, { code: string; name: string; fullName: string }[]> = {
+  '01': [
+    { code: '00163', name: 'Ba Đình', fullName: 'Phường Ba Đình' },
+    { code: '00166', name: 'Ngọc Hà', fullName: 'Phường Ngọc Hà' },
+  ],
+  '79': [{ code: '26734', name: 'Bến Nghé', fullName: 'Phường Bến Nghé' }],
+}
+
+const BASE_MAPPINGS: MappingFixture[] = [
+  {
+    placeId: 'm1111111-1111-4111-8111-111111111111',
+    name: 'Quán Cơm Ba Đình',
+    placeStatus: 'review',
+    status: 'NEEDS_REVIEW',
+    addressText: '12 Đội Cấn, Ba Đình, Hà Nội',
+    city: 'Hà Nội',
+    district: 'Ba Đình',
+    provinceCode: '01',
+    communeCode: null,
+    method: 'exact_name',
+    confidence: null,
+    datasetVersion: ACTIVE_DATASET_VERSION,
+    reviewer: null,
+    updatedAt: '2026-09-07T09:00:00.000Z',
+    identityValid: true,
+  },
+  {
+    placeId: 'm2222222-2222-4222-8222-222222222222',
+    name: 'Cà Phê Ngọc Hà',
+    placeStatus: 'published',
+    status: 'STALE',
+    addressText: '5 Hoàng Hoa Thám, Hà Nội',
+    city: 'Hà Nội',
+    district: 'Ba Đình',
+    provinceCode: '01',
+    communeCode: '00166',
+    method: 'boundary_point_in_polygon',
+    confidence: '1.00',
+    datasetVersion: 'v4.9.0+v2.4.0+7fac8c45+none+r0',
+    reviewer: { id: 'ad-9', displayName: 'moderator.cũ' },
+    updatedAt: '2026-09-07T09:05:00.000Z',
+    identityValid: false,
+  },
+  {
+    placeId: 'm3333333-3333-4333-8333-333333333333',
+    name: 'Bún Chả Bến Nghé',
+    placeStatus: 'review',
+    status: 'UNMAPPED',
+    addressText: '1 Đồng Khởi, Quận 1, TP.HCM',
+    city: 'Hồ Chí Minh',
+    district: 'Quận 1',
+    provinceCode: null,
+    communeCode: null,
+    method: null,
+    confidence: null,
+    datasetVersion: null,
+    reviewer: null,
+    updatedAt: '2026-09-07T09:10:00.000Z',
+    identityValid: false,
+  },
+  {
+    placeId: 'm4444444-4444-4444-8444-444444444444',
+    name: 'Phở Ba Đình',
+    placeStatus: 'published',
+    status: 'VERIFIED',
+    addressText: '20 Núi Trúc, Hà Nội',
+    city: 'Hà Nội',
+    district: 'Ba Đình',
+    provinceCode: '01',
+    communeCode: '00163',
+    method: 'editor',
+    confidence: null,
+    datasetVersion: 'v4.9.0+v2.4.0+7fac8c45+none+r0',
+    reviewer: { id: 'ad-2', displayName: 'moderator' },
+    updatedAt: '2026-09-07T09:15:00.000Z',
+    // Valid under a newer dataset: REVALIDATED, and emphatically not stale.
+    identityValid: true,
+  },
+]
+
+export const mappingRows: MappingFixture[] = BASE_MAPPINGS.map((row) => ({ ...row }))
+
+export function resetMappingModeration(): void {
+  mappingRows.splice(0, mappingRows.length, ...BASE_MAPPINGS.map((row) => ({ ...row })))
+}
+
+function blocksApproval(row: MappingFixture): boolean {
+  return row.status !== 'VERIFIED'
+}
+
+function mappingListItem(row: MappingFixture) {
+  return {
+    placeId: row.placeId,
+    name: row.name,
+    placeStatus: row.placeStatus,
+    mappingStatus: row.status,
+    provinceCode: row.provinceCode,
+    communeCode: row.communeCode,
+    datasetVersion: row.datasetVersion,
+    updatedAt: row.updatedAt,
+    blocksApproval: blocksApproval(row),
+  }
+}
+
+function mappingCounts() {
+  const counts: Record<string, number> = {
+    UNMAPPED: 0,
+    AUTO_MATCHED: 0,
+    NEEDS_REVIEW: 0,
+    VERIFIED: 0,
+    REJECTED: 0,
+    STALE: 0,
+  }
+  for (const row of mappingRows) counts[row.status] = (counts[row.status] ?? 0) + 1
+  counts.actionable = (counts.NEEDS_REVIEW ?? 0) + (counts.STALE ?? 0)
+  return counts
+}
+
+function staleVerdict(row: MappingFixture) {
+  const sameVersion = row.datasetVersion === ACTIVE_DATASET_VERSION
+  const reason = !row.communeCode
+    ? 'NO_MAPPING'
+    : !row.identityValid
+      ? 'UNIT_NOT_IN_ACTIVE_DATASET'
+      : sameVersion
+        ? 'CURRENT'
+        : // Labelled with an older version and still true. Healthy, not stale.
+          'REVALIDATED'
+  return {
+    stale: reason === 'UNIT_NOT_IN_ACTIVE_DATASET',
+    reason,
+    reviewerOwned: row.reviewer !== null,
+    requiresReview: reason === 'UNIT_NOT_IN_ACTIVE_DATASET',
+    storedDatasetVersion: row.datasetVersion,
+    activeDatasetVersion: ACTIVE_DATASET_VERSION,
+  }
+}
+
+function approvalBlock(row: MappingFixture) {
+  if (!blocksApproval(row)) return null
+  const code =
+    row.status === 'UNMAPPED'
+      ? 'MAPPING_UNMAPPED'
+      : row.status === 'REJECTED'
+        ? 'MAPPING_REJECTED'
+        : row.status === 'STALE'
+          ? 'MAPPING_STALE'
+          : 'MAPPING_NOT_VERIFIED'
+  return { code, message: code }
+}
+
+/**
+ * What each role may do, mirroring GoGo-BE's own `permittedActions`. The screen
+ * gates every button on this rather than on a role name.
+ */
+function permittedActions(row: MappingFixture): string[] {
+  const role = currentActor().role
+  const moderator = role === 'moderator' || role === 'super_admin'
+  const ops = role === 'ops_admin' || role === 'super_admin'
+  const actions = ['view']
+  if (moderator) {
+    if (row.status === 'VERIFIED') actions.push('correct')
+    else actions.push('verify', 'reject')
+    if (['REJECTED', 'NEEDS_REVIEW', 'STALE'].includes(row.status)) actions.push('rematch')
+  }
+  if (ops) actions.push('reconcile')
+  return actions
+}
+
+function mappingDetail(row: MappingFixture) {
+  const province = PROVINCES.find((p) => p.code === row.provinceCode)
+  const commune = row.provinceCode
+    ? COMMUNES[row.provinceCode]?.find((c) => c.code === row.communeCode)
+    : undefined
+  return {
+    placeId: row.placeId,
+    place: {
+      name: row.name,
+      status: row.placeStatus,
+      addressText: row.addressText,
+      city: row.city,
+      district: row.district,
+      geometry: { lng: 105.8342, lat: 21.0278 },
+      updatedAt: row.updatedAt,
+    },
+    mapping: {
+      status: row.status,
+      provinceCode: row.provinceCode,
+      communeCode: row.communeCode,
+      legacyDistrictCode: null,
+      provinceName: province?.fullName ?? null,
+      communeName: commune?.fullName ?? null,
+      legacyDistrictName: null,
+      method: row.method,
+      confidence: row.confidence,
+      datasetVersion: row.datasetVersion,
+      boundaryVersion: row.datasetVersion ? 'v5.0.0' : null,
+      mappedAt: row.datasetVersion ? row.updatedAt : null,
+      reviewer: row.reviewer,
+    },
+    activeDatasetVersion: ACTIVE_DATASET_VERSION,
+    evidence:
+      row.status === 'UNMAPPED'
+        ? []
+        : [
+            {
+              method: row.method ?? 'exact_name',
+              provinceCode: row.provinceCode,
+              communeCode: row.communeCode,
+              hierarchyValid: row.identityValid,
+              deterministic: row.confidence !== null,
+              detail: 'Tên phường khớp chính xác trong tỉnh đã lưu.',
+            },
+          ],
+    candidates:
+      row.status === 'NEEDS_REVIEW'
+        ? [
+            {
+              method: 'exact_name',
+              provinceCode: '01',
+              communeCode: '00163',
+              detail: 'Phường Ba Đình — tên khớp',
+            },
+            {
+              method: 'exact_name',
+              provinceCode: '01',
+              communeCode: '00166',
+              detail: 'Phường Ngọc Hà — tên khớp',
+            },
+          ]
+        : [],
+    unresolvedReason: row.status === 'NEEDS_REVIEW' ? 'AMBIGUOUS_NAME' : null,
+    hierarchyValid: row.identityValid,
+    staleness: staleVerdict(row),
+    approval: { blocked: blocksApproval(row), block: approvalBlock(row) },
+    permittedActions: permittedActions(row),
+  }
+}
+
+function unitDto(
+  unit: { code: string; name: string; fullName: string },
+  level: 'PROVINCE' | 'COMMUNE',
+  parentCode: string | null,
+) {
+  return {
+    ...unit,
+    nameEn: null,
+    codeName: null,
+    unitType: level === 'PROVINCE' ? 'MUNICIPALITY' : 'WARD',
+    level,
+    parentCode,
+    status: 'ACTIVE',
+    effectiveFrom: '2025-07-01',
+    effectiveTo: null,
+    isCurrent: true,
   }
 }

@@ -9,6 +9,18 @@ const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
 /**
+ * Every open dialog, oldest first.
+ *
+ * Escape must close exactly one — the top one. Both handlers are capture-phase
+ * listeners on `document`, so neither `stopPropagation` nor even
+ * `stopImmediatePropagation` helps: the outer dialog was registered first and
+ * has already run by the time the inner one sees the event. So the stack
+ * decides, and a confirmation opened over a drawer cancels itself without
+ * taking the drawer with it.
+ */
+const openDialogs: symbol[] = []
+
+/**
  * Escape to close + focus trap + focus restore, shared by drawer and modal.
  *
  * `initialFocusRef` names the control that should receive focus instead of the
@@ -36,8 +48,12 @@ function useDialogBehaviour(
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
 
+  const id = useRef(Symbol('dialog'))
+
   useEffect(() => {
     if (!open) return
+    const self = id.current
+    openDialogs.push(self)
     restoreTo.current = document.activeElement as HTMLElement | null
     const node = ref.current
     const preferred = initialFocusRef?.current
@@ -46,6 +62,9 @@ function useDialogBehaviour(
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
+        // Only the topmost dialog answers, so cancelling a confirmation leaves
+        // the drawer it was opened from exactly where it was.
+        if (openDialogs.at(-1) !== self) return
         event.stopPropagation()
         onCloseRef.current()
         return
@@ -69,7 +88,11 @@ function useDialogBehaviour(
     document.body.style.overflow = 'hidden'
     return () => {
       document.removeEventListener('keydown', onKeyDown, true)
-      document.body.style.overflow = previousOverflow
+      const index = openDialogs.indexOf(self)
+      if (index >= 0) openDialogs.splice(index, 1)
+      // The body scroll belongs to the outermost dialog; restoring it while
+      // another is still open would let the page behind it scroll.
+      if (openDialogs.length === 0) document.body.style.overflow = previousOverflow
       restoreTo.current?.focus()
     }
     // `open` alone: the trap is armed once per opening. `initialFocusRef` is

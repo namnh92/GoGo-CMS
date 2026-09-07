@@ -163,87 +163,128 @@ export const administrativeMappingListItemSchema = z.object({
   name: z.string(),
   placeStatus: z.string(),
   mappingStatus: administrativeMappingStatusSchema,
-  provinceCode: z.string().nullish(),
-  communeCode: z.string().nullish(),
-  datasetVersion: z.string().nullish(),
+  provinceCode: z.string().nullable(),
+  communeCode: z.string().nullable(),
+  datasetVersion: z.string().nullable(),
   updatedAt: z.string(),
+  /** True for anything that is not VERIFIED; the reason is on the detail. */
   blocksApproval: z.boolean(),
 })
 export type AdministrativeMappingListItem = z.infer<typeof administrativeMappingListItemSchema>
 
 export const administrativeMappingPageSchema = z.object({
   items: z.array(administrativeMappingListItemSchema),
-  nextCursor: z.string().nullish(),
-  counts: z.record(z.string(), z.number()).default({}),
+  nextCursor: z.string().nullable(),
+  /** One per mapping status, plus `actionable`. */
+  counts: z.record(z.string(), z.number()),
 })
 export type AdministrativeMappingPage = z.infer<typeof administrativeMappingPageSchema>
 
 const evidenceSchema = z.object({
   method: z.string(),
-  provinceCode: z.string().nullish(),
-  communeCode: z.string().nullish(),
+  provinceCode: z.string().nullable(),
+  communeCode: z.string().nullable(),
   legacyDistrictCode: z.string().nullish(),
   hierarchyValid: z.boolean(),
+  /** False for anything that may only ever be offered to a person. */
   deterministic: z.boolean(),
-  onEdge: z.boolean().nullish(),
+  /**
+   * Boundary evidence only, and *optional* rather than nullable — the contract
+   * omits the key instead of sending null. The binding below caught the
+   * difference, which #153 had guessed at.
+   */
+  onEdge: z.boolean().optional(),
   detail: z.string(),
 })
+
+/**
+ * `REVALIDATED` is the healthy case and the one a screen most easily gets
+ * wrong: the mapping is labelled with an older dataset version and is still
+ * true. A version difference alone is not staleness, and nothing is written
+ * for it.
+ */
+export const administrativeStaleVerdictSchema = z.object({
+  stale: z.boolean(),
+  reason: z.enum([
+    'NO_MAPPING',
+    'CURRENT',
+    'REVALIDATED',
+    'UNIT_NOT_IN_ACTIVE_DATASET',
+    'UNIT_NOT_CURRENT',
+    'HIERARCHY_CHANGED',
+  ]),
+  reviewerOwned: z.boolean(),
+  requiresReview: z.boolean(),
+  storedDatasetVersion: z.string().nullable(),
+  activeDatasetVersion: z.string(),
+})
+export type AdministrativeStaleVerdict = z.infer<typeof administrativeStaleVerdictSchema>
+
+export const administrativeApprovalBlockCodeSchema = z.enum([
+  'MAPPING_UNMAPPED',
+  'MAPPING_NOT_VERIFIED',
+  'MAPPING_REJECTED',
+  'MAPPING_STALE',
+  'MAPPING_INCOMPLETE',
+  'MAPPING_UNIT_NOT_CURRENT',
+  'MAPPING_HIERARCHY_INVALID',
+])
+export type AdministrativeApprovalBlockCode = z.infer<typeof administrativeApprovalBlockCodeSchema>
 
 export const administrativeMappingDetailSchema = z.object({
   placeId: z.string(),
   place: z.object({
     name: z.string(),
     status: z.string(),
-    addressText: z.string().nullish(),
-    city: z.string().nullish(),
-    district: z.string().nullish(),
+    addressText: z.string().nullable(),
+    city: z.string().nullable(),
+    district: z.string().nullable(),
     geometry: z.object({ lng: z.number(), lat: z.number() }),
     /** Send back as `expectedUpdatedAt` on any decision. */
     updatedAt: z.string(),
   }),
   mapping: z.object({
     status: administrativeMappingStatusSchema,
-    provinceCode: z.string().nullish(),
-    communeCode: z.string().nullish(),
-    legacyDistrictCode: z.string().nullish(),
-    provinceName: z.string().nullish(),
-    communeName: z.string().nullish(),
-    legacyDistrictName: z.string().nullish(),
-    method: z.string().nullish(),
-    confidence: z.string().nullish(),
-    datasetVersion: z.string().nullish(),
-    boundaryVersion: z.string().nullish(),
-    mappedAt: z.string().nullish(),
-    reviewer: z.object({ id: z.string(), displayName: z.string() }).nullish(),
+    provinceCode: z.string().nullable(),
+    communeCode: z.string().nullable(),
+    legacyDistrictCode: z.string().nullable(),
+    provinceName: z.string().nullable(),
+    communeName: z.string().nullable(),
+    legacyDistrictName: z.string().nullable(),
+    method: z.string().nullable(),
+    /**
+     * 1.00 or absent. A manual verification writes none, because a person's
+     * judgement is not a probability — so null is "unscored", never zero.
+     */
+    confidence: z.string().nullable(),
+    datasetVersion: z.string().nullable(),
+    boundaryVersion: z.string().nullable(),
+    mappedAt: z.string().nullable(),
+    /** Who is responsible for the mapping the row carries now. Kept on STALE. */
+    reviewer: z.object({ id: z.string(), displayName: z.string() }).nullable(),
   }),
   activeDatasetVersion: z.string(),
-  evidence: z.array(evidenceSchema).default([]),
-  candidates: z
-    .array(
-      z.object({
-        method: z.string(),
-        provinceCode: z.string().nullish(),
-        communeCode: z.string().nullish(),
-        detail: z.string(),
-      }),
-    )
-    .default([]),
-  unresolvedReason: z.string().nullish(),
+  evidence: z.array(evidenceSchema),
+  /** Alternatives the resolver refused to choose between. */
+  candidates: z.array(
+    z.object({
+      method: z.string(),
+      provinceCode: z.string().nullable(),
+      communeCode: z.string().nullable(),
+      detail: z.string(),
+    }),
+  ),
+  unresolvedReason: z.string().nullable(),
   hierarchyValid: z.boolean(),
-  staleness: z.object({
-    stale: z.boolean(),
-    reason: z.string(),
-    reviewerOwned: z.boolean(),
-    requiresReview: z.boolean(),
-    storedDatasetVersion: z.string().nullish(),
-    activeDatasetVersion: z.string(),
-  }),
+  staleness: administrativeStaleVerdictSchema,
   approval: z.object({
     blocked: z.boolean(),
-    block: z.object({ code: z.string(), message: z.string() }).nullish(),
+    block: z
+      .object({ code: administrativeApprovalBlockCodeSchema, message: z.string() })
+      .nullable(),
   }),
-  /** What this role may do — the server still enforces it. */
-  permittedActions: z.array(z.string()).default([]),
+  /** What this role may do. The server still enforces it. */
+  permittedActions: z.array(z.string()),
 })
 export type AdministrativeMappingDetail = z.infer<typeof administrativeMappingDetailSchema>
 
@@ -612,3 +653,71 @@ type _Materialize = Exact<
   AdministrativeMaterializeResult,
   Schemas['AdministrativeMaterializeResult']
 >
+
+// --- CMS #156: per-place mapping moderation ----------------------------------
+
+/**
+ * A current administrative unit, as GoGo-BE serves it.
+ *
+ * The selector reads these and submits the code it was given: display text is
+ * never the identifier, and a commune is only ever offered under the province
+ * it actually belongs to.
+ */
+export const administrativeUnitSchema = z.object({
+  code: z.string(),
+  name: z.string(),
+  fullName: z.string(),
+  nameEn: z.string().nullish(),
+  codeName: z.string().nullish(),
+  unitType: z.enum([
+    'PROVINCE',
+    'MUNICIPALITY',
+    'WARD',
+    'COMMUNE',
+    'SPECIAL_ZONE',
+    'LEGACY_DISTRICT',
+  ]),
+  level: z.enum(['PROVINCE', 'COMMUNE', 'LEGACY_DISTRICT']),
+  parentCode: z.string().nullish(),
+  status: z.enum(['ACTIVE', 'INACTIVE', 'FUTURE']),
+  effectiveFrom: z.string(),
+  effectiveTo: z.string().nullish(),
+  isCurrent: z.boolean(),
+})
+export type AdministrativeUnitDto = z.infer<typeof administrativeUnitSchema>
+
+export const administrativeUnitPageSchema = z.object({
+  items: z.array(administrativeUnitSchema),
+  nextCursor: z.string().nullish(),
+  datasetVersion: z.string(),
+})
+export type AdministrativeUnitPage = z.infer<typeof administrativeUnitPageSchema>
+
+export const administrativeVerifyResultSchema = z.object({
+  placeId: z.string(),
+  status: z.literal('VERIFIED'),
+  datasetVersion: z.string(),
+})
+
+/** The resolver ran. It may land on any of three states, and none is a verification. */
+export const administrativeRematchResultSchema = z.object({
+  placeId: z.string(),
+  status: z.enum(['UNMAPPED', 'AUTO_MATCHED', 'NEEDS_REVIEW']),
+  communeCode: z.string().nullable(),
+})
+export type AdministrativeRematchResult = z.infer<typeof administrativeRematchResultSchema>
+
+/** `changed: false` is the ordinary answer: a valid mapping needs no write. */
+export const administrativeReconcileResultSchema = z.object({
+  placeId: z.string(),
+  changed: z.boolean(),
+  verdict: administrativeStaleVerdictSchema,
+})
+export type AdministrativeReconcileResult = z.infer<typeof administrativeReconcileResultSchema>
+
+type _Stale = Exact<AdministrativeStaleVerdict, Schemas['AdministrativeStaleVerdict']>
+type _MappingItem = Exact<AdministrativeMappingListItem, Schemas['AdministrativeMappingListItem']>
+type _MappingDetail = Exact<AdministrativeMappingDetail, Schemas['AdministrativeMappingDetail']>
+type _Unit = Exact<AdministrativeUnitDto, Schemas['AdministrativeUnit']>
+
+export type MappingContractBinding = [_Stale, _MappingItem, _MappingDetail, _Unit]

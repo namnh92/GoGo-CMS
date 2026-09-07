@@ -14,9 +14,13 @@ import {
   administrativeOverrideSetSchema,
   administrativeQuarantineDetailSchema,
   administrativeQuarantinePageSchema,
+  administrativeReconcileResultSchema,
+  administrativeRematchResultSchema,
   administrativeRestorableSchema,
   administrativeTransitionResultSchema,
+  administrativeUnitPageSchema,
   administrativeValidateResultSchema,
+  administrativeVerifyResultSchema,
   type AdministrativeCapability,
   type AdministrativeDatasetDetail,
   type AdministrativeDatasetDiff,
@@ -31,9 +35,12 @@ import {
   type AdministrativeOverrideSet,
   type AdministrativeQuarantineDetail,
   type AdministrativeQuarantinePage,
+  type AdministrativeReconcileResult,
+  type AdministrativeRematchResult,
   type AdministrativeRemediation,
   type AdministrativeRestorable,
   type AdministrativeTransitionResult,
+  type AdministrativeUnitPage,
   type AdministrativeValidateResult,
 } from '@/shared/api/contracts-administrative'
 
@@ -324,6 +331,34 @@ export function abandonOverrideSet(
   )
 }
 
+// --- current administrative units, for the reviewer's selectors (ADM-003) -----
+
+/**
+ * The 34 current provinces, from GoGo-BE.
+ *
+ * The public read, not an upstream one: ADR-0019 §9.5 forbids fetching
+ * administrative data from anywhere else, and the identities a reviewer picks
+ * have to come from the same dataset the decision will be validated against.
+ */
+export function fetchProvinces(signal?: AbortSignal): Promise<AdministrativeUnitPage> {
+  return apiFetchParsed(administrativeUnitPageSchema, '/administrative/provinces', {
+    query: { limit: 100 },
+    signal,
+  })
+}
+
+/** The communes of one province, in the active dataset. */
+export function fetchCommunes(
+  provinceCode: string,
+  signal?: AbortSignal,
+): Promise<AdministrativeUnitPage> {
+  return apiFetchParsed(
+    administrativeUnitPageSchema,
+    `/administrative/provinces/${provinceCode}/communes`,
+    { query: { limit: 500 }, signal },
+  )
+}
+
 // --- mapping moderation (ADM-009) --------------------------------------------
 
 export function fetchAdministrativeMappings(
@@ -382,20 +417,25 @@ export function verifyPlaceMapping(
     legacyDistrictCode?: string | null
     note?: string
   },
+  { idempotencyKey = newIdempotencyKey() }: Idempotent = {},
 ) {
-  return apiFetch(`/cms/places/${placeId}/administrative-mapping/verify`, {
-    method: 'POST',
-    body: input,
-    idempotencyKey: newIdempotencyKey(),
-  })
+  return apiFetchParsed(
+    administrativeVerifyResultSchema,
+    `/cms/places/${placeId}/administrative-mapping/verify`,
+    { method: 'POST', body: input, idempotencyKey },
+  )
 }
 
 /** Rejects the mapping. The place's own moderation state is untouched. */
-export function rejectPlaceMapping(placeId: string, input: MappingDecision & { reason: string }) {
+export function rejectPlaceMapping(
+  placeId: string,
+  input: MappingDecision & { reason: string },
+  { idempotencyKey = newIdempotencyKey() }: Idempotent = {},
+) {
   return apiFetch(`/cms/places/${placeId}/administrative-mapping/reject`, {
     method: 'POST',
     body: input,
-    idempotencyKey: newIdempotencyKey(),
+    idempotencyKey,
   })
 }
 
@@ -404,12 +444,16 @@ export function rejectPlaceMapping(placeId: string, input: MappingDecision & { r
  * verifying anything: the previous reviewer's attribution is cleared and the
  * requester is recorded in the audit as the requester.
  */
-export function rematchPlaceMapping(placeId: string, input: MappingDecision & { reason: string }) {
-  return apiFetch(`/cms/places/${placeId}/administrative-mapping/rematch`, {
-    method: 'POST',
-    body: input,
-    idempotencyKey: newIdempotencyKey(),
-  })
+export function rematchPlaceMapping(
+  placeId: string,
+  input: MappingDecision & { reason: string },
+  { idempotencyKey = newIdempotencyKey() }: Idempotent = {},
+): Promise<AdministrativeRematchResult> {
+  return apiFetchParsed(
+    administrativeRematchResultSchema,
+    `/cms/places/${placeId}/administrative-mapping/rematch`,
+    { method: 'POST', body: input, idempotencyKey },
+  )
 }
 
 /** Changing a decision somebody already made. The audit names both people. */
@@ -421,18 +465,23 @@ export function correctPlaceMapping(
     legacyDistrictCode?: string | null
     reason: string
   },
+  { idempotencyKey = newIdempotencyKey() }: Idempotent = {},
 ) {
   return apiFetch(`/cms/places/${placeId}/administrative-mapping/correct`, {
     method: 'POST',
     body: input,
-    idempotencyKey: newIdempotencyKey(),
+    idempotencyKey,
   })
 }
 
 /** ops_admin, not moderator: reconciliation belongs to whoever published the dataset. */
-export function reconcilePlaceMapping(placeId: string) {
-  return apiFetch(`/cms/places/${placeId}/administrative-mapping/reconcile`, {
-    method: 'POST',
-    idempotencyKey: newIdempotencyKey(),
-  })
+export function reconcilePlaceMapping(
+  placeId: string,
+  { idempotencyKey = newIdempotencyKey() }: Idempotent = {},
+): Promise<AdministrativeReconcileResult> {
+  return apiFetchParsed(
+    administrativeReconcileResultSchema,
+    `/cms/places/${placeId}/administrative-mapping/reconcile`,
+    { method: 'POST', idempotencyKey },
+  )
 }

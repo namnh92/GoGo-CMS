@@ -24,6 +24,12 @@ export const queryKeys = {
     ['administrative', 'dataset', id, 'quarantine', 'row', rowId] as const,
   administrativeOverrideSet: (id: string) =>
     ['administrative', 'dataset', id, 'override-set'] as const,
+  /** CMS #156 — per-place mapping moderation. */
+  administrativeMappingDetail: (placeId: string) => ['administrative', 'mapping', placeId] as const,
+  administrativeRemediation: () => ['administrative', 'remediation'] as const,
+  administrativeProvinces: () => ['administrative', 'units', 'provinces'] as const,
+  administrativeCommunes: (provinceCode: string) =>
+    ['administrative', 'units', 'communes', provinceCode] as const,
 
   opsKpis: ['ops', 'kpis'] as const,
   opsHealth: ['ops', 'health'] as const,
