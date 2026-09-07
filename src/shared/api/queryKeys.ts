@@ -17,6 +17,13 @@ export const queryKeys = {
     ['administrative', 'dataset', id, 'diff', limit, offset] as const,
   administrativeRestorable: () => ['administrative', 'restorable'] as const,
   administrativeDatasetAudit: (id: string) => ['administrative', 'dataset', id, 'audit'] as const,
+  /** CMS #155 — the source-drift queue and the draft decision set. */
+  administrativeQuarantine: (id: string, scope: string) =>
+    ['administrative', 'dataset', id, 'quarantine', scope] as const,
+  administrativeQuarantineRow: (id: string, rowId: string) =>
+    ['administrative', 'dataset', id, 'quarantine', 'row', rowId] as const,
+  administrativeOverrideSet: (id: string) =>
+    ['administrative', 'dataset', id, 'override-set'] as const,
 
   opsKpis: ['ops', 'kpis'] as const,
   opsHealth: ['ops', 'health'] as const,

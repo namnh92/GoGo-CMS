@@ -141,6 +141,182 @@ export const en: Partial<Record<MessageKey, string>> = {
   'administrative.tab.validation': 'Validation',
   'administrative.tab.diff': 'Changes',
   'administrative.tab.audit': 'Audit',
+  'administrative.tab.sourceDrift': 'Mapping source',
+
+  // CMS #155 — the source-drift adjudication queue.
+  'sourceDrift.title': 'Source-drift review queue',
+  'sourceDrift.hint':
+    'The mapping source is advisory. Rows it could not resolve — almost all of them divided communes — wait here for a person.',
+  'sourceDrift.draftOnly':
+    'Decisions here are drafts and change nothing that is running. They have to be materialised into a new version, then validated and published, before the API answers any differently.',
+  'sourceDrift.open': 'Open',
+  'sourceDrift.parent': 'in {code}',
+  'sourceDrift.empty': 'No rows',
+  'sourceDrift.emptyUndecided': 'Nothing is waiting on a decision under this filter.',
+  'sourceDrift.emptyFiltered': 'No row matches the current filter.',
+  'sourceDrift.pageSummary': 'Showing {shown} rows',
+  'sourceDrift.firstPage': 'First page',
+
+  'sourceDrift.col.source': 'Historical source unit',
+  'sourceDrift.col.proposed': 'Upstream’s proposed target',
+  'sourceDrift.col.classification': 'Upstream classification',
+  'sourceDrift.col.decisionState': 'Draft decision',
+  'sourceDrift.col.evidence': 'Evidence',
+  'sourceDrift.col.affected': 'Affected places',
+  'sourceDrift.col.decidedAt': 'Decided at',
+
+  'sourceDrift.filter.state': 'Decision state',
+  'sourceDrift.filter.classification': 'Classification',
+  'sourceDrift.filter.all': 'All',
+
+  'sourceDrift.evidence.divided': 'Source says: divided',
+  'sourceDrift.evidence.merged': 'Source says: merged',
+  'sourceDrift.evidence.candidates': '{count} candidates',
+
+  'sourceDrift.decisionState.UNDECIDED': 'Undecided',
+  'sourceDrift.decisionState.ACCEPTED_DRAFT': 'Draft: accepted',
+  'sourceDrift.decisionState.REJECTED_DRAFT': 'Draft: rejected',
+  'sourceDrift.decisionState.SUPERSEDED': 'Superseded',
+  'sourceDrift.decision.ACCEPT': 'Accept',
+  'sourceDrift.decision.REJECT': 'Reject',
+
+  'sourceDrift.classification.DIVIDED_REQUIRES_REVIEW': 'Divided — needs review',
+  'sourceDrift.classification.TARGET_NOT_FOUND': 'Target not found',
+  'sourceDrift.classification.SOURCE_NOT_FOUND': 'Source not found',
+  'sourceDrift.classification.MULTIPLE_TARGETS': 'Multiple targets',
+  'sourceDrift.classification.HIERARCHY_CONFLICT': 'Hierarchy conflict',
+  'sourceDrift.classification.DUPLICATE': 'Duplicate',
+  'sourceDrift.classification.INVALID': 'Invalid',
+  'sourceDrift.classification.VALID_UNIQUE': 'Valid — single target',
+  'sourceDrift.classification.VALID_MERGE': 'Valid — merge',
+  'sourceDrift.classification.VALID_DISTRICT_TO_SPECIAL_ZONE': 'Valid — district to special zone',
+
+  'sourceDrift.changeType.CREATED': 'Created',
+  'sourceDrift.changeType.RENAMED': 'Renamed',
+  'sourceDrift.changeType.MERGED': 'Merged',
+  'sourceDrift.changeType.SPLIT': 'Split',
+  'sourceDrift.changeType.REASSIGNED': 'Reassigned',
+  'sourceDrift.changeType.DISSOLVED': 'Dissolved',
+
+  'sourceDrift.counts.canonical': 'Canonical edges in this dataset',
+  'sourceDrift.counts.canonicalHint':
+    'Every mapping this dataset asserts, by change type. This is not the queue.',
+  'sourceDrift.counts.backlog': 'Review backlog',
+  'sourceDrift.counts.backlogHint':
+    'Quarantined rows only, by the upstream’s classification. This is the queue.',
+  'sourceDrift.counts.backlogEmpty': 'Nothing is quarantined.',
+  'sourceDrift.counts.decisions': 'Draft decisions',
+  'sourceDrift.counts.decisionsHint':
+    'Quarantined rows by the effective decision in the current draft set.',
+
+  'sourceDrift.set.title': 'Draft decision set',
+  'sourceDrift.set.status': 'Set status',
+  'sourceDrift.set.revision': 'Revision',
+  'sourceDrift.set.effective': 'Effective decisions',
+  'sourceDrift.set.effectiveValue':
+    '{accepted} accepted · {rejected} rejected · {undecided} undecided',
+  'sourceDrift.set.updatedAt': 'Updated at',
+  'sourceDrift.set.materialized': 'Materialised into',
+  'sourceDrift.set.openDerived': 'Open derived dataset',
+  'sourceDrift.set.none': 'No draft set yet. The first decision opens one on this version.',
+  'sourceDrift.setStatus.DRAFT': 'Draft',
+  'sourceDrift.setStatus.MATERIALIZED': 'Materialised',
+  'sourceDrift.setStatus.ABANDONED': 'Abandoned',
+  'sourceDrift.setStatus.NONE': 'None',
+
+  'sourceDrift.detail.title': 'Quarantined mapping row',
+  'sourceDrift.detail.subtitle':
+    'What the source said, which targets this dataset holds, and who decided what.',
+  'sourceDrift.detail.reason': 'Why it was quarantined',
+  'sourceDrift.detail.source': 'Source unit',
+  'sourceDrift.detail.baseVersion': 'Base version',
+  'sourceDrift.detail.provenance': 'Source provenance',
+  'sourceDrift.detail.affected': 'Places carrying the old code',
+  'sourceDrift.detail.affectedSamples': 'Affected place samples',
+  'sourceDrift.detail.sampleTruncated': 'Showing {shown} samples of {total}.',
+  'sourceDrift.detail.setRevision': 'Draft revision',
+  'sourceDrift.detail.candidates': 'Target candidates',
+  'sourceDrift.detail.candidatesHint':
+    'None is pre-selected. The source’s default successor for a divided commune is exactly the guess the rule refuses.',
+  'sourceDrift.detail.upstreamGuess': 'Upstream’s guess',
+  'sourceDrift.detail.selectable': 'Selectable',
+  'sourceDrift.detail.notSelectable':
+    'Not selectable: not an active commune-level unit in this dataset.',
+  'sourceDrift.detail.hierarchyInvalid': 'This unit’s parent does not resolve.',
+  'sourceDrift.detail.reasonLabel': 'Reason for the decision',
+  'sourceDrift.detail.reasonHint':
+    'Required. A decision nobody explained cannot be reviewed later.',
+  'sourceDrift.detail.history': 'Decision history',
+  'sourceDrift.detail.historyEmpty': 'Nobody has decided this row.',
+  'sourceDrift.detail.superseded': 'Superseded',
+  'sourceDrift.detail.rawPayload': 'Raw source payload',
+  'sourceDrift.detail.rawTruncated': 'Capped: evidence to read, not an archive to stream.',
+
+  'sourceDrift.accept.action': 'Accept',
+  'sourceDrift.accept.done': 'Accept recorded as a draft decision',
+  'sourceDrift.accept.consequence':
+    'Creates a GoGo-owned draft decision for target {code}. It does not change the published dataset and does not change what the resolver answers — it has to be materialised, validated and published first.',
+  'sourceDrift.reject.action': 'Reject',
+  'sourceDrift.reject.done': 'Rejection recorded as a draft decision',
+  'sourceDrift.reject.doneDetail':
+    'This advisory relation will not become a canonical edge. The source evidence is kept.',
+  'sourceDrift.reject.consequence':
+    'Rejecting means this advisory relation must not become a canonical edge. It rejects and deletes no place, keeps the source evidence, and changes nothing that is running.',
+
+  'sourceDrift.materialize.action': 'Materialise',
+  'sourceDrift.materialize.confirmTitle': 'Materialise the decision set',
+  'sourceDrift.materialize.confirmBody':
+    'Turns the effective decisions into ONE new dataset version, staged.',
+  'sourceDrift.materialize.decisions': 'Decisions to apply',
+  'sourceDrift.materialize.rejectedNote':
+    'A rejection writes no edge — it changes provenance, not content.',
+  'sourceDrift.materialize.resultLabel': 'Result',
+  'sourceDrift.materialize.stagedOnly':
+    'Creates a STAGED version and nothing else. It does not validate, does not publish, and changes nothing that is running.',
+  'sourceDrift.materialize.empty':
+    'No effective decision yet. A dataset identical to its base is not a version.',
+  'sourceDrift.materialize.doneTitle': 'Derived version created',
+  'sourceDrift.materialize.doneBody': 'The new version is STAGED and serves nobody.',
+  'sourceDrift.materialize.edges': 'Canonical edges written',
+  'sourceDrift.materialize.openDataset': 'Open the derived version',
+  'sourceDrift.materialize.sequence':
+    'What is left: Validate → read the Changes tab → Publish. Until it is published, the resolver still answers from the active version.',
+
+  'sourceDrift.abandon.action': 'Abandon draft',
+  'sourceDrift.abandon.confirmTitle': 'Abandon the draft decision set',
+  'sourceDrift.abandon.confirmBody':
+    'The set stops accepting decisions and can never be materialised.',
+  'sourceDrift.abandon.consequence':
+    'The decisions and their audit history stay exactly as they are. The base and published datasets are unchanged.',
+  'sourceDrift.abandon.reasonHint': 'Required, and recorded in the audit log.',
+  'sourceDrift.abandon.done': 'Draft abandoned',
+  'sourceDrift.abandon.doneDetail': 'The decisions remain; the set takes no more.',
+
+  'sourceDrift.conflict.revision':
+    'Somebody else decided a row in this draft. The screen has refetched — read it again before deciding.',
+  'sourceDrift.conflict.lifecycle':
+    'The draft or the base dataset changed. The screen has refetched and the previous selection was dropped.',
+
+  'error.OVERRIDE_SET_REVISION_CONFLICT':
+    'The draft moved since you read it. Reload and decide again.',
+  'error.OVERRIDE_SET_NOT_DRAFT': 'This decision set is no longer a draft.',
+  'error.OVERRIDE_SET_NOT_FOUND': 'There is no draft set for this dataset.',
+  'error.OVERRIDE_SET_EMPTY': 'No effective decision to materialise.',
+  'error.OVERRIDE_BASE_ALREADY_MATERIALIZED':
+    'This base already produced a version. The next round belongs on that one.',
+  'error.OVERRIDE_TARGET_NOT_FOUND':
+    'No unit with that code and effective date exists in this dataset.',
+  'error.OVERRIDE_TARGET_NOT_CURRENT': 'The target is not an active commune-level unit.',
+  'error.OVERRIDE_TARGET_HIERARCHY_INVALID':
+    'The target’s parent does not resolve in this dataset.',
+  'error.OVERRIDE_TARGET_IS_SOURCE': 'The target is the source unit itself.',
+  'error.OVERRIDE_EDGE_ALREADY_CANONICAL': 'This edge is already canonical in the dataset.',
+  'error.QUARANTINE_ROW_NOT_FOUND': 'No such quarantined row.',
+  'error.QUARANTINE_ROW_NOT_IN_DATASET': 'That row belongs to a different dataset version.',
+  'error.QUARANTINE_ROW_HAS_NO_SOURCE':
+    'The advisory row names no source unit, so there is no edge to accept.',
+  'error.BASE_DATASET_CHANGED':
+    'The base dataset is no longer the one these decisions were taken against.',
   'administrative.overview.hint':
     'This version’s exact provenance: each source, each checksum, and the combined checksum.',
   'administrative.overview.storedDiff':

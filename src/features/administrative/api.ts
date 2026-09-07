@@ -8,6 +8,12 @@ import {
   administrativeMappingDetailSchema,
   administrativeMappingPageSchema,
   administrativeRemediationSchema,
+  administrativeMaterializeResultSchema,
+  administrativeOverrideAbandonResultSchema,
+  administrativeOverrideDecisionResultSchema,
+  administrativeOverrideSetSchema,
+  administrativeQuarantineDetailSchema,
+  administrativeQuarantinePageSchema,
   administrativeRestorableSchema,
   administrativeTransitionResultSchema,
   administrativeValidateResultSchema,
@@ -18,7 +24,13 @@ import {
   type AdministrativeImportReport,
   type AdministrativeMappingDetail,
   type AdministrativeMappingPage,
+  type AdministrativeDecisionState,
   type AdministrativeMappingStatus,
+  type AdministrativeMaterializeResult,
+  type AdministrativeOverrideDecisionResult,
+  type AdministrativeOverrideSet,
+  type AdministrativeQuarantineDetail,
+  type AdministrativeQuarantinePage,
   type AdministrativeRemediation,
   type AdministrativeRestorable,
   type AdministrativeTransitionResult,
@@ -170,6 +182,145 @@ export function rollbackAdministrativeDataset(
     administrativeTransitionResultSchema,
     `/cms/administrative-datasets/${id}/rollback`,
     { method: 'POST', idempotencyKey },
+  )
+}
+
+// --- source-drift adjudication (ADM-011, alpha.10) ---------------------------
+
+/**
+ * The review queue for one dataset's quarantined advisory rows.
+ *
+ * Cursor-paged on the server. 1,033 rows is the pinned backlog and none of it
+ * belongs in browser memory; the cursor keys on the source code, so a decision
+ * appended mid-review cannot shift the page boundary under the reviewer.
+ */
+export function fetchAdministrativeQuarantine(
+  datasetId: string,
+  options: {
+    classification?: string[]
+    decisionState?: AdministrativeDecisionState[]
+    limit?: number
+    cursor?: string | null
+  } = {},
+  signal?: AbortSignal,
+): Promise<AdministrativeQuarantinePage> {
+  return apiFetchParsed(
+    administrativeQuarantinePageSchema,
+    `/cms/administrative-datasets/${datasetId}/quarantine`,
+    {
+      query: {
+        classification: options.classification?.length
+          ? options.classification.join(',')
+          : undefined,
+        decisionState: options.decisionState?.length ? options.decisionState.join(',') : undefined,
+        limit: options.limit,
+        cursor: options.cursor ?? undefined,
+      },
+      signal,
+    },
+  )
+}
+
+export function fetchQuarantineRow(
+  datasetId: string,
+  rowId: string,
+  signal?: AbortSignal,
+): Promise<AdministrativeQuarantineDetail> {
+  return apiFetchParsed(
+    administrativeQuarantineDetailSchema,
+    `/cms/administrative-datasets/${datasetId}/quarantine/${rowId}`,
+    { signal },
+  )
+}
+
+export function fetchOverrideSet(
+  datasetId: string,
+  signal?: AbortSignal,
+): Promise<AdministrativeOverrideSet> {
+  return apiFetchParsed(
+    administrativeOverrideSetSchema,
+    `/cms/administrative-datasets/${datasetId}/override-set`,
+    { signal },
+  )
+}
+
+/**
+ * Accept one advisory edge onto a target the reviewer names.
+ *
+ * `targetCode` never travels alone: a code alone is not an identity, and the
+ * server refuses one whose effective period it does not hold. `expectedRevision`
+ * is the draft revision the screen was showing — without it two reviewers
+ * deciding the same row a second apart both succeed and the second silently
+ * wins.
+ *
+ * It creates a *draft* decision. Nothing the API answers changes until the set
+ * is materialised, validated and published.
+ */
+export function acceptQuarantineRow(
+  datasetId: string,
+  rowId: string,
+  input: {
+    targetCode: string
+    targetEffectiveFrom: string
+    reason: string
+    expectedRevision: number
+  },
+  { idempotencyKey = newIdempotencyKey() }: Idempotent = {},
+): Promise<AdministrativeOverrideDecisionResult> {
+  return apiFetchParsed(
+    administrativeOverrideDecisionResultSchema,
+    `/cms/administrative-datasets/${datasetId}/quarantine/${rowId}/accept`,
+    { method: 'POST', body: input, idempotencyKey },
+  )
+}
+
+/**
+ * Refuse the advisory edge. It deletes no evidence and rejects no place — the
+ * row keeps its raw payload and travels into the derived dataset with the
+ * decision recorded beside it.
+ */
+export function rejectQuarantineRow(
+  datasetId: string,
+  rowId: string,
+  input: { reason: string; expectedRevision: number },
+  { idempotencyKey = newIdempotencyKey() }: Idempotent = {},
+): Promise<AdministrativeOverrideDecisionResult> {
+  return apiFetchParsed(
+    administrativeOverrideDecisionResultSchema,
+    `/cms/administrative-datasets/${datasetId}/quarantine/${rowId}/reject`,
+    { method: 'POST', body: input, idempotencyKey },
+  )
+}
+
+/**
+ * Turn the effective decisions into one new STAGED dataset.
+ *
+ * It validates nothing and publishes nothing. The derived version goes through
+ * the ordinary validate → diff → publish path, which is why the screen shows
+ * that sequence rather than doing any of it.
+ */
+export function materializeOverrideSet(
+  datasetId: string,
+  input: { reason: string; expectedRevision: number },
+  { idempotencyKey = newIdempotencyKey() }: Idempotent = {},
+): Promise<AdministrativeMaterializeResult> {
+  return apiFetchParsed(
+    administrativeMaterializeResultSchema,
+    `/cms/administrative-datasets/${datasetId}/override-set/materialize`,
+    { method: 'POST', body: input, idempotencyKey },
+  )
+}
+
+/** Close a draft nobody is going to materialise. The decisions stay readable. */
+export function abandonOverrideSet(
+  datasetId: string,
+  input: { reason: string; expectedRevision: number },
+  { idempotencyKey = newIdempotencyKey() }: Idempotent = {},
+) {
+  return apiFetchParsed(
+    administrativeOverrideAbandonResultSchema,
+    `/cms/administrative-datasets/${datasetId}/override-set/abandon`,
+    { method: 'POST', body: input, idempotencyKey },
   )
 }
 
