@@ -33,6 +33,22 @@ export const vi = {
   'nav.taxonomy': 'Phân loại',
   'nav.collections': 'Bộ sưu tập',
   'nav.imports': 'Nhập liệu',
+  'nav.administrativeData': 'Dữ liệu hành chính',
+  'nav.administrativeMapping': 'Duyệt gán hành chính',
+  'administrative.dataset.title': 'Dữ liệu hành chính',
+  'administrative.dataset.subtitle':
+    'Bộ đơn vị hành chính đã ghim và ranh giới đi kèm — nguồn quyết định một địa điểm nằm ở phường/xã nào.',
+  'administrative.mapping.title': 'Duyệt gán hành chính',
+  'administrative.mapping.subtitle':
+    'Hàng đợi các địa điểm cần người xác nhận phường/xã trước khi được duyệt đăng.',
+  'administrative.shell.notImplemented':
+    'Màn hình này chưa được dựng. Quyền truy cập, điều hướng và hợp đồng API đã sẵn sàng; nội dung sẽ đến ở CMS #154–#156.',
+  'administrative.capability.datasetMissing':
+    'Chưa có bộ dữ liệu hành chính nào được publish. Không địa điểm nào được duyệt đăng cho tới khi có.',
+  'administrative.capability.boundariesMissing':
+    'Chưa nạp ranh giới. Resolver vẫn chạy bằng mã và tên đã lưu, nhưng không dùng được hình học.',
+  'administrative.capability.publicationBlocked': 'Duyệt đăng địa điểm đang bị chặn.',
+  'administrative.capability.full': 'Đầy đủ dữ liệu hành chính và ranh giới.',
   'nav.planTemplates': 'Mẫu lịch trình',
   'nav.recommendations': 'Gợi ý',
   'nav.settings': 'Cấu hình',
@@ -1854,6 +1870,8 @@ export const vi = {
   'roles.domain.campaign': 'Chiến dịch push',
   'roles.domain.safety': 'Luật Trust & Safety',
   'roles.domain.moderation': 'Kiểm duyệt',
+  'roles.domain.administrativeMapping': 'Gán hành chính cho địa điểm',
+  'roles.domain.administrativeDataset': 'Bộ dữ liệu hành chính',
   'roles.domain.submission': 'Đề xuất từ app',
   'roles.domain.import': 'Nhập liệu',
   'roles.domain.upload': 'Tải media',

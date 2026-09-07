@@ -18,6 +18,12 @@ const PlaceCreateScreen = lazy(() => import('@/features/places/placeCreate.view'
 const ImportListScreen = lazy(() => import('@/features/imports/importList.view'))
 const ImportWizardScreen = lazy(() => import('@/features/imports/importWizard.view'))
 const ImportJobScreen = lazy(() => import('@/features/imports/jobDetail.view'))
+const AdministrativeDataScreen = lazy(
+  () => import('@/features/administrative/administrativeData.view'),
+)
+const AdministrativeMappingScreen = lazy(
+  () => import('@/features/administrative/administrativeMapping.view'),
+)
 const ModerationQueueScreen = lazy(() => import('@/features/moderation/moderationQueue.view'))
 const ReviewListScreen = lazy(() => import('@/features/moderation/reviewList.view'))
 const SubmissionQueueScreen = lazy(() => import('@/features/submissions/submissionQueue.view'))
@@ -108,6 +114,10 @@ export const router = createBrowserRouter([
           { path: 'moderation/reviews', element: <ReviewListScreen /> },
           { path: 'moderation/reviews/:reviewId', element: <ReviewListScreen /> },
           { path: 'submissions', element: <SubmissionQueueScreen /> },
+          // CMS #153 — shells. The screens themselves are #154 and #156; each
+          // enforces its own permission rather than trusting the nav to hide it.
+          { path: 'administrative-data', element: <AdministrativeDataScreen /> },
+          { path: 'administrative-mapping', element: <AdministrativeMappingScreen /> },
           { path: 'taxonomy', element: <TaxonomyScreen /> },
           { path: 'collections', element: <CollectionsScreen /> },
           { path: 'recommendations', element: <RecommendationListScreen /> },

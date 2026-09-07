@@ -35,6 +35,22 @@ export const en: Partial<Record<MessageKey, string>> = {
   'nav.taxonomy': 'Taxonomy',
   'nav.collections': 'Collections',
   'nav.imports': 'Imports',
+  'nav.administrativeData': 'Administrative data',
+  'nav.administrativeMapping': 'Place mapping review',
+  'administrative.dataset.title': 'Administrative data',
+  'administrative.dataset.subtitle':
+    'The pinned administrative units and the boundary release beside them — what decides which ward a place is in.',
+  'administrative.mapping.title': 'Place mapping review',
+  'administrative.mapping.subtitle':
+    'Places waiting for someone to confirm their ward before they can be approved.',
+  'administrative.shell.notImplemented':
+    'This screen is not built yet. Access, navigation and the API contract are in place; the content arrives in CMS #154–#156.',
+  'administrative.capability.datasetMissing':
+    'No administrative dataset is published. No place can be approved until one is.',
+  'administrative.capability.boundariesMissing':
+    'No boundary release is loaded. The resolver still answers from stored codes and names, but not from geometry.',
+  'administrative.capability.publicationBlocked': 'Place publication is blocked.',
+  'administrative.capability.full': 'Administrative data and boundaries are both available.',
   'nav.planTemplates': 'Plan templates',
   'nav.recommendations': 'Recommendations',
   'nav.settings': 'Settings',
@@ -1241,6 +1257,8 @@ export const en: Partial<Record<MessageKey, string>> = {
   'roles.domain.campaign': 'Push campaigns',
   'roles.domain.safety': 'Trust & Safety rules',
   'roles.domain.moderation': 'Moderation',
+  'roles.domain.administrativeMapping': 'Place administrative mapping',
+  'roles.domain.administrativeDataset': 'Administrative dataset',
   'roles.domain.submission': 'App submissions',
   'roles.domain.import': 'Imports',
   'roles.domain.upload': 'Media uploads',

@@ -528,6 +528,52 @@ export const handlers = [
   // CMS-031: the reachability probe. A 200 here means "the network is up".
   http.get(`${BASE}/health`, () => HttpResponse.json({ status: 'ok' })),
 
+  // CMS #153 — the administrative surface (GoGo-BE ADM-005/ADM-009). The mock
+  // answers the shape the vendored contract declares; the screens in #154–#156
+  // will need richer fixtures, and they can extend these rather than invent a
+  // second set.
+  http.get(`${BASE}/cms/administrative-datasets/capability`, () =>
+    HttpResponse.json({
+      dataset: {
+        state: 'AVAILABLE',
+        version: 'v5.0.0+v2.4.1+7fac8c45+none+r0',
+        publishedAt: '2026-09-07T00:00:00.000Z',
+        ageSeconds: 120,
+        counts: { STAGED: 0, VALIDATED: 0, REJECTED: 0, PUBLISHED: 1, ROLLED_BACK: 0 },
+        quarantined: 1033,
+        unresolved: 1033,
+        validation: { errors: 0, warnings: 2 },
+      },
+      boundaries: {
+        state: 'AVAILABLE',
+        version: 'v5.0.0',
+        loadedAt: '2026-09-07T00:00:00.000Z',
+        ageSeconds: 300,
+        provinces: 34,
+        communes: 3321,
+      },
+      resolver: 'FULL',
+      publication: 'ENABLED',
+      mappings: {
+        UNMAPPED: 4,
+        AUTO_MATCHED: 0,
+        NEEDS_REVIEW: 2,
+        VERIFIED: 1,
+        REJECTED: 0,
+        STALE: 0,
+      },
+      remediation: { compliant: 10, unmapped: 0 },
+      observedAt: '2026-09-07T00:02:00.000Z',
+    }),
+  ),
+  http.get(`${BASE}/cms/administrative-mappings`, () =>
+    HttpResponse.json({
+      items: [],
+      nextCursor: null,
+      counts: { UNMAPPED: 4, AUTO_MATCHED: 0, NEEDS_REVIEW: 2, VERIFIED: 1, REJECTED: 0, STALE: 0 },
+    }),
+  ),
+
   http.post(`${BASE}/cms/auth/login`, async ({ request }) => {
     const body = (await request.json()) as { email?: string; password?: string; totp?: string }
     if (!body.email || !body.password) return envelope(401, 'UNAUTHORIZED', 'bad credentials')

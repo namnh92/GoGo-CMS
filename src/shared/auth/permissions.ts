@@ -62,6 +62,20 @@ const ROUTE_ROLES = {
   campaigns: ['ops_admin'],
   /** `CmsUploadsController` — @RequireRole('editor', 'ops_admin') */
   uploads: ['editor', 'ops_admin'],
+  /**
+   * `AdministrativeMappingController` / `AdministrativeMappingQueueController`
+   * — @RequireRole('moderator') (GoGo-BE#462). Reads open to `editor` on rank,
+   * writes stay exactly moderator: the person who decides a place belongs in
+   * the catalogue is not the person who certifies where it is.
+   */
+  administrativeMapping: ['moderator'],
+  /**
+   * `AdministrativeAdminController` — @RequireRole('ops_admin') (GoGo-BE#458),
+   * plus the per-place reconcile handler in #462. Rank 2, so reading it is ops
+   * and above — an editor or a moderator sees which dataset their work is
+   * judged against through the mapping screen, not through this one.
+   */
+  administrativeDataset: ['ops_admin'],
   /** `POST /cms/auth/admins` — @RequireRole('super_admin') */
   admins: ['super_admin'],
 } as const satisfies Record<string, readonly AdminRole[]>
@@ -97,6 +111,17 @@ const PERMISSIONS = {
   'place.transition': ['catalog', 'write'],
   'place.merge': ['catalog', 'write'],
   'place.verifyFreshness': ['catalog', 'write'],
+
+  // GoGo-BE#462 — mapping moderation. Reading is rank-open (an editor may look
+  // at why a place cannot be approved); verifying, rejecting, rematching and
+  // correcting are exactly moderator.
+  'administrativeMapping.read': ['administrativeMapping', 'read'],
+  'administrativeMapping.review': ['administrativeMapping', 'write'],
+  // GoGo-BE#458/#462 — the dataset itself. Import, validate, publish, rollback
+  // and reconcile are exactly ops_admin; the list, diff and capability are
+  // rank-read, which at rank 2 still means ops and above.
+  'administrativeDataset.read': ['administrativeDataset', 'read'],
+  'administrativeDataset.manage': ['administrativeDataset', 'write'],
 
   // Editorial content — editor and ops both write taxonomy and collections.
   'taxonomy.read': ['content', 'read'],

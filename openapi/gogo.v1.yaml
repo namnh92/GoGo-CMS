@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: GoGo API
-  version: 1.0.0-alpha.4
+  version: 1.0.0-alpha.8
   description: |
     Public contract for GoGo clients (Mobile, Web, Mini App). This page is the
     integration guide — every rule below is enforced by the API, not advisory.
@@ -954,6 +954,892 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '503':
           description: Object storage is not configured in this environment
+
+  /administrative/version:
+    get:
+      operationId: getAdministrativeVersion
+      tags: [administrative]
+      summary: Active administrative dataset version (the cheap poll)
+      description: >
+        ADM-003 / ADR-0019. A client holds a snapshot and refetches only when
+        datasetVersion changes. Serves the one PUBLISHED dataset; 503 when none
+        is published, which is an operational fault rather than an empty result.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/IfNoneMatch'
+      responses:
+        '200':
+          description: Active dataset version and record counts
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { $ref: '#/components/headers/CacheControl' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdministrativeVersion' }
+        '304': { $ref: '#/components/responses/NotModified' }
+        '503': { $ref: '#/components/responses/AdministrativeUnavailable' }
+
+  /administrative/provinces:
+    get:
+      operationId: listAdministrativeProvinces
+      tags: [administrative]
+      summary: Current provinces and municipalities, ordered by code
+      description: >
+        ADM-003. The 34 current province-level units. Legacy district-level
+        units are never returned here — they were dissolved on 2025-07-01.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/AdministrativeLimit'
+        - $ref: '#/components/parameters/AdministrativeCursor'
+        - $ref: '#/components/parameters/IfNoneMatch'
+      responses:
+        '200':
+          description: Province page
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { $ref: '#/components/headers/CacheControl' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdministrativeUnitPage' }
+        '304': { $ref: '#/components/responses/NotModified' }
+        '503': { $ref: '#/components/responses/AdministrativeUnavailable' }
+
+  /administrative/provinces/{provinceCode}/communes:
+    get:
+      operationId: listAdministrativeCommunes
+      tags: [administrative]
+      summary: Current communes of one province, ordered by code
+      description: >
+        ADM-003. A province code that names no current province answers 404
+        PROVINCE_NOT_FOUND rather than an empty page — "no communes" and "no
+        such province" are different answers.
+      security: []
+      parameters:
+        - name: provinceCode
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[0-9]{2,5}$' }
+        - $ref: '#/components/parameters/AdministrativeLimit'
+        - $ref: '#/components/parameters/AdministrativeCursor'
+        - $ref: '#/components/parameters/IfNoneMatch'
+      responses:
+        '200':
+          description: Commune page
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { $ref: '#/components/headers/CacheControl' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdministrativeUnitPage' }
+        '304': { $ref: '#/components/responses/NotModified' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/AdministrativeUnavailable' }
+
+  /administrative/search:
+    get:
+      operationId: searchAdministrativeUnits
+      tags: [administrative]
+      summary: Accent-insensitive search over unit names
+      description: >
+        ADM-003. Matches both the short name ("Ba Đình") and the full name
+        ("Phường Ba Đình"), accented or not, through the same Vietnamese
+        normalizer the place search uses. Legacy units require includeLegacy.
+      security: []
+      parameters:
+        - {
+            name: query,
+            in: query,
+            required: true,
+            schema: { type: string, minLength: 1, maxLength: 120 },
+          }
+        - { name: provinceCode, in: query, schema: { type: string, pattern: '^[0-9]{2,5}$' } }
+        - $ref: '#/components/parameters/AdministrativeIncludeLegacy'
+        - $ref: '#/components/parameters/AdministrativeLimit'
+        - $ref: '#/components/parameters/AdministrativeCursor'
+        - $ref: '#/components/parameters/IfNoneMatch'
+      responses:
+        '200':
+          description: Matching units, current first, then legacy when asked for
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { $ref: '#/components/headers/CacheControl' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdministrativeUnitPage' }
+        '304': { $ref: '#/components/responses/NotModified' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/AdministrativeUnavailable' }
+
+  /administrative/resolve:
+    get:
+      operationId: resolveAdministrativeCode
+      tags: [administrative]
+      summary: What a code meant on a date, and where the unit went
+      description: >
+        ADM-003 / ADR-0019 §2. Codes are reused: 2,212 of the 3,321 current
+        commune codes named a different unit before 2025-07-01, so `at` selects
+        the effective period. Successors come from canonical changes only — a
+        divided commune is quarantined, never resolved, and is reported with
+        unresolved=true rather than the source's guess.
+      security: []
+      parameters:
+        - {
+            name: code,
+            in: query,
+            required: true,
+            schema: { type: string, pattern: '^[0-9]{2,5}$' },
+          }
+        - name: at
+          in: query
+          description: ISO date. Absent means "the current unit".
+          schema: { type: string, format: date }
+        - $ref: '#/components/parameters/IfNoneMatch'
+      responses:
+        '200':
+          description: The unit effective on that date, plus canonical successors
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { $ref: '#/components/headers/CacheControl' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdministrativeResolution' }
+        '304': { $ref: '#/components/responses/NotModified' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/AdministrativeUnavailable' }
+
+  /administrative/units/{code}:
+    get:
+      operationId: getAdministrativeUnit
+      tags: [administrative]
+      summary: One code and its effective periods
+      description: >
+        ADM-003. Without includeLegacy only the current period is returned, and
+        a code naming no current unit answers 404 UNIT_NOT_CURRENT.
+      security: []
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[0-9]{2,5}$' }
+        - $ref: '#/components/parameters/AdministrativeIncludeLegacy'
+        - $ref: '#/components/parameters/IfNoneMatch'
+      responses:
+        '200':
+          description: The current unit and the periods this code has had
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { $ref: '#/components/headers/CacheControl' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdministrativeUnitDetail' }
+        '304': { $ref: '#/components/responses/NotModified' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/AdministrativeUnavailable' }
+
+  /cms/administrative-datasets:
+    get:
+      operationId: listAdministrativeDatasets
+      tags: [cms, administrative]
+      summary: 'Ops: every imported dataset version, newest first (ADM-005)'
+      description: >
+        ADM-005 (#458). Read needs rank >= ops_admin; every write on this
+        resource needs the exact ops_admin role (or the audited super-admin
+        bypass), so an on-call operator can inspect a dataset without being able
+        to publish it. `validation` is the stored result summary — absent means
+        the version has never been validated, which is itself a refusal reason
+        for publication.
+      parameters:
+        - {
+            name: limit,
+            in: query,
+            schema: { type: integer, minimum: 1, maximum: 100, default: 25 },
+          }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        '200':
+          description: A page of dataset versions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total, limit, offset]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/AdministrativeDatasetSummary' }
+                  total: { type: integer }
+                  limit: { type: integer }
+                  offset: { type: integer }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /cms/administrative-datasets/capability:
+    get:
+      operationId: getAdministrativeCapability
+      tags: [cms, administrative]
+      summary: 'Ops: what this environment can currently do (ADM-010)'
+      description: >
+        Deliberately separate from readiness. An environment with no
+        administrative dataset still serves rooms, search and plans; it simply
+        cannot publish a place, which the domain guard already refuses. Taking
+        the whole API out of the load balancer for that would turn a
+        configuration gap into an outage.
+
+
+        This is also where the exact dataset and boundary versions live. They
+        are not Prometheus labels: a label whose values grow with every
+        publication is a series set that never stops growing, so the numbers go
+        on a dashboard and the identities go here.
+
+
+        `resolver` is `FULL` with polygons loaded, `PARTIAL` without them — the
+        resolver still answers from explicit codes, stored names and the change
+        mapping, which is less of the catalogue rather than none of it.
+      responses:
+        '200':
+          description: Current administrative capability
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdministrativeCapability' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /cms/administrative-datasets/import:
+    post:
+      operationId: importAdministrativeDataset
+      tags: [cms, administrative]
+      summary: 'Ops: import the pinned snapshot set into staging (ADM-005)'
+      description: >
+        Writes a STAGED version and nothing else — no path here can touch the
+        active dataset. One transaction: a failure leaves nothing behind, so a
+        retry is a clean import rather than a half-written version that the
+        checksum guard would then call a duplicate. Re-importing byte-identical
+        sources at the same override revision is 409 DATASET_ALREADY_IMPORTED,
+        because the same inputs are the same dataset.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                overrideRevision:
+                  type: integer
+                  minimum: 0
+                  maximum: 10000
+                  default: 0
+                  description: >
+                    Bumped by a reviewer decision rather than an upstream
+                    release. It is a component of the combined version, so
+                    bumping it mints a new dataset from unchanged sources.
+      responses:
+        '201':
+          description: A new STAGED dataset version
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdministrativeImportReport' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /cms/administrative-datasets/restorable:
+    get:
+      operationId: listRestorableAdministrativeDatasets
+      tags: [cms, administrative]
+      summary: 'Ops: versions a rollback could restore (ADM-005)'
+      description: >
+        Previously published, not active now. A version that was never published
+        never appears here: rollback restores an earlier active dataset, it does
+        not publish a new one.
+      responses:
+        '200':
+          description: Restorable versions, most recently published first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/AdministrativeDatasetSummary' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /cms/administrative-datasets/{id}:
+    get:
+      operationId: getAdministrativeDataset
+      tags: [cms, administrative]
+      summary: 'Ops: one dataset version with its stored validation and diff'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: The dataset version
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/AdministrativeDatasetSummary'
+                  - type: object
+                    properties:
+                      validationReport:
+                        $ref: '#/components/schemas/AdministrativeValidationReport'
+                      diffSummary:
+                        type: object
+                        nullable: true
+                        additionalProperties: true
+                        description: >
+                          The diff stored when this version was last validated.
+                          It describes the baseline that was active *then* —
+                          GET /diff recomputes against today's.
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /cms/administrative-datasets/{id}/diff:
+    get:
+      operationId: getAdministrativeDatasetDiff
+      tags: [cms, administrative]
+      summary: 'Ops: this version against whatever is published now (ADM-005)'
+      description: >
+        Recomputed on read, never written. A first publication compares against
+        an explicitly empty baseline, so `fromVersion` is null rather than the
+        request being an error. Entries are paged; `countsByCategory` is always
+        complete, so a reviewer walking a 14,000-entry diff never sees a total
+        that shrinks to the page. A change to nothing but `overrideRevision`
+        yields exactly one SOURCE_DRIFT entry rather than replaying every
+        migration the dataset already asserted.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - {
+            name: limit,
+            in: query,
+            schema: { type: integer, minimum: 1, maximum: 500, default: 100 },
+          }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        '200':
+          description: The diff, with complete counts and a bounded entry page
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdministrativeDatasetDiff' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /cms/administrative-datasets/{id}/validate:
+    post:
+      operationId: validateAdministrativeDataset
+      tags: [cms, administrative]
+      summary: 'Ops: run every gate against this exact snapshot (ADM-005)'
+      description: >
+        Runs the ADM-004 gates and stores the result bound to the dataset's
+        identity, checksum, staged-row digest, override revision and validator
+        version. Re-validating replaces the previous result rather than adding
+        to it. A publishable result moves the version to VALIDATED; a failing one
+        leaves it STAGED, because it failed a check — nobody rejected it.
+      responses:
+        '201':
+          description: The validation result and the diff computed with it
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [validation, diff]
+                properties:
+                  validation: { $ref: '#/components/schemas/AdministrativeValidationReport' }
+                  diff: { $ref: '#/components/schemas/AdministrativeDatasetDiff' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+
+  /cms/administrative-datasets/{id}/publish:
+    post:
+      operationId: publishAdministrativeDataset
+      tags: [cms, administrative]
+      summary: 'Ops: make this version the active dataset (ADM-005)'
+      description: >
+        Takes a dataset id and nothing else. No `publishable` flag, no checksum
+        and no warning acknowledgement is accepted from the caller: inside the
+        publishing transaction the server re-reads the lifecycle status, the
+        stored checksum, the checksum the pinned files produce now, the digest of
+        the staged rows and the validation bound to them, and refuses on the
+        first disagreement.
+
+
+        `publishable === errors === 0`. An ERROR can never be overridden; a
+        WARNING never blocks and stays visible and audited.
+
+
+        Demote and promote are one transaction serialised by an advisory lock, so
+        there are never two active versions and never zero. The previous version
+        is retained — it is what a rollback restores. Publishing the already
+        active version is 409 DATASET_ALREADY_PUBLISHED, not a silent no-op;
+        replaying the same `Idempotency-Key` returns the original result. The
+        in-process cache pointer is refreshed only after commit and a failure to
+        refresh it is reported in `cacheWarmed`, never rolled back: PostgreSQL is
+        authoritative and other processes converge within the 60-second TTL.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: The version is now active
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdministrativeTransitionResult' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: >
+            Refused, and audited with its reason. DATASET_NOT_VALIDATED,
+            DATASET_REJECTED, DATASET_ALREADY_PUBLISHED, VALIDATION_MISSING,
+            VALIDATION_STALE, VALIDATION_HAS_ERRORS, SNAPSHOT_CHECKSUM_MISMATCH,
+            or ACTIVE_VERSION_CHANGED when another publication won the race
+            while this one was being prepared.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /cms/administrative-datasets/{id}/rollback:
+    post:
+      operationId: rollbackAdministrativeDataset
+      tags: [cms, administrative]
+      summary: 'Ops: re-activate a previously published version (ADM-005)'
+      description: >
+        A forward act with its own audit row, not an undo. Nothing is deleted, no
+        migration is reversed, no stored address text is rewritten and no place
+        mapping is changed — stale mappings against the restored version are
+        reported, not written, because whether a claim a person verified should
+        be demoted is the mapping work's decision (#459/#461/#462).
+
+
+        Refuses a version that was never published, one that is already active,
+        and one whose stored rows no longer match the snapshot that was
+        validated. It deliberately does not re-verify the pinned source files: a
+        version published long ago may have been built from a snapshot no longer
+        vendored, and refusing on that ground would remove the escape hatch
+        exactly when it is needed.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: The earlier version is active again
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdministrativeTransitionResult' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: >
+            Refused, and audited with its reason. DATASET_NEVER_PUBLISHED,
+            DATASET_ALREADY_PUBLISHED, DATASET_NOT_RESTORABLE, VALIDATION_MISSING,
+            DATASET_CORRUPTED, or ACTIVE_VERSION_CHANGED.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /cms/administrative-mappings:
+    get:
+      operationId: listAdministrativeMappings
+      tags: [cms, administrative]
+      summary: 'Moderation: places by administrative mapping status (ADM-009)'
+      description: >
+        The review queue. NEEDS_REVIEW and STALE are the actionable states — the
+        ones where a person has something to decide — but nothing is hidden:
+        every status is one filter away and all of them are in `counts`.
+
+
+        `blockedApprovalOnly=true` is the view that matters most: places waiting
+        for approval that cannot get it because of their mapping, including
+        UNMAPPED ones. A place stuck on a mapping nobody can see is exactly the
+        case a queue ordered by "what looks actionable" would bury.
+
+
+        Cursor pagination orders by place id, not by `updated_at`: ordering by a
+        column reviewers are changing would let a place they just touched jump
+        pages under them.
+      parameters:
+        - name: status
+          in: query
+          description: Comma-separated mapping statuses.
+          schema: { type: string, example: 'NEEDS_REVIEW,STALE' }
+        - name: placeStatus
+          in: query
+          description: Comma-separated place statuses.
+          schema: { type: string, example: 'review,community_submitted' }
+        - name: blockedApprovalOnly
+          in: query
+          schema: { type: string, enum: ['true', 'false'] }
+        - {
+            name: limit,
+            in: query,
+            schema: { type: integer, minimum: 1, maximum: 200, default: 50 },
+          }
+        - { name: cursor, in: query, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: A page of mappings, with complete counts per status
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, nextCursor, counts]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/AdministrativeMappingListItem' }
+                  nextCursor: { type: string, format: uuid, nullable: true }
+                  counts:
+                    type: object
+                    additionalProperties: { type: integer }
+                    description: One per mapping status plus `actionable`.
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /cms/administrative-mappings/remediation:
+    get:
+      operationId: getAdministrativeRemediation
+      tags: [cms, administrative]
+      summary: 'Moderation: approved places that would not pass the policy today'
+      description: >
+        Reporting only. Nothing here un-approves anything: these places were
+        approved before the policy existed, and taking a working catalogue off
+        the air to satisfy a rule written afterwards would do more harm than the
+        gap it closes.
+
+
+        `verified_against_older_version` is not a defect. The approval gate tests
+        the identity — does this commune still exist, is it still current, does
+        it still sit under this province — not the version string, because
+        otherwise every publication would un-approve the catalogue. The category
+        exists because "who verified this, and against what" is what a reviewer
+        asks before deciding whether to look again.
+      responses:
+        '200':
+          description: Counts per remediation category with bounded samples
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [activeDatasetVersion, counts, samples]
+                properties:
+                  activeDatasetVersion: { type: string }
+                  counts:
+                    type: object
+                    required:
+                      [
+                        unmapped,
+                        auto_matched,
+                        needs_review,
+                        rejected,
+                        stale,
+                        verified_against_older_version,
+                        compliant,
+                      ]
+                    properties:
+                      unmapped: { type: integer }
+                      auto_matched: { type: integer }
+                      needs_review: { type: integer }
+                      rejected: { type: integer }
+                      stale: { type: integer }
+                      verified_against_older_version: { type: integer }
+                      compliant: { type: integer }
+                  samples:
+                    type: object
+                    additionalProperties:
+                      type: array
+                      items: { type: string, format: uuid }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /cms/places/{id}/administrative-mapping:
+    get:
+      operationId: getPlaceAdministrativeMapping
+      tags: [cms, administrative]
+      summary: 'Moderation: one mapping, its evidence and what may be done to it'
+      description: >
+        Everything the console needs on one screen, recomputed on read rather
+        than served from a cache of what the resolver once thought: current
+        codes and their resolved names, the resolver's evidence and alternative
+        candidates, the unresolved reason, hierarchy validity, the staleness
+        verdict, whether this mapping blocks approving the place and why, and
+        which actions this role may take.
+
+
+        The place's own address text, `city` and `district` are returned because
+        a reviewer judges the mapping against what the address actually says.
+        They are read here and never written by any endpoint in this group.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: The mapping and its evidence
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdministrativeMappingDetail' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/AdministrativeUnavailable' }
+
+  /cms/places/{id}/administrative-mapping/verify:
+    post:
+      operationId: verifyPlaceAdministrativeMapping
+      tags: [cms, administrative]
+      summary: 'Moderation: a reviewer verifies these codes (ADM-009)'
+      description: >
+        The only path that writes VERIFIED. Inside the write transaction the
+        server re-reads the place under a row lock, re-reads the *active*
+        dataset, and checks that the province and commune are both current in it
+        and that the commune belongs to the province — a code is not an
+        identity, so the period is part of the check.
+
+
+        No confidence number is written. A person's judgement is not a
+        probability; VERIFIED plus their identity is the whole claim.
+
+
+        `expectedUpdatedAt` is required: a reviewer decides about a row they saw,
+        and a publication, another reviewer or a backfill can move it in
+        between.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [provinceCode, communeCode, expectedUpdatedAt]
+              properties:
+                provinceCode: { type: string, pattern: '^[0-9]{2,5}$' }
+                communeCode: { type: string, pattern: '^[0-9]{2,5}$' }
+                legacyDistrictCode:
+                  type: string
+                  pattern: '^[0-9]{2,5}$'
+                  nullable: true
+                  description: Pre-2025-07-01 evidence. Checked against the historical set.
+                note: { type: string, maxLength: 500 }
+                expectedUpdatedAt: { type: string, format: date-time }
+      responses:
+        '201':
+          description: The mapping is verified
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [placeId, status, datasetVersion]
+                properties:
+                  placeId: { type: string, format: uuid }
+                  status: { type: string, enum: [VERIFIED] }
+                  datasetVersion: { type: string }
+        '400':
+          description: >
+            PROVINCE_NOT_CURRENT, COMMUNE_NOT_CURRENT, HIERARCHY_INVALID or
+            LEGACY_DISTRICT_UNKNOWN — the selection does not describe a real
+            unit in the active dataset.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: PLACE_MODIFIED — the place changed since it was read.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /cms/places/{id}/administrative-mapping/reject:
+    post:
+      operationId: rejectPlaceAdministrativeMapping
+      tags: [cms, administrative]
+      summary: 'Moderation: reject the mapping — not the place (ADM-009)'
+      description: >
+        Rejecting a mapping says this answer is wrong. It does not touch the
+        place's own moderation state, its address, or its geometry; it blocks
+        approval until somebody produces a mapping that is right.
+
+
+        The rejected codes and the resolver's evidence are kept on the record,
+        because what was rejected is the most useful thing the next reviewer can
+        be told.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdministrativeMappingReason' }
+      responses:
+        '201':
+          description: The mapping is rejected
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [placeId, status]
+                properties:
+                  placeId: { type: string, format: uuid }
+                  status: { type: string, enum: [REJECTED] }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /cms/places/{id}/administrative-mapping/rematch:
+    post:
+      operationId: rematchPlaceAdministrativeMapping
+      tags: [cms, administrative]
+      summary: 'Moderation: re-run the resolver on one rejected mapping (ADM-009)'
+      description: >
+        The only route that reopens a REJECTED mapping — one place, a reason, and
+        an authenticated person to attribute it to. The bulk backfill (#461) has
+        no such option, because it has nobody to name.
+
+
+        Asking for a rematch is not verifying anything. The resolver's answer is
+        written under the ordinary transition rules, the previous reviewer's
+        attribution is cleared because their decision no longer stands, and the
+        requester is recorded in the audit as the requester — never in
+        `administrative_mapped_by`.
+
+
+        A VERIFIED mapping is refused: correcting one is an explicit reviewer
+        act that names both people, not a re-derivation.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdministrativeMappingReason' }
+      responses:
+        '201':
+          description: The resolver ran and its result was persisted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [placeId, status, communeCode]
+                properties:
+                  placeId: { type: string, format: uuid }
+                  status:
+                    type: string
+                    enum: [UNMAPPED, AUTO_MATCHED, NEEDS_REVIEW]
+                  communeCode: { type: string, nullable: true }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: VERIFIED_NOT_REMATCHABLE, or PLACE_MODIFIED.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /cms/places/{id}/administrative-mapping/correct:
+    post:
+      operationId: correctPlaceAdministrativeMapping
+      tags: [cms, administrative]
+      summary: 'Moderation: correct a mapping somebody already verified (ADM-009)'
+      description: >
+        Separate from verify on purpose. Changing a decision a person recorded is
+        an act that must name both of them, and the audit row does: the previous
+        reviewer, their codes, the corrector, the reason, and the new codes.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [provinceCode, communeCode, reason, expectedUpdatedAt]
+              properties:
+                provinceCode: { type: string, pattern: '^[0-9]{2,5}$' }
+                communeCode: { type: string, pattern: '^[0-9]{2,5}$' }
+                legacyDistrictCode: { type: string, pattern: '^[0-9]{2,5}$', nullable: true }
+                reason: { type: string, minLength: 1, maxLength: 500 }
+                expectedUpdatedAt: { type: string, format: date-time }
+      responses:
+        '201':
+          description: The mapping is corrected and re-verified
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [placeId, status, datasetVersion]
+                properties:
+                  placeId: { type: string, format: uuid }
+                  status: { type: string, enum: [VERIFIED] }
+                  datasetVersion: { type: string }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: NOT_VERIFIED, or PLACE_MODIFIED.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /cms/places/{id}/administrative-mapping/reconcile:
+    post:
+      operationId: reconcilePlaceAdministrativeMapping
+      tags: [cms, administrative]
+      summary: 'Ops: re-evaluate one mapping against the active dataset (ADM-009)'
+      description: >
+        System reconciliation, and `ops_admin` rather than `moderator` because it
+        belongs to whoever published the dataset that changed — and because it is
+        emphatically not a verification.
+
+
+        A version change alone never makes a mapping stale. If the same commune
+        still exists, is still current and still sits under the same province,
+        nothing is written and the older version stays as provenance. When the
+        identity really has failed, STALE is written and the codes and
+        `administrative_mapped_by` are **kept**: that column names who verified
+        the stored mapping, and they did — STALE says that verification is no
+        longer current. The audit row names the reconciler separately, so the log
+        can never be read as "this person verified it".
+
+
+        Idempotent: reconciling an already-stale mapping writes nothing.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: The verdict, and whether anything was written
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [placeId, changed, verdict]
+                properties:
+                  placeId: { type: string, format: uuid }
+                  changed: { type: boolean }
+                  verdict: { $ref: '#/components/schemas/AdministrativeStaleVerdict' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
 
   /taxonomies:
     get:
@@ -6916,6 +7802,37 @@ components:
       in: cookie
       name: gogo_at
   parameters:
+    IfNoneMatch:
+      name: If-None-Match
+      in: header
+      required: false
+      description: >
+        ADM-003 / ADR-0019 §8. The ETag a client already holds. The tag is
+        derived from the active datasetVersion plus the resolved request, so it
+        carries no clock and no process-local state: two instances serving the
+        same version answer with the same tag, and a restart does not invalidate
+        anyone's cache.
+      schema: { type: string, maxLength: 256 }
+    AdministrativeIncludeLegacy:
+      name: includeLegacy
+      in: query
+      required: false
+      description: >
+        District-level units were dissolved on 2025-07-01 and are excluded from
+        every response unless this is `true`. A form offering "Quận Ba Đình"
+        would be offering something that no longer exists.
+      schema: { type: string, enum: ['true', 'false'] }
+    AdministrativeLimit:
+      name: limit
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+    AdministrativeCursor:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque cursor from a previous page's `nextCursor`.
+      schema: { type: string, maxLength: 64 }
     IdempotencyKey:
       name: Idempotency-Key
       in: header
@@ -6975,6 +7892,723 @@ components:
         maximum: 100
         default: 20
   schemas:
+    AdministrativeUnit:
+      type: object
+      required: [code, name, fullName, unitType, level, status, effectiveFrom, isCurrent]
+      properties:
+        code:
+          { type: string, description: Official GSO code. Not unique on its own — see ADR-0019 §2. }
+        name: { type: string, description: Short name without its type prefix ("Ba Đình"). }
+        fullName: { type: string, description: The source's own string ("Phường Ba Đình"). }
+        nameEn: { type: string, nullable: true }
+        codeName: { type: string, nullable: true }
+        unitType:
+          type: string
+          enum: [PROVINCE, MUNICIPALITY, WARD, COMMUNE, SPECIAL_ZONE, LEGACY_DISTRICT]
+        level: { type: string, enum: [PROVINCE, COMMUNE, LEGACY_DISTRICT] }
+        parentCode:
+          { type: string, nullable: true, description: Province code; null for a province. }
+        status: { type: string, enum: [ACTIVE, INACTIVE, FUTURE] }
+        effectiveFrom: { type: string, format: date }
+        effectiveTo: { type: string, format: date, nullable: true }
+        isCurrent: { type: boolean }
+    AdministrativeUnitPage:
+      type: object
+      required: [datasetVersion, items, nextCursor, total]
+      properties:
+        datasetVersion: { type: string }
+        items: { type: array, items: { $ref: '#/components/schemas/AdministrativeUnit' } }
+        nextCursor: { type: string, nullable: true }
+        total: { type: integer }
+    AdministrativeUnitDetail:
+      type: object
+      required: [datasetVersion, current, periods]
+      properties:
+        datasetVersion: { type: string }
+        current:
+          allOf: [{ $ref: '#/components/schemas/AdministrativeUnit' }]
+          nullable: true
+        periods:
+          type: array
+          description: Every effective period this code has had, oldest first.
+          items: { $ref: '#/components/schemas/AdministrativeUnit' }
+    AdministrativeResolution:
+      type: object
+      required: [datasetVersion, requested, unit, successors, unresolved]
+      properties:
+        datasetVersion: { type: string }
+        requested:
+          type: object
+          required: [code, at]
+          properties:
+            code: { type: string }
+            at: { type: string, format: date, nullable: true }
+        unit: { $ref: '#/components/schemas/AdministrativeUnit' }
+        successors:
+          type: array
+          description: Canonical changes only. A quarantined split never appears here.
+          items:
+            type: object
+            required: [code, changeType, effectiveDate]
+            properties:
+              code: { type: string, nullable: true }
+              changeType:
+                type: string
+                enum: [CREATED, RENAMED, MERGED, SPLIT, REASSIGNED, DISSOLVED]
+              effectiveDate: { type: string, format: date }
+              legalReference: { type: string, nullable: true }
+        unresolved:
+          type: boolean
+          description: >
+            True when the unit is not current and GoGo holds no canonical
+            successor — typically an ambiguous split awaiting CMS review. Said
+            in a field rather than left to be inferred from an empty list.
+    AdministrativeVersion:
+      type: object
+      required: [datasetVersion, effectiveDate, publishedAt, counts]
+      properties:
+        datasetVersion: { type: string }
+        effectiveDate: { type: string, format: date }
+        publishedAt: { type: string, format: date-time, nullable: true }
+        counts:
+          type: object
+          required: [provinces, communes, legacyDistricts, legacyCommunes, changes]
+          properties:
+            provinces: { type: integer }
+            communes: { type: integer }
+            legacyDistricts: { type: integer }
+            legacyCommunes: { type: integer }
+            changes: { type: integer }
+    AdministrativeDatasetSummary:
+      type: object
+      required:
+        [
+          id,
+          combinedDatasetVersion,
+          combinedChecksum,
+          status,
+          effectiveDate,
+          overrideRevision,
+          sources,
+          importedAt,
+          publishedAt,
+          validation,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        combinedDatasetVersion:
+          type: string
+          description: >
+            The identity of a GoGo dataset is the tuple of its pinned upstreams
+            plus the override revision, not any single source version.
+        combinedChecksum: { type: string }
+        status:
+          type: string
+          enum: [STAGED, VALIDATED, REJECTED, PUBLISHED, ROLLED_BACK]
+          description: >
+            At most one version is PUBLISHED, held by a partial unique index.
+            A version demoted by a later publication becomes ROLLED_BACK and is
+            retained — that is what a rollback restores.
+        effectiveDate: { type: string, format: date }
+        overrideRevision: { type: integer }
+        sources:
+          type: object
+          required:
+            [
+              currentSourceVersion,
+              historicalSourceVersion,
+              mappingSourceCommit,
+              boundarySourceVersion,
+            ]
+          properties:
+            currentSourceVersion: { type: string }
+            historicalSourceVersion: { type: string, nullable: true }
+            mappingSourceCommit: { type: string, nullable: true }
+            boundarySourceVersion: { type: string, nullable: true }
+        importedAt: { type: string, format: date-time }
+        publishedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            Non-null means this version was active at some point, which is what
+            makes it a legitimate rollback target.
+        validation:
+          type: object
+          nullable: true
+          required:
+            [validationId, validatorVersion, ranAt, errors, warnings, publishable, warningGates]
+          properties:
+            validationId: { type: string }
+            validatorVersion: { type: string }
+            ranAt: { type: string, format: date-time }
+            errors: { type: integer }
+            warnings: { type: integer }
+            publishable:
+              type: boolean
+              description: Exactly `errors === 0`. Warnings never affect it.
+            warningGates:
+              type: array
+              items: { type: string }
+    AdministrativeImportReport:
+      type: object
+      required:
+        [
+          datasetVersionId,
+          combinedDatasetVersion,
+          combinedChecksum,
+          counts,
+          classification,
+          warnings,
+        ]
+      properties:
+        datasetVersionId: { type: string, format: uuid }
+        combinedDatasetVersion: { type: string }
+        combinedChecksum: { type: string }
+        counts:
+          type: object
+          required:
+            [provinces, communes, legacyDistricts, legacyCommunes, canonicalChanges, quarantined]
+          properties:
+            provinces: { type: integer }
+            communes: { type: integer }
+            legacyDistricts: { type: integer }
+            legacyCommunes: { type: integer }
+            canonicalChanges: { type: integer }
+            quarantined: { type: integer }
+        classification:
+          type: object
+          additionalProperties: { type: integer }
+          description: >
+            Count per quarantine class. An advisory mapping row is promoted to a
+            canonical change only when both endpoints resolve; the rest are
+            quarantined with their raw payload, never guessed.
+        warnings:
+          type: array
+          items: { type: string }
+    AdministrativeValidationReport:
+      type: object
+      nullable: true
+      required:
+        [
+          datasetVersion,
+          ranAt,
+          findings,
+          errors,
+          warnings,
+          publishable,
+          counts,
+          validationId,
+          validatorVersion,
+          boundTo,
+        ]
+      properties:
+        datasetVersion: { type: string }
+        ranAt: { type: string, format: date-time }
+        findings:
+          type: array
+          items:
+            type: object
+            required: [gate, severity, message, count, samples]
+            properties:
+              gate: { type: string }
+              severity: { type: string, enum: [ERROR, WARNING] }
+              message: { type: string }
+              count: { type: integer }
+              samples:
+                type: array
+                items: { type: string }
+        errors: { type: integer }
+        warnings: { type: integer }
+        publishable:
+          type: boolean
+          description: >
+            `errors === 0`. The only thing publication consults, and it is
+            re-checked server-side against a freshly re-read result.
+        counts:
+          type: object
+          required:
+            [
+              currentProvinces,
+              currentCommunes,
+              historicalProvinces,
+              historicalDistricts,
+              historicalCommunes,
+              canonicalChanges,
+              quarantined,
+            ]
+          properties:
+            currentProvinces: { type: integer }
+            currentCommunes: { type: integer }
+            historicalProvinces: { type: integer }
+            historicalDistricts: { type: integer }
+            historicalCommunes: { type: integer }
+            canonicalChanges: { type: integer }
+            quarantined: { type: integer }
+        validationId:
+          type: string
+          description: >
+            Deterministic in what was checked and what was found, so an audit row
+            can name the exact validation a publication relied on.
+        validatorVersion: { type: string }
+        boundTo:
+          type: object
+          description: >
+            What this result is evidence about. Publication re-derives every one
+            of these and refuses as VALIDATION_STALE on any disagreement — which
+            is what makes "validated, then someone edited a staged row" a refusal
+            rather than a silent publication of unvalidated data.
+          required:
+            [
+              datasetVersionId,
+              combinedDatasetVersion,
+              combinedChecksum,
+              snapshotFingerprint,
+              overrideRevision,
+            ]
+          properties:
+            datasetVersionId: { type: string, format: uuid }
+            combinedDatasetVersion: { type: string }
+            combinedChecksum: { type: string }
+            snapshotFingerprint:
+              type: string
+              description: >
+                Digest of the stored rows themselves. The combined checksum is
+                computed from the pinned files, so it cannot see a row edited
+                directly in the database; this can.
+            overrideRevision: { type: integer }
+    AdministrativeAffectedPlaces:
+      type: object
+      required: [total, samples, truncated, sampleLimit]
+      properties:
+        total:
+          type: integer
+          description: >
+            Counted in the database. Places with no administrative claim
+            (UNMAPPED) are excluded — a place with no claim is not affected by a
+            change to administrative data.
+        samples:
+          type: array
+          items:
+            type: object
+            required: [placeId, name, code, status]
+            properties:
+              placeId: { type: string, format: uuid }
+              name: { type: string }
+              code: { type: string }
+              status: { type: string }
+        truncated: { type: boolean }
+        sampleLimit: { type: integer }
+    AdministrativeDatasetDiff:
+      type: object
+      required:
+        [
+          fromVersion,
+          toVersion,
+          countsByCategory,
+          entries,
+          entriesTruncated,
+          entryLimit,
+          affectedPlaces,
+        ]
+      properties:
+        fromVersion:
+          type: string
+          nullable: true
+          description: Null for a first publication, which compares against an empty baseline.
+        toVersion: { type: string }
+        countsByCategory:
+          type: object
+          additionalProperties: { type: integer }
+          description: >
+            Always complete, never paged. Categories: CREATED, DISSOLVED,
+            RENAMED, PARENT_CHANGED, STATUS_CHANGED, EFFECTIVE_PERIOD_CHANGED,
+            MERGED, SPLIT, REASSIGNED, UNRESOLVED, SOURCE_DRIFT.
+        entries:
+          type: array
+          items:
+            type: object
+            required: [key, category, from, to, detail, provenance, validation]
+            properties:
+              key: { type: string }
+              category: { type: string }
+              from:
+                type: object
+                nullable: true
+                properties:
+                  code: { type: string }
+                  effectiveFrom: { type: string, format: date }
+              to:
+                type: object
+                nullable: true
+                properties:
+                  code: { type: string }
+                  effectiveFrom: { type: string, format: date }
+              detail: { type: string }
+              provenance: { type: string, nullable: true }
+              validation:
+                type: array
+                items: { type: string }
+        entriesTruncated: { type: boolean }
+        entryLimit: { type: integer }
+        affectedPlaces: { $ref: '#/components/schemas/AdministrativeAffectedPlaces' }
+        pagination:
+          type: object
+          required: [offset, limit, totalEntries, hasMore]
+          properties:
+            offset: { type: integer }
+            limit: { type: integer }
+            totalEntries: { type: integer }
+            hasMore: { type: boolean }
+    AdministrativeStaleMappings:
+      type: object
+      description: >
+        Places whose administrative claim does not resolve against the dataset
+        being activated. Reported, never written: whether a claim a person
+        verified should be demoted is the mapping work's decision (#459/#461/#462).
+      required: [total, samples, truncated, sampleLimit]
+      properties:
+        total: { type: integer }
+        samples:
+          type: array
+          items:
+            type: object
+            required: [placeId, name, code, status]
+            properties:
+              placeId: { type: string, format: uuid }
+              name: { type: string }
+              code: { type: string }
+              status: { type: string }
+        truncated: { type: boolean }
+        sampleLimit: { type: integer }
+    AdministrativeTransitionResult:
+      type: object
+      required:
+        [
+          datasetVersionId,
+          combinedDatasetVersion,
+          previousActiveVersion,
+          previousActiveVersionId,
+          publishedAt,
+          validationId,
+          warnings,
+          warningGates,
+          diff,
+          staleMappings,
+          cacheWarmed,
+        ]
+      properties:
+        datasetVersionId: { type: string, format: uuid }
+        combinedDatasetVersion: { type: string }
+        previousActiveVersion:
+          type: string
+          nullable: true
+          description: Retained, not deleted. This is what a rollback restores.
+        previousActiveVersionId: { type: string, format: uuid, nullable: true }
+        publishedAt: { type: string, format: date-time }
+        validationId:
+          type: string
+          description: The exact validation result this transition relied on.
+        warnings: { type: integer }
+        warningGates:
+          type: array
+          items: { type: string }
+          description: Visible and audited; they never blocked the publication.
+        diff: { $ref: '#/components/schemas/AdministrativeDatasetDiff' }
+        staleMappings: { $ref: '#/components/schemas/AdministrativeStaleMappings' }
+        cacheWarmed:
+          type: boolean
+          description: >
+            Whether this process refilled its own active-version pointer after
+            the commit. False is not a failed publication — PostgreSQL is
+            authoritative and every process converges within the 60-second TTL.
+    AdministrativeCapability:
+      type: object
+      required: [dataset, boundaries, resolver, publication, mappings, remediation, observedAt]
+      properties:
+        dataset:
+          type: object
+          required:
+            [state, version, publishedAt, ageSeconds, counts, quarantined, unresolved, validation]
+          properties:
+            state: { type: string, enum: [AVAILABLE, MISSING, ERROR] }
+            version: { type: string, nullable: true }
+            publishedAt: { type: string, format: date-time, nullable: true }
+            ageSeconds: { type: integer, nullable: true }
+            counts:
+              type: object
+              additionalProperties: { type: integer }
+              description: One per lifecycle status.
+            quarantined: { type: integer }
+            unresolved: { type: integer }
+            validation:
+              type: object
+              nullable: true
+              required: [errors, warnings]
+              properties:
+                errors: { type: integer }
+                warnings: { type: integer }
+        boundaries:
+          type: object
+          required: [state, version, loadedAt, ageSeconds, provinces, communes]
+          properties:
+            state: { type: string, enum: [AVAILABLE, MISSING, ERROR] }
+            version: { type: string, nullable: true }
+            loadedAt: { type: string, format: date-time, nullable: true }
+            ageSeconds: { type: integer, nullable: true }
+            provinces: { type: integer }
+            communes: { type: integer }
+        resolver:
+          type: string
+          enum: [FULL, PARTIAL, UNAVAILABLE]
+          description: >
+            PARTIAL means no boundary release is loaded: the resolver still
+            answers from explicit codes, stored names and the change mapping.
+        publication:
+          type: string
+          enum: [ENABLED, BLOCKED]
+          description: >
+            BLOCKED when no dataset is published — nothing to validate a mapping
+            against, so no place may be approved. Enforced by the domain guard,
+            not by taking the service offline.
+        mappings:
+          type: object
+          additionalProperties: { type: integer }
+          description: Places per administrative mapping status.
+        remediation:
+          type: object
+          additionalProperties: { type: integer }
+          description: Approved places per remediation category.
+        observedAt: { type: string, format: date-time }
+    AdministrativeMappingReason:
+      type: object
+      additionalProperties: false
+      required: [reason, expectedUpdatedAt]
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: Required. A decision with no stated reason cannot be reviewed later.
+        expectedUpdatedAt:
+          type: string
+          format: date-time
+          description: >
+            The place's `updatedAt` as the reviewer saw it. A mismatch is 409
+            PLACE_MODIFIED rather than a lost update.
+    AdministrativeMappingListItem:
+      type: object
+      required:
+        [
+          placeId,
+          name,
+          placeStatus,
+          mappingStatus,
+          provinceCode,
+          communeCode,
+          datasetVersion,
+          updatedAt,
+          blocksApproval,
+        ]
+      properties:
+        placeId: { type: string, format: uuid }
+        name: { type: string }
+        placeStatus: { type: string }
+        mappingStatus: { $ref: '#/components/schemas/AdministrativeMappingStatus' }
+        provinceCode: { type: string, nullable: true }
+        communeCode: { type: string, nullable: true }
+        datasetVersion: { type: string, nullable: true }
+        updatedAt: { type: string, format: date-time }
+        blocksApproval:
+          type: boolean
+          description: >
+            True for anything that is not VERIFIED. The precise reason is
+            per place and comes from the detail endpoint.
+    AdministrativeMappingStatus:
+      type: string
+      enum: [UNMAPPED, AUTO_MATCHED, NEEDS_REVIEW, VERIFIED, REJECTED, STALE]
+      description: >
+        VERIFIED and REJECTED are reviewer-owned: no automatic path writes them.
+        AUTO_MATCHED is the resolver's answer, which is why it does not permit
+        approval — the point of a review queue is that the machine's answer is
+        not the decision.
+    AdministrativeStaleVerdict:
+      type: object
+      required:
+        [stale, reason, reviewerOwned, requiresReview, storedDatasetVersion, activeDatasetVersion]
+      properties:
+        stale: { type: boolean }
+        reason:
+          type: string
+          enum:
+            [
+              NO_MAPPING,
+              CURRENT,
+              REVALIDATED,
+              UNIT_NOT_IN_ACTIVE_DATASET,
+              UNIT_NOT_CURRENT,
+              HIERARCHY_CHANGED,
+            ]
+          description: >
+            `REVALIDATED` is the healthy case: the mapping is labelled with an
+            older dataset version and is still true. It is not stale, and
+            nothing is written for it.
+        reviewerOwned: { type: boolean }
+        requiresReview: { type: boolean }
+        storedDatasetVersion: { type: string, nullable: true }
+        activeDatasetVersion: { type: string }
+    AdministrativeMappingEvidence:
+      type: object
+      required: [method, provinceCode, communeCode, hierarchyValid, deterministic, detail]
+      properties:
+        method: { type: string }
+        provinceCode: { type: string, nullable: true }
+        communeCode: { type: string, nullable: true }
+        legacyDistrictCode: { type: string, nullable: true }
+        hierarchyValid: { type: boolean }
+        deterministic:
+          type: boolean
+          description: False for anything that may only ever be offered to a person.
+        onEdge:
+          type: boolean
+          description: Boundary evidence only — the point sits on the polygon's own edge.
+        detail: { type: string }
+    AdministrativeMappingDetail:
+      type: object
+      required:
+        [
+          placeId,
+          place,
+          mapping,
+          activeDatasetVersion,
+          evidence,
+          candidates,
+          unresolvedReason,
+          hierarchyValid,
+          staleness,
+          approval,
+          permittedActions,
+        ]
+      properties:
+        placeId: { type: string, format: uuid }
+        place:
+          type: object
+          description: >
+            Read here so a reviewer can judge the mapping against what the
+            address actually says. No endpoint in this group writes any of it.
+          required: [name, status, addressText, city, district, geometry, updatedAt]
+          properties:
+            name: { type: string }
+            status: { type: string }
+            addressText: { type: string, nullable: true }
+            city: { type: string, nullable: true }
+            district: { type: string, nullable: true }
+            geometry:
+              type: object
+              required: [lng, lat]
+              properties:
+                lng: { type: number }
+                lat: { type: number }
+            updatedAt:
+              type: string
+              format: date-time
+              description: Send this back as `expectedUpdatedAt` on any decision.
+        mapping:
+          type: object
+          required:
+            [
+              status,
+              provinceCode,
+              communeCode,
+              legacyDistrictCode,
+              provinceName,
+              communeName,
+              legacyDistrictName,
+              method,
+              confidence,
+              datasetVersion,
+              boundaryVersion,
+              mappedAt,
+              reviewer,
+            ]
+          properties:
+            status: { $ref: '#/components/schemas/AdministrativeMappingStatus' }
+            provinceCode: { type: string, nullable: true }
+            communeCode: { type: string, nullable: true }
+            legacyDistrictCode: { type: string, nullable: true }
+            provinceName: { type: string, nullable: true }
+            communeName: { type: string, nullable: true }
+            legacyDistrictName: { type: string, nullable: true }
+            method: { type: string, nullable: true }
+            confidence:
+              type: string
+              nullable: true
+              description: >
+                1.00 or absent. Only an official code or a strictly-inside
+                containment is definitional; a manual verification writes none,
+                because a person's judgement is not a probability.
+            datasetVersion: { type: string, nullable: true }
+            boundaryVersion: { type: string, nullable: true }
+            mappedAt: { type: string, format: date-time, nullable: true }
+            reviewer:
+              type: object
+              nullable: true
+              description: >
+                Who is responsible for the mapping the row carries now. Retained
+                on a STALE row — they did verify it; STALE says that
+                verification is no longer current.
+              required: [id, displayName]
+              properties:
+                id: { type: string, format: uuid }
+                displayName: { type: string }
+        activeDatasetVersion: { type: string }
+        evidence:
+          type: array
+          items: { $ref: '#/components/schemas/AdministrativeMappingEvidence' }
+        candidates:
+          type: array
+          description: Alternatives the resolver refused to choose between.
+          items:
+            type: object
+            required: [method, provinceCode, communeCode, detail]
+            properties:
+              method: { type: string }
+              provinceCode: { type: string, nullable: true }
+              communeCode: { type: string, nullable: true }
+              detail: { type: string }
+        unresolvedReason: { type: string, nullable: true }
+        hierarchyValid: { type: boolean }
+        staleness: { $ref: '#/components/schemas/AdministrativeStaleVerdict' }
+        approval:
+          type: object
+          required: [blocked, block]
+          properties:
+            blocked: { type: boolean }
+            block:
+              type: object
+              nullable: true
+              required: [code, message]
+              properties:
+                code:
+                  type: string
+                  enum:
+                    [
+                      MAPPING_UNMAPPED,
+                      MAPPING_NOT_VERIFIED,
+                      MAPPING_REJECTED,
+                      MAPPING_STALE,
+                      MAPPING_INCOMPLETE,
+                      MAPPING_UNIT_NOT_CURRENT,
+                      MAPPING_HIERARCHY_INVALID,
+                    ]
+                message: { type: string }
+        permittedActions:
+          type: array
+          description: >
+            What this role may do, so the console renders buttons it knows will
+            work. The server still enforces it: hiding a button is not
+            authorization.
+          items: { type: string }
     RoomConstraintInput:
       type: object
       required: [budgetMode, budgetAmount]
@@ -9370,6 +11004,45 @@ components:
             rowsByStatus:
               type: object
               additionalProperties: { type: integer }
+            publication:
+              type: object
+              description: >
+                ADM-009 (#462) — what happened to the publication this mode asked
+                for. Kept apart from `rowsByStatus` because they answer different
+                questions: a row can be `imported` and not published, and folding
+                the two together would tell an operator their places are live
+                when they are waiting for a reviewer.
+
+
+                A newly imported place has never been verified by anybody, so its
+                publication is always deferred and the place lands in `review`.
+                The one row that can publish is one matching an existing place
+                whose mapping a reviewer already verified and which is still
+                valid against the active administrative dataset.
+              required:
+                [
+                  requested,
+                  published,
+                  deferred,
+                  mappingUnverified,
+                  mappingInvalid,
+                  noActiveAdministrativeDataset,
+                ]
+              properties:
+                requested:
+                  type: integer
+                  description: Rows whose mode asked for publication.
+                published: { type: integer }
+                deferred: { type: integer }
+                mappingUnverified:
+                  type: integer
+                  description: No mapping, or one no reviewer has verified.
+                mappingInvalid:
+                  type: integer
+                  description: Verified, but the unit or hierarchy no longer holds.
+                noActiveAdministrativeDataset:
+                  type: integer
+                  description: Nothing to validate a mapping against in this environment.
             startedAt: { type: string, format: date-time }
             cancelledAt: { type: string, format: date-time }
             reused:
@@ -10991,7 +12664,27 @@ components:
               runId: { type: string, format: uuid }
               reason: { type: string }
 
+  headers:
+    ETag:
+      description: Deterministic entity tag over datasetVersion + the resolved request.
+      schema: { type: string }
+    CacheControl:
+      description: Always `public, max-age=0, must-revalidate` — immutable per version, but the active version can change.
+      schema: { type: string }
+
   responses:
+    NotModified:
+      description: >
+        The client's ETag still matches. No body, by definition — this is the
+        whole saving the tag exists for.
+    AdministrativeUnavailable:
+      description: >
+        No administrative dataset is PUBLISHED. Deliberately not an empty list,
+        which would read as "Vietnam has no provinces"; this is an operational
+        fault and #463 alerts on it.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
     BadRequest:
       description: Validation or business rule failure
       content:
