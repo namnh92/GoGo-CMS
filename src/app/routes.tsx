@@ -21,6 +21,9 @@ const ImportJobScreen = lazy(() => import('@/features/imports/jobDetail.view'))
 const AdministrativeDataScreen = lazy(
   () => import('@/features/administrative/administrativeData.view'),
 )
+const AdministrativeDatasetDetailScreen = lazy(
+  () => import('@/features/administrative/datasetDetail.view'),
+)
 const AdministrativeMappingScreen = lazy(
   () => import('@/features/administrative/administrativeMapping.view'),
 )
@@ -114,9 +117,14 @@ export const router = createBrowserRouter([
           { path: 'moderation/reviews', element: <ReviewListScreen /> },
           { path: 'moderation/reviews/:reviewId', element: <ReviewListScreen /> },
           { path: 'submissions', element: <SubmissionQueueScreen /> },
-          // CMS #153 — shells. The screens themselves are #154 and #156; each
-          // enforces its own permission rather than trusting the nav to hide it.
+          // CMS #153/#154 — the dataset screens are built; the mapping queue is
+          // still a shell (#156). Each enforces its own permission rather than
+          // trusting the nav to hide it.
           { path: 'administrative-data', element: <AdministrativeDataScreen /> },
+          {
+            path: 'administrative-data/:datasetId',
+            element: <AdministrativeDatasetDetailScreen />,
+          },
           { path: 'administrative-mapping', element: <AdministrativeMappingScreen /> },
           { path: 'taxonomy', element: <TaxonomyScreen /> },
           { path: 'collections', element: <CollectionsScreen /> },

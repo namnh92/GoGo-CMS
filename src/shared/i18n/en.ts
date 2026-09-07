@@ -51,6 +51,260 @@ export const en: Partial<Record<MessageKey, string>> = {
     'No boundary release is loaded. The resolver still answers from stored codes and names, but not from geometry.',
   'administrative.capability.publicationBlocked': 'Place publication is blocked.',
   'administrative.capability.full': 'Administrative data and boundaries are both available.',
+
+  // CMS #154 — dataset operations.
+  'administrative.capability.title': 'Current capability',
+  'administrative.capability.dataset': 'Dataset',
+  'administrative.capability.boundaries': 'Boundaries',
+  'administrative.capability.resolver': 'Resolver',
+  'administrative.capability.publication': 'Place publication',
+  'administrative.capability.activeVersion': 'Active version',
+  'administrative.capability.publishedAt': 'Published at',
+  'administrative.capability.boundaryVersion': 'Boundary version',
+  'administrative.capability.boundaryLoadedAt': 'Boundaries loaded at',
+  'administrative.capability.boundaryUnits': 'Units with geometry',
+  'administrative.capability.boundaryUnitsValue': '{provinces} provinces · {communes} communes',
+  'administrative.capability.quarantined': 'Quarantined rows',
+  'administrative.capability.unresolved': 'Unresolved',
+  'administrative.capability.validation': 'Validation result',
+  'administrative.capability.observedAt': 'Observed at',
+  'administrative.capability.mappings': 'Places by mapping status',
+  'administrative.capability.remediation': 'Approved places by remediation category',
+
+  'administrative.state.AVAILABLE': 'Available',
+  'administrative.state.MISSING': 'Missing',
+  'administrative.state.ERROR': 'Error',
+  'administrative.resolver.FULL': 'Full',
+  'administrative.resolver.PARTIAL': 'Partial',
+  'administrative.resolver.UNAVAILABLE': 'Unavailable',
+  'administrative.resolver.PARTIALHint':
+    'Still answers from explicit codes, stored names and the change mapping; only the geometry is unavailable. Less of the catalogue, not none of it.',
+  'administrative.resolver.UNAVAILABLEHint':
+    'Administrative units cannot be resolved. The rest of the API is unaffected.',
+  'administrative.publication.ENABLED': 'Enabled',
+  'administrative.publication.BLOCKED': 'Blocked',
+
+  'administrative.status.STAGED': 'Staged',
+  'administrative.status.VALIDATED': 'Validated',
+  'administrative.status.REJECTED': 'Rejected',
+  'administrative.status.PUBLISHED': 'Active',
+  'administrative.status.ROLLED_BACK': 'Superseded',
+  'administrative.severity.ERROR': 'Error',
+  'administrative.severity.WARNING': 'Warning',
+
+  'administrative.active': 'Active',
+  'administrative.publishable': 'Publishable',
+  'administrative.notPublishable': 'Not publishable',
+  'administrative.neverValidated': 'Never validated',
+  'administrative.never': 'Never',
+  'administrative.none': 'None',
+  'administrative.errorsWarnings': '{errors} errors · {warnings} warnings',
+  'administrative.overrideRevision': 'Override revision',
+  'administrative.openDetail': 'Details',
+  'administrative.copy': 'Copy',
+  'administrative.copied': 'Copied',
+  'administrative.copyChecksum': 'Copy the full value of {label}',
+
+  'administrative.list.title': 'Imported versions',
+  'administrative.list.hint':
+    'Newest first. A dataset is identified by the tuple of its four pinned sources plus the override revision, not by any single version string.',
+  'administrative.list.empty': 'No dataset imported yet',
+  'administrative.list.emptyHint':
+    'Import the pinned release to create the first version. Importing publishes nothing.',
+  'administrative.list.summary': 'Showing {shown} of {total} versions',
+
+  'administrative.col.version': 'Combined version',
+  'administrative.col.status': 'Status',
+  'administrative.col.effectiveDate': 'Effective date',
+  'administrative.col.sources': 'Sources',
+  'administrative.col.checksum': 'Checksum',
+  'administrative.col.validation': 'Validation',
+  'administrative.col.imported': 'Imported',
+  'administrative.col.published': 'Published',
+  'administrative.col.actions': 'Actions',
+
+  'administrative.import.action': 'Import pinned release',
+  'administrative.import.title': 'Import the pinned administrative release',
+  'administrative.import.body':
+    'GoGo-BE imports the exact snapshot set pinned in its own manifest and verifies it by checksum. There is no file to upload from here.',
+  'administrative.import.confirm': 'Import',
+  'administrative.import.stagedOnly':
+    'Import writes a STAGED version and nothing else. No path here can touch the active dataset.',
+  'administrative.import.overrideRevision': 'Override revision',
+  'administrative.import.overrideRevisionHint':
+    'Bumped by a reviewer decision rather than an upstream release. It is a component of the combined version, so bumping it mints a new dataset from unchanged sources. Re-importing byte-identical sources at the same revision is refused as a duplicate.',
+  'administrative.import.currentActive': 'Currently active: {version}',
+  'administrative.import.done': 'Imported',
+  'administrative.import.doneDetail': 'Created version {version} as STAGED.',
+
+  'administrative.tab.overview': 'Overview',
+  'administrative.tab.validation': 'Validation',
+  'administrative.tab.diff': 'Changes',
+  'administrative.tab.audit': 'Audit',
+  'administrative.overview.hint':
+    'This version’s exact provenance: each source, each checksum, and the combined checksum.',
+  'administrative.overview.storedDiff':
+    'Diff stored at validation time (against the baseline active then, not now)',
+  'administrative.audit.hint':
+    'Every import, validation, publication and rollback — including the refused ones, with their reason.',
+
+  'administrative.source.current': 'Current units source',
+  'administrative.source.historical': 'Historical units source',
+  'administrative.source.mapping': 'Change-mapping commit',
+  'administrative.source.boundary': 'Boundary source',
+
+  'administrative.counts.currentProvinces': 'Current provinces',
+  'administrative.counts.currentCommunes': 'Current communes',
+  'administrative.counts.historicalProvinces': 'Historical provinces',
+  'administrative.counts.historicalDistricts': 'Historical districts',
+  'administrative.counts.historicalCommunes': 'Historical communes',
+  'administrative.counts.canonicalChanges': 'Canonical changes',
+  'administrative.counts.quarantined': 'Quarantined rows',
+  'administrative.counts.needsValidation': 'Run a validation to get per-level record counts.',
+
+  'administrative.validate.action': 'Validate',
+  'administrative.validate.done': 'Validation ran',
+  'administrative.validate.hint':
+    'The result is bound to this exact snapshot: version, checksum, the digest of the stored rows and the override revision.',
+  'administrative.validate.ranAt': 'Ran at',
+  'administrative.validate.validator': 'Validator version',
+  'administrative.validate.validationId': 'Validation id',
+  'administrative.validate.boundTo': 'Bound to version',
+  'administrative.validate.fingerprint': 'Snapshot fingerprint',
+  'administrative.validate.errorsBlock':
+    'ERROR blocks publication and cannot be overridden from the CMS. Fix the source and validate again.',
+  'administrative.validate.warningsDoNotBlock':
+    'WARNING never blocks publication. It stays recorded and visible.',
+  'administrative.validate.noneOfThisSeverity': 'Nothing at this severity.',
+  'administrative.validate.rowCount': '{count} rows',
+  'administrative.validate.neverHint':
+    'This version has never been validated, and an unvalidated version cannot be published.',
+
+  'administrative.publish.action': 'Publish',
+  'administrative.publish.confirmTitle': 'Publish the administrative dataset',
+  'administrative.publish.confirmBody':
+    'This is what every place approval is validated against. Read what changes before confirming.',
+  'administrative.publish.done': 'Published',
+  'administrative.publish.consequenceLabel': 'Consequence',
+  'administrative.publish.consequence':
+    'The active version is demoted and retained — that is what a rollback restores. No stored address text is rewritten.',
+
+  'administrative.rollback.action': 'Roll back',
+  'administrative.rollback.confirmTitle': 'Restore a previously published version',
+  'administrative.rollback.confirmBody':
+    'Rollback is a forward act with its own audit row, not an undo.',
+  'administrative.rollback.done': 'Restored',
+  'administrative.rollback.consequenceLabel': 'Consequence',
+  'administrative.rollback.consequence':
+    'Rollback switches the active immutable version. It does not rewrite stored addresses, reverse a migration or change any place mapping — mappings that no longer resolve are reported, not overwritten.',
+
+  'administrative.confirm.activeVersion': 'Active version',
+  'administrative.confirm.effectiveDate': 'Effective date',
+  'administrative.confirm.validation': 'Validation result',
+  'administrative.confirm.warningsNote':
+    'Warnings never block publication and stay recorded. Gates fired: {gates}',
+  'administrative.confirm.errorsNote': 'ERROR blocks publication and cannot be overridden.',
+  'administrative.confirm.diff': 'Changes against the active version',
+  'administrative.confirm.diffValue': '{changes} changes across {categories} categories',
+  'administrative.confirm.affected': '{count} places carry an administrative claim this touches.',
+  'administrative.confirm.quarantine': 'Quarantined / unresolved',
+  'administrative.confirm.quarantineValue': '{quarantined} quarantined · {unresolved} unresolved',
+
+  'administrative.activeVersionChanged':
+    'Another publication won the race while this one was being prepared. The screen has refetched — read the new diff before trying again.',
+  'administrative.cacheNotWarmed':
+    'The publication succeeded. This process did not refill its own cache pointer; PostgreSQL is authoritative and every process converges within 60 seconds.',
+  'administrative.staleMappings': '{count} mappings no longer resolve against this version',
+  'administrative.staleMappingsDetail':
+    'Reported, never written. Demoting a claim a person verified belongs to the mapping review queue.',
+
+  'administrative.diff.title': 'Changes against the active version',
+  'administrative.diff.hint':
+    'Recomputed on read, never written. Category counts are always complete; the list below is paged.',
+  'administrative.diff.firstPublication':
+    'First publication: compared against an explicitly empty baseline, so there is no source version.',
+  'administrative.diff.baseline': 'From {from} to {to}',
+  'administrative.diff.onlySourceDrift':
+    'Only the source identity changed. No administrative unit moved.',
+  'administrative.diff.affected': 'Affected places',
+  'administrative.diff.entryTotal': 'Total changes',
+  'administrative.diff.affectedSamples': 'Affected place samples',
+  'administrative.diff.sampleTruncated': 'Showing {shown} samples of {total}.',
+  'administrative.diff.truncated':
+    'The entry list is capped at {limit}. The category counts above are still complete.',
+  'administrative.diff.empty': 'No entries on this page',
+  'administrative.diff.emptyHint': 'The categories above describe every change in this version.',
+  'administrative.diff.summary': 'Showing {shown} of {total} changes',
+  'administrative.diff.col.category': 'Category',
+  'administrative.diff.col.from': 'From',
+  'administrative.diff.col.to': 'To',
+  'administrative.diff.col.detail': 'Detail',
+  'administrative.diff.col.provenance': 'Provenance',
+  'administrative.diff.col.gates': 'Gates',
+
+  'administrative.diffCategory.CREATED': 'Created',
+  'administrative.diffCategory.RENAMED': 'Renamed',
+  'administrative.diffCategory.MERGED': 'Merged',
+  'administrative.diffCategory.SPLIT': 'Split',
+  'administrative.diffCategory.REASSIGNED': 'Reassigned',
+  'administrative.diffCategory.DISSOLVED': 'Dissolved',
+  'administrative.diffCategory.PARENT_CHANGED': 'Parent changed',
+  'administrative.diffCategory.STATUS_CHANGED': 'Status changed',
+  'administrative.diffCategory.EFFECTIVE_PERIOD_CHANGED': 'Effective period changed',
+  'administrative.diffCategory.UNRESOLVED': 'Unresolved',
+  'administrative.diffCategory.SOURCE_DRIFT': 'Source drift',
+
+  'administrative.mappingStatus.UNMAPPED': 'Unmapped',
+  'administrative.mappingStatus.AUTO_MATCHED': 'Auto-matched',
+  'administrative.mappingStatus.NEEDS_REVIEW': 'Needs review',
+  'administrative.mappingStatus.VERIFIED': 'Verified',
+  'administrative.mappingStatus.REJECTED': 'Rejected',
+  'administrative.mappingStatus.STALE': 'Stale',
+
+  'administrative.remediation.compliant': 'Compliant',
+  'administrative.remediation.unmapped': 'Unmapped',
+  'administrative.remediation.auto_matched': 'Auto-matched',
+  'administrative.remediation.needs_review': 'Needs review',
+  'administrative.remediation.rejected': 'Rejected',
+  'administrative.remediation.stale': 'Stale',
+  'administrative.remediation.verified_against_older_version': 'Verified against an older version',
+
+  'administrative.block.NO_PERMISSION':
+    'Only ops_admin can act here. You can still read everything on this screen.',
+  'administrative.block.OFFLINE': 'The server is unreachable. Writes are held until it is back.',
+  'administrative.block.NOT_VALIDATABLE':
+    'Only a STAGED or VALIDATED version can be validated. This one is {status}.',
+  'administrative.block.DATASET_ALREADY_PUBLISHED': 'This version is already the active dataset.',
+  'administrative.block.DATASET_REJECTED': 'This version was rejected and cannot be published.',
+  'administrative.block.DATASET_NOT_VALIDATED': 'This version is {status}; validate it first.',
+  'administrative.block.VALIDATION_MISSING': 'No validation result is stored for this version.',
+  'administrative.block.VALIDATION_STALE':
+    'The stored validation no longer describes this version. Validate it again.',
+  'administrative.block.VALIDATION_HAS_ERRORS':
+    '{errors} validation errors block publication. ERROR cannot be overridden.',
+  'administrative.block.DATASET_NEVER_PUBLISHED':
+    'This version was never active. Rollback restores a previously active version; it does not publish a new one.',
+  'administrative.block.DATASET_NOT_RESTORABLE':
+    'The server does not list this version as restorable (it is {status}).',
+
+  'error.DATASET_NOT_FOUND': 'No such administrative dataset.',
+  'error.DATASET_ALREADY_IMPORTED':
+    'Byte-identical sources at the same override revision are already imported. Bump the revision to mint a new version.',
+  'error.DATASET_ALREADY_PUBLISHED': 'This version is already the active dataset.',
+  'error.DATASET_NOT_VALIDATED': 'The version has not been validated, so it cannot be published.',
+  'error.DATASET_REJECTED': 'The version was rejected and cannot be published.',
+  'error.DATASET_NEVER_PUBLISHED': 'The version was never active, so it cannot be restored.',
+  'error.DATASET_NOT_RESTORABLE': 'The version is not in a restorable state.',
+  'error.DATASET_CORRUPTED':
+    'The stored rows no longer match the snapshot that was validated. Re-import instead of restoring.',
+  'error.VALIDATION_MISSING': 'No validation result is stored for this version.',
+  'error.VALIDATION_STALE':
+    'The validation no longer describes this version. Validate it again and retry.',
+  'error.VALIDATION_HAS_ERRORS': 'Validation errors block publication and cannot be overridden.',
+  'error.SNAPSHOT_CHECKSUM_MISMATCH':
+    'A pinned source file is missing or its bytes no longer match the manifest.',
+  'error.ACTIVE_VERSION_CHANGED':
+    'Another publication won the race while this one was being prepared. Reload and read the new diff.',
   'nav.planTemplates': 'Plan templates',
   'nav.recommendations': 'Recommendations',
   'nav.settings': 'Settings',

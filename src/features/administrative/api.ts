@@ -1,18 +1,28 @@
 import { apiFetch, apiFetchParsed, newIdempotencyKey } from '@/shared/api/client'
 import {
   administrativeCapabilitySchema,
+  administrativeDatasetDetailSchema,
   administrativeDatasetDiffSchema,
   administrativeDatasetPageSchema,
+  administrativeImportReportSchema,
   administrativeMappingDetailSchema,
   administrativeMappingPageSchema,
   administrativeRemediationSchema,
+  administrativeRestorableSchema,
+  administrativeTransitionResultSchema,
+  administrativeValidateResultSchema,
   type AdministrativeCapability,
+  type AdministrativeDatasetDetail,
   type AdministrativeDatasetDiff,
   type AdministrativeDatasetPage,
+  type AdministrativeImportReport,
   type AdministrativeMappingDetail,
   type AdministrativeMappingPage,
   type AdministrativeMappingStatus,
   type AdministrativeRemediation,
+  type AdministrativeRestorable,
+  type AdministrativeTransitionResult,
+  type AdministrativeValidateResult,
 } from '@/shared/api/contracts-administrative'
 
 /**
@@ -55,6 +65,29 @@ export function fetchAdministrativeDatasets(
   })
 }
 
+export function fetchAdministrativeDataset(
+  id: string,
+  signal?: AbortSignal,
+): Promise<AdministrativeDatasetDetail> {
+  return apiFetchParsed(administrativeDatasetDetailSchema, `/cms/administrative-datasets/${id}`, {
+    signal,
+  })
+}
+
+/**
+ * Versions a rollback could restore: previously published, not active now.
+ * The server decides this, and the screen offers rollback for nothing else — a
+ * version that was never published is not a rollback target, it is an unpublished
+ * one.
+ */
+export function fetchRestorableAdministrativeDatasets(
+  signal?: AbortSignal,
+): Promise<AdministrativeRestorable> {
+  return apiFetchParsed(administrativeRestorableSchema, '/cms/administrative-datasets/restorable', {
+    signal,
+  })
+}
+
 export function fetchAdministrativeDatasetDiff(
   id: string,
   options: { limit?: number; offset?: number } = {},
@@ -71,20 +104,39 @@ export function fetchAdministrativeDatasetDiff(
   )
 }
 
+/**
+ * Every mutation below takes the key rather than minting one internally.
+ *
+ * A key minted inside the call is a new key on every attempt, which turns the
+ * retry of a request that may already have been applied into a second
+ * operation. The screen mints one when the operator opens a confirmation and
+ * reuses that same key for the retries of *that* decision — so a double-click,
+ * a flaky connection or a second press of the same button replays the original
+ * response instead of importing twice.
+ */
+export type Idempotent = { idempotencyKey?: string }
+
 /** Writes a STAGED version only; it can never touch the active dataset. */
-export function importAdministrativeDataset(overrideRevision = 0) {
-  return apiFetch('/cms/administrative-datasets/import', {
+export function importAdministrativeDataset(
+  overrideRevision = 0,
+  { idempotencyKey = newIdempotencyKey() }: Idempotent = {},
+): Promise<AdministrativeImportReport> {
+  return apiFetchParsed(administrativeImportReportSchema, '/cms/administrative-datasets/import', {
     method: 'POST',
     body: { overrideRevision },
-    idempotencyKey: newIdempotencyKey(),
+    idempotencyKey,
   })
 }
 
-export function validateAdministrativeDataset(id: string) {
-  return apiFetch(`/cms/administrative-datasets/${id}/validate`, {
-    method: 'POST',
-    idempotencyKey: newIdempotencyKey(),
-  })
+export function validateAdministrativeDataset(
+  id: string,
+  { idempotencyKey = newIdempotencyKey() }: Idempotent = {},
+): Promise<AdministrativeValidateResult> {
+  return apiFetchParsed(
+    administrativeValidateResultSchema,
+    `/cms/administrative-datasets/${id}/validate`,
+    { method: 'POST', idempotencyKey },
+  )
 }
 
 /**
@@ -93,18 +145,32 @@ export function validateAdministrativeDataset(id: string) {
  * publishing transaction — a `publishable` flag sent from here would not be
  * consulted, so none is sent.
  */
-export function publishAdministrativeDataset(id: string) {
-  return apiFetch(`/cms/administrative-datasets/${id}/publish`, {
-    method: 'POST',
-    idempotencyKey: newIdempotencyKey(),
-  })
+export function publishAdministrativeDataset(
+  id: string,
+  { idempotencyKey = newIdempotencyKey() }: Idempotent = {},
+): Promise<AdministrativeTransitionResult> {
+  return apiFetchParsed(
+    administrativeTransitionResultSchema,
+    `/cms/administrative-datasets/${id}/publish`,
+    { method: 'POST', idempotencyKey },
+  )
 }
 
-export function rollbackAdministrativeDataset(id: string) {
-  return apiFetch(`/cms/administrative-datasets/${id}/rollback`, {
-    method: 'POST',
-    idempotencyKey: newIdempotencyKey(),
-  })
+/**
+ * Re-activates a version that was published before. Nothing is deleted, no
+ * migration is reversed and no stored address text is rewritten — mappings that
+ * no longer resolve against the restored version come back in `staleMappings`
+ * as a report, not as writes.
+ */
+export function rollbackAdministrativeDataset(
+  id: string,
+  { idempotencyKey = newIdempotencyKey() }: Idempotent = {},
+): Promise<AdministrativeTransitionResult> {
+  return apiFetchParsed(
+    administrativeTransitionResultSchema,
+    `/cms/administrative-datasets/${id}/rollback`,
+    { method: 'POST', idempotencyKey },
+  )
 }
 
 // --- mapping moderation (ADM-009) --------------------------------------------

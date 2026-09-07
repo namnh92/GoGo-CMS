@@ -76,6 +76,25 @@ export function formatDateTime(iso: string | null | undefined, locale: Locale): 
   }).format(date)
 }
 
+/**
+ * A date with no time of day — an effective date, not an instant.
+ *
+ * `formatDateTime` on a `YYYY-MM-DD` renders a midnight that the source never
+ * claimed, and in a timezone west of UTC it renders the previous day.
+ */
+export function formatDate(iso: string | null | undefined, locale: Locale): string {
+  if (!iso) return '—'
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso)
+  if (!match) return formatDateTime(iso, locale)
+  const [, year, month, day] = match
+  const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)))
+  if (Number.isNaN(date.getTime())) return '—'
+  return new Intl.DateTimeFormat(locale === 'en' ? 'en-US' : 'vi-VN', {
+    dateStyle: 'medium',
+    timeZone: 'UTC',
+  }).format(date)
+}
+
 export function formatTimeOnly(iso: string | null | undefined, locale: Locale): string {
   if (!iso) return '—'
   const date = new Date(iso)
