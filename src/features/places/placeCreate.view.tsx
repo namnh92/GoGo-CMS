@@ -25,6 +25,7 @@ import {
   splitFieldErrors,
   usePlaceFieldError,
   type PlaceCreateForm,
+  type PlaceIdentityField,
 } from './placeForm'
 
 /**
@@ -118,6 +119,21 @@ export default function PlaceCreateScreen() {
     )
   }
 
+  /**
+   * A message this form's schema authored is an i18n key, not a sentence —
+   * rendering `errors.lat.message` directly puts `placeEditor.error.required`
+   * on screen, which is what shipped in the first cut of this screen. The
+   * editor's resolver already turns a key and a zod code into Vietnamese.
+   */
+  const errorFor = (field: PlaceIdentityField): string | undefined => {
+    const issue = form.formState.errors[field]
+    if (!issue) return undefined
+    return fieldError(field, {
+      code: String(issue.type ?? ''),
+      message: String(issue.message ?? ''),
+    })
+  }
+
   const submit = form.handleSubmit((values) => create.mutate(values))
 
   return (
@@ -137,7 +153,7 @@ export default function PlaceCreateScreen() {
                   label={t('placeEditor.name')}
                   required
                   autoFocus
-                  error={form.formState.errors.name?.message}
+                  error={errorFor('name')}
                   {...form.register('name')}
                 />
 
@@ -149,7 +165,7 @@ export default function PlaceCreateScreen() {
                     inputMode="decimal"
                     step="any"
                     hint={t('placeCreate.coordinateHint')}
-                    error={form.formState.errors.lat?.message}
+                    error={errorFor('lat')}
                     {...form.register('lat', numberFieldRegister)}
                   />
                   <TextInput
@@ -158,7 +174,7 @@ export default function PlaceCreateScreen() {
                     type="number"
                     inputMode="decimal"
                     step="any"
-                    error={form.formState.errors.lng?.message}
+                    error={errorFor('lng')}
                     {...form.register('lng', numberFieldRegister)}
                   />
                 </div>
@@ -171,7 +187,7 @@ export default function PlaceCreateScreen() {
                       id="place-area-key"
                       label={t('placeEditor.areaKey')}
                       hint={t('placeEditor.areaKeyHint')}
-                      error={form.formState.errors.areaKey?.message}
+                      error={errorFor('areaKey')}
                       value={field.value ? field.value : null}
                       onChange={(next) => field.onChange(next ?? '')}
                       preferCity={form.watch('city') ?? undefined}
@@ -181,19 +197,19 @@ export default function PlaceCreateScreen() {
 
                 <TextInput
                   label={t('placeEditor.address')}
-                  error={form.formState.errors.addressText?.message}
+                  error={errorFor('addressText')}
                   {...form.register('addressText')}
                 />
 
                 <div className={styles.fieldRow}>
                   <TextInput
                     label={t('placeEditor.city')}
-                    error={form.formState.errors.city?.message}
+                    error={errorFor('city')}
                     {...form.register('city')}
                   />
                   <TextInput
                     label={t('placeEditor.district')}
-                    error={form.formState.errors.district?.message}
+                    error={errorFor('district')}
                     {...form.register('district')}
                   />
                 </div>
@@ -202,12 +218,12 @@ export default function PlaceCreateScreen() {
                   <TextInput
                     label={t('placeEditor.phone')}
                     inputMode="tel"
-                    error={form.formState.errors.phone?.message}
+                    error={errorFor('phone')}
                     {...form.register('phone')}
                   />
                   <TextInput
                     label={t('placeEditor.website')}
-                    error={form.formState.errors.website?.message}
+                    error={errorFor('website')}
                     {...form.register('website')}
                   />
                 </div>
@@ -217,14 +233,14 @@ export default function PlaceCreateScreen() {
                   type="number"
                   inputMode="numeric"
                   hint={t('placeEditor.avgVisitHint')}
-                  error={form.formState.errors.avgVisitMinutes?.message}
+                  error={errorFor('avgVisitMinutes')}
                   {...form.register('avgVisitMinutes', numberFieldRegister)}
                 />
 
                 <TextArea
                   label={t('placeEditor.description')}
                   rows={4}
-                  error={form.formState.errors.description?.message}
+                  error={errorFor('description')}
                   {...form.register('description')}
                 />
               </div>
