@@ -57,7 +57,7 @@ export function Tabs<T extends string>({
               <span
                 className={cn(
                   'rounded-pill px-1.5 py-0.5 text-[11px] tabular-nums',
-                  selected ? 'bg-coral-soft text-coral-deep' : 'bg-surface-sunken text-text-subtle',
+                  selected ? 'bg-coral-soft text-coral-ink' : 'bg-surface-sunken text-text-subtle',
                 )}
               >
                 {item.count}

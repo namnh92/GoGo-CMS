@@ -4,7 +4,7 @@ export const styles = {
   side: 'flex flex-col gap-5',
   fieldRow: 'grid gap-4 sm:grid-cols-2',
   tagRow: 'flex flex-wrap gap-2',
-  tag: 'inline-flex items-center gap-1 rounded-pill border border-lavender/35 bg-lavender-soft px-2.5 py-1 text-[11px] font-semibold text-lavender',
+  tag: 'inline-flex items-center gap-1 rounded-pill border border-lavender/35 bg-lavender-soft px-2.5 py-1 text-[11px] font-semibold text-lavender-ink',
   tagRemove: 'ml-0.5 rounded-full p-0.5 hover:bg-lavender/15',
   tagAdd:
     'inline-flex min-h-11 items-center rounded-pill border border-dashed border-line-strong px-3 text-[11px] font-semibold text-text-subtle hover:border-neutral-500 hover:text-text',

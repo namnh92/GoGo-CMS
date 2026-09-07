@@ -2,7 +2,7 @@ export const styles = {
   transition:
     'flex flex-wrap items-center gap-2 rounded-compact border border-line bg-surface-muted px-3 py-2',
   transitionLabel: 'text-[11px] font-semibold uppercase tracking-wide text-text-subtle',
-  from: 'rounded bg-danger-soft px-1.5 py-0.5 text-[13px] text-danger line-through',
+  from: 'rounded bg-danger-soft px-1.5 py-0.5 text-[13px] text-danger-ink line-through',
   arrow: 'text-text-subtle',
   to: 'rounded bg-amber-soft px-1.5 py-0.5 text-[13px] font-semibold text-text',
   resource: 'mt-2 text-[13px] font-semibold text-text',

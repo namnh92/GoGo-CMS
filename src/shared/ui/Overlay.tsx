@@ -256,7 +256,7 @@ export function ConfirmDialog({
             {change.from !== undefined || change.to !== undefined ? (
               <span className="flex flex-wrap items-center gap-2">
                 {change.from !== undefined ? (
-                  <span className="rounded bg-danger-soft px-1.5 py-0.5 text-[13px] text-danger line-through">
+                  <span className="rounded bg-danger-soft px-1.5 py-0.5 text-[13px] text-danger-ink line-through">
                     {change.from}
                   </span>
                 ) : null}

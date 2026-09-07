@@ -3,10 +3,10 @@ export const styles = {
   windowGroup: 'inline-flex rounded-pill border border-line bg-surface p-0.5',
   windowButton:
     'min-h-11 rounded-pill px-3 py-1 text-xs font-semibold text-text-muted transition-colors hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-coral',
-  windowButtonActive: 'bg-coral-soft text-coral-deep',
+  windowButtonActive: 'bg-coral-soft text-coral-ink',
   meta: 'flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-text-subtle',
   banner: 'flex items-start gap-3 rounded-card border px-4 py-3 text-[13px] leading-relaxed',
-  bannerWarn: 'border-amber/40 bg-amber-soft text-amber',
+  bannerWarn: 'border-amber/40 bg-amber-soft text-amber-ink',
   bannerInfo: 'border-line bg-surface-muted text-text-muted',
   cardGrid: 'grid gap-4 sm:grid-cols-2 xl:grid-cols-3',
   cardSub: 'text-[11px] leading-relaxed text-text-subtle',
