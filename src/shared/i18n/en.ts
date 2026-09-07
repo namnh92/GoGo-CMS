@@ -212,6 +212,10 @@ export const en: Partial<Record<MessageKey, string>> = {
 
   'administrative.activeVersionChanged':
     'Another publication won the race while this one was being prepared. The screen has refetched — read the new diff before trying again.',
+  'administrative.stateNotValidatable':
+    'This version’s lifecycle moved after the screen was rendered, so it can no longer be validated. The screen has refetched.',
+  'administrative.changedDuringValidation':
+    'The snapshot changed while the gates were running, so the server discarded the result instead of storing it. Nothing was written. The screen has refetched — validate again if you still need to.',
   'administrative.cacheNotWarmed':
     'The publication succeeded. This process did not refill its own cache pointer; PostgreSQL is authoritative and every process converges within 60 seconds.',
   'administrative.staleMappings': '{count} mappings no longer resolve against this version',
@@ -305,6 +309,10 @@ export const en: Partial<Record<MessageKey, string>> = {
     'A pinned source file is missing or its bytes no longer match the manifest.',
   'error.ACTIVE_VERSION_CHANGED':
     'Another publication won the race while this one was being prepared. Reload and read the new diff.',
+  'error.DATASET_STATE_NOT_VALIDATABLE':
+    'Only a STAGED or VALIDATED version can be validated. Validating the active one would demote it out of PUBLISHED.',
+  'error.DATASET_CHANGED_DURING_VALIDATION':
+    'The dataset changed while the gates were running. The result was discarded and nothing was written — validate again.',
   'nav.planTemplates': 'Plan templates',
   'nav.recommendations': 'Recommendations',
   'nav.settings': 'Settings',

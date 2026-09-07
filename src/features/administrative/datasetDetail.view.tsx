@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useI18n, useT } from '@/shared/i18n/i18n'
+import type { MessageKey } from '@/shared/i18n/vi'
 import { queryKeys } from '@/shared/api/queryKeys'
 import { useSession } from '@/shared/auth/session'
 import { useOnline } from '@/shared/ui/useOnline'
@@ -138,15 +139,43 @@ export default function AdministrativeDatasetDetailScreen() {
     void queryClient.invalidateQueries({ queryKey: queryKeys.administrativeAll })
 
   /**
-   * `ACTIVE_VERSION_CHANGED` means another publication won the race while this
-   * one was being prepared. Retrying blindly would decide against a baseline
-   * that no longer exists, so the screen refetches instead and asks the operator
-   * to read the new diff.
+   * Whether a manual retry should carry the same key or a new one.
+   *
+   * A domain refusal is a decision about state, and GoGo-BE releases the key
+   * behind it — so pressing the button again is a new decision and gets a new
+   * key. A network or 5xx failure is the opposite: the mutation may already
+   * have been applied and the reply lost, and that is exactly the case the key
+   * exists for, so it is kept for the retry to replay.
    */
+  const settled = (error: unknown): boolean =>
+    error instanceof ApiError && error.status >= 400 && error.status < 500
+
+  /**
+   * The three ways a transition can be refused for a reason the operator has to
+   * read rather than retry through.
+   *
+   * `ACTIVE_VERSION_CHANGED`: another publication won the race, so the diff on
+   * screen describes a baseline that no longer exists.
+   * `DATASET_STATE_NOT_VALIDATABLE`: the lifecycle moved under the render —
+   * somebody published or rolled back while this screen was open.
+   * `DATASET_CHANGED_DURING_VALIDATION`: the staged snapshot moved *during* the
+   * run, so the report the server computed was discarded and the validation
+   * this screen was about to show never existed.
+   *
+   * All three refetch and none of them retries: a retry against a baseline the
+   * operator has not read is the thing these codes exist to prevent.
+   */
+  const REFRESH_AND_EXPLAIN: Record<string, MessageKey> = {
+    ACTIVE_VERSION_CHANGED: 'administrative.activeVersionChanged',
+    DATASET_STATE_NOT_VALIDATABLE: 'administrative.stateNotValidatable',
+    DATASET_CHANGED_DURING_VALIDATION: 'administrative.changedDuringValidation',
+  }
+
   const onTransitionError = (error: unknown) => {
-    if (error instanceof ApiError && error.code === 'ACTIVE_VERSION_CHANGED') {
+    const explained = error instanceof ApiError ? REFRESH_AND_EXPLAIN[error.code] : undefined
+    if (explained) {
       invalidate()
-      toast.error(t('administrative.activeVersionChanged'))
+      toast.error(t(explained))
       return
     }
     toast.error(describeError(error))
@@ -189,7 +218,14 @@ export default function AdministrativeDatasetDetailScreen() {
         }),
       )
     },
-    onError: (error) => toast.error(describeError(error)),
+    onError: (error) => {
+      // A refused run leaves the stored report and the lifecycle exactly as
+      // they were, but the screen's copy of both may now be wrong — the refusal
+      // is usually *because* something moved. Refetch rather than keep showing
+      // the assumption the request was built on.
+      if (settled(error)) setValidateKey(newIdempotencyKey())
+      onTransitionError(error)
+    },
   })
 
   const runPublish = useMutation({
@@ -199,7 +235,10 @@ export default function AdministrativeDatasetDetailScreen() {
       setPublishKey(newIdempotencyKey())
       announce(result, 'publish')
     },
-    onError: onTransitionError,
+    onError: (error) => {
+      if (settled(error)) setPublishKey(newIdempotencyKey())
+      onTransitionError(error)
+    },
   })
 
   const runRollback = useMutation({
@@ -209,7 +248,10 @@ export default function AdministrativeDatasetDetailScreen() {
       setRollbackKey(newIdempotencyKey())
       announce(result, 'rollback')
     },
-    onError: onTransitionError,
+    onError: (error) => {
+      if (settled(error)) setRollbackKey(newIdempotencyKey())
+      onTransitionError(error)
+    },
   })
 
   const isRestorable = useMemo(

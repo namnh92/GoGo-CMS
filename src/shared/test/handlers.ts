@@ -3536,18 +3536,28 @@ export const administrativeAuditEntries: AuditEntry[] = [
     requestId: 'req-adm-import',
     authorizationPath: 'exact_role' as const,
   },
+  /*
+   * GoGo-BE declares an `administrative_dataset.validate` action and has never
+   * written it: a validation that runs leaves its evidence in the stored report
+   * on the dataset row, not in the audit log. A fixture for it was invented
+   * here in #154 and is removed rather than corrected — a mock that answers
+   * with rows the API cannot produce teaches the screen to expect them.
+   *
+   * A *refused* validation is audited, since GoGo-BE#482, exactly as a refused
+   * publication already was.
+   */
   {
     id: 'au-adm-2',
-    action: 'administrative_dataset.validate',
+    action: 'administrative_dataset.validate_rejected',
     actorType: 'admin' as const,
     actorId: 'ad-1',
     actorRole: 'ops_admin' as const,
     resourceType: 'administrative_dataset',
     resourceId: '22222222-2222-4222-8222-222222222222',
     occurredAt: '2026-09-06T02:30:00.000Z',
-    diff: { after: { errors: 0, warnings: 1, publishable: true }, validationId: 'val-staged' },
+    diff: { result: 'rejected', reason: 'DATASET_CHANGED_DURING_VALIDATION' },
     breakGlass: false,
-    requestId: 'req-adm-validate',
+    requestId: 'req-adm-validate-refused',
     authorizationPath: 'exact_role' as const,
   },
   {
