@@ -420,9 +420,9 @@ export const vi = {
   'places.add': 'Thêm địa điểm',
   'placeCreate.title': 'Thêm địa điểm',
   'placeCreate.intro':
-    'Nhập những gì bạn biết chắc. Địa điểm được tạo ở trạng thái Nháp — giờ mở cửa, giá và ảnh nhập tiếp ở màn sửa, xuất bản là bước riêng.',
+    'Kiểm lại và bổ sung những gì bạn biết chắc. Địa điểm được tạo ở trạng thái Nháp — giờ mở cửa, giá và ảnh nhập tiếp ở màn sửa, xuất bản là bước riêng.',
   'placeCreate.coordinateHint':
-    'Lấy từ bản đồ. Không có toạ độ thì không tìm kiếm hay chỉ đường được.',
+    'Dán link Google Maps ở trên để điền sẵn. Không có toạ độ thì không tìm kiếm hay chỉ đường được.',
   'placeCreate.submit': 'Tạo địa điểm',
   'placeCreate.created': 'Đã tạo địa điểm ở trạng thái Nháp.',
   'placeCreate.failed': 'Chưa tạo được địa điểm',
@@ -431,6 +431,27 @@ export const vi = {
     'Những địa điểm dưới đây nằm trong bán kính 150m và có tên gần giống. Kiểm tra trước khi tạo thêm một bản ghi nữa.',
   'placeCreate.duplicateOpenQueue': 'Xem danh sách trùng lặp',
   'placeCreate.duplicateCreateAnyway': 'Đây là chỗ khác, vẫn tạo',
+  'placeCreate.link.intro':
+    'Có link Google Maps thì dán vào đây — tên, địa chỉ và toạ độ sẽ được điền sẵn, và địa điểm gắn được với bản ghi Google để về sau còn làm mới. Không có link vẫn nhập tay bình thường ở dưới.',
+  'placeCreate.link.label': 'Link Google Maps',
+  'placeCreate.link.hint':
+    'Nhận cả link rút gọn (maps.app.goo.gl) lẫn link đầy đủ. Chỉ đọc link, không mở trang.',
+  'placeCreate.link.resolve': 'Tìm địa điểm',
+  'placeCreate.link.found': 'Google trả về địa điểm này',
+  'placeCreate.link.rating': '{rating}★ Google · {count} đánh giá',
+  'placeCreate.link.apply': 'Dùng dữ liệu này',
+  'placeCreate.link.applyNote': 'Điền vào form bên dưới, sửa lại thoải mái.',
+  'placeCreate.link.exists': 'GoGo đã có địa điểm này',
+  'placeCreate.link.existsBody':
+    'Link này trỏ tới một bản ghi Google đã gắn với địa điểm trong danh mục. Mở địa điểm đó thay vì tạo bản thứ hai.',
+  'placeCreate.link.existsOpen': 'Mở địa điểm đã có',
+  'placeCreate.link.ambiguous': 'Link khớp với nhiều chi nhánh',
+  'placeCreate.link.ambiguousBody':
+    'Link không mang Place ID nên chưa xác định được chi nhánh nào. Mở đúng chi nhánh trên Google Maps, bấm Chia sẻ để lấy link riêng của nó rồi dán lại — link đó mang sẵn Place ID.',
+  'placeCreate.link.unresolved': 'Chưa xác định được địa điểm từ link này',
+  'placeCreate.link.unresolvedBody':
+    'Có thể link không phải Google Maps, hoặc không trỏ tới một địa điểm cụ thể. Kiểm tra lại link, hoặc nhập tay ở dưới.',
+  'placeCreate.link.failed': 'Chưa tra được link',
   'places.bulkImport': 'Nhập hàng loạt',
   'places.searchPlaceholder': 'Tìm theo tên hoặc địa chỉ…',
   'places.filter.allCategories': 'Tất cả nhóm',

@@ -246,4 +246,48 @@ test.describe('roles', () => {
     // Not the editor: no place has been created yet, so there is nothing to save.
     await expect(page.getByRole('button', { name: 'Lưu thông tin' })).toHaveCount(0)
   })
+
+  /**
+   * GoGo-CMS#157. The screen used to open on a latitude box; the whole point of
+   * the link is that an editor never types one. This walks the path a person
+   * actually takes — paste, look, accept, create — and checks the boxes carry
+   * Google's answer rather than checking that a request was sent.
+   */
+  test('a Google Maps link fills the form and creates the draft', async ({ page }) => {
+    await signIn(page, 'editor@gogo.vn')
+    await page.goto('/places/new')
+
+    await page
+      .getByLabel('Link Google Maps')
+      .fill('https://www.google.com/maps/place/?q=place_id:ChIJcafe&place_id=ChIJcafe')
+    await page.getByRole('button', { name: 'Tìm địa điểm' }).click()
+
+    await expect(page.getByText('Google trả về địa điểm này')).toBeVisible()
+    // Google requires its attribution to travel with anything it supplied.
+    await expect(page.getByText('Dữ liệu bản đồ ©2026 Google')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Dùng dữ liệu này' }).click()
+
+    await expect(page.getByLabel(/Tên hiển thị/)).toHaveValue('Cà Phê Bên Đường')
+    await expect(page.getByLabel(/Vĩ độ/)).toHaveValue('10.7743')
+    await expect(page.getByLabel(/Kinh độ/)).toHaveValue('106.7038')
+
+    await page.getByRole('button', { name: 'Tạo địa điểm' }).click()
+    await expect(page).toHaveURL(/\/places\/created-/)
+  })
+
+  test('a link GoGo already holds opens that place instead of duplicating it', async ({ page }) => {
+    await signIn(page, 'editor@gogo.vn')
+    await page.goto('/places/new')
+
+    await page
+      .getByLabel('Link Google Maps')
+      .fill('https://www.google.com/maps?place_id=ChIJalreadyhere')
+    await page.getByRole('button', { name: 'Tìm địa điểm' }).click()
+
+    await expect(page.getByText('GoGo đã có địa điểm này')).toBeVisible()
+    await page.getByRole('button', { name: 'Mở địa điểm đã có' }).click()
+
+    await expect(page).not.toHaveURL(/\/places\/new$/)
+  })
 })

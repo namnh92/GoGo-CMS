@@ -795,6 +795,96 @@ export const handlers = [
 
   http.get(`${BASE}/cms/places/duplicates`, () => HttpResponse.json(db.duplicates)),
 
+  /**
+   * `cmsResolvePlaceLink` (GoGo-BE#465). Answers off the link's own shape so
+   * the console's four states are all reachable without a provider: a link
+   * carrying a Place ID resolves, one naming a chain is ambiguous, one whose id
+   * a fixture place already holds already exists, and anything else is
+   * unresolved. Declared before `/cms/places/:id` — MSW matches in order, and
+   * `:id` would otherwise swallow `resolve-link`.
+   */
+  http.post(`${BASE}/cms/places/resolve-link`, async ({ request }) => {
+    const { url } = (await request.json()) as { url: string }
+    const placeId = /[?&](?:place_id|placeid|query_place_id)=([\w-]+)/.exec(url)?.[1]
+
+    if (placeId === 'ChIJalreadyhere') {
+      return HttpResponse.json(
+        {
+          status: 'ALREADY_EXISTS',
+          existingPlaceId: db.places[0]!.id,
+          reasonCodes: ['PLACE_ALREADY_LINKED', 'DB_FIRST'],
+        },
+        { status: 201 },
+      )
+    }
+    if (placeId) {
+      return HttpResponse.json(
+        {
+          status: 'RESOLVED',
+          matchConfidence: 0.97,
+          reasonCodes: ['EXACT_PROVIDER_ID'],
+          candidate: {
+            googlePlaceId: placeId,
+            name: 'Cà Phê Bên Đường',
+            address: '9 Nguyễn Huệ, Quận 1, Hồ Chí Minh',
+            location: { lat: 10.7743, lng: 106.7038 },
+            googleRating: 4.4,
+            googleRatingCount: 88,
+            googleScore: 71,
+            businessStatus: 'OPERATIONAL',
+            source: 'google_places',
+            fetchedAt: new Date().toISOString(),
+            attributions: ['Dữ liệu bản đồ ©2026 Google'],
+          },
+        },
+        { status: 201 },
+      )
+    }
+    if (/\/maps\/place\//.test(url)) {
+      return HttpResponse.json(
+        {
+          status: 'CANDIDATE_SELECTION',
+          reasonCodes: ['AMBIGUOUS_NAME'],
+          candidates: [
+            { googlePlaceId: 'ChIJa', name: 'Highlands Coffee', address: '1 Lê Lợi', confidence: 0.62 },
+            {
+              googlePlaceId: 'ChIJb',
+              name: 'Highlands Coffee',
+              address: '88 Hai Bà Trưng',
+              confidence: 0.6,
+            },
+          ],
+        },
+        { status: 201 },
+      )
+    }
+    return HttpResponse.json(
+      { status: 'UNRESOLVED', reasonCodes: ['NOT_FOUND'] },
+      { status: 201 },
+    )
+  }),
+
+  /**
+   * `cmsCreatePlace` (GoGo-BE#452/#465). The row lands in `db.places` so the
+   * editor the console navigates to afterwards actually loads.
+   */
+  http.post(`${BASE}/cms/places`, async ({ request }) => {
+    const body = (await request.json()) as Record<string, unknown>
+    const created = {
+      ...db.places[0]!,
+      id: `created-${db.places.length + 1}`,
+      name: String(body.name ?? ''),
+      status: 'draft',
+      lat: Number(body.lat ?? 0),
+      lng: Number(body.lng ?? 0),
+      addressText: (body.addressText as string | undefined) ?? null,
+      media: [],
+      updatedAt: new Date().toISOString(),
+    }
+    db.places.push(created as (typeof db.places)[number])
+    return HttpResponse.json(created, { status: 201 })
+  }),
+
   http.get(`${BASE}/cms/places/:id/audit`, ({ params }) =>
     HttpResponse.json({
       items: auditEntries.filter((entry) => entry.resourceId === params.id),

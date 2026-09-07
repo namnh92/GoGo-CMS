@@ -20,6 +20,8 @@ import {
   type PlaceSourceFilter,
   type PlaceStatus,
   type PriceUnit,
+  resolveLinkResultSchema,
+  type ResolveLinkResult,
   type StalePlace,
 } from '@/shared/api/contracts'
 
@@ -186,7 +188,40 @@ export type CreatePlaceInput = UpdatePlaceInput & {
   lat: number
   lng: number
   allowDuplicate?: boolean
+  /**
+   * GoGo-CMS#157 — the Google record this place is the GoGo copy of, from a
+   * preceding `resolvePlaceLink`. Identity, not content: it becomes a
+   * `place_sources` row, which is what puts the place inside provider dedup.
+   */
+  googlePlaceId?: string
+  /**
+   * Which fields still hold what the resolution filled in. They are recorded
+   * `google_derived` rather than `editorial`, so a later refresh knows which
+   * values a person actually owns.
+   */
+  googleDerivedFields?: GoogleDerivedField[]
 }
+
+/** Exactly the fields GoGo-BE will accept as provider-applied. */
+export const GOOGLE_DERIVED_FIELDS = ['name', 'addressText', 'lat', 'lng'] as const
+export type GoogleDerivedField = (typeof GOOGLE_DERIVED_FIELDS)[number]
+
+/**
+ * GoGo-CMS#157 / GoGo-BE#465 — which Google place a link names.
+ *
+ * A preview. Nothing is written, and the editor sees the answer before any of
+ * it reaches a form. Behind `place.write` and rate-limited per admin, because a
+ * miss costs a provider request.
+ */
+export function resolvePlaceLink(input: { url: string; cityHint?: string }) {
+  return apiFetchParsed<typeof resolveLinkResultSchema>(
+    resolveLinkResultSchema,
+    '/cms/places/resolve-link',
+    { method: 'POST', body: input },
+  )
+}
+
+export type { ResolveLinkResult }
 
 export function createPlace(input: CreatePlaceInput) {
   return apiFetch<CmsPlaceDetail>('/cms/places', {

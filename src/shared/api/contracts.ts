@@ -2384,3 +2384,44 @@ export const privacyExecuteResultSchema = z.object({
   data: z.record(z.string(), z.unknown()).nullish(),
 })
 export type PrivacyExecuteResult = z.infer<typeof privacyExecuteResultSchema>
+
+/**
+ * GoGo-CMS#157 / GoGo-BE#465 — what `POST /cms/places/resolve-link` answers.
+ *
+ * Everything past `status` is optional in the contract because each status
+ * carries a different subset: `RESOLVED` has a candidate, `ALREADY_EXISTS` has
+ * a place id, `CANDIDATE_SELECTION` has a list and `UNRESOLVED` has only reason
+ * codes. Modelling that as one permissive object rather than a discriminated
+ * union keeps the parse honest — the server may add a status this build has
+ * never heard of, and a union would reject the whole response for it.
+ */
+export const resolvedCandidateSchema = z.object({
+  googlePlaceId: z.string(),
+  name: z.string(),
+  address: z.string().default(''),
+  location: z.object({ lat: z.number(), lng: z.number() }),
+  googleRating: z.number().nullish(),
+  googleRatingCount: z.number().int().nullish(),
+  businessStatus: z.string().nullish(),
+  /** Google requires its attribution to travel with anything it supplied. */
+  attributions: z.array(z.string()).default([]),
+})
+export type ResolvedCandidate = z.infer<typeof resolvedCandidateSchema>
+
+export const resolveLinkResultSchema = z.object({
+  status: z.string(),
+  reasonCodes: z.array(z.string()).default([]),
+  existingPlaceId: z.string().nullish(),
+  candidate: resolvedCandidateSchema.nullish(),
+  candidates: z
+    .array(
+      z.object({
+        googlePlaceId: z.string(),
+        name: z.string(),
+        address: z.string().default(''),
+        confidence: z.number().nullish(),
+      }),
+    )
+    .default([]),
+})
+export type ResolveLinkResult = z.infer<typeof resolveLinkResultSchema>
