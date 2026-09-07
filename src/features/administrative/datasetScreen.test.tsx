@@ -709,6 +709,158 @@ describe('audit', () => {
   })
 })
 
+/**
+ * CMS #167 — the two refusals GoGo-BE#482 added to the validate contract.
+ *
+ * Both mean the same thing to the screen: what it was showing is no longer what
+ * the server holds. So both refetch, neither retries, and neither is presented
+ * as anything other than a refusal — a failed request that reported itself as
+ * an idempotent replay would be claiming the server had already done the work.
+ */
+describe('validate refusals from the alpha.9 contract', () => {
+  const refuse = (code: string, message: string) =>
+    server.use(
+      http.post(`${BASE}/cms/administrative-datasets/:id/validate`, () =>
+        HttpResponse.json({ code, message }, { status: 409 }),
+      ),
+    )
+
+  it('sends an Idempotency-Key on every validation', async () => {
+    signInAs('ops_admin')
+    const keys: (string | null)[] = []
+    server.use(
+      http.post(`${BASE}/cms/administrative-datasets/:id/validate`, ({ request }) => {
+        keys.push(request.headers.get('Idempotency-Key'))
+        return undefined
+      }),
+    )
+    renderDetail(VALIDATED.id)
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Kiểm tra$/ })).toBeEnabled())
+    await userEvent.click(screen.getByRole('button', { name: /^Kiểm tra$/ }))
+    await waitFor(() => expect(keys).toHaveLength(1))
+    expect(keys[0]).toMatch(/^[0-9a-f-]{36}$/)
+  })
+
+  it('explains a lifecycle that moved under the render, and refetches', async () => {
+    signInAs('ops_admin')
+    let detailReads = 0
+    server.use(
+      http.get(`${BASE}/cms/administrative-datasets/:id`, () => {
+        detailReads += 1
+        return undefined
+      }),
+    )
+    refuse('DATASET_STATE_NOT_VALIDATABLE', 'is PUBLISHED')
+    renderDetail(VALIDATED.id)
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Kiểm tra$/ })).toBeEnabled())
+    const before = detailReads
+    await userEvent.click(screen.getByRole('button', { name: /^Kiểm tra$/ }))
+
+    expect(await screen.findByText(/Vòng đời của phiên bản này đã thay đổi/i)).toBeInTheDocument()
+    await waitFor(() => expect(detailReads).toBeGreaterThan(before))
+  })
+
+  it('discards the validation it was about to show when the snapshot moved', async () => {
+    signInAs('ops_admin')
+    let diffReads = 0
+    server.use(
+      http.get(`${BASE}/cms/administrative-datasets/:id/diff`, () => {
+        diffReads += 1
+        return undefined
+      }),
+    )
+    refuse('DATASET_CHANGED_DURING_VALIDATION', 'staged rows changed')
+    renderDetail(VALIDATED.id)
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Kiểm tra$/ })).toBeEnabled())
+    const before = diffReads
+    await userEvent.click(screen.getByRole('button', { name: /^Kiểm tra$/ }))
+
+    expect(await screen.findByText(/Ảnh chụp dữ liệu đã thay đổi/i)).toBeInTheDocument()
+    expect(screen.getByText(/Không có gì được ghi/i)).toBeInTheDocument()
+    // The diff on screen described the run that was discarded.
+    await waitFor(() => expect(diffReads).toBeGreaterThan(before))
+  })
+
+  it('retries neither refusal on its own, and never calls one a replay', async () => {
+    signInAs('ops_admin')
+    let attempts = 0
+    server.use(
+      http.post(`${BASE}/cms/administrative-datasets/:id/validate`, () => {
+        attempts += 1
+        return HttpResponse.json(
+          { code: 'DATASET_CHANGED_DURING_VALIDATION', message: 'moved' },
+          { status: 409 },
+        )
+      }),
+    )
+    renderDetail(VALIDATED.id)
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Kiểm tra$/ })).toBeEnabled())
+    await userEvent.click(screen.getByRole('button', { name: /^Kiểm tra$/ }))
+    await screen.findByText(/Ảnh chụp dữ liệu đã thay đổi/i)
+
+    // One request, one message. A refusal is a decision to read, not a
+    // transient to retry through.
+    expect(attempts).toBe(1)
+    expect(screen.queryByText(/phát lại|replay/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Đã chạy kiểm tra/i)).not.toBeInTheDocument()
+  })
+
+  it('mints a new key for the manual retry after a refusal', async () => {
+    signInAs('ops_admin')
+    const keys: (string | null)[] = []
+    server.use(
+      http.post(`${BASE}/cms/administrative-datasets/:id/validate`, ({ request }) => {
+        keys.push(request.headers.get('Idempotency-Key'))
+        return HttpResponse.json(
+          { code: 'DATASET_CHANGED_DURING_VALIDATION', message: 'moved' },
+          { status: 409 },
+        )
+      }),
+    )
+    renderDetail(VALIDATED.id)
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Kiểm tra$/ })).toBeEnabled())
+    const button = screen.getByRole('button', { name: /^Kiểm tra$/ })
+    await userEvent.click(button)
+    await waitFor(() => expect(keys).toHaveLength(1))
+    await userEvent.click(button)
+    await waitFor(() => expect(keys).toHaveLength(2))
+
+    /*
+     * GoGo-BE releases the key behind a refused mutation, so the second press
+     * is a new decision about state that has moved — not the retry of one the
+     * server may already have applied. That case is a network failure, and the
+     * key is kept for it.
+     */
+    expect(keys[0]).not.toBe(keys[1])
+  })
+})
+
+describe('the audit fixture answers what the API actually writes', () => {
+  it('has no successful-validation row, because GoGo-BE writes none', async () => {
+    signInAs('ops_admin')
+    renderDetail(VALIDATED.id)
+
+    await userEvent.click(await screen.findByRole('tab', { name: /Nhật ký/i }))
+    await screen.findByText(/administrative_dataset\.import/)
+    // A validation that runs leaves its evidence in the stored report, not in
+    // the audit log. The action exists in the vocabulary and is never written.
+    expect(screen.queryByText('administrative_dataset.validate')).not.toBeInTheDocument()
+  })
+
+  it('shows a refused validation under the action GoGo-BE#482 introduced', async () => {
+    signInAs('ops_admin')
+    renderDetail(VALIDATED.id)
+
+    await userEvent.click(await screen.findByRole('tab', { name: /Nhật ký/i }))
+    expect(await screen.findByText(/administrative_dataset\.validate_rejected/)).toBeInTheDocument()
+  })
+})
+
 describe('the rest of the console is untouched', () => {
   it('adds one child route and leaves every existing destination in place', async () => {
     const { router } = await import('@/app/routes')

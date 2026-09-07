@@ -211,6 +211,10 @@ export const vi = {
 
   'administrative.activeVersionChanged':
     'Một lần publish khác đã thắng trong lúc thao tác này đang được chuẩn bị. Dữ liệu đã được tải lại — đọc lại phần thay đổi trước khi thử tiếp.',
+  'administrative.stateNotValidatable':
+    'Vòng đời của phiên bản này đã thay đổi kể từ lúc màn hình được vẽ, nên không kiểm tra được nữa. Dữ liệu đã được tải lại.',
+  'administrative.changedDuringValidation':
+    'Ảnh chụp dữ liệu đã thay đổi trong lúc đang kiểm tra, nên máy chủ đã huỷ kết quả thay vì lưu nó. Không có gì được ghi. Dữ liệu đã được tải lại — chạy kiểm tra lại nếu vẫn cần.',
   'administrative.cacheNotWarmed':
     'Publish đã thành công. Tiến trình này chưa làm nóng lại con trỏ bộ nhớ đệm của nó; PostgreSQL mới là nguồn quyết định và các tiến trình khác sẽ đồng bộ trong vòng 60 giây.',
   'administrative.staleMappings': '{count} ánh xạ không còn khớp phiên bản này',
@@ -306,6 +310,10 @@ export const vi = {
     'Tệp nguồn đã ghim bị thiếu hoặc nội dung không còn khớp manifest.',
   'error.ACTIVE_VERSION_CHANGED':
     'Một lần publish khác đã thắng trong lúc thao tác này đang chuẩn bị. Tải lại và đọc lại phần thay đổi.',
+  'error.DATASET_STATE_NOT_VALIDATABLE':
+    'Chỉ phiên bản Đã nhập hoặc Đã kiểm tra mới chạy kiểm tra được. Chạy kiểm tra trên bản đang hoạt động sẽ hạ nó khỏi trạng thái hoạt động.',
+  'error.DATASET_CHANGED_DURING_VALIDATION':
+    'Bộ dữ liệu đã thay đổi trong lúc đang kiểm tra. Kết quả bị huỷ, không có gì được ghi — chạy kiểm tra lại.',
   'nav.planTemplates': 'Mẫu lịch trình',
   'nav.recommendations': 'Gợi ý',
   'nav.settings': 'Cấu hình',
