@@ -5,6 +5,12 @@ import type { PlaceStatus, TaxonomyKind } from './contracts'
 export const queryKeys = {
   session: ['session'] as const,
 
+  // CMS #153 — the administrative surface (#154–#156 build on these).
+  administrativeCapability: () => ['administrative', 'capability'] as const,
+  administrativeDatasets: (limit: number, offset: number) =>
+    ['administrative', 'datasets', limit, offset] as const,
+  administrativeMappings: (scope: string) => ['administrative', 'mappings', scope] as const,
+
   opsKpis: ['ops', 'kpis'] as const,
   opsHealth: ['ops', 'health'] as const,
   opsQueues: ['ops', 'queues'] as const,

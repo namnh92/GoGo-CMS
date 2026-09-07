@@ -90,6 +90,15 @@ const CATALOG: NavLeaf[] = [
 
 const REVIEW: NavLeaf[] = [
   {
+    // GoGo-BE#462 — the queue of places whose ward nobody has confirmed yet.
+    // Read is rank-open, so an editor sees why a place cannot be approved; the
+    // decisions on the screen stay moderator-only.
+    to: '/administrative-mapping',
+    labelKey: 'nav.administrativeMapping',
+    permission: 'administrativeMapping.read',
+    match: (p) => p.startsWith('/administrative-mapping'),
+  },
+  {
     to: '/moderation',
     labelKey: 'nav.moderation',
     permission: 'moderation.read',
@@ -104,6 +113,15 @@ const REVIEW: NavLeaf[] = [
 ]
 
 const OPERATIONS: NavLeaf[] = [
+  {
+    // GoGo-BE#458 — the pinned dataset and its boundary release. Rank 2 on the
+    // server, so the destination is offered to ops and above and to nobody
+    // else; hiding it is a courtesy, the server is the enforcement.
+    to: '/administrative-data',
+    labelKey: 'nav.administrativeData',
+    permission: 'administrativeDataset.read',
+    match: (p) => p.startsWith('/administrative-data'),
+  },
   {
     // Composed here, sent by the worker. `ops_admin` in both directions: a
     // campaign that has gone out cannot be recalled.

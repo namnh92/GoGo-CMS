@@ -93,3 +93,69 @@ describe('read is hierarchical, write is exact', () => {
     expect(landingPathFor('ops_admin')).toBe('/')
   })
 })
+
+/**
+ * CMS #153 — the administrative surface, mirroring GoGo-BE#458 and #462.
+ *
+ * The separation of duties is the point and it is deliberate: the person who
+ * decides a place belongs in the catalogue is not the person who certifies
+ * where it is, and neither of them publishes the dataset both depend on.
+ */
+describe('administrative surface', () => {
+  it('lets every staff role read the mapping queue, and only the moderator decide', () => {
+    for (const role of ['editor', 'moderator', 'ops_admin', 'super_admin'] as const) {
+      expect(roleCan(role, 'administrativeMapping.read')).toBe(true)
+    }
+    expect(roleCan('moderator', 'administrativeMapping.review')).toBe(true)
+    expect(roleCan('super_admin', 'administrativeMapping.review')).toBe(true)
+    // The editor approves places and cannot certify where they are.
+    expect(roleCan('editor', 'administrativeMapping.review')).toBe(false)
+    // Ops publishes the dataset and does not thereby gain the moderator's job.
+    expect(roleCan('ops_admin', 'administrativeMapping.review')).toBe(false)
+  })
+
+  it('keeps the dataset ops-only, readable from rank 2 up', () => {
+    expect(roleCan('ops_admin', 'administrativeDataset.read')).toBe(true)
+    expect(roleCan('super_admin', 'administrativeDataset.read')).toBe(true)
+    // Rank 1 cannot read above itself, exactly as the guard decides.
+    expect(roleCan('editor', 'administrativeDataset.read')).toBe(false)
+    expect(roleCan('moderator', 'administrativeDataset.read')).toBe(false)
+
+    expect(roleCan('ops_admin', 'administrativeDataset.manage')).toBe(true)
+    expect(roleCan('moderator', 'administrativeDataset.manage')).toBe(false)
+    expect(roleCan('editor', 'administrativeDataset.manage')).toBe(false)
+  })
+
+  it('does not let the moderator publish a place, nor the editor verify its mapping', () => {
+    // The two halves of the approval policy, and neither role holds both.
+    expect(roleCan('moderator', 'place.write')).toBe(false)
+    expect(roleCan('editor', 'administrativeMapping.review')).toBe(false)
+    expect(roleCan('editor', 'place.write')).toBe(true)
+    expect(roleCan('moderator', 'administrativeMapping.review')).toBe(true)
+  })
+
+  it('gives super_admin both, which is the audited escape hatch and not a fourth role', () => {
+    expect(roleCan('super_admin', 'administrativeMapping.review')).toBe(true)
+    expect(roleCan('super_admin', 'administrativeDataset.manage')).toBe(true)
+    expect(roleCan('super_admin', 'place.write')).toBe(true)
+  })
+
+  it('refuses everything to a signed-out caller', () => {
+    for (const permission of [
+      'administrativeMapping.read',
+      'administrativeMapping.review',
+      'administrativeDataset.read',
+      'administrativeDataset.manage',
+    ] as const) {
+      expect(roleCan(null, permission)).toBe(false)
+      expect(roleCan(undefined, permission)).toBe(false)
+    }
+  })
+
+  it('mirrors the guard rule directly, group by group', () => {
+    expect(canAccess('editor', 'administrativeMapping', 'read')).toBe(true)
+    expect(canAccess('editor', 'administrativeMapping', 'write')).toBe(false)
+    expect(canAccess('moderator', 'administrativeDataset', 'read')).toBe(false)
+    expect(canAccess('ops_admin', 'administrativeDataset', 'write')).toBe(true)
+  })
+})

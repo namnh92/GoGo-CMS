@@ -487,6 +487,495 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/administrative/version": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Active administrative dataset version (the cheap poll)
+         * @description ADM-003 / ADR-0019. A client holds a snapshot and refetches only when datasetVersion changes. Serves the one PUBLISHED dataset; 503 when none is published, which is an operational fault rather than an empty result.
+         */
+        get: operations["getAdministrativeVersion"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/administrative/provinces": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Current provinces and municipalities, ordered by code
+         * @description ADM-003. The 34 current province-level units. Legacy district-level units are never returned here — they were dissolved on 2025-07-01.
+         */
+        get: operations["listAdministrativeProvinces"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/administrative/provinces/{provinceCode}/communes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Current communes of one province, ordered by code
+         * @description ADM-003. A province code that names no current province answers 404 PROVINCE_NOT_FOUND rather than an empty page — "no communes" and "no such province" are different answers.
+         */
+        get: operations["listAdministrativeCommunes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/administrative/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Accent-insensitive search over unit names
+         * @description ADM-003. Matches both the short name ("Ba Đình") and the full name ("Phường Ba Đình"), accented or not, through the same Vietnamese normalizer the place search uses. Legacy units require includeLegacy.
+         */
+        get: operations["searchAdministrativeUnits"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/administrative/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What a code meant on a date, and where the unit went
+         * @description ADM-003 / ADR-0019 §2. Codes are reused: 2,212 of the 3,321 current commune codes named a different unit before 2025-07-01, so `at` selects the effective period. Successors come from canonical changes only — a divided commune is quarantined, never resolved, and is reported with unresolved=true rather than the source's guess.
+         */
+        get: operations["resolveAdministrativeCode"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/administrative/units/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One code and its effective periods
+         * @description ADM-003. Without includeLegacy only the current period is returned, and a code naming no current unit answers 404 UNIT_NOT_CURRENT.
+         */
+        get: operations["getAdministrativeUnit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/administrative-datasets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ops: every imported dataset version, newest first (ADM-005)
+         * @description ADM-005 (#458). Read needs rank >= ops_admin; every write on this resource needs the exact ops_admin role (or the audited super-admin bypass), so an on-call operator can inspect a dataset without being able to publish it. `validation` is the stored result summary — absent means the version has never been validated, which is itself a refusal reason for publication.
+         */
+        get: operations["listAdministrativeDatasets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/administrative-datasets/capability": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ops: what this environment can currently do (ADM-010)
+         * @description Deliberately separate from readiness. An environment with no administrative dataset still serves rooms, search and plans; it simply cannot publish a place, which the domain guard already refuses. Taking the whole API out of the load balancer for that would turn a configuration gap into an outage.
+         *
+         *     This is also where the exact dataset and boundary versions live. They are not Prometheus labels: a label whose values grow with every publication is a series set that never stops growing, so the numbers go on a dashboard and the identities go here.
+         *
+         *     `resolver` is `FULL` with polygons loaded, `PARTIAL` without them — the resolver still answers from explicit codes, stored names and the change mapping, which is less of the catalogue rather than none of it.
+         */
+        get: operations["getAdministrativeCapability"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/administrative-datasets/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ops: import the pinned snapshot set into staging (ADM-005)
+         * @description Writes a STAGED version and nothing else — no path here can touch the active dataset. One transaction: a failure leaves nothing behind, so a retry is a clean import rather than a half-written version that the checksum guard would then call a duplicate. Re-importing byte-identical sources at the same override revision is 409 DATASET_ALREADY_IMPORTED, because the same inputs are the same dataset.
+         */
+        post: operations["importAdministrativeDataset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/administrative-datasets/restorable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ops: versions a rollback could restore (ADM-005)
+         * @description Previously published, not active now. A version that was never published never appears here: rollback restores an earlier active dataset, it does not publish a new one.
+         */
+        get: operations["listRestorableAdministrativeDatasets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/administrative-datasets/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ops: one dataset version with its stored validation and diff */
+        get: operations["getAdministrativeDataset"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/administrative-datasets/{id}/diff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ops: this version against whatever is published now (ADM-005)
+         * @description Recomputed on read, never written. A first publication compares against an explicitly empty baseline, so `fromVersion` is null rather than the request being an error. Entries are paged; `countsByCategory` is always complete, so a reviewer walking a 14,000-entry diff never sees a total that shrinks to the page. A change to nothing but `overrideRevision` yields exactly one SOURCE_DRIFT entry rather than replaying every migration the dataset already asserted.
+         */
+        get: operations["getAdministrativeDatasetDiff"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/administrative-datasets/{id}/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ops: run every gate against this exact snapshot (ADM-005)
+         * @description Runs the ADM-004 gates and stores the result bound to the dataset's identity, checksum, staged-row digest, override revision and validator version. Re-validating replaces the previous result rather than adding to it. A publishable result moves the version to VALIDATED; a failing one leaves it STAGED, because it failed a check — nobody rejected it.
+         */
+        post: operations["validateAdministrativeDataset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/administrative-datasets/{id}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ops: make this version the active dataset (ADM-005)
+         * @description Takes a dataset id and nothing else. No `publishable` flag, no checksum and no warning acknowledgement is accepted from the caller: inside the publishing transaction the server re-reads the lifecycle status, the stored checksum, the checksum the pinned files produce now, the digest of the staged rows and the validation bound to them, and refuses on the first disagreement.
+         *
+         *     `publishable === errors === 0`. An ERROR can never be overridden; a WARNING never blocks and stays visible and audited.
+         *
+         *     Demote and promote are one transaction serialised by an advisory lock, so there are never two active versions and never zero. The previous version is retained — it is what a rollback restores. Publishing the already active version is 409 DATASET_ALREADY_PUBLISHED, not a silent no-op; replaying the same `Idempotency-Key` returns the original result. The in-process cache pointer is refreshed only after commit and a failure to refresh it is reported in `cacheWarmed`, never rolled back: PostgreSQL is authoritative and other processes converge within the 60-second TTL.
+         */
+        post: operations["publishAdministrativeDataset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/administrative-datasets/{id}/rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ops: re-activate a previously published version (ADM-005)
+         * @description A forward act with its own audit row, not an undo. Nothing is deleted, no migration is reversed, no stored address text is rewritten and no place mapping is changed — stale mappings against the restored version are reported, not written, because whether a claim a person verified should be demoted is the mapping work's decision (#459/#461/#462).
+         *
+         *     Refuses a version that was never published, one that is already active, and one whose stored rows no longer match the snapshot that was validated. It deliberately does not re-verify the pinned source files: a version published long ago may have been built from a snapshot no longer vendored, and refusing on that ground would remove the escape hatch exactly when it is needed.
+         */
+        post: operations["rollbackAdministrativeDataset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/administrative-mappings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Moderation: places by administrative mapping status (ADM-009)
+         * @description The review queue. NEEDS_REVIEW and STALE are the actionable states — the ones where a person has something to decide — but nothing is hidden: every status is one filter away and all of them are in `counts`.
+         *
+         *     `blockedApprovalOnly=true` is the view that matters most: places waiting for approval that cannot get it because of their mapping, including UNMAPPED ones. A place stuck on a mapping nobody can see is exactly the case a queue ordered by "what looks actionable" would bury.
+         *
+         *     Cursor pagination orders by place id, not by `updated_at`: ordering by a column reviewers are changing would let a place they just touched jump pages under them.
+         */
+        get: operations["listAdministrativeMappings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/administrative-mappings/remediation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Moderation: approved places that would not pass the policy today
+         * @description Reporting only. Nothing here un-approves anything: these places were approved before the policy existed, and taking a working catalogue off the air to satisfy a rule written afterwards would do more harm than the gap it closes.
+         *
+         *     `verified_against_older_version` is not a defect. The approval gate tests the identity — does this commune still exist, is it still current, does it still sit under this province — not the version string, because otherwise every publication would un-approve the catalogue. The category exists because "who verified this, and against what" is what a reviewer asks before deciding whether to look again.
+         */
+        get: operations["getAdministrativeRemediation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/places/{id}/administrative-mapping": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Moderation: one mapping, its evidence and what may be done to it
+         * @description Everything the console needs on one screen, recomputed on read rather than served from a cache of what the resolver once thought: current codes and their resolved names, the resolver's evidence and alternative candidates, the unresolved reason, hierarchy validity, the staleness verdict, whether this mapping blocks approving the place and why, and which actions this role may take.
+         *
+         *     The place's own address text, `city` and `district` are returned because a reviewer judges the mapping against what the address actually says. They are read here and never written by any endpoint in this group.
+         */
+        get: operations["getPlaceAdministrativeMapping"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/places/{id}/administrative-mapping/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Moderation: a reviewer verifies these codes (ADM-009)
+         * @description The only path that writes VERIFIED. Inside the write transaction the server re-reads the place under a row lock, re-reads the *active* dataset, and checks that the province and commune are both current in it and that the commune belongs to the province — a code is not an identity, so the period is part of the check.
+         *
+         *     No confidence number is written. A person's judgement is not a probability; VERIFIED plus their identity is the whole claim.
+         *
+         *     `expectedUpdatedAt` is required: a reviewer decides about a row they saw, and a publication, another reviewer or a backfill can move it in between.
+         */
+        post: operations["verifyPlaceAdministrativeMapping"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/places/{id}/administrative-mapping/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Moderation: reject the mapping — not the place (ADM-009)
+         * @description Rejecting a mapping says this answer is wrong. It does not touch the place's own moderation state, its address, or its geometry; it blocks approval until somebody produces a mapping that is right.
+         *
+         *     The rejected codes and the resolver's evidence are kept on the record, because what was rejected is the most useful thing the next reviewer can be told.
+         */
+        post: operations["rejectPlaceAdministrativeMapping"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/places/{id}/administrative-mapping/rematch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Moderation: re-run the resolver on one rejected mapping (ADM-009)
+         * @description The only route that reopens a REJECTED mapping — one place, a reason, and an authenticated person to attribute it to. The bulk backfill (#461) has no such option, because it has nobody to name.
+         *
+         *     Asking for a rematch is not verifying anything. The resolver's answer is written under the ordinary transition rules, the previous reviewer's attribution is cleared because their decision no longer stands, and the requester is recorded in the audit as the requester — never in `administrative_mapped_by`.
+         *
+         *     A VERIFIED mapping is refused: correcting one is an explicit reviewer act that names both people, not a re-derivation.
+         */
+        post: operations["rematchPlaceAdministrativeMapping"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/places/{id}/administrative-mapping/correct": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Moderation: correct a mapping somebody already verified (ADM-009)
+         * @description Separate from verify on purpose. Changing a decision a person recorded is an act that must name both of them, and the audit row does: the previous reviewer, their codes, the corrector, the reason, and the new codes.
+         */
+        post: operations["correctPlaceAdministrativeMapping"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/places/{id}/administrative-mapping/reconcile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ops: re-evaluate one mapping against the active dataset (ADM-009)
+         * @description System reconciliation, and `ops_admin` rather than `moderator` because it belongs to whoever published the dataset that changed — and because it is emphatically not a verification.
+         *
+         *     A version change alone never makes a mapping stale. If the same commune still exists, is still current and still sits under the same province, nothing is written and the older version stays as provenance. When the identity really has failed, STALE is written and the codes and `administrative_mapped_by` are **kept**: that column names who verified the stored mapping, and they did — STALE says that verification is no longer current. The audit row names the reconciler separately, so the log can never be read as "this person verified it".
+         *
+         *     Idempotent: reconciling an already-stale mapping writes nothing.
+         */
+        post: operations["reconcilePlaceAdministrativeMapping"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/taxonomies": {
         parameters: {
             query?: never;
@@ -3709,6 +4198,420 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AdministrativeUnit: {
+            /** @description Official GSO code. Not unique on its own — see ADR-0019 §2. */
+            code: string;
+            /** @description Short name without its type prefix ("Ba Đình"). */
+            name: string;
+            /** @description The source's own string ("Phường Ba Đình"). */
+            fullName: string;
+            nameEn?: string | null;
+            codeName?: string | null;
+            /** @enum {string} */
+            unitType: "PROVINCE" | "MUNICIPALITY" | "WARD" | "COMMUNE" | "SPECIAL_ZONE" | "LEGACY_DISTRICT";
+            /** @enum {string} */
+            level: "PROVINCE" | "COMMUNE" | "LEGACY_DISTRICT";
+            /** @description Province code; null for a province. */
+            parentCode?: string | null;
+            /** @enum {string} */
+            status: "ACTIVE" | "INACTIVE" | "FUTURE";
+            /** Format: date */
+            effectiveFrom: string;
+            /** Format: date */
+            effectiveTo?: string | null;
+            isCurrent: boolean;
+        };
+        AdministrativeUnitPage: {
+            datasetVersion: string;
+            items: components["schemas"]["AdministrativeUnit"][];
+            nextCursor: string | null;
+            total: number;
+        };
+        AdministrativeUnitDetail: {
+            datasetVersion: string;
+            current: components["schemas"]["AdministrativeUnit"] | null;
+            /** @description Every effective period this code has had, oldest first. */
+            periods: components["schemas"]["AdministrativeUnit"][];
+        };
+        AdministrativeResolution: {
+            datasetVersion: string;
+            requested: {
+                code: string;
+                /** Format: date */
+                at: string | null;
+            };
+            unit: components["schemas"]["AdministrativeUnit"];
+            /** @description Canonical changes only. A quarantined split never appears here. */
+            successors: {
+                code: string | null;
+                /** @enum {string} */
+                changeType: "CREATED" | "RENAMED" | "MERGED" | "SPLIT" | "REASSIGNED" | "DISSOLVED";
+                /** Format: date */
+                effectiveDate: string;
+                legalReference?: string | null;
+            }[];
+            /** @description True when the unit is not current and GoGo holds no canonical successor — typically an ambiguous split awaiting CMS review. Said in a field rather than left to be inferred from an empty list. */
+            unresolved: boolean;
+        };
+        AdministrativeVersion: {
+            datasetVersion: string;
+            /** Format: date */
+            effectiveDate: string;
+            /** Format: date-time */
+            publishedAt: string | null;
+            counts: {
+                provinces: number;
+                communes: number;
+                legacyDistricts: number;
+                legacyCommunes: number;
+                changes: number;
+            };
+        };
+        AdministrativeDatasetSummary: {
+            /** Format: uuid */
+            id: string;
+            /** @description The identity of a GoGo dataset is the tuple of its pinned upstreams plus the override revision, not any single source version. */
+            combinedDatasetVersion: string;
+            combinedChecksum: string;
+            /**
+             * @description At most one version is PUBLISHED, held by a partial unique index. A version demoted by a later publication becomes ROLLED_BACK and is retained — that is what a rollback restores.
+             * @enum {string}
+             */
+            status: "STAGED" | "VALIDATED" | "REJECTED" | "PUBLISHED" | "ROLLED_BACK";
+            /** Format: date */
+            effectiveDate: string;
+            overrideRevision: number;
+            sources: {
+                currentSourceVersion: string;
+                historicalSourceVersion: string | null;
+                mappingSourceCommit: string | null;
+                boundarySourceVersion: string | null;
+            };
+            /** Format: date-time */
+            importedAt: string;
+            /**
+             * Format: date-time
+             * @description Non-null means this version was active at some point, which is what makes it a legitimate rollback target.
+             */
+            publishedAt: string | null;
+            validation: {
+                validationId: string;
+                validatorVersion: string;
+                /** Format: date-time */
+                ranAt: string;
+                errors: number;
+                warnings: number;
+                /** @description Exactly `errors === 0`. Warnings never affect it. */
+                publishable: boolean;
+                warningGates: string[];
+            } | null;
+        };
+        AdministrativeImportReport: {
+            /** Format: uuid */
+            datasetVersionId: string;
+            combinedDatasetVersion: string;
+            combinedChecksum: string;
+            counts: {
+                provinces: number;
+                communes: number;
+                legacyDistricts: number;
+                legacyCommunes: number;
+                canonicalChanges: number;
+                quarantined: number;
+            };
+            /** @description Count per quarantine class. An advisory mapping row is promoted to a canonical change only when both endpoints resolve; the rest are quarantined with their raw payload, never guessed. */
+            classification: {
+                [key: string]: number;
+            };
+            warnings: string[];
+        };
+        AdministrativeValidationReport: {
+            datasetVersion: string;
+            /** Format: date-time */
+            ranAt: string;
+            findings: {
+                gate: string;
+                /** @enum {string} */
+                severity: "ERROR" | "WARNING";
+                message: string;
+                count: number;
+                samples: string[];
+            }[];
+            errors: number;
+            warnings: number;
+            /** @description `errors === 0`. The only thing publication consults, and it is re-checked server-side against a freshly re-read result. */
+            publishable: boolean;
+            counts: {
+                currentProvinces: number;
+                currentCommunes: number;
+                historicalProvinces: number;
+                historicalDistricts: number;
+                historicalCommunes: number;
+                canonicalChanges: number;
+                quarantined: number;
+            };
+            /** @description Deterministic in what was checked and what was found, so an audit row can name the exact validation a publication relied on. */
+            validationId: string;
+            validatorVersion: string;
+            /** @description What this result is evidence about. Publication re-derives every one of these and refuses as VALIDATION_STALE on any disagreement — which is what makes "validated, then someone edited a staged row" a refusal rather than a silent publication of unvalidated data. */
+            boundTo: {
+                /** Format: uuid */
+                datasetVersionId: string;
+                combinedDatasetVersion: string;
+                combinedChecksum: string;
+                /** @description Digest of the stored rows themselves. The combined checksum is computed from the pinned files, so it cannot see a row edited directly in the database; this can. */
+                snapshotFingerprint: string;
+                overrideRevision: number;
+            };
+        } | null;
+        AdministrativeAffectedPlaces: {
+            /** @description Counted in the database. Places with no administrative claim (UNMAPPED) are excluded — a place with no claim is not affected by a change to administrative data. */
+            total: number;
+            samples: {
+                /** Format: uuid */
+                placeId: string;
+                name: string;
+                code: string;
+                status: string;
+            }[];
+            truncated: boolean;
+            sampleLimit: number;
+        };
+        AdministrativeDatasetDiff: {
+            /** @description Null for a first publication, which compares against an empty baseline. */
+            fromVersion: string | null;
+            toVersion: string;
+            /** @description Always complete, never paged. Categories: CREATED, DISSOLVED, RENAMED, PARENT_CHANGED, STATUS_CHANGED, EFFECTIVE_PERIOD_CHANGED, MERGED, SPLIT, REASSIGNED, UNRESOLVED, SOURCE_DRIFT. */
+            countsByCategory: {
+                [key: string]: number;
+            };
+            entries: {
+                key: string;
+                category: string;
+                from: {
+                    code?: string;
+                    /** Format: date */
+                    effectiveFrom?: string;
+                } | null;
+                to: {
+                    code?: string;
+                    /** Format: date */
+                    effectiveFrom?: string;
+                } | null;
+                detail: string;
+                provenance: string | null;
+                validation: string[];
+            }[];
+            entriesTruncated: boolean;
+            entryLimit: number;
+            affectedPlaces: components["schemas"]["AdministrativeAffectedPlaces"];
+            pagination?: {
+                offset: number;
+                limit: number;
+                totalEntries: number;
+                hasMore: boolean;
+            };
+        };
+        /** @description Places whose administrative claim does not resolve against the dataset being activated. Reported, never written: whether a claim a person verified should be demoted is the mapping work's decision (#459/#461/#462). */
+        AdministrativeStaleMappings: {
+            total: number;
+            samples: {
+                /** Format: uuid */
+                placeId: string;
+                name: string;
+                code: string;
+                status: string;
+            }[];
+            truncated: boolean;
+            sampleLimit: number;
+        };
+        AdministrativeTransitionResult: {
+            /** Format: uuid */
+            datasetVersionId: string;
+            combinedDatasetVersion: string;
+            /** @description Retained, not deleted. This is what a rollback restores. */
+            previousActiveVersion: string | null;
+            /** Format: uuid */
+            previousActiveVersionId: string | null;
+            /** Format: date-time */
+            publishedAt: string;
+            /** @description The exact validation result this transition relied on. */
+            validationId: string;
+            warnings: number;
+            /** @description Visible and audited; they never blocked the publication. */
+            warningGates: string[];
+            diff: components["schemas"]["AdministrativeDatasetDiff"];
+            staleMappings: components["schemas"]["AdministrativeStaleMappings"];
+            /** @description Whether this process refilled its own active-version pointer after the commit. False is not a failed publication — PostgreSQL is authoritative and every process converges within the 60-second TTL. */
+            cacheWarmed: boolean;
+        };
+        AdministrativeCapability: {
+            dataset: {
+                /** @enum {string} */
+                state: "AVAILABLE" | "MISSING" | "ERROR";
+                version: string | null;
+                /** Format: date-time */
+                publishedAt: string | null;
+                ageSeconds: number | null;
+                /** @description One per lifecycle status. */
+                counts: {
+                    [key: string]: number;
+                };
+                quarantined: number;
+                unresolved: number;
+                validation: {
+                    errors: number;
+                    warnings: number;
+                } | null;
+            };
+            boundaries: {
+                /** @enum {string} */
+                state: "AVAILABLE" | "MISSING" | "ERROR";
+                version: string | null;
+                /** Format: date-time */
+                loadedAt: string | null;
+                ageSeconds: number | null;
+                provinces: number;
+                communes: number;
+            };
+            /**
+             * @description PARTIAL means no boundary release is loaded: the resolver still answers from explicit codes, stored names and the change mapping.
+             * @enum {string}
+             */
+            resolver: "FULL" | "PARTIAL" | "UNAVAILABLE";
+            /**
+             * @description BLOCKED when no dataset is published — nothing to validate a mapping against, so no place may be approved. Enforced by the domain guard, not by taking the service offline.
+             * @enum {string}
+             */
+            publication: "ENABLED" | "BLOCKED";
+            /** @description Places per administrative mapping status. */
+            mappings: {
+                [key: string]: number;
+            };
+            /** @description Approved places per remediation category. */
+            remediation: {
+                [key: string]: number;
+            };
+            /** Format: date-time */
+            observedAt: string;
+        };
+        AdministrativeMappingReason: {
+            /** @description Required. A decision with no stated reason cannot be reviewed later. */
+            reason: string;
+            /**
+             * Format: date-time
+             * @description The place's `updatedAt` as the reviewer saw it. A mismatch is 409 PLACE_MODIFIED rather than a lost update.
+             */
+            expectedUpdatedAt: string;
+        };
+        AdministrativeMappingListItem: {
+            /** Format: uuid */
+            placeId: string;
+            name: string;
+            placeStatus: string;
+            mappingStatus: components["schemas"]["AdministrativeMappingStatus"];
+            provinceCode: string | null;
+            communeCode: string | null;
+            datasetVersion: string | null;
+            /** Format: date-time */
+            updatedAt: string;
+            /** @description True for anything that is not VERIFIED. The precise reason is per place and comes from the detail endpoint. */
+            blocksApproval: boolean;
+        };
+        /**
+         * @description VERIFIED and REJECTED are reviewer-owned: no automatic path writes them. AUTO_MATCHED is the resolver's answer, which is why it does not permit approval — the point of a review queue is that the machine's answer is not the decision.
+         * @enum {string}
+         */
+        AdministrativeMappingStatus: "UNMAPPED" | "AUTO_MATCHED" | "NEEDS_REVIEW" | "VERIFIED" | "REJECTED" | "STALE";
+        AdministrativeStaleVerdict: {
+            stale: boolean;
+            /**
+             * @description `REVALIDATED` is the healthy case: the mapping is labelled with an older dataset version and is still true. It is not stale, and nothing is written for it.
+             * @enum {string}
+             */
+            reason: "NO_MAPPING" | "CURRENT" | "REVALIDATED" | "UNIT_NOT_IN_ACTIVE_DATASET" | "UNIT_NOT_CURRENT" | "HIERARCHY_CHANGED";
+            reviewerOwned: boolean;
+            requiresReview: boolean;
+            storedDatasetVersion: string | null;
+            activeDatasetVersion: string;
+        };
+        AdministrativeMappingEvidence: {
+            method: string;
+            provinceCode: string | null;
+            communeCode: string | null;
+            legacyDistrictCode?: string | null;
+            hierarchyValid: boolean;
+            /** @description False for anything that may only ever be offered to a person. */
+            deterministic: boolean;
+            /** @description Boundary evidence only — the point sits on the polygon's own edge. */
+            onEdge?: boolean;
+            detail: string;
+        };
+        AdministrativeMappingDetail: {
+            /** Format: uuid */
+            placeId: string;
+            /** @description Read here so a reviewer can judge the mapping against what the address actually says. No endpoint in this group writes any of it. */
+            place: {
+                name: string;
+                status: string;
+                addressText: string | null;
+                city: string | null;
+                district: string | null;
+                geometry: {
+                    lng: number;
+                    lat: number;
+                };
+                /**
+                 * Format: date-time
+                 * @description Send this back as `expectedUpdatedAt` on any decision.
+                 */
+                updatedAt: string;
+            };
+            mapping: {
+                status: components["schemas"]["AdministrativeMappingStatus"];
+                provinceCode: string | null;
+                communeCode: string | null;
+                legacyDistrictCode: string | null;
+                provinceName: string | null;
+                communeName: string | null;
+                legacyDistrictName: string | null;
+                method: string | null;
+                /** @description 1.00 or absent. Only an official code or a strictly-inside containment is definitional; a manual verification writes none, because a person's judgement is not a probability. */
+                confidence: string | null;
+                datasetVersion: string | null;
+                boundaryVersion: string | null;
+                /** Format: date-time */
+                mappedAt: string | null;
+                /** @description Who is responsible for the mapping the row carries now. Retained on a STALE row — they did verify it; STALE says that verification is no longer current. */
+                reviewer: {
+                    /** Format: uuid */
+                    id: string;
+                    displayName: string;
+                } | null;
+            };
+            activeDatasetVersion: string;
+            evidence: components["schemas"]["AdministrativeMappingEvidence"][];
+            /** @description Alternatives the resolver refused to choose between. */
+            candidates: {
+                method: string;
+                provinceCode: string | null;
+                communeCode: string | null;
+                detail: string;
+            }[];
+            unresolvedReason: string | null;
+            hierarchyValid: boolean;
+            staleness: components["schemas"]["AdministrativeStaleVerdict"];
+            approval: {
+                blocked: boolean;
+                block: {
+                    /** @enum {string} */
+                    code: "MAPPING_UNMAPPED" | "MAPPING_NOT_VERIFIED" | "MAPPING_REJECTED" | "MAPPING_STALE" | "MAPPING_INCOMPLETE" | "MAPPING_UNIT_NOT_CURRENT" | "MAPPING_HIERARCHY_INVALID";
+                    message: string;
+                } | null;
+            };
+            /** @description What this role may do, so the console renders buttons it knows will work. The server still enforces it: hiding a button is not authorization. */
+            permittedActions: string[];
+        };
         RoomConstraintInput: {
             originText?: string;
             originLat?: number;
@@ -5247,6 +6150,23 @@ export interface components {
             rowsByStatus?: {
                 [key: string]: number;
             };
+            /**
+             * @description ADM-009 (#462) — what happened to the publication this mode asked for. Kept apart from `rowsByStatus` because they answer different questions: a row can be `imported` and not published, and folding the two together would tell an operator their places are live when they are waiting for a reviewer.
+             *
+             *     A newly imported place has never been verified by anybody, so its publication is always deferred and the place lands in `review`. The one row that can publish is one matching an existing place whose mapping a reviewer already verified and which is still valid against the active administrative dataset.
+             */
+            publication?: {
+                /** @description Rows whose mode asked for publication. */
+                requested: number;
+                published: number;
+                deferred: number;
+                /** @description No mapping, or one no reviewer has verified. */
+                mappingUnverified: number;
+                /** @description Verified, but the unit or hierarchy no longer holds. */
+                mappingInvalid: number;
+                /** @description Nothing to validate a mapping against in this environment. */
+                noActiveAdministrativeDataset: number;
+            };
             /** Format: date-time */
             startedAt?: string;
             /** Format: date-time */
@@ -6354,6 +7274,22 @@ export interface components {
         };
     };
     responses: {
+        /** @description The client's ETag still matches. No body, by definition — this is the whole saving the tag exists for. */
+        NotModified: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content?: never;
+        };
+        /** @description No administrative dataset is PUBLISHED. Deliberately not an empty list, which would read as "Vietnam has no provinces"; this is an operational fault and #463 alerts on it. */
+        AdministrativeUnavailable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorEnvelope"];
+            };
+        };
         /** @description Validation or business rule failure */
         BadRequest: {
             headers: {
@@ -6410,6 +7346,13 @@ export interface components {
         };
     };
     parameters: {
+        /** @description ADM-003 / ADR-0019 §8. The ETag a client already holds. The tag is derived from the active datasetVersion plus the resolved request, so it carries no clock and no process-local state: two instances serving the same version answer with the same tag, and a restart does not invalidate anyone's cache. */
+        IfNoneMatch: string;
+        /** @description District-level units were dissolved on 2025-07-01 and are excluded from every response unless this is `true`. A form offering "Quận Ba Đình" would be offering something that no longer exists. */
+        AdministrativeIncludeLegacy: "true" | "false";
+        AdministrativeLimit: number;
+        /** @description Opaque cursor from a previous page's `nextCursor`. */
+        AdministrativeCursor: string;
         /** @description Client-generated key for retryable mutations. Repeating a request with the same key returns the original result instead of re-applying it. */
         IdempotencyKey: string;
         /** @description Fixed window, never a duration or a range. Four values only: a free-form range is arbitrary load on the store and an arbitrary number of points at the browser, and the enum is also what makes "no client-supplied PromQL" true by construction rather than by escaping. */
@@ -6423,7 +7366,12 @@ export interface components {
         Limit: number;
     };
     requestBodies: never;
-    headers: never;
+    headers: {
+        /** @description Deterministic entity tag over datasetVersion + the resolved request. */
+        ETag: string;
+        /** @description Always `public, max-age=0, must-revalidate` — immutable per version, but the active version can change. */
+        CacheControl: string;
+    };
     pathItems: never;
 }
 export type $defs = Record<string, never>;
@@ -7402,6 +8350,810 @@ export interface operations {
                 };
                 content?: never;
             };
+        };
+    };
+    getAdministrativeVersion: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description ADM-003 / ADR-0019 §8. The ETag a client already holds. The tag is derived from the active datasetVersion plus the resolved request, so it carries no clock and no process-local state: two instances serving the same version answer with the same tag, and a restart does not invalidate anyone's cache. */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Active dataset version and record counts */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdministrativeVersion"];
+                };
+            };
+            304: components["responses"]["NotModified"];
+            503: components["responses"]["AdministrativeUnavailable"];
+        };
+    };
+    listAdministrativeProvinces: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["AdministrativeLimit"];
+                /** @description Opaque cursor from a previous page's `nextCursor`. */
+                cursor?: components["parameters"]["AdministrativeCursor"];
+            };
+            header?: {
+                /** @description ADM-003 / ADR-0019 §8. The ETag a client already holds. The tag is derived from the active datasetVersion plus the resolved request, so it carries no clock and no process-local state: two instances serving the same version answer with the same tag, and a restart does not invalidate anyone's cache. */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Province page */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdministrativeUnitPage"];
+                };
+            };
+            304: components["responses"]["NotModified"];
+            503: components["responses"]["AdministrativeUnavailable"];
+        };
+    };
+    listAdministrativeCommunes: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["AdministrativeLimit"];
+                /** @description Opaque cursor from a previous page's `nextCursor`. */
+                cursor?: components["parameters"]["AdministrativeCursor"];
+            };
+            header?: {
+                /** @description ADM-003 / ADR-0019 §8. The ETag a client already holds. The tag is derived from the active datasetVersion plus the resolved request, so it carries no clock and no process-local state: two instances serving the same version answer with the same tag, and a restart does not invalidate anyone's cache. */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
+            path: {
+                provinceCode: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Commune page */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdministrativeUnitPage"];
+                };
+            };
+            304: components["responses"]["NotModified"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["AdministrativeUnavailable"];
+        };
+    };
+    searchAdministrativeUnits: {
+        parameters: {
+            query: {
+                query: string;
+                provinceCode?: string;
+                /** @description District-level units were dissolved on 2025-07-01 and are excluded from every response unless this is `true`. A form offering "Quận Ba Đình" would be offering something that no longer exists. */
+                includeLegacy?: components["parameters"]["AdministrativeIncludeLegacy"];
+                limit?: components["parameters"]["AdministrativeLimit"];
+                /** @description Opaque cursor from a previous page's `nextCursor`. */
+                cursor?: components["parameters"]["AdministrativeCursor"];
+            };
+            header?: {
+                /** @description ADM-003 / ADR-0019 §8. The ETag a client already holds. The tag is derived from the active datasetVersion plus the resolved request, so it carries no clock and no process-local state: two instances serving the same version answer with the same tag, and a restart does not invalidate anyone's cache. */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Matching units, current first, then legacy when asked for */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdministrativeUnitPage"];
+                };
+            };
+            304: components["responses"]["NotModified"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["AdministrativeUnavailable"];
+        };
+    };
+    resolveAdministrativeCode: {
+        parameters: {
+            query: {
+                code: string;
+                /** @description ISO date. Absent means "the current unit". */
+                at?: string;
+            };
+            header?: {
+                /** @description ADM-003 / ADR-0019 §8. The ETag a client already holds. The tag is derived from the active datasetVersion plus the resolved request, so it carries no clock and no process-local state: two instances serving the same version answer with the same tag, and a restart does not invalidate anyone's cache. */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The unit effective on that date, plus canonical successors */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdministrativeResolution"];
+                };
+            };
+            304: components["responses"]["NotModified"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["AdministrativeUnavailable"];
+        };
+    };
+    getAdministrativeUnit: {
+        parameters: {
+            query?: {
+                /** @description District-level units were dissolved on 2025-07-01 and are excluded from every response unless this is `true`. A form offering "Quận Ba Đình" would be offering something that no longer exists. */
+                includeLegacy?: components["parameters"]["AdministrativeIncludeLegacy"];
+            };
+            header?: {
+                /** @description ADM-003 / ADR-0019 §8. The ETag a client already holds. The tag is derived from the active datasetVersion plus the resolved request, so it carries no clock and no process-local state: two instances serving the same version answer with the same tag, and a restart does not invalidate anyone's cache. */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The current unit and the periods this code has had */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdministrativeUnitDetail"];
+                };
+            };
+            304: components["responses"]["NotModified"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["AdministrativeUnavailable"];
+        };
+    };
+    listAdministrativeDatasets: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of dataset versions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["AdministrativeDatasetSummary"][];
+                        total: number;
+                        limit: number;
+                        offset: number;
+                    };
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    getAdministrativeCapability: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current administrative capability */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdministrativeCapability"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    importAdministrativeDataset: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client-generated key for retryable mutations. Repeating a request with the same key returns the original result instead of re-applying it. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /**
+                     * @description Bumped by a reviewer decision rather than an upstream release. It is a component of the combined version, so bumping it mints a new dataset from unchanged sources.
+                     * @default 0
+                     */
+                    overrideRevision?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description A new STAGED dataset version */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdministrativeImportReport"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    listRestorableAdministrativeDatasets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Restorable versions, most recently published first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["AdministrativeDatasetSummary"][];
+                    };
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    getAdministrativeDataset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The dataset version */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdministrativeDatasetSummary"] & {
+                        validationReport?: components["schemas"]["AdministrativeValidationReport"];
+                        /** @description The diff stored when this version was last validated. It describes the baseline that was active *then* — GET /diff recomputes against today's. */
+                        diffSummary?: {
+                            [key: string]: unknown;
+                        } | null;
+                    };
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    getAdministrativeDatasetDiff: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The diff, with complete counts and a bounded entry page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdministrativeDatasetDiff"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    validateAdministrativeDataset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The validation result and the diff computed with it */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        validation: components["schemas"]["AdministrativeValidationReport"];
+                        diff: components["schemas"]["AdministrativeDatasetDiff"];
+                    };
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    publishAdministrativeDataset: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client-generated key for retryable mutations. Repeating a request with the same key returns the original result instead of re-applying it. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The version is now active */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdministrativeTransitionResult"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Refused, and audited with its reason. DATASET_NOT_VALIDATED, DATASET_REJECTED, DATASET_ALREADY_PUBLISHED, VALIDATION_MISSING, VALIDATION_STALE, VALIDATION_HAS_ERRORS, SNAPSHOT_CHECKSUM_MISMATCH, or ACTIVE_VERSION_CHANGED when another publication won the race while this one was being prepared. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    rollbackAdministrativeDataset: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client-generated key for retryable mutations. Repeating a request with the same key returns the original result instead of re-applying it. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The earlier version is active again */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdministrativeTransitionResult"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Refused, and audited with its reason. DATASET_NEVER_PUBLISHED, DATASET_ALREADY_PUBLISHED, DATASET_NOT_RESTORABLE, VALIDATION_MISSING, DATASET_CORRUPTED, or ACTIVE_VERSION_CHANGED. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    listAdministrativeMappings: {
+        parameters: {
+            query?: {
+                /** @description Comma-separated mapping statuses. */
+                status?: string;
+                /** @description Comma-separated place statuses. */
+                placeStatus?: string;
+                blockedApprovalOnly?: "true" | "false";
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of mappings, with complete counts per status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["AdministrativeMappingListItem"][];
+                        /** Format: uuid */
+                        nextCursor: string | null;
+                        /** @description One per mapping status plus `actionable`. */
+                        counts: {
+                            [key: string]: number;
+                        };
+                    };
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    getAdministrativeRemediation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Counts per remediation category with bounded samples */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        activeDatasetVersion: string;
+                        counts: {
+                            unmapped: number;
+                            auto_matched: number;
+                            needs_review: number;
+                            rejected: number;
+                            stale: number;
+                            verified_against_older_version: number;
+                            compliant: number;
+                        };
+                        samples: {
+                            [key: string]: string[];
+                        };
+                    };
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    getPlaceAdministrativeMapping: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The mapping and its evidence */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdministrativeMappingDetail"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["AdministrativeUnavailable"];
+        };
+    };
+    verifyPlaceAdministrativeMapping: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client-generated key for retryable mutations. Repeating a request with the same key returns the original result instead of re-applying it. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    provinceCode: string;
+                    communeCode: string;
+                    /** @description Pre-2025-07-01 evidence. Checked against the historical set. */
+                    legacyDistrictCode?: string | null;
+                    note?: string;
+                    /** Format: date-time */
+                    expectedUpdatedAt: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The mapping is verified */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        placeId: string;
+                        /** @enum {string} */
+                        status: "VERIFIED";
+                        datasetVersion: string;
+                    };
+                };
+            };
+            /** @description PROVINCE_NOT_CURRENT, COMMUNE_NOT_CURRENT, HIERARCHY_INVALID or LEGACY_DISTRICT_UNKNOWN — the selection does not describe a real unit in the active dataset. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description PLACE_MODIFIED — the place changed since it was read. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    rejectPlaceAdministrativeMapping: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client-generated key for retryable mutations. Repeating a request with the same key returns the original result instead of re-applying it. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdministrativeMappingReason"];
+            };
+        };
+        responses: {
+            /** @description The mapping is rejected */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        placeId: string;
+                        /** @enum {string} */
+                        status: "REJECTED";
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    rematchPlaceAdministrativeMapping: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client-generated key for retryable mutations. Repeating a request with the same key returns the original result instead of re-applying it. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdministrativeMappingReason"];
+            };
+        };
+        responses: {
+            /** @description The resolver ran and its result was persisted */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        placeId: string;
+                        /** @enum {string} */
+                        status: "UNMAPPED" | "AUTO_MATCHED" | "NEEDS_REVIEW";
+                        communeCode: string | null;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description VERIFIED_NOT_REMATCHABLE, or PLACE_MODIFIED. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    correctPlaceAdministrativeMapping: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client-generated key for retryable mutations. Repeating a request with the same key returns the original result instead of re-applying it. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    provinceCode: string;
+                    communeCode: string;
+                    legacyDistrictCode?: string | null;
+                    reason: string;
+                    /** Format: date-time */
+                    expectedUpdatedAt: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The mapping is corrected and re-verified */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        placeId: string;
+                        /** @enum {string} */
+                        status: "VERIFIED";
+                        datasetVersion: string;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description NOT_VERIFIED, or PLACE_MODIFIED. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    reconcilePlaceAdministrativeMapping: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client-generated key for retryable mutations. Repeating a request with the same key returns the original result instead of re-applying it. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The verdict, and whether anything was written */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        placeId: string;
+                        changed: boolean;
+                        verdict: components["schemas"]["AdministrativeStaleVerdict"];
+                    };
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
         };
     };
     listTaxonomies: {
