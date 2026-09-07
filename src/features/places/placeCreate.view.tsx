@@ -16,8 +16,9 @@ import { PermissionDeniedState, useErrorMessage } from '@/shared/ui/State'
 import { useToast } from '@/shared/ui/Toast'
 import { useOnline } from '@/shared/ui/useOnline'
 
-import { createPlace } from './api'
+import { createPlace, GOOGLE_DERIVED_FIELDS, type GoogleDerivedField } from './api'
 import { AreaCombobox } from './areaCombobox'
+import { PlaceCreateLinkPanel, type AppliedResolution } from './placeCreateLink.view'
 import { styles } from './placeCreate.style'
 import {
   numberFieldRegister,
@@ -40,6 +41,13 @@ import {
  * off, so the flow is: create the draft, then land on the editor that already
  * owns all of that. Publishing is a third step, deliberately — entering the
  * catalogue and being visible are separate decisions.
+ *
+ * GoGo-CMS#157 put a Google Maps link in front of all of it. The screen used to
+ * open on a latitude box; coordinates typed by hand are the most reliable way
+ * to put a pin on the wrong street, and a place entered that way carries no
+ * Google Place ID, so it sits outside provider dedup and nothing can ever
+ * refresh it. Every field below is still typed and still editable — the link is
+ * the fast path, not the only one.
  */
 export default function PlaceCreateScreen() {
   const t = useT()
@@ -54,11 +62,35 @@ export default function PlaceCreateScreen() {
   /** Candidates from a 409, kept so the editor can decide rather than retry blind. */
   const [duplicates, setDuplicates] = useState<string[] | null>(null)
   const [serverError, setServerError] = useState<ApiError | null>(null)
+  /**
+   * What a resolution filled in, kept verbatim so provenance can be worked out
+   * at submit time rather than tracked keystroke by keystroke: a field whose
+   * value still equals what Google gave is `google_derived`, and one the editor
+   * changed — or changed and changed back — is their own claim either way.
+   */
+  const [applied, setApplied] = useState<AppliedResolution | null>(null)
 
   const form = useForm<PlaceCreateForm>({
     resolver: zodResolver(placeCreateSchema),
     defaultValues: { name: '', areaKey: undefined },
   })
+
+  /**
+   * Which applied fields the editor left alone. Compared by value at submit
+   * time, so retyping Google's own answer character for character is treated as
+   * accepting it — which is the honest reading, and the alternative (tracking
+   * every edit event) would call an undo an editorial claim.
+   */
+  const derivedFields = (values: PlaceCreateForm): GoogleDerivedField[] => {
+    if (!applied) return []
+    const same: Record<GoogleDerivedField, boolean> = {
+      name: values.name.trim() === applied.name.trim(),
+      addressText: (values.addressText ?? '').trim() === applied.addressText.trim(),
+      lat: values.lat === applied.lat,
+      lng: values.lng === applied.lng,
+    }
+    return GOOGLE_DERIVED_FIELDS.filter((field) => same[field])
+  }
 
   const create = useMutation({
     mutationFn: (values: PlaceCreateForm & { allowDuplicate?: boolean }) =>
@@ -66,6 +98,10 @@ export default function PlaceCreateScreen() {
         name: values.name,
         lat: values.lat,
         lng: values.lng,
+        ...(applied ? { googlePlaceId: applied.googlePlaceId } : {}),
+        ...(applied && derivedFields(values).length > 0
+          ? { googleDerivedFields: derivedFields(values) }
+          : {}),
         ...(values.addressText ? { addressText: values.addressText } : {}),
         ...(values.areaKey ? { areaKey: values.areaKey } : {}),
         ...(values.city ? { city: values.city } : {}),
@@ -93,6 +129,21 @@ export default function PlaceCreateScreen() {
       if (apiError.code === 'PLACE_DUPLICATE_SUSPECTED') {
         setDuplicates(apiError.fieldErrors.map((issue) => issue.message))
         return
+      }
+
+      /**
+       * The Google record already belongs to a place. Nothing about this form
+       * can fix that, and creating a second row for one Google id is the exact
+       * thing add-by-link exists to prevent — so the editor is sent to the
+       * place that already holds it.
+       */
+      if (apiError.code === 'PLACE_ALREADY_LINKED') {
+        const existingId = apiError.fieldErrors[0]?.message
+        if (existingId) {
+          toast.success(t('placeCreate.link.exists'))
+          navigate(`/places/${existingId}`)
+          return
+        }
       }
 
       // Field-level rejections land on the boxes that caused them; anything the
@@ -146,13 +197,29 @@ export default function PlaceCreateScreen() {
         <form className={styles.form} onSubmit={submit} noValidate>
           <Card>
             <CardBody>
+              <PlaceCreateLinkPanel
+                onApply={(values) => {
+                  setApplied(values)
+                  // `shouldDirty` so the unsaved-changes guard treats an applied
+                  // resolution as work in progress, which it is.
+                  form.setValue('name', values.name, { shouldDirty: true })
+                  form.setValue('addressText', values.addressText, { shouldDirty: true })
+                  form.setValue('lat', values.lat, { shouldDirty: true })
+                  form.setValue('lng', values.lng, { shouldDirty: true })
+                  form.clearErrors(['name', 'addressText', 'lat', 'lng'])
+                }}
+              />
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardBody>
               <div className="flex flex-col gap-4">
                 <p className={styles.hint}>{t('placeCreate.intro')}</p>
 
                 <TextInput
                   label={t('placeEditor.name')}
                   required
-                  autoFocus
                   error={errorFor('name')}
                   {...form.register('name')}
                 />

@@ -422,9 +422,9 @@ export const en: Partial<Record<MessageKey, string>> = {
   'places.add': 'Add place',
   'placeCreate.title': 'Add place',
   'placeCreate.intro':
-    'Enter what you know for certain. The place is created as a draft — hours, prices and photos come next in the editor, and publishing is a separate step.',
+    'Check it over and add what you know for certain. The place is created as a draft — hours, prices and photos come next in the editor, and publishing is a separate step.',
   'placeCreate.coordinateHint':
-    'Read it off the map. Without coordinates a place cannot be searched or routed to.',
+    'Paste a Google Maps link above to fill this in. Without coordinates a place cannot be searched or routed to.',
   'placeCreate.submit': 'Create place',
   'placeCreate.created': 'Place created as a draft.',
   'placeCreate.failed': 'Could not create the place',
@@ -433,6 +433,27 @@ export const en: Partial<Record<MessageKey, string>> = {
     'These places sit within 150m and have a similar name. Check them before adding another record.',
   'placeCreate.duplicateOpenQueue': 'Open duplicate queue',
   'placeCreate.duplicateCreateAnyway': 'Different place, create anyway',
+  'placeCreate.link.intro':
+    'Paste a Google Maps link and the name, address and coordinates are filled in for you — and the place is linked to its Google record, so it can be refreshed later. No link? Type it in below as before.',
+  'placeCreate.link.label': 'Google Maps link',
+  'placeCreate.link.hint':
+    'Short links (maps.app.goo.gl) and full links both work. The link is read, never opened.',
+  'placeCreate.link.resolve': 'Find place',
+  'placeCreate.link.found': 'Google returned this place',
+  'placeCreate.link.rating': '{rating}★ Google · {count} reviews',
+  'placeCreate.link.apply': 'Use this data',
+  'placeCreate.link.applyNote': 'Fills the form below; edit anything you like.',
+  'placeCreate.link.exists': 'GoGo already has this place',
+  'placeCreate.link.existsBody':
+    'This link points at a Google record already attached to a place in the catalogue. Open that one instead of creating a second.',
+  'placeCreate.link.existsOpen': 'Open the existing place',
+  'placeCreate.link.ambiguous': 'The link matches several branches',
+  'placeCreate.link.ambiguousBody':
+    'The link carries no Place ID, so the branch is undecided. Open the right branch in Google Maps, use Share to get its own link, and paste that — it carries the Place ID.',
+  'placeCreate.link.unresolved': 'Could not identify a place from this link',
+  'placeCreate.link.unresolvedBody':
+    'It may not be a Google Maps link, or it may not point at one specific place. Check the link, or type the details in below.',
+  'placeCreate.link.failed': 'Could not look up the link',
   'places.bulkImport': 'Bulk import',
   'places.tab.all': 'All',
   'places.tab.published': 'Published',
