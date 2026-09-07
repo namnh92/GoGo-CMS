@@ -89,7 +89,7 @@ export function AuditTrail({ entries }: { entries: AuditEntry[] }) {
                   <div key={key} className="contents">
                     <dt className="font-mono text-text-subtle">{key}</dt>
                     <dd className="flex flex-wrap items-center gap-2">
-                      <span className="rounded bg-danger-soft px-1.5 py-0.5 text-danger line-through">
+                      <span className="rounded bg-danger-soft px-1.5 py-0.5 text-danger-ink line-through">
                         {renderValue(before[key])}
                       </span>
                       <span aria-hidden="true" className="text-text-subtle">

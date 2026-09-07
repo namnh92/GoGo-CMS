@@ -7,13 +7,19 @@ export type Tone = 'neutral' | 'coral' | 'lavender' | 'mint' | 'amber' | 'danger
 /** Glyph paired with every tone so state survives greyscale. */
 export type BadgeShape = 'dot' | 'check' | 'alert' | 'clock' | 'info'
 
+// The `-ink` text colours exist because the obvious pairing did not read: the
+// tone on its own -soft fill measured 3.64 (coral), 3.37 (lavender), 2.30
+// (mint), 2.24 (amber) and 3.74 (danger) against a 4.5 threshold, on the column
+// an editor scans most. Same hue, dark enough to read. The undarkened tones
+// stay in use for borders and for the status dots on the ops dashboard, where
+// they are shapes rather than text.
 const TONE: Record<Tone, string> = {
   neutral: 'bg-surface-sunken text-text-muted border-line-strong',
-  coral: 'bg-coral-soft text-coral-deep border-coral/35',
-  lavender: 'bg-lavender-soft text-lavender border-lavender/35',
-  mint: 'bg-mint-soft text-mint border-mint/40',
-  amber: 'bg-amber-soft text-amber border-amber/40',
-  danger: 'bg-danger-soft text-danger border-danger/40',
+  coral: 'bg-coral-soft text-coral-ink border-coral/35',
+  lavender: 'bg-lavender-soft text-lavender-ink border-lavender/35',
+  mint: 'bg-mint-soft text-mint-ink border-mint/40',
+  amber: 'bg-amber-soft text-amber-ink border-amber/40',
+  danger: 'bg-danger-soft text-danger-ink border-danger/40',
 }
 
 export function Badge({

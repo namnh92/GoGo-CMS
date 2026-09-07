@@ -37,9 +37,9 @@ function Frame({
         className={cn(
           'flex h-10 w-10 items-center justify-center rounded-pill',
           tone === 'danger'
-            ? 'bg-danger-soft text-danger'
+            ? 'bg-danger-soft text-danger-ink'
             : tone === 'amber'
-              ? 'bg-amber-soft text-amber'
+              ? 'bg-amber-soft text-amber-ink'
               : 'bg-surface-sunken text-text-subtle',
         )}
       >

@@ -14,7 +14,7 @@ export const styles = {
   dialogTarget: 'text-[13px] font-semibold text-text',
   dialogHint: 'text-xs text-text-muted',
   dialogError:
-    'flex items-start gap-2 rounded-compact border border-danger/40 bg-danger-soft px-3 py-2 text-xs text-danger',
+    'flex items-start gap-2 rounded-compact border border-danger/40 bg-danger-soft px-3 py-2 text-xs text-danger-ink',
   tempWrap: 'flex flex-col gap-4',
   tempWarn:
     'flex items-start gap-2 rounded-compact border border-amber/40 bg-amber-soft px-3 py-2 text-xs text-text',

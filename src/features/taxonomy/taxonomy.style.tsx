@@ -4,7 +4,7 @@ export const styles = {
   navTitle: 'mb-2 px-2 text-[10px] font-bold uppercase tracking-widest text-text-subtle',
   navItem:
     'flex w-full min-h-11 items-center justify-between gap-2 rounded-compact px-3 text-[13px] font-semibold',
-  navActive: 'bg-coral-soft text-coral-deep',
+  navActive: 'bg-coral-soft text-coral-ink',
   navIdle: 'text-text-muted hover:bg-surface-sunken hover:text-text',
   navCount: 'text-[11px] tabular-nums',
   content: 'flex flex-col gap-5 xl:col-span-3',

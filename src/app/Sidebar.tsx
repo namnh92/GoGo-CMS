@@ -102,7 +102,7 @@ export function Sidebar() {
       nested ? 'text-[12px]' : 'text-[13px]',
       'transition-colors duration-[var(--duration-fast)]',
       active
-        ? 'bg-coral-soft text-coral-deep'
+        ? 'bg-coral-soft text-coral-ink'
         : 'text-text-muted hover:bg-surface-sunken hover:text-text',
     )
 
@@ -117,7 +117,7 @@ export function Sidebar() {
       <div className="flex flex-wrap items-center gap-2 px-4 py-5">
         <LogoMark size={30} />
         <span className="font-display text-base font-extrabold text-text">{t('app.name')}</span>
-        <span className="rounded bg-coral-soft px-1.5 py-0.5 text-[10px] font-bold text-coral-deep">
+        <span className="rounded bg-coral-soft px-1.5 py-0.5 text-[10px] font-bold text-coral-ink">
           {t('app.suffix')}
         </span>
         {/* One instance, always on screen: which deployment is this? */}
@@ -160,7 +160,7 @@ export function Sidebar() {
                   'transition-colors duration-[var(--duration-fast)]',
                   // A closed group still says the current screen lives inside it.
                   holdsActiveRoute && !open
-                    ? 'bg-coral-soft text-coral-deep'
+                    ? 'bg-coral-soft text-coral-ink'
                     : 'text-text-muted hover:bg-surface-sunken hover:text-text',
                 )}
               >

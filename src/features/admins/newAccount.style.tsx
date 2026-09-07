@@ -4,7 +4,7 @@ export const styles = {
   grid: 'grid gap-4 md:grid-cols-2',
   footer: 'flex flex-wrap items-center justify-end gap-2 border-t border-line px-5 py-4',
   alertDanger:
-    'flex items-start gap-2 rounded-compact border border-danger/40 bg-danger-soft px-3 py-2 text-xs text-danger',
+    'flex items-start gap-2 rounded-compact border border-danger/40 bg-danger-soft px-3 py-2 text-xs text-danger-ink',
   requestId: 'mt-1 block font-mono text-[11px] text-text-subtle',
   note: 'flex items-start gap-2 rounded-compact border border-amber/40 bg-amber-soft px-3 py-2 text-xs text-text',
   roleHint: 'text-xs text-text-subtle',

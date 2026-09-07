@@ -25,7 +25,7 @@ export const styles = {
   formInner: 'w-full max-w-sm',
   mobileBrand: 'mb-6 flex items-center gap-2 lg:hidden',
   mobileWordmark: 'font-display text-lg font-extrabold text-text',
-  mobileSuffix: 'rounded bg-coral-soft px-1.5 py-0.5 text-[10px] font-bold text-coral-deep',
+  mobileSuffix: 'rounded bg-coral-soft px-1.5 py-0.5 text-[10px] font-bold text-coral-ink',
 
   stepHead: 'mb-8',
   stepBadge:
@@ -43,7 +43,7 @@ export const styles = {
   alert:
     'flex items-start gap-2 rounded-compact border border-amber/40 bg-amber-soft px-3 py-2 text-xs text-text',
   alertDanger:
-    'flex items-start gap-2 rounded-compact border border-danger/40 bg-danger-soft px-3 py-2 text-xs text-danger',
+    'flex items-start gap-2 rounded-compact border border-danger/40 bg-danger-soft px-3 py-2 text-xs text-danger-ink',
 
   /* Environment notice under the form — colour per environment, never colour alone. */
   envNote: 'mt-6 flex items-start gap-2 rounded-card border px-4 py-3 text-xs',

@@ -11,8 +11,9 @@ const VARIANT: Record<Variant, string> = {
     'bg-surface text-text border border-line-strong hover:bg-surface-muted disabled:text-text-subtle',
   ghost: 'bg-transparent text-text-muted hover:bg-surface-sunken disabled:text-text-subtle',
   danger:
-    'bg-surface text-danger border border-danger/40 hover:bg-danger-soft disabled:text-danger/45',
-  success: 'bg-surface text-mint border border-mint/45 hover:bg-mint-soft disabled:text-mint/45',
+    'bg-surface text-danger-ink border border-danger/40 hover:bg-danger-soft disabled:text-danger-ink/45',
+  success:
+    'bg-surface text-mint-ink border border-mint/45 hover:bg-mint-soft disabled:text-mint-ink/45',
 }
 
 const SIZE: Record<Size, string> = {
@@ -109,7 +110,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
         'inline-flex h-11 w-11 items-center justify-center rounded-compact',
         'transition-colors duration-[var(--duration-fast)]',
         tone === 'danger'
-          ? 'text-danger hover:bg-danger-soft'
+          ? 'text-danger-ink hover:bg-danger-soft'
           : 'text-text-subtle hover:bg-surface-sunken hover:text-text',
         'disabled:cursor-not-allowed disabled:opacity-45',
         className,

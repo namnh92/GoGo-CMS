@@ -12,16 +12,25 @@
   /* ---- Brand (= colors.brand on mobile) ----------------------------- */
   --color-coral: #d84f4a;
   --color-coral-deep: #c74552;
+  /* Badge text on the matching -soft fill. The -deep/-soft pairs were all
+     under WCAG AA (coral 3.64, lavender 3.37, mint 2.30, amber 2.24, danger
+     3.74) on the one column an editor reads most: place status. These are the
+     same hues, darkened only until the pair clears 4.5. */
+  --color-coral-ink: #b33643;
   --color-coral-bright: #ff746c;
   --color-coral-soft: #ffd8d4;
   --color-coral-ghost: rgb(216 79 74 / 0.1);
   --color-lavender: #7667e8;
+  --color-lavender-ink: #5e4ce4;
   --color-lavender-soft: #e5e0ff;
   --color-mint: #4faf86;
+  --color-mint-ink: #36775b;
   --color-mint-soft: #d9f3e7;
   --color-amber: #d99028;
+  --color-amber-ink: #93611a;
   --color-amber-soft: #fcebcb;
   --color-danger: #c84455;
+  --color-danger-ink: #b73647;
   --color-danger-soft: #fadde2;
 
   /* ---- Neutrals (= colors.neutral on mobile) ------------------------ */
@@ -30,7 +39,9 @@
   --color-neutral-50: #f6f3ee;
   --color-neutral-100: #ece8e1;
   --color-neutral-300: #c8c1b8;
-  --color-neutral-500: #817b74;
+  /* Was #817b74: 4.18 on white, 3.78 on the sunken surface — under AA for the
+     213 places `text-text-subtle` appears. Mirrors GoGo-MobileApp#141. */
+  --color-neutral-500: #746e68;
   --color-neutral-700: #4a4641;
   --color-neutral-900: #211f1c;
 

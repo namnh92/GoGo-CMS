@@ -257,7 +257,7 @@ function CommandPaletteDialog({ open, onClose }: { open: boolean; onClose: () =>
                 'flex min-h-11 w-full items-center justify-between gap-3 rounded-compact px-3 text-left text-[13px]',
                 'transition-colors duration-[var(--duration-fast)]',
                 index === activeIndex
-                  ? 'bg-coral-soft text-coral-deep'
+                  ? 'bg-coral-soft text-coral-ink'
                   : 'text-text hover:bg-surface-sunken',
               )}
             >

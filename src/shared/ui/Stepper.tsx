@@ -36,9 +36,9 @@ export function Stepper({
             className={cn(
               'flex min-h-11 items-center gap-2 rounded-pill border px-3 font-semibold',
               active
-                ? 'border-coral bg-coral-soft text-coral-deep'
+                ? 'border-coral bg-coral-soft text-coral-ink'
                 : done
-                  ? 'border-mint/45 bg-mint-soft text-mint'
+                  ? 'border-mint/45 bg-mint-soft text-mint-ink'
                   : 'border-line-strong bg-surface text-text-subtle',
             )}
           >

@@ -25,7 +25,7 @@ export function AppShell() {
           // chrome. Static, so no live region — it is not an update, it is a
           // standing condition — and deliberately not animated, because a
           // pulsing bar is exactly what `prefers-reduced-motion` is about.
-          <p className="flex items-center justify-center gap-2 border-b border-danger/40 bg-danger-soft px-4 py-1.5 text-xs font-bold text-danger">
+          <p className="flex items-center justify-center gap-2 border-b border-danger/40 bg-danger-soft px-4 py-1.5 text-xs font-bold text-danger-ink">
             <AlertIcon size={13} />
             {t('env.productionWarning')}
           </p>
