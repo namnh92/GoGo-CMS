@@ -43,8 +43,6 @@ export const en: Partial<Record<MessageKey, string>> = {
   'administrative.mapping.title': 'Place mapping review',
   'administrative.mapping.subtitle':
     'Places waiting for someone to confirm their ward before they can be approved.',
-  'administrative.shell.notImplemented':
-    'This screen is not built yet. Access, navigation and the API contract are in place; the content arrives in CMS #154–#156.',
   'administrative.capability.datasetMissing':
     'No administrative dataset is published. No place can be approved until one is.',
   'administrative.capability.boundariesMissing':
@@ -142,6 +140,174 @@ export const en: Partial<Record<MessageKey, string>> = {
   'administrative.tab.diff': 'Changes',
   'administrative.tab.audit': 'Audit',
   'administrative.tab.sourceDrift': 'Mapping source',
+
+  // CMS #156 — per-place administrative mapping moderation.
+  'mapping.open': 'Open',
+  'mapping.col.place': 'Place',
+  'mapping.col.status': 'Mapping status',
+  'mapping.col.codes': 'Province / commune',
+  'mapping.col.datasetVersion': 'Dataset version',
+  'mapping.col.blocks': 'Publication',
+  'mapping.col.updatedAt': 'Updated at',
+
+  'mapping.status.UNMAPPED': 'Unmapped',
+  'mapping.status.AUTO_MATCHED': 'Auto-matched',
+  'mapping.status.NEEDS_REVIEW': 'Needs review',
+  'mapping.status.VERIFIED': 'Verified',
+  'mapping.status.REJECTED': 'Mapping rejected',
+  'mapping.status.STALE': 'Stale',
+
+  'mapping.approval.blocked': 'Blocks publication',
+  'mapping.approval.clear': 'Not blocking',
+  'mapping.block.MAPPING_UNMAPPED': 'The place has no administrative mapping.',
+  'mapping.block.MAPPING_NOT_VERIFIED': 'No person has verified the mapping.',
+  'mapping.block.MAPPING_REJECTED': 'The mapping was rejected; rematch and verify it.',
+  'mapping.block.MAPPING_STALE': 'The mapping no longer resolves against the active dataset.',
+  'mapping.block.MAPPING_INCOMPLETE': 'The mapping is missing a province or a commune.',
+  'mapping.block.MAPPING_UNIT_NOT_CURRENT': 'The mapped unit is no longer current.',
+  'mapping.block.MAPPING_HIERARCHY_INVALID': 'The commune does not sit in the mapped province.',
+
+  'mapping.stale.yes': 'Stale',
+  'mapping.stale.no': 'Still valid',
+  'mapping.staleReason.NO_MAPPING': 'There is no mapping to check.',
+  'mapping.staleReason.CURRENT': 'Labelled with the active dataset.',
+  'mapping.staleReason.REVALIDATED':
+    'Labelled with an older dataset version and still true. A version difference alone is not staleness, and nothing was written.',
+  'mapping.staleReason.UNIT_NOT_IN_ACTIVE_DATASET': 'The mapped unit is not in the active dataset.',
+  'mapping.staleReason.UNIT_NOT_CURRENT': 'The mapped unit is no longer current.',
+  'mapping.staleReason.HIERARCHY_CHANGED': 'The commune no longer sits in the mapped province.',
+
+  'mapping.confidence.unscored': 'Unscored — verified by a person',
+  'mapping.confidence.value': '{value} (definitional)',
+
+  'mapping.remediation.title': 'Approved places, by remediation category',
+  'mapping.remediation.hint':
+    'Measured against the active dataset. A report: no place is unpublished automatically.',
+  'mapping.remediation.notice':
+    'No published place was rolled back. The approval policy applies to approvals from now on; this list says where a person should look.',
+  'mapping.remediation.activeVersion': 'Measured against {version}',
+  'mapping.remediation.empty': 'Nothing needs attention.',
+  'mapping.remediation.compliant': 'Compliant',
+  'mapping.remediation.unmapped': 'Unmapped',
+  'mapping.remediation.auto_matched': 'Auto-matched',
+  'mapping.remediation.needs_review': 'Needs review',
+  'mapping.remediation.rejected': 'Mapping rejected',
+  'mapping.remediation.stale': 'Stale',
+  'mapping.remediation.verified_against_older_version': 'Verified against an older version',
+
+  'mapping.queue.title': 'Mapping queue',
+  'mapping.queue.hint':
+    'Defaults to the rows with something to decide. Unmapped places stay reachable through the filter and the counts.',
+  'mapping.queue.summary': 'Showing {shown} rows',
+  'mapping.queue.empty': 'No rows',
+  'mapping.queue.emptyActionable':
+    'Nothing is waiting on review. Change the filter for other states.',
+  'mapping.queue.emptyFiltered': 'No row matches the current filter.',
+  'mapping.filter.status': 'Mapping status',
+  'mapping.filter.actionable': 'Actionable (needs review + stale)',
+  'mapping.filter.all': 'All statuses',
+  'mapping.filter.blocked': 'Publication',
+  'mapping.filter.anyApproval': 'No filter',
+  'mapping.filter.blockedOnly': 'Only rows blocking publication',
+
+  'mapping.detail.title': 'Administrative mapping',
+  'mapping.detail.subtitle': 'Where this place is, on what evidence, and who is answerable for it.',
+  'mapping.detail.scope':
+    'This screen certifies the place’s ADMINISTRATIVE LOCATION. It does not publish the place — that is the editor’s decision — and it is not the source adjudication on the Administrative data screen.',
+  'mapping.detail.place': 'Stored address',
+  'mapping.detail.approval': 'Effect on publication',
+  'mapping.detail.staleness': 'Against the active dataset',
+  'mapping.detail.province': 'Province',
+  'mapping.detail.commune': 'Commune',
+  'mapping.detail.legacyDistrict': 'Legacy district',
+  'mapping.detail.method': 'Method',
+  'mapping.detail.confidence': 'Confidence',
+  'mapping.detail.reviewer': 'Answerable',
+  'mapping.detail.noReviewer': 'Nobody has verified it',
+  'mapping.detail.datasetVersion': 'Dataset used',
+  'mapping.detail.activeVersion': 'Active dataset',
+  'mapping.detail.boundaryVersion': 'Boundaries used',
+  'mapping.detail.mappedAt': 'Mapped at',
+  'mapping.detail.hierarchy': 'Hierarchy',
+  'mapping.detail.evidence': 'Resolver evidence',
+  'mapping.detail.noEvidence': 'No evidence.',
+  'mapping.detail.candidates': 'Candidates the resolver refused to choose between',
+  'mapping.detail.candidatesHint':
+    'The resolver saw more than one possibility and would not pick. A reviewer decides.',
+  'mapping.detail.decide': 'Choose the administrative unit',
+  'mapping.detail.reasonLabel': 'Reason',
+  'mapping.detail.reasonHint': 'Required to correct, reject or rematch. Not required to verify.',
+  'mapping.detail.readOnly':
+    'You can read the mapping and why it blocks publication. Mapping decisions belong to the moderator.',
+
+  'mapping.hierarchy.ok': 'Valid',
+  'mapping.hierarchy.invalid': 'Invalid',
+  'mapping.evidence.deterministic': 'Deterministic',
+  'mapping.evidence.suggestion': 'Suggestion only',
+  'mapping.evidence.onEdge': 'On the boundary edge',
+
+  'mapping.selector.province': 'Province',
+  'mapping.selector.provinceHint': 'From GoGo’s own active dataset.',
+  'mapping.selector.commune': 'Commune',
+  'mapping.selector.communeHint': 'Only units inside the chosen province.',
+  'mapping.selector.chooseProvinceFirst': 'Choose a province first.',
+  'mapping.selector.choose': '— Choose —',
+  'mapping.selector.legacyNote':
+    'The legacy district keeps its stored value: the current contract offers no selector for that level.',
+
+  'mapping.verify.action': 'Verify',
+  'mapping.verify.confirmTitle': 'Verify the administrative mapping',
+  'mapping.verify.confirmBody': 'You become answerable for this place being in the chosen unit.',
+  'mapping.verify.consequenceLabel': 'Consequence',
+  'mapping.verify.consequence':
+    'Verifying does NOT publish the place. It removes the administrative blocker so the editor can decide.',
+  'mapping.verify.done': 'Mapping verified',
+  'mapping.verify.doneDetail': 'The place is not published. That is still the editor’s decision.',
+
+  'mapping.correct.action': 'Correct mapping',
+  'mapping.correct.confirmTitle': 'Correct the administrative mapping',
+  'mapping.correct.confirmBody': 'Replaces the current mapping with the unit you chose.',
+  'mapping.correct.confirmVerified':
+    'Somebody already verified this mapping. Correcting replaces their decision, and the audit names both of you.',
+  'mapping.correct.done': 'Mapping corrected',
+
+  'mapping.reject.action': 'Reject mapping',
+  'mapping.reject.confirmTitle': 'Reject the administrative mapping',
+  'mapping.reject.confirmBody': 'This mapping is wrong and must not be used.',
+  'mapping.reject.consequenceLabel': 'Consequence',
+  'mapping.reject.consequence':
+    'This rejects the MAPPING, not the place. The place is not deleted and not taken down. It stays blocked from publication until it is remapped and verified. Evidence and audit history remain.',
+  'mapping.reject.done': 'Mapping rejected',
+  'mapping.reject.doneDetail':
+    'The place is not rejected and not deleted — only its administrative mapping.',
+
+  'mapping.rematch.action': 'Rematch',
+  'mapping.rematch.confirmTitle': 'Run the resolver again',
+  'mapping.rematch.confirmBody': 'Re-runs the resolver over the place’s own stored data.',
+  'mapping.rematch.consequenceLabel': 'Consequence',
+  'mapping.rematch.consequence':
+    'A rematch is not a verification. The previous reviewer’s attribution is cleared and you are recorded as the requester. The result may be auto-matched, needs-review, or unmapped.',
+  'mapping.rematch.done': 'The resolver ran: {status}',
+  'mapping.rematch.doneDetail': 'Nobody has verified this result, and the place is not published.',
+
+  'mapping.reconcile.action': 'Reconcile',
+  'mapping.reconcile.confirmTitle': 'Reconcile against the active dataset',
+  'mapping.reconcile.confirmBody': 'Checks whether the stored mapping still holds.',
+  'mapping.reconcile.consequenceLabel': 'Consequence',
+  'mapping.reconcile.consequence':
+    'Evaluates only: it never remaps or corrects. A version difference that is still valid writes nothing. The previous reviewer’s attribution is kept — the reconciler is not recorded as the verifier.',
+  'mapping.reconcile.changed': 'Updated: the mapping no longer holds',
+  'mapping.reconcile.unchanged': 'Nothing written: the mapping still holds',
+
+  'mapping.conflict.modified':
+    'The place changed since the screen was rendered. It has refetched — read it again before deciding.',
+
+  'error.PROVINCE_NOT_CURRENT': 'The chosen province is not a current unit in the active dataset.',
+  'error.COMMUNE_NOT_CURRENT': 'The chosen commune is not a current unit in the active dataset.',
+  'error.HIERARCHY_INVALID': 'The commune does not sit in the chosen province.',
+  'error.LEGACY_DISTRICT_UNKNOWN': 'That legacy district code is not recognised.',
+  'error.VERIFIED_NOT_REMATCHABLE':
+    'A verified mapping cannot be rematched. Use Correct if it is wrong.',
 
   // CMS #155 — the source-drift adjudication queue.
   'sourceDrift.title': 'Source-drift review queue',

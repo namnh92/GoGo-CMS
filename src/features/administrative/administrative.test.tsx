@@ -134,18 +134,22 @@ describe('the route enforces its own permission', () => {
   })
 
   /*
-   * The dataset screen stopped being a shell in #154; the mapping queue has
-   * not. The assertion moves rather than being deleted — a shell that quietly
-   * grew controls nobody designed is exactly what it was written to catch.
+   * Both shells are gone: the dataset screen was built in #154 and the mapping
+   * queue in #156. The assertion becomes its own closing statement — the
+   * placeholder copy must not survive anywhere, because a screen that still
+   * says "not built yet" beside working controls is worse than either.
    */
-  it('says plainly that the mapping queue is not built rather than showing dead controls', async () => {
+  it('no longer claims either screen is unbuilt', async () => {
     signInAs('moderator')
     renderWithProviders(<AdministrativeMappingScreen />)
 
-    expect(await screen.findByText(/chưa được dựng|not built yet/i)).toBeInTheDocument()
-    for (const name of [/xác nhận|verify/i, /từ chối|reject/i, /gán lại|rematch/i]) {
-      expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
-    }
+    expect(
+      await screen.findByRole('heading', { level: 1, name: /Duyệt gán hành chính/ }),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/chưa được dựng|not built yet/i)).not.toBeInTheDocument()
+
+    const { vi } = await import('@/shared/i18n/vi')
+    expect(vi).not.toHaveProperty('administrative.shell.notImplemented')
   })
 })
 

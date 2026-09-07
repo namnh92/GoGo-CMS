@@ -41,8 +41,179 @@ export const vi = {
   'administrative.mapping.title': 'Duyệt gán hành chính',
   'administrative.mapping.subtitle':
     'Hàng đợi các địa điểm cần người xác nhận phường/xã trước khi được duyệt đăng.',
-  'administrative.shell.notImplemented':
-    'Màn hình này chưa được dựng. Quyền truy cập, điều hướng và hợp đồng API đã sẵn sàng; nội dung sẽ đến ở CMS #154–#156.',
+
+  // CMS #156 — kiểm duyệt ánh xạ hành chính của từng địa điểm (GoGo-BE ADM-009).
+  'mapping.open': 'Mở',
+  'mapping.col.place': 'Địa điểm',
+  'mapping.col.status': 'Trạng thái ánh xạ',
+  'mapping.col.codes': 'Tỉnh / Phường-xã',
+  'mapping.col.datasetVersion': 'Phiên bản bộ dữ liệu',
+  'mapping.col.blocks': 'Duyệt đăng',
+  'mapping.col.updatedAt': 'Cập nhật lúc',
+
+  'mapping.status.UNMAPPED': 'Chưa gán',
+  'mapping.status.AUTO_MATCHED': 'Máy khớp',
+  'mapping.status.NEEDS_REVIEW': 'Cần xem lại',
+  'mapping.status.VERIFIED': 'Đã xác nhận',
+  'mapping.status.REJECTED': 'Đã từ chối ánh xạ',
+  'mapping.status.STALE': 'Đã cũ',
+
+  'mapping.approval.blocked': 'Đang chặn duyệt đăng',
+  'mapping.approval.clear': 'Không chặn',
+  'mapping.block.MAPPING_UNMAPPED': 'Địa điểm chưa có ánh xạ hành chính nào.',
+  'mapping.block.MAPPING_NOT_VERIFIED': 'Ánh xạ chưa được người thật xác nhận.',
+  'mapping.block.MAPPING_REJECTED': 'Ánh xạ đã bị từ chối; cần gán lại rồi xác nhận.',
+  'mapping.block.MAPPING_STALE': 'Ánh xạ không còn khớp bộ dữ liệu đang hoạt động.',
+  'mapping.block.MAPPING_INCOMPLETE': 'Ánh xạ thiếu tỉnh hoặc phường/xã.',
+  'mapping.block.MAPPING_UNIT_NOT_CURRENT': 'Đơn vị đã gán không còn là đơn vị hiện hành.',
+  'mapping.block.MAPPING_HIERARCHY_INVALID': 'Phường/xã không thuộc tỉnh đã gán.',
+
+  'mapping.stale.yes': 'Đã cũ',
+  'mapping.stale.no': 'Còn hiệu lực',
+  'mapping.staleReason.NO_MAPPING': 'Chưa có ánh xạ để đối chiếu.',
+  'mapping.staleReason.CURRENT': 'Gắn đúng bộ dữ liệu đang hoạt động.',
+  'mapping.staleReason.REVALIDATED':
+    'Gắn nhãn một phiên bản cũ hơn nhưng vẫn đúng. Khác phiên bản KHÔNG có nghĩa là đã cũ, và không có gì được ghi.',
+  'mapping.staleReason.UNIT_NOT_IN_ACTIVE_DATASET':
+    'Đơn vị đã gán không có trong bộ dữ liệu đang hoạt động.',
+  'mapping.staleReason.UNIT_NOT_CURRENT': 'Đơn vị đã gán không còn là đơn vị hiện hành.',
+  'mapping.staleReason.HIERARCHY_CHANGED': 'Phường/xã không còn thuộc tỉnh đã gán.',
+
+  'mapping.confidence.unscored': 'Không chấm điểm — người thật xác nhận',
+  'mapping.confidence.value': '{value} (định nghĩa được)',
+
+  'mapping.remediation.title': 'Địa điểm đã duyệt, theo nhóm cần xử lý',
+  'mapping.remediation.hint':
+    'Đối chiếu với bộ dữ liệu đang hoạt động. Đây là báo cáo — không địa điểm nào bị gỡ đăng tự động.',
+  'mapping.remediation.notice':
+    'Không có địa điểm nào đã đăng bị tự động gỡ. Chính sách duyệt đăng áp dụng cho các lần duyệt từ nay; danh sách này cho biết chỗ nào cần người xem lại.',
+  'mapping.remediation.activeVersion': 'Đối chiếu với phiên bản {version}',
+  'mapping.remediation.empty': 'Không có địa điểm nào cần xử lý.',
+  'mapping.remediation.compliant': 'Đạt',
+  'mapping.remediation.unmapped': 'Chưa gán',
+  'mapping.remediation.auto_matched': 'Máy khớp',
+  'mapping.remediation.needs_review': 'Cần xem lại',
+  'mapping.remediation.rejected': 'Đã từ chối ánh xạ',
+  'mapping.remediation.stale': 'Đã cũ',
+  'mapping.remediation.verified_against_older_version': 'Xác nhận trên bản cũ hơn',
+
+  'mapping.queue.title': 'Hàng đợi ánh xạ',
+  'mapping.queue.hint':
+    'Mặc định hiển thị những dòng có việc để làm. Chưa gán vẫn tìm được qua bộ lọc và qua khung số đếm.',
+  'mapping.queue.summary': 'Hiển thị {shown} dòng',
+  'mapping.queue.empty': 'Không có dòng nào',
+  'mapping.queue.emptyActionable':
+    'Không còn dòng nào cần xem lại. Đổi bộ lọc để xem trạng thái khác.',
+  'mapping.queue.emptyFiltered': 'Không có dòng nào khớp bộ lọc hiện tại.',
+  'mapping.filter.status': 'Trạng thái ánh xạ',
+  'mapping.filter.actionable': 'Cần xử lý (cần xem lại + đã cũ)',
+  'mapping.filter.all': 'Tất cả trạng thái',
+  'mapping.filter.blocked': 'Duyệt đăng',
+  'mapping.filter.anyApproval': 'Không lọc',
+  'mapping.filter.blockedOnly': 'Chỉ dòng đang chặn duyệt đăng',
+
+  'mapping.detail.title': 'Ánh xạ hành chính của địa điểm',
+  'mapping.detail.subtitle':
+    'Địa điểm này nằm ở đâu, dựa trên bằng chứng nào, và ai chịu trách nhiệm.',
+  'mapping.detail.scope':
+    'Màn này xác nhận VỊ TRÍ HÀNH CHÍNH của địa điểm. Nó không đăng địa điểm — quyết định đó thuộc về biên tập viên — và không phải là phân xử nguồn ánh xạ ở màn Dữ liệu hành chính.',
+  'mapping.detail.place': 'Địa chỉ đã lưu',
+  'mapping.detail.approval': 'Ảnh hưởng tới duyệt đăng',
+  'mapping.detail.staleness': 'Đối chiếu bộ dữ liệu',
+  'mapping.detail.province': 'Tỉnh / thành',
+  'mapping.detail.commune': 'Phường / xã',
+  'mapping.detail.legacyDistrict': 'Quận / huyện (lịch sử)',
+  'mapping.detail.method': 'Phương pháp',
+  'mapping.detail.confidence': 'Độ tin cậy',
+  'mapping.detail.reviewer': 'Người chịu trách nhiệm',
+  'mapping.detail.noReviewer': 'Chưa có người xác nhận',
+  'mapping.detail.datasetVersion': 'Bộ dữ liệu đã dùng',
+  'mapping.detail.activeVersion': 'Bộ dữ liệu đang hoạt động',
+  'mapping.detail.boundaryVersion': 'Ranh giới đã dùng',
+  'mapping.detail.mappedAt': 'Gán lúc',
+  'mapping.detail.hierarchy': 'Phân cấp',
+  'mapping.detail.evidence': 'Bằng chứng của bộ phân giải',
+  'mapping.detail.noEvidence': 'Không có bằng chứng nào.',
+  'mapping.detail.candidates': 'Ứng viên bộ phân giải từ chối chọn',
+  'mapping.detail.candidatesHint':
+    'Bộ phân giải thấy nhiều khả năng và không tự chọn. Người duyệt quyết định.',
+  'mapping.detail.decide': 'Chọn đơn vị hành chính',
+  'mapping.detail.reasonLabel': 'Lý do',
+  'mapping.detail.reasonHint': 'Bắt buộc với sửa, từ chối và gán lại. Xác nhận thì không bắt buộc.',
+  'mapping.detail.readOnly':
+    'Bạn xem được ánh xạ và lý do đang chặn duyệt đăng. Quyết định về ánh xạ thuộc về người kiểm duyệt.',
+
+  'mapping.hierarchy.ok': 'Hợp lệ',
+  'mapping.hierarchy.invalid': 'Không hợp lệ',
+  'mapping.evidence.deterministic': 'Xác định được',
+  'mapping.evidence.suggestion': 'Chỉ là gợi ý',
+  'mapping.evidence.onEdge': 'Nằm trên đường ranh',
+
+  'mapping.selector.province': 'Tỉnh / thành',
+  'mapping.selector.provinceHint': 'Lấy từ bộ dữ liệu đang hoạt động của GoGo.',
+  'mapping.selector.commune': 'Phường / xã',
+  'mapping.selector.communeHint': 'Chỉ hiện các đơn vị thuộc tỉnh đã chọn.',
+  'mapping.selector.chooseProvinceFirst': 'Chọn tỉnh trước.',
+  'mapping.selector.choose': '— Chọn —',
+  'mapping.selector.legacyNote':
+    'Quận/huyện lịch sử giữ nguyên giá trị đang có: hợp đồng hiện tại không cung cấp bộ chọn cho cấp này.',
+
+  'mapping.verify.action': 'Xác nhận',
+  'mapping.verify.confirmTitle': 'Xác nhận ánh xạ hành chính',
+  'mapping.verify.confirmBody': 'Bạn nhận trách nhiệm rằng địa điểm này nằm ở đơn vị đã chọn.',
+  'mapping.verify.consequenceLabel': 'Hệ quả',
+  'mapping.verify.consequence':
+    'Xác nhận KHÔNG đăng địa điểm. Nó gỡ rào cản hành chính để biên tập viên tự quyết định việc đăng.',
+  'mapping.verify.done': 'Đã xác nhận ánh xạ',
+  'mapping.verify.doneDetail':
+    'Không đăng địa điểm. Biên tập viên vẫn là người quyết định việc đăng.',
+
+  'mapping.correct.action': 'Sửa ánh xạ',
+  'mapping.correct.confirmTitle': 'Sửa ánh xạ hành chính',
+  'mapping.correct.confirmBody': 'Thay ánh xạ hiện tại bằng đơn vị bạn chọn.',
+  'mapping.correct.confirmVerified':
+    'Ánh xạ này đã được người khác xác nhận. Sửa sẽ thay quyết định của họ, và nhật ký ghi tên cả hai.',
+  'mapping.correct.done': 'Đã sửa ánh xạ',
+
+  'mapping.reject.action': 'Từ chối ánh xạ',
+  'mapping.reject.confirmTitle': 'Từ chối ánh xạ hành chính',
+  'mapping.reject.confirmBody': 'Ánh xạ này không đúng và không được dùng.',
+  'mapping.reject.consequenceLabel': 'Hệ quả',
+  'mapping.reject.consequence':
+    'Từ chối ÁNH XẠ, không phải từ chối địa điểm. Địa điểm không bị xoá, không bị gỡ. Nó sẽ bị chặn duyệt đăng cho tới khi được gán lại và xác nhận. Bằng chứng và nhật ký vẫn giữ.',
+  'mapping.reject.done': 'Đã từ chối ánh xạ',
+  'mapping.reject.doneDetail':
+    'Địa điểm không bị từ chối và không bị xoá — chỉ ánh xạ hành chính bị từ chối.',
+
+  'mapping.rematch.action': 'Gán lại',
+  'mapping.rematch.confirmTitle': 'Cho bộ phân giải chạy lại',
+  'mapping.rematch.confirmBody': 'Chạy lại bộ phân giải trên chính dữ liệu đã lưu của địa điểm.',
+  'mapping.rematch.consequenceLabel': 'Hệ quả',
+  'mapping.rematch.consequence':
+    'Gán lại KHÔNG phải là xác nhận. Quy kết của người xác nhận trước bị xoá, và người yêu cầu được ghi là người yêu cầu. Kết quả có thể là Máy khớp, Cần xem lại, hoặc Chưa gán.',
+  'mapping.rematch.done': 'Bộ phân giải đã chạy: {status}',
+  'mapping.rematch.doneDetail': 'Không ai xác nhận kết quả này, và địa điểm không được đăng.',
+
+  'mapping.reconcile.action': 'Đối chiếu lại',
+  'mapping.reconcile.confirmTitle': 'Đối chiếu ánh xạ với bộ dữ liệu đang hoạt động',
+  'mapping.reconcile.confirmBody': 'Kiểm tra ánh xạ đã lưu còn đúng với bộ dữ liệu hiện tại không.',
+  'mapping.reconcile.consequenceLabel': 'Hệ quả',
+  'mapping.reconcile.consequence':
+    'Chỉ đánh giá, không gán lại và không sửa. Khác phiên bản mà vẫn đúng thì không ghi gì. Quy kết của người xác nhận trước được giữ — người đối chiếu không được ghi là người xác nhận.',
+  'mapping.reconcile.changed': 'Đã cập nhật: ánh xạ không còn hợp lệ',
+  'mapping.reconcile.unchanged': 'Không ghi gì: ánh xạ vẫn hợp lệ',
+
+  'mapping.conflict.modified':
+    'Địa điểm đã thay đổi kể từ lúc màn hình được vẽ. Dữ liệu đã tải lại — đọc lại rồi quyết định lần nữa.',
+
+  'error.PROVINCE_NOT_CURRENT':
+    'Tỉnh đã chọn không phải đơn vị hiện hành trong bộ dữ liệu đang hoạt động.',
+  'error.COMMUNE_NOT_CURRENT':
+    'Phường/xã đã chọn không phải đơn vị hiện hành trong bộ dữ liệu đang hoạt động.',
+  'error.HIERARCHY_INVALID': 'Phường/xã không thuộc tỉnh đã chọn.',
+  'error.LEGACY_DISTRICT_UNKNOWN': 'Không nhận ra mã quận/huyện lịch sử này.',
+  'error.VERIFIED_NOT_REMATCHABLE':
+    'Ánh xạ đã được xác nhận thì không gán lại được. Dùng Sửa ánh xạ nếu nó sai.',
   'administrative.capability.datasetMissing':
     'Chưa có bộ dữ liệu hành chính nào được publish. Không địa điểm nào được duyệt đăng cho tới khi có.',
   'administrative.capability.boundariesMissing':
