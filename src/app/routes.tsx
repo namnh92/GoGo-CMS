@@ -14,6 +14,7 @@ const CostTestRunScreen = lazy(() => import('@/features/ops/costTestRun.view'))
 const ManualCostsScreen = lazy(() => import('@/features/ops/manualCosts.view'))
 const PlaceListScreen = lazy(() => import('@/features/places/placeList.view'))
 const PlaceEditorScreen = lazy(() => import('@/features/places/placeEditor.view'))
+const PlaceCreateScreen = lazy(() => import('@/features/places/placeCreate.view'))
 const ImportListScreen = lazy(() => import('@/features/imports/importList.view'))
 const ImportWizardScreen = lazy(() => import('@/features/imports/importWizard.view'))
 const ImportJobScreen = lazy(() => import('@/features/imports/jobDetail.view'))
@@ -93,6 +94,10 @@ export const router = createBrowserRouter([
           { path: 'costs/manual', element: <ManualCostsScreen /> },
           { path: 'costs/test-runs/:id', element: <CostTestRunScreen /> },
           { path: 'places', element: <PlaceListScreen /> },
+          // Before `places/:id`: react-router matches in order, and `:id`
+          // would swallow `new` — which is exactly how the old button ended up
+          // opening the editor with the id "new" (GoGo-CMS#128).
+          { path: 'places/new', element: <PlaceCreateScreen /> },
           { path: 'places/:id', element: <PlaceEditorScreen /> },
           { path: 'imports', element: <ImportListScreen /> },
           { path: 'imports/new', element: <ImportWizardScreen /> },

@@ -869,7 +869,11 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Register a push device token (BE-BFF-010) */
+        /**
+         * Register a push device token (BE-BFF-010) — deprecated
+         * @deprecated
+         * @description NTF-BE-002 (#193): push is addressed by user id through the provider's external_id alias; GoGo keeps no APNs/FCM token registry and nothing on the delivery path reads this table any more. The route still accepts a token so an older client does not break, but registering one has no effect on delivery. Clients bind identity through the provider SDK login (NTF-APP-004) instead. Removal is a separate, announced change.
+         */
         put: operations["registerDeviceToken"];
         post?: never;
         delete?: never;
@@ -1252,6 +1256,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/notifications/identity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Short-lived OneSignal identity JWT for the signed-in user (NTF-BE-008)
+         * @description ES256 JWT with `iss` = the OneSignal app id and `identity.external_id` = the authenticated user's id, lifetime ≤ 1 hour. The user id always comes from the session — nothing in the request can choose it. Guests have no push identity (403 `USER_ONLY`). When this environment holds no identity signing key the endpoint answers 503 `PUSH_IDENTITY_UNAVAILABLE`, `retryable: false`. The client passes the token to the provider SDK login and requests a new one before `expiresAt` or when the SDK reports it invalid; the token is never logged on either side.
+         */
+        get: operations["getPushIdentityToken"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/share-links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mint a canonical share link for a room invite, plan or place (LNK-BE-002)
+         * @description Returns `https://<share-host>/l/{slug}` — a random 128-bit slug and nothing else in the URL (FR-LINK-001). The sharer's right to point at the entity is checked here: room host for `ROOM_INVITE` (the slug then doubles as the invite code, joined with `POST /rooms/join`), room member for `PLAN`, any signed-in user for a published `PLACE`. `COLLECTION` and `REFERRAL` are reserved and answer 400 `SHARE_LINK_TYPE_UNSUPPORTED`. Guests cannot mint. 503 `SHARE_LINKS_UNAVAILABLE` (not retryable) when the environment has no share host configured.
+         */
+        post: operations["createShareLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/share-links/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Edge resolve — what a slug points at (LNK-BE-002)
+         * @description Called by the share-link Worker on every click and by the app for a deferred link. Public: the slug is the credential. Answers the target's type and id only — the client authorises through the entity's own endpoint afterwards (FR-LINK-002). 404 for a slug nobody minted, 410 the moment a link is revoked, expired, or its invite is spent. Edge caching follows FR-LINK-005 (room invite ≤ 30 s, others ≤ 300 s).
+         */
+        get: operations["resolveShareLink"];
+        put?: never;
+        post?: never;
+        /**
+         * Revoke a share link immediately (LNK-BE-002)
+         * @description Creator, or the host of the room a ROOM_INVITE / PLAN link points into. A ROOM_INVITE revoke also revokes the invite in the same transaction. Idempotent.
+         */
+        delete: operations["revokeShareLink"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/notification-preferences": {
         parameters: {
             query?: never;
@@ -1466,7 +1534,10 @@ export interface paths {
          */
         get: operations["cmsListAdmins"];
         put?: never;
-        /** Super admin: create a staff account */
+        /**
+         * Super admin: create a staff account
+         * @description Every CMS account except the `super_admin` is created here. That one is bootstrapped once from SSM — an environment holds at most one before bootstrap and exactly one after — so `role: super_admin` is refused with 409 `SUPER_ADMIN_SINGLETON` (ADR-0018). The enum still lists it: narrowing the request enum is a breaking change and waits until no client sends the value.
+         */
         post: operations["cmsCreateAdmin"];
         delete?: never;
         options?: never;
@@ -1874,7 +1945,19 @@ export interface paths {
          */
         get: operations["cmsListPlaces"];
         put?: never;
-        post?: never;
+        /**
+         * Editor: create a place by hand (GoGo-BE#452)
+         * @description The third way a place enters the catalogue, and the only one where the facts are a person's own. Bulk import resolves rows against a provider; a community submission arrives from the app for review; this is an editor typing what they know from a menu, a phone call or a visit.
+         *
+         *     Always created `draft`. Entering the catalogue and being visible are two decisions, and `cmsTransitionPlace` already owns the second.
+         *
+         *     Every field written here is recorded `editorial` provenance, including a value the editor read off a provider preview and retyped — copying does not transfer ownership (GOGO_PRODUCT_DATA_ARCHITECTURE.md). No provider content is created, fetched or stored.
+         *
+         *     **Duplicate check.** Before inserting, the same rule the duplicate queue uses — within 150 m and name similarity above 0.5 — runs against the catalogue. A hit answers `409 PLACE_DUPLICATE_SUSPECTED` with the candidates in `field_errors` (name and distance in metres), so the console can offer the merge screen it already has. `allowDuplicate: true` is how an editor says they looked and these are different places; two cafés of one chain on the same street are real.
+         *
+         *     Field limits follow `cmsUpdatePlace` exactly and are stated there.
+         */
+        post: operations["cmsCreatePlace"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2599,6 +2682,8 @@ export interface paths {
         /**
          * Ops: edit a campaign that has not been sent
          * @description Editable only in `draft`, `cancelled` or `failed`. Editing a scheduled campaign would silently change what is about to go out — unschedule it first, which is a deliberate, audited act.
+         *
+         *     Once the campaign has delivered to anyone, the fields that reach a phone — `title`, `body`, `imageKey`, `ctaLabel`, audience and destination — are frozen and answer 409 `CAMPAIGN_ALREADY_DELIVERED`, whatever the status: changing them would leave half the audience on one message and half on another, or send a second, different message to people already reached. The editorial `name` stays editable, a patch that repeats the current values is not a change, and the unchanged campaign can still be retried. New copy is a new campaign.
          */
         patch: operations["cmsUpdateCampaign"];
         trace?: never;
@@ -2805,7 +2890,11 @@ export interface paths {
         put?: never;
         /**
          * Staff: replace your own password
-         * @description The only route reachable while a password change is owed, which is what keeps the obligation from being a deadlock. The current password is required even then: it proves the caller is the person the temporary password was handed to, and without it a leaked session id would be enough. Every other session of this account is revoked.
+         * @description The only route reachable while a password change is owed, which is what keeps the obligation from being a deadlock. The current password is required even then: it proves the caller is the person the temporary password was handed to, and without it a leaked session id would be enough.
+         *
+         *     **Sessions: the calling session survives, every other session of this account is revoked.** Both halves matter. The caller authenticated a moment ago and is still working, so ending their session would make a routine rotation read as a failure; and a password change is also how someone answers a suspected compromise, which is worth nothing if the other sessions live on. `POST /cms/auth/admins/{id}/reset-password` keeps none — there the actor is someone else and control of the account is already in doubt.
+         *
+         *     This is also how the `super_admin` rotates the password it was bootstrapped with (ADR-0018). Editing the SSM parameter that password came from changes nothing about how the account signs in: the database holds the Argon2id hash, and rotation has to be authenticated, audited and session-revoking, which editing a parameter is not.
          */
         post: operations["cmsChangeOwnPassword"];
         delete?: never;
@@ -4713,6 +4802,67 @@ export interface components {
             targetId?: string;
             /** Format: date-time */
             savedAt?: string;
+        };
+        PushIdentityToken: {
+            /**
+             * Format: uuid
+             * @description The user id the SDK logs in with (`external_id`).
+             */
+            externalId: string;
+            /** @description ES256 JWT for the provider SDK. Opaque to the client; never persist or log it. */
+            token: string;
+            /**
+             * Format: date-time
+             * @description Refresh before this instant.
+             */
+            expiresAt: string;
+        };
+        /**
+         * @description COLLECTION and REFERRAL are reserved contract; not issued yet.
+         * @enum {string}
+         */
+        ShareLinkType: "ROOM_INVITE" | "PLAN" | "PLACE" | "COLLECTION" | "REFERRAL";
+        ShareLinkCreated: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: uri
+             * @description The canonical link — the only URL a client shares.
+             */
+            url: string;
+            type: components["schemas"]["ShareLinkType"];
+            /**
+             * Format: date-time
+             * @description ROOM_INVITE follows the invite's expiry; other types do not expire.
+             */
+            expiresAt: string | null;
+        };
+        ShareLinkResolution: {
+            type: components["schemas"]["ShareLinkType"];
+            /** @description Exactly one key, by type — ROOM_INVITE `inviteCode` (join with it), PLAN `planId`, PLACE `placeId`, COLLECTION `collectionId`, REFERRAL `code`. Never a user id. */
+            target: {
+                inviteCode?: string;
+                /** Format: uuid */
+                planId?: string;
+                /** Format: uuid */
+                placeId?: string;
+                collectionId?: string;
+                code?: string;
+            };
+            /** Format: date-time */
+            expiresAt: string | null;
+            /**
+             * @description Attribution vendor this link was minted with; NONE when none was configured or it failed.
+             * @enum {string}
+             */
+            provider: "NONE" | "TENJIN";
+            /**
+             * Format: uri
+             * @description The vendor click URL with the canonical link as deferred target, or null. Routing only — never the shared URL. Composed per resolve from the slug presented; it is not stored, because it embeds the slug (for a room invite, the join credential).
+             */
+            trackingUrl: string | null;
+            source: string | null;
+            campaign: string | null;
         };
         /** @description Facts only — compose the display string client-side from `kind` + `payload`. */
         Notification: {
@@ -8570,6 +8720,149 @@ export interface operations {
             };
         };
     };
+    getPushIdentityToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Identity token for the current user */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PushIdentityToken"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
+            /** @description No identity signing key in this environment (`PUSH_IDENTITY_UNAVAILABLE`) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    createShareLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    type: components["schemas"]["ShareLinkType"];
+                    /**
+                     * Format: uuid
+                     * @description rooms.id for ROOM_INVITE, plans.id for PLAN, places.id for PLACE.
+                     */
+                    entityId: string;
+                    source?: string;
+                    medium?: string;
+                    campaign?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Link minted; the URL is the only thing the client shares */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareLinkCreated"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["RateLimited"];
+            /** @description No share host configured in this environment (`SHARE_LINKS_UNAVAILABLE`) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    resolveShareLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Resolution facts */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareLinkResolution"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            /** @description Link revoked, expired, or its invite no longer usable (`SHARE_LINK_GONE`) */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    revokeShareLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description { revoked: true } */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        revoked: true;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
     getNotificationPreferences: {
         parameters: {
             query?: never;
@@ -8996,7 +9289,17 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["BadRequest"];
             403: components["responses"]["Forbidden"];
+            /** @description `SUPER_ADMIN_SINGLETON` — an environment has exactly one `super_admin` and a second cannot be created. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
         };
     };
     cmsListUsers: {
@@ -9734,6 +10037,65 @@ export interface operations {
                 };
             };
             403: components["responses"]["Forbidden"];
+        };
+    };
+    cmsCreatePlace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Enforced: trimmed, 1..200 characters. */
+                    name: string;
+                    /** @description Enforced: -90..90. Required — a place with no position cannot be searched, routed to, or checked for duplicates. */
+                    lat: number;
+                    /** @description Enforced: -180..180. */
+                    lng: number;
+                    description?: string | null;
+                    addressText?: string | null;
+                    areaKey?: string | null;
+                    city?: string | null;
+                    district?: string | null;
+                    /** @description Normalized to E.164 on write, same as `cmsUpdatePlace`. */
+                    phone?: string | null;
+                    website?: string | null;
+                    /** @description Enforced: 10..720, or `null` when unknown. */
+                    avgVisitMinutes?: number | null;
+                    suitability?: {
+                        [key: string]: number;
+                    };
+                    isLodging?: boolean;
+                    curatedRank?: number | null;
+                    taxonomyIds?: string[];
+                    /** @description Skip the duplicate check. Send it only after showing the editor the candidates from a previous 409. */
+                    allowDuplicate?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Created as draft; the body is the record the editor screen loads. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsPlaceDetail"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description `PLACE_DUPLICATE_SUSPECTED` — near-identical places already in the catalogue, listed in `field_errors`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
         };
     };
     cmsStaleQueue: {
@@ -11299,12 +11661,14 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             404: components["responses"]["NotFound"];
-            /** @description Not in an editable state (`CAMPAIGN_NOT_EDITABLE`) */
+            /** @description Not in an editable state (`CAMPAIGN_NOT_EDITABLE`), or already delivered to at least one recipient and the patch changes a field that reaches a phone (`CAMPAIGN_ALREADY_DELIVERED`). */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
             };
         };
     };
@@ -11535,7 +11899,13 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
-            /** @description `LAST_SUPER_ADMIN` — demoting the only active super_admin would leave a console nobody can administer. */
+            /**
+             * @description `LAST_SUPER_ADMIN` — the `super_admin` role cannot be given up. Demoting it leaves a console nobody can administer, and there is by construction no second holder to fall back to.
+             *
+             *     `SUPER_ADMIN_SINGLETON` — nor can `role` be set to `super_admin`: an environment holds at most one before it is bootstrapped and exactly one after, and that account is bootstrapped rather than promoted. The enum still offers the value; the refusal is here.
+             *
+             *     Neither freezes the account's credentials. It rotates its password through `POST /cms/auth/change-password` like every other account.
+             */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -11580,7 +11950,7 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
-            /** @description `LAST_SUPER_ADMIN` — the only active super_admin cannot be suspended. */
+            /** @description `LAST_SUPER_ADMIN` — the `super_admin` cannot be suspended. Suspending it is demotion by another name, and an environment has exactly one. */
             409: {
                 headers: {
                     [name: string]: unknown;

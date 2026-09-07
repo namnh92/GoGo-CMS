@@ -172,6 +172,30 @@ export function updatePlace(id: string, input: UpdatePlaceInput) {
   return apiFetch(`/cms/places/${id}`, { method: 'PATCH', body: input })
 }
 
+/**
+ * GoGo-CMS#150 / GoGo-BE#452 — the third way a place enters the catalogue, and
+ * the only one where the facts are the editor's own.
+ *
+ * Always answers a `draft`: publishing is `transitionPlace`, a separate
+ * decision. A near-duplicate answers 409 `PLACE_DUPLICATE_SUSPECTED` with the
+ * candidates in `field_errors`; resend with `allowDuplicate` once the editor
+ * has looked at them.
+ */
+export type CreatePlaceInput = UpdatePlaceInput & {
+  name: string
+  lat: number
+  lng: number
+  allowDuplicate?: boolean
+}
+
+export function createPlace(input: CreatePlaceInput) {
+  return apiFetch<CmsPlaceDetail>('/cms/places', {
+    method: 'POST',
+    body: input,
+    idempotencyKey: newIdempotencyKey(),
+  })
+}
+
 export function transitionPlace(id: string, status: PlaceStatus) {
   return apiFetch(`/cms/places/${id}/status`, {
     method: 'PATCH',
