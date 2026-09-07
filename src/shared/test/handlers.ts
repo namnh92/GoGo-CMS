@@ -656,6 +656,115 @@ export const handlers = [
     if (!found) return envelope(404, 'DATASET_NOT_FOUND', 'no such dataset')
     return HttpResponse.json(administrativeTransition(found), { status: 201 })
   }),
+  // CMS #155 — the source-drift queue. Stateful on purpose: a decision has to
+  // move the revision, supersede the previous one and change the counts, and a
+  // fixture that answered the same thing every time would let the screen ship
+  // claiming an append-only history it never exercised.
+  http.get(`${BASE}/cms/administrative-datasets/:id/quarantine`, ({ request }) => {
+    const url = new URL(request.url)
+    const wanted = url.searchParams.get('decisionState')?.split(',').filter(Boolean) ?? []
+    const classes = url.searchParams.get('classification')?.split(',').filter(Boolean) ?? []
+    const limit = Number(url.searchParams.get('limit') ?? 25)
+    const cursor = url.searchParams.get('cursor')
+
+    let rows = quarantineRows.map(quarantineListItem)
+    if (classes.length) rows = rows.filter((r) => classes.includes(r.classification))
+    if (wanted.length) rows = rows.filter((r) => wanted.includes(r.decisionState))
+    const start = cursor ? rows.findIndex((r) => r.id === cursor) + 1 : 0
+    const page = rows.slice(start, start + limit)
+    return HttpResponse.json({
+      items: page,
+      nextCursor: start + limit < rows.length ? (page.at(-1)?.id ?? null) : null,
+      counts: quarantineCounts(),
+    })
+  }),
+  http.get(`${BASE}/cms/administrative-datasets/:id/quarantine/:rowId`, ({ params }) => {
+    const row = quarantineRows.find((r) => r.id === params.rowId)
+    if (!row) return envelope(404, 'QUARANTINE_ROW_NOT_FOUND', 'no such row')
+    return HttpResponse.json(quarantineDetail(row))
+  }),
+  http.get(`${BASE}/cms/administrative-datasets/:id/override-set`, () =>
+    HttpResponse.json({
+      draft: overrideSet.status === 'DRAFT' ? { ...overrideSet } : null,
+      counts: quarantineCounts(),
+      materialized: materialisedSets,
+    }),
+  ),
+  http.post(
+    `${BASE}/cms/administrative-datasets/:id/quarantine/:rowId/accept`,
+    async ({ params, request }) => {
+      const body = (await request.json()) as {
+        targetCode: string
+        targetEffectiveFrom: string
+        reason: string
+        expectedRevision: number
+      }
+      return decide(String(params.rowId), 'ACCEPT', body)
+    },
+  ),
+  http.post(
+    `${BASE}/cms/administrative-datasets/:id/quarantine/:rowId/reject`,
+    async ({ params, request }) => {
+      const body = (await request.json()) as { reason: string; expectedRevision: number }
+      return decide(String(params.rowId), 'REJECT', body)
+    },
+  ),
+  http.post(
+    `${BASE}/cms/administrative-datasets/:id/override-set/materialize`,
+    async ({ request }) => {
+      const body = (await request.json()) as { reason: string; expectedRevision: number }
+      if (overrideSet.status !== 'DRAFT') {
+        return envelope(409, 'OVERRIDE_SET_NOT_FOUND', 'no draft override set')
+      }
+      if (body.expectedRevision !== overrideSet.revision) {
+        return envelope(409, 'OVERRIDE_SET_REVISION_CONFLICT', 'the override set moved')
+      }
+      const accepted = [...decisions.values()].filter((d) => d.decision === 'ACCEPT').length
+      const rejected = [...decisions.values()].filter((d) => d.decision === 'REJECT').length
+      if (accepted + rejected === 0) {
+        return envelope(409, 'OVERRIDE_SET_EMPTY', 'no effective decision to materialise')
+      }
+      overrideSet.status = 'MATERIALIZED'
+      materialisedSets.push({
+        id: overrideSet.id,
+        revision: overrideSet.revision,
+        datasetVersionId: DERIVED_DATASET_ID,
+        materializedAt: '2026-09-07T12:00:00.000Z',
+      })
+      return HttpResponse.json(
+        {
+          overrideSetId: overrideSet.id,
+          overrideSetRevision: overrideSet.revision,
+          datasetVersionId: DERIVED_DATASET_ID,
+          combinedDatasetVersion: 'v5.0.0+v2.4.1+7fac8c45+none+r1',
+          combinedChecksum: 'f1e2d3c4b5a6978869504132fedcba9876543210fedcba9876543210fedcba98',
+          overrideRevision: 1,
+          status: 'STAGED',
+          decisions: { effective: accepted + rejected, accepted, rejected, edges: accepted },
+        },
+        { status: 201 },
+      )
+    },
+  ),
+  http.post(`${BASE}/cms/administrative-datasets/:id/override-set/abandon`, async ({ request }) => {
+    const body = (await request.json()) as { reason: string; expectedRevision: number }
+    if (overrideSet.status !== 'DRAFT') {
+      return envelope(409, 'OVERRIDE_SET_NOT_FOUND', 'no draft override set')
+    }
+    if (body.expectedRevision !== overrideSet.revision) {
+      return envelope(409, 'OVERRIDE_SET_REVISION_CONFLICT', 'the override set moved')
+    }
+    overrideSet.status = 'ABANDONED'
+    return HttpResponse.json(
+      {
+        overrideSetId: overrideSet.id,
+        status: 'ABANDONED',
+        abandonedAt: '2026-09-07T12:00:00.000Z',
+      },
+      { status: 201 },
+    )
+  }),
+
   http.get(`${BASE}/cms/administrative-mappings`, () =>
     HttpResponse.json({
       items: [],
@@ -3575,3 +3684,249 @@ export const administrativeAuditEntries: AuditEntry[] = [
     authorizationPath: 'exact_role' as const,
   },
 ]
+
+/** CMS #155 — the source-drift fixtures, and the draft they accumulate into. */
+export const DERIVED_DATASET_ID = '55555555-5555-4555-8555-555555555555'
+
+type QuarantineFixture = {
+  id: string
+  classification: string
+  validationReason: string
+  oldCode: string
+  oldName: string
+  newCode: string
+  newName: string
+  candidates: { code: string; name: string; selectable: boolean; hierarchyValid: boolean }[]
+  affectedPlaceCount: number
+}
+
+export const quarantineRows: QuarantineFixture[] = [
+  {
+    id: 'q1111111-1111-4111-8111-111111111111',
+    classification: 'DIVIDED_REQUIRES_REVIEW',
+    validationReason: 'the source names several successors and offers a default',
+    oldCode: '00160',
+    oldName: 'Phường Cống Vị',
+    newCode: '00163',
+    newName: 'Phường Ba Đình',
+    candidates: [
+      { code: '00163', name: 'Phường Ba Đình', selectable: true, hierarchyValid: true },
+      { code: '00166', name: 'Phường Ngọc Hà', selectable: true, hierarchyValid: true },
+      // A district-level unit: shown so a reviewer can see why it is refused.
+      { code: '00170', name: 'Quận Ba Đình (cũ)', selectable: false, hierarchyValid: false },
+    ],
+    affectedPlaceCount: 12,
+  },
+  {
+    id: 'q2222222-2222-4222-8222-222222222222',
+    classification: 'DIVIDED_REQUIRES_REVIEW',
+    validationReason: 'the source names several successors and offers a default',
+    oldCode: '00161',
+    oldName: 'Phường Điện Biên',
+    newCode: '00163',
+    newName: 'Phường Ba Đình',
+    candidates: [
+      { code: '00163', name: 'Phường Ba Đình', selectable: true, hierarchyValid: true },
+      { code: '00169', name: 'Phường Kim Mã', selectable: true, hierarchyValid: true },
+    ],
+    affectedPlaceCount: 3,
+  },
+]
+
+export const overrideSet = {
+  id: 'os111111-1111-4111-8111-111111111111',
+  revision: 0,
+  status: 'DRAFT' as 'DRAFT' | 'MATERIALIZED' | 'ABANDONED',
+  createdAt: '2026-09-07T09:00:00.000Z',
+  updatedAt: '2026-09-07T09:00:00.000Z',
+}
+
+type DecisionFixture = {
+  id: string
+  sequence: number
+  decision: 'ACCEPT' | 'REJECT'
+  targetCode: string | null
+  targetEffectiveFrom: string | null
+  reason: string
+  supersedesDecisionId: string | null
+  supersededById: string | null
+  decidedAt: string
+}
+
+/** Every decision ever appended, newest last, keyed by the row it is about. */
+export const decisionHistory = new Map<string, DecisionFixture[]>()
+/** The effective decision per row — one, by construction. */
+export const decisions = new Map<string, DecisionFixture>()
+
+export const materialisedSets: {
+  id: string
+  revision: number
+  datasetVersionId: string | null
+  materializedAt: string | null
+}[] = []
+
+/** Restores the fixtures between tests; the draft is mutable by design. */
+export function resetSourceDrift(): void {
+  overrideSet.revision = 0
+  overrideSet.status = 'DRAFT'
+  decisions.clear()
+  decisionHistory.clear()
+  materialisedSets.length = 0
+}
+
+function decide(
+  rowId: string,
+  decision: 'ACCEPT' | 'REJECT',
+  body: {
+    targetCode?: string
+    targetEffectiveFrom?: string
+    reason: string
+    expectedRevision: number
+  },
+) {
+  if (overrideSet.status !== 'DRAFT') {
+    return envelope(409, 'OVERRIDE_SET_NOT_DRAFT', 'the set is no longer a draft')
+  }
+  if (body.expectedRevision !== overrideSet.revision) {
+    return envelope(
+      409,
+      'OVERRIDE_SET_REVISION_CONFLICT',
+      'the override set moved while you were deciding',
+    )
+  }
+  const row = quarantineRows.find((r) => r.id === rowId)
+  if (!row) return envelope(404, 'QUARANTINE_ROW_NOT_FOUND', 'no such row')
+  if (decision === 'ACCEPT') {
+    const candidate = row.candidates.find((c) => c.code === body.targetCode)
+    if (!candidate) return envelope(409, 'OVERRIDE_TARGET_NOT_FOUND', 'no such target')
+    if (!candidate.selectable) {
+      return envelope(409, 'OVERRIDE_TARGET_NOT_CURRENT', 'not an active commune')
+    }
+  }
+
+  const previous = decisions.get(rowId) ?? null
+  overrideSet.revision += 1
+  const appended: DecisionFixture = {
+    id: `d${overrideSet.revision}-${rowId.slice(0, 8)}`,
+    sequence: overrideSet.revision,
+    decision,
+    targetCode: decision === 'ACCEPT' ? (body.targetCode ?? null) : null,
+    targetEffectiveFrom: decision === 'ACCEPT' ? (body.targetEffectiveFrom ?? null) : null,
+    reason: body.reason,
+    supersedesDecisionId: previous?.id ?? null,
+    supersededById: null,
+    decidedAt: '2026-09-07T10:00:00.000Z',
+  }
+  if (previous) previous.supersededById = appended.id
+  decisions.set(rowId, appended)
+  decisionHistory.set(rowId, [...(decisionHistory.get(rowId) ?? []), appended])
+
+  return HttpResponse.json(
+    {
+      decisionId: appended.id,
+      overrideSetId: overrideSet.id,
+      overrideSetRevision: overrideSet.revision,
+      decision,
+      quarantineRowId: rowId,
+      supersededDecisionId: previous?.id ?? null,
+      decidedAt: appended.decidedAt,
+    },
+    { status: 201 },
+  )
+}
+
+function stateOf(rowId: string): 'UNDECIDED' | 'ACCEPTED_DRAFT' | 'REJECTED_DRAFT' | 'SUPERSEDED' {
+  const effective = decisions.get(rowId)
+  if (effective) return effective.decision === 'ACCEPT' ? 'ACCEPTED_DRAFT' : 'REJECTED_DRAFT'
+  return decisionHistory.has(rowId) ? 'SUPERSEDED' : 'UNDECIDED'
+}
+
+function quarantineListItem(row: QuarantineFixture) {
+  return {
+    id: row.id,
+    classification: row.classification,
+    validationReason: row.validationReason,
+    source: { code: row.oldCode, name: row.oldName },
+    proposedTarget: { code: row.newCode, name: row.newName },
+    upstreamFlags: { isDividedWard: true, isMergedWard: false },
+    candidateCount: row.candidates.length,
+    affectedPlaceCount: row.affectedPlaceCount,
+    decisionState: stateOf(row.id),
+    decidedAt: decisions.get(row.id)?.decidedAt ?? null,
+    sourceProvenance: 'namnh92/vietnam-admin@7fac8c45:mapping.json',
+  }
+}
+
+function identity(code: string, name: string, level: string, status: string) {
+  return {
+    code,
+    name,
+    unitType: level === 'COMMUNE' ? 'WARD' : 'LEGACY_DISTRICT',
+    level,
+    effectiveFrom: '2025-07-01',
+    effectiveTo: null,
+    parentCode: '01',
+    status,
+  }
+}
+
+function quarantineDetail(row: QuarantineFixture) {
+  const history = [...(decisionHistory.get(row.id) ?? [])].reverse()
+  return {
+    id: row.id,
+    datasetVersionId: '11111111-1111-4111-8111-111111111111',
+    classification: row.classification,
+    validationReason: row.validationReason,
+    sourceProvenance: 'namnh92/vietnam-admin@7fac8c45:mapping.json',
+    combinedDatasetVersion: 'v5.0.0+v2.4.1+7fac8c45+none+r0',
+    upstreamFlags: { isDividedWard: true },
+    rawPayload: {
+      value: { ward: row.oldName, newWard: row.newName, isDividedWard: true },
+      truncated: false,
+    },
+    source: identity(row.oldCode, row.oldName, 'COMMUNE', 'INACTIVE'),
+    candidates: row.candidates.map((c) => ({
+      ...identity(c.code, c.name, c.selectable ? 'COMMUNE' : 'LEGACY_DISTRICT', 'ACTIVE'),
+      proposedByUpstream: c.code === row.newCode,
+      hierarchyValid: c.hierarchyValid,
+      selectable: c.selectable,
+    })),
+    affectedPlaces: {
+      total: row.affectedPlaceCount,
+      samples: [
+        {
+          placeId: 'p1111111-1111-4111-8111-111111111111',
+          name: 'Quán Cơm Ba Đình',
+          code: row.oldCode,
+          status: 'published',
+        },
+      ],
+      truncated: row.affectedPlaceCount > 1,
+      sampleLimit: 20,
+    },
+    overrideSet: {
+      id: overrideSet.status === 'DRAFT' ? overrideSet.id : null,
+      revision: overrideSet.revision,
+      status: overrideSet.status,
+    },
+    decision: decisions.get(row.id) ?? null,
+    decisionState: stateOf(row.id),
+    history,
+  }
+}
+
+function quarantineCounts() {
+  const accepted = [...decisions.values()].filter((d) => d.decision === 'ACCEPT').length
+  const rejected = [...decisions.values()].filter((d) => d.decision === 'REJECT').length
+  return {
+    // Nine times the backlog, and the reason the two must never be summed.
+    canonical: { MERGED: 9432, RENAMED: 132, REASSIGNED: 5 },
+    backlog: { DIVIDED_REQUIRES_REVIEW: 1033 },
+    decisions: {
+      UNDECIDED: 1033 - accepted - rejected,
+      ACCEPTED_DRAFT: accepted,
+      REJECTED_DRAFT: rejected,
+      SUPERSEDED: 0,
+    },
+  }
+}

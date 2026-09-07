@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useI18n, useT } from '@/shared/i18n/i18n'
 import type { MessageKey } from '@/shared/i18n/vi'
@@ -50,12 +50,15 @@ import {
 } from './datasetGuards'
 import { BlockedReason, Checksum, Fact, Facts } from './datasetParts'
 import { DatasetDiffPanel, DiffHeader } from './datasetDiff.view'
+import { SourceDriftPanel } from './sourceDrift.view'
 import { styles } from './datasetDetail.style'
 
 /** The audit vocabulary GoGo-BE writes for this resource (ADM-005). */
 const AUDIT_RESOURCE = 'administrative_dataset'
 
-type Tab = 'overview' | 'validation' | 'diff' | 'audit'
+type Tab = 'overview' | 'validation' | 'diff' | 'sourceDrift' | 'audit'
+
+const TABS: Tab[] = ['overview', 'validation', 'diff', 'sourceDrift', 'audit']
 
 /**
  * CMS #154 — one dataset version, and the three transitions it can take.
@@ -78,7 +81,26 @@ export default function AdministrativeDatasetDetailScreen() {
   const online = useOnline()
   const describeError = useErrorMessage()
 
-  const [tab, setTab] = useState<Tab>('overview')
+  /*
+   * The tab lives in the URL so a reviewer can hand somebody "the queue on this
+   * dataset" rather than "open the dataset and click the fourth tab". The
+   * source-drift panel keeps its filters and cursor there too.
+   */
+  const [params, setParams] = useSearchParams()
+  const requested = params.get('tab')
+  const tab: Tab = TABS.includes(requested as Tab) ? (requested as Tab) : 'overview'
+  const setTab = (next: Tab) => {
+    const updated = new URLSearchParams(params)
+    updated.set('tab', next)
+    // The queue's own state belongs to the queue; leaving it behind on another
+    // tab would restore a filter the operator cannot see.
+    if (next !== 'sourceDrift') {
+      updated.delete('class')
+      updated.delete('state')
+      updated.delete('cursor')
+    }
+    setParams(updated, { replace: true })
+  }
   const [publishOpen, setPublishOpen] = useState(false)
   const [rollbackOpen, setRollbackOpen] = useState(false)
   /*
@@ -365,6 +387,11 @@ export default function AdministrativeDatasetDetailScreen() {
                           : undefined,
                     },
                     { id: 'diff', label: t('administrative.tab.diff') },
+                    {
+                      id: 'sourceDrift',
+                      label: t('administrative.tab.sourceDrift'),
+                      count: data.status === 'PUBLISHED' ? undefined : undefined,
+                    },
                     { id: 'audit', label: t('administrative.tab.audit') },
                   ]}
                 />
@@ -376,6 +403,7 @@ export default function AdministrativeDatasetDetailScreen() {
                     <DatasetDiffPanel datasetId={datasetId} />
                   </>
                 ) : null}
+                {tab === 'sourceDrift' ? <SourceDriftPanel datasetId={datasetId} /> : null}
                 {tab === 'audit' ? (
                   <>
                     <CardHeader

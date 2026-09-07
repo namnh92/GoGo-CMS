@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { Schemas } from './generated'
 
 /**
  * CMS #153 — boundary schemas for the administrative surface (GoGo-BE ADM-005
@@ -374,3 +375,240 @@ export const administrativeTransitionResultSchema = z.object({
   cacheWarmed: z.boolean(),
 })
 export type AdministrativeTransitionResult = z.infer<typeof administrativeTransitionResultSchema>
+
+// --- CMS #155: source-drift adjudication (GoGo-BE ADM-011, alpha.10) ---------
+
+/**
+ * These mirror the vendored contract, and are held to it at compile time.
+ *
+ * Zod stays because it is the boundary rule this repo runs on (ADR-0002): the
+ * CMS half of the spec documents most GET responses with prose, so the
+ * generated types widen and a shape drift would otherwise surface as
+ * `undefined` deep inside a cell. What zod cannot do on its own is stay
+ * *honest* — a hand-written schema is a second contract, and second contracts
+ * drift in silence.
+ *
+ * So every schema below is bound to the generated DTO in both directions by the
+ * assertions at the end of this file. A field renamed, dropped or invented here
+ * stops compiling rather than shipping.
+ */
+
+export const administrativeDecisionStateSchema = z.enum([
+  'UNDECIDED',
+  'ACCEPTED_DRAFT',
+  'REJECTED_DRAFT',
+  'SUPERSEDED',
+])
+export type AdministrativeDecisionState = z.infer<typeof administrativeDecisionStateSchema>
+
+/**
+ * A code and the effective date that makes it mean something. 2,212 of the
+ * 3,321 current commune codes named a different unit before 2025-07-01, so a
+ * code on its own is ambiguous rather than merely terse.
+ */
+export const administrativeUnitIdentitySchema = z.object({
+  code: z.string().nullable(),
+  name: z.string().nullable(),
+  unitType: z.string().nullable(),
+  level: z.string().nullable(),
+  effectiveFrom: z.string().nullable(),
+  effectiveTo: z.string().nullable(),
+  parentCode: z.string().nullable(),
+  status: z.string().nullable(),
+})
+export type AdministrativeUnitIdentity = z.infer<typeof administrativeUnitIdentitySchema>
+
+/**
+ * Three groups, never one. `canonical` counts every edge the dataset asserts,
+ * `backlog` counts the quarantine rows themselves, and `decisions` counts them
+ * by the state of their effective decision. Summing the import report's
+ * classification map instead would report a backlog nine times too large.
+ */
+export const administrativeQuarantineCountsSchema = z.object({
+  canonical: z.record(z.string(), z.number()),
+  backlog: z.record(z.string(), z.number()),
+  decisions: z.record(z.string(), z.number()),
+})
+export type AdministrativeQuarantineCounts = z.infer<typeof administrativeQuarantineCountsSchema>
+
+export const administrativeQuarantineItemSchema = z.object({
+  id: z.string(),
+  classification: z.string(),
+  validationReason: z.string(),
+  source: z.object({ code: z.string().nullish(), name: z.string().nullish() }),
+  /** What the upstream guessed. Shown, never pre-selected. */
+  proposedTarget: z.object({ code: z.string().nullish(), name: z.string().nullish() }),
+  upstreamFlags: z.record(z.string(), z.unknown()),
+  candidateCount: z.number(),
+  affectedPlaceCount: z.number(),
+  decisionState: administrativeDecisionStateSchema,
+  decidedAt: z.string().nullable(),
+  sourceProvenance: z.string(),
+})
+export type AdministrativeQuarantineItem = z.infer<typeof administrativeQuarantineItemSchema>
+
+export const administrativeQuarantinePageSchema = z.object({
+  items: z.array(administrativeQuarantineItemSchema),
+  nextCursor: z.string().nullable(),
+  counts: administrativeQuarantineCountsSchema,
+})
+export type AdministrativeQuarantinePage = z.infer<typeof administrativeQuarantinePageSchema>
+
+/** One opinion. Append-only: nothing here is ever rewritten. */
+export const administrativeOverrideDecisionRecordSchema = z.object({
+  id: z.string(),
+  sequence: z.number(),
+  decision: z.enum(['ACCEPT', 'REJECT']),
+  targetCode: z.string().nullable(),
+  targetEffectiveFrom: z.string().nullable(),
+  reason: z.string(),
+  supersedesDecisionId: z.string().nullish(),
+  supersededById: z.string().nullish(),
+  decidedAt: z.string(),
+})
+export type AdministrativeOverrideDecisionRecord = z.infer<
+  typeof administrativeOverrideDecisionRecordSchema
+>
+
+export const administrativeQuarantineDetailSchema = z.object({
+  id: z.string(),
+  datasetVersionId: z.string(),
+  classification: z.string(),
+  validationReason: z.string(),
+  sourceProvenance: z.string(),
+  combinedDatasetVersion: z.string(),
+  upstreamFlags: z.record(z.string(), z.unknown()).optional(),
+  /** Verbatim up to a cap; `truncated` says when the cap applied. */
+  rawPayload: z.object({ value: z.unknown(), truncated: z.boolean() }),
+  source: administrativeUnitIdentitySchema,
+  candidates: z.array(
+    administrativeUnitIdentitySchema.extend({
+      proposedByUpstream: z.boolean().optional(),
+      hierarchyValid: z.boolean().optional(),
+      selectable: z.boolean().optional(),
+    }),
+  ),
+  affectedPlaces: administrativeAffectedPlacesSchema,
+  overrideSet: z.object({
+    id: z.string().nullable(),
+    revision: z.number(),
+    status: z.string(),
+  }),
+  decision: administrativeOverrideDecisionRecordSchema.nullable(),
+  decisionState: administrativeDecisionStateSchema,
+  history: z.array(administrativeOverrideDecisionRecordSchema),
+})
+export type AdministrativeQuarantineDetail = z.infer<typeof administrativeQuarantineDetailSchema>
+
+export const administrativeOverrideSetSchema = z.object({
+  /** Null until the first decision opens one. At most one per base dataset. */
+  draft: z
+    .object({
+      id: z.string(),
+      /** Send this back as `expectedRevision` on the next decision. */
+      revision: z.number(),
+      status: z.literal('DRAFT'),
+      createdAt: z.string(),
+      updatedAt: z.string(),
+    })
+    .nullable(),
+  counts: administrativeQuarantineCountsSchema,
+  materialized: z.array(
+    z.object({
+      id: z.string(),
+      revision: z.number(),
+      datasetVersionId: z.string().nullable(),
+      materializedAt: z.string().nullable(),
+    }),
+  ),
+})
+export type AdministrativeOverrideSet = z.infer<typeof administrativeOverrideSetSchema>
+
+export const administrativeOverrideDecisionResultSchema = z.object({
+  decisionId: z.string(),
+  overrideSetId: z.string(),
+  overrideSetRevision: z.number(),
+  decision: z.enum(['ACCEPT', 'REJECT']),
+  quarantineRowId: z.string(),
+  supersededDecisionId: z.string().nullable(),
+  decidedAt: z.string(),
+})
+export type AdministrativeOverrideDecisionResult = z.infer<
+  typeof administrativeOverrideDecisionResultSchema
+>
+
+export const administrativeMaterializeResultSchema = z.object({
+  overrideSetId: z.string(),
+  overrideSetRevision: z.number(),
+  /** STAGED, and served to nobody until it is published. */
+  datasetVersionId: z.string(),
+  combinedDatasetVersion: z.string(),
+  combinedChecksum: z.string(),
+  overrideRevision: z.number(),
+  status: z.literal('STAGED'),
+  decisions: z.object({
+    effective: z.number(),
+    accepted: z.number(),
+    rejected: z.number(),
+    /** A rejection produces none: it changes provenance, not content. */
+    edges: z.number(),
+  }),
+})
+export type AdministrativeMaterializeResult = z.infer<typeof administrativeMaterializeResultSchema>
+
+export const administrativeOverrideAbandonResultSchema = z.object({
+  overrideSetId: z.string(),
+  status: z.literal('ABANDONED'),
+  abandonedAt: z.string().nullable(),
+})
+
+/*
+ * The binding. Each pair asserts the zod shape and the generated DTO are
+ * mutually assignable, so a schema above cannot rename, drop or invent a field
+ * without failing the build. This is what keeps zod a boundary check rather
+ * than a second contract.
+ */
+type Exact<A extends B, B extends C, C = A> = A
+
+export type ContractBinding = [
+  _Identity,
+  _Counts,
+  _Item,
+  _Page,
+  _Record,
+  _Detail,
+  _Set,
+  _Decision,
+  _Materialize,
+]
+
+type _Identity = Exact<AdministrativeUnitIdentity, Schemas['AdministrativeUnitIdentity']>
+type _Counts = Exact<AdministrativeQuarantineCounts, Schemas['AdministrativeQuarantineCounts']>
+type _Item = Exact<AdministrativeQuarantineItem, Schemas['AdministrativeQuarantineItem']>
+type _Page = Exact<AdministrativeQuarantinePage, Schemas['AdministrativeQuarantinePage']>
+type _Record = Exact<
+  AdministrativeOverrideDecisionRecord,
+  Schemas['AdministrativeOverrideDecisionRecord']
+>
+/*
+ * `rawPayload.value` is re-stated rather than bound. TypeScript treats a
+ * property whose type includes `undefined` as optional, and `unknown` includes
+ * it — so no zod schema can infer a *required* `unknown` field, whatever the
+ * contract says. Every other field of the detail is bound; this one is excepted
+ * on the record rather than by loosening the whole assertion.
+ */
+type _Detail = Exact<
+  Omit<AdministrativeQuarantineDetail, 'rawPayload'> & {
+    rawPayload: { value: unknown; truncated: boolean }
+  },
+  Schemas['AdministrativeQuarantineDetail']
+>
+type _Set = Exact<AdministrativeOverrideSet, Schemas['AdministrativeOverrideSet']>
+type _Decision = Exact<
+  AdministrativeOverrideDecisionResult,
+  Schemas['AdministrativeOverrideDecisionResult']
+>
+type _Materialize = Exact<
+  AdministrativeMaterializeResult,
+  Schemas['AdministrativeMaterializeResult']
+>

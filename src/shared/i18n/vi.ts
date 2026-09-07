@@ -139,6 +139,183 @@ export const vi = {
   'administrative.tab.validation': 'Kiểm tra',
   'administrative.tab.diff': 'Thay đổi',
   'administrative.tab.audit': 'Nhật ký',
+  'administrative.tab.sourceDrift': 'Nguồn ánh xạ',
+
+  // CMS #155 — hàng đợi phân xử nguồn ánh xạ (GoGo-BE ADM-011).
+  'sourceDrift.title': 'Hàng đợi phân xử nguồn ánh xạ',
+  'sourceDrift.hint':
+    'Nguồn ánh xạ chỉ có tính tham khảo. Những dòng máy không tự quyết được — gần như toàn bộ là xã/phường bị chia tách — nằm ở đây chờ người quyết định.',
+  'sourceDrift.draftOnly':
+    'Quyết định ở đây là bản nháp và KHÔNG đổi gì đang chạy. Phải vật chất hoá thành một phiên bản mới, rồi kiểm tra và publish, thì API mới trả lời khác đi.',
+  'sourceDrift.open': 'Mở',
+  'sourceDrift.parent': 'thuộc {code}',
+  'sourceDrift.empty': 'Không có dòng nào',
+  'sourceDrift.emptyUndecided': 'Không còn dòng nào chờ quyết định ở bộ lọc này.',
+  'sourceDrift.emptyFiltered': 'Không có dòng nào khớp bộ lọc hiện tại.',
+  'sourceDrift.pageSummary': 'Hiển thị {shown} dòng',
+  'sourceDrift.firstPage': 'Về đầu',
+
+  'sourceDrift.col.source': 'Đơn vị nguồn (lịch sử)',
+  'sourceDrift.col.proposed': 'Đích nguồn đề xuất',
+  'sourceDrift.col.classification': 'Phân loại của nguồn',
+  'sourceDrift.col.decisionState': 'Quyết định nháp',
+  'sourceDrift.col.evidence': 'Bằng chứng',
+  'sourceDrift.col.affected': 'Địa điểm ảnh hưởng',
+  'sourceDrift.col.decidedAt': 'Quyết định lúc',
+
+  'sourceDrift.filter.state': 'Trạng thái quyết định',
+  'sourceDrift.filter.classification': 'Phân loại',
+  'sourceDrift.filter.all': 'Tất cả',
+
+  'sourceDrift.evidence.divided': 'Nguồn khai: bị chia tách',
+  'sourceDrift.evidence.merged': 'Nguồn khai: sáp nhập',
+  'sourceDrift.evidence.candidates': '{count} ứng viên',
+
+  'sourceDrift.decisionState.UNDECIDED': 'Chưa quyết định',
+  'sourceDrift.decisionState.ACCEPTED_DRAFT': 'Nháp: chấp nhận',
+  'sourceDrift.decisionState.REJECTED_DRAFT': 'Nháp: từ chối',
+  'sourceDrift.decisionState.SUPERSEDED': 'Đã bị thay thế',
+  'sourceDrift.decision.ACCEPT': 'Chấp nhận',
+  'sourceDrift.decision.REJECT': 'Từ chối',
+
+  'sourceDrift.classification.DIVIDED_REQUIRES_REVIEW': 'Chia tách — cần người xem',
+  'sourceDrift.classification.TARGET_NOT_FOUND': 'Không thấy đích',
+  'sourceDrift.classification.SOURCE_NOT_FOUND': 'Không thấy nguồn',
+  'sourceDrift.classification.MULTIPLE_TARGETS': 'Nhiều đích',
+  'sourceDrift.classification.HIERARCHY_CONFLICT': 'Mâu thuẫn phân cấp',
+  'sourceDrift.classification.DUPLICATE': 'Trùng',
+  'sourceDrift.classification.INVALID': 'Không hợp lệ',
+  'sourceDrift.classification.VALID_UNIQUE': 'Hợp lệ — một đích',
+  'sourceDrift.classification.VALID_MERGE': 'Hợp lệ — sáp nhập',
+  'sourceDrift.classification.VALID_DISTRICT_TO_SPECIAL_ZONE': 'Hợp lệ — huyện thành đặc khu',
+
+  'sourceDrift.changeType.CREATED': 'Tạo mới',
+  'sourceDrift.changeType.RENAMED': 'Đổi tên',
+  'sourceDrift.changeType.MERGED': 'Sáp nhập',
+  'sourceDrift.changeType.SPLIT': 'Chia tách',
+  'sourceDrift.changeType.REASSIGNED': 'Chuyển thuộc',
+  'sourceDrift.changeType.DISSOLVED': 'Giải thể',
+
+  'sourceDrift.counts.canonical': 'Cạnh chuẩn của bộ dữ liệu',
+  'sourceDrift.counts.canonicalHint':
+    'Mọi ánh xạ bộ dữ liệu này khẳng định, theo loại thay đổi. Đây KHÔNG phải hàng đợi.',
+  'sourceDrift.counts.backlog': 'Tồn đọng cần phân xử',
+  'sourceDrift.counts.backlogHint':
+    'Chỉ các dòng bị cách ly, theo phân loại của nguồn. Đây mới là hàng đợi.',
+  'sourceDrift.counts.backlogEmpty': 'Không còn dòng nào bị cách ly.',
+  'sourceDrift.counts.decisions': 'Quyết định nháp',
+  'sourceDrift.counts.decisionsHint':
+    'Các dòng cách ly theo quyết định đang có hiệu lực trong bộ nháp hiện tại.',
+
+  'sourceDrift.set.title': 'Bộ quyết định nháp',
+  'sourceDrift.set.status': 'Trạng thái bộ',
+  'sourceDrift.set.revision': 'Revision',
+  'sourceDrift.set.effective': 'Quyết định hiệu lực',
+  'sourceDrift.set.effectiveValue':
+    '{accepted} chấp nhận · {rejected} từ chối · {undecided} chưa quyết',
+  'sourceDrift.set.updatedAt': 'Cập nhật lúc',
+  'sourceDrift.set.materialized': 'Đã vật chất hoá thành',
+  'sourceDrift.set.openDerived': 'Mở bộ dữ liệu dẫn xuất',
+  'sourceDrift.set.none':
+    'Chưa có bộ nháp nào. Quyết định đầu tiên sẽ mở một bộ mới trên phiên bản này.',
+  'sourceDrift.setStatus.DRAFT': 'Đang soạn',
+  'sourceDrift.setStatus.MATERIALIZED': 'Đã vật chất hoá',
+  'sourceDrift.setStatus.ABANDONED': 'Đã bỏ',
+  'sourceDrift.setStatus.NONE': 'Chưa có',
+
+  'sourceDrift.detail.title': 'Dòng nguồn ánh xạ bị cách ly',
+  'sourceDrift.detail.subtitle':
+    'Nguồn nói gì, bộ dữ liệu này có những đích nào, và ai đã quyết định gì.',
+  'sourceDrift.detail.reason': 'Lý do bị cách ly',
+  'sourceDrift.detail.source': 'Đơn vị nguồn',
+  'sourceDrift.detail.baseVersion': 'Phiên bản nền',
+  'sourceDrift.detail.provenance': 'Xuất xứ nguồn',
+  'sourceDrift.detail.affected': 'Địa điểm mang mã cũ',
+  'sourceDrift.detail.affectedSamples': 'Ví dụ địa điểm bị ảnh hưởng',
+  'sourceDrift.detail.sampleTruncated': 'Hiển thị {shown} ví dụ trong tổng số {total}.',
+  'sourceDrift.detail.setRevision': 'Revision bộ nháp',
+  'sourceDrift.detail.candidates': 'Ứng viên đích',
+  'sourceDrift.detail.candidatesHint':
+    'Không cái nào được chọn sẵn. Đích mặc định của nguồn cho một xã bị chia tách chính là phỏng đoán mà quy tắc cấm tin.',
+  'sourceDrift.detail.upstreamGuess': 'Nguồn đề xuất',
+  'sourceDrift.detail.selectable': 'Chọn được',
+  'sourceDrift.detail.notSelectable':
+    'Không chọn được: không phải đơn vị cấp xã đang hoạt động trong bộ dữ liệu này.',
+  'sourceDrift.detail.hierarchyInvalid': 'Cấp trên của đơn vị này không phân giải được.',
+  'sourceDrift.detail.reasonLabel': 'Lý do quyết định',
+  'sourceDrift.detail.reasonHint':
+    'Bắt buộc. Một quyết định không ai giải thích thì sau này không ai xem lại được.',
+  'sourceDrift.detail.history': 'Lịch sử quyết định',
+  'sourceDrift.detail.historyEmpty': 'Chưa ai quyết định dòng này.',
+  'sourceDrift.detail.superseded': 'Đã bị thay thế',
+  'sourceDrift.detail.rawPayload': 'Dữ liệu thô của nguồn',
+  'sourceDrift.detail.rawTruncated': 'Đã cắt bớt: đây là bằng chứng để đọc, không phải kho để tải.',
+
+  'sourceDrift.accept.action': 'Chấp nhận',
+  'sourceDrift.accept.done': 'Đã ghi quyết định chấp nhận (bản nháp)',
+  'sourceDrift.accept.consequence':
+    'Tạo một quyết định nháp thuộc sở hữu GoGo cho đích {code}. Nó KHÔNG đổi bộ dữ liệu đang publish và KHÔNG đổi cách resolver trả lời — phải vật chất hoá, kiểm tra rồi publish.',
+  'sourceDrift.reject.action': 'Từ chối',
+  'sourceDrift.reject.done': 'Đã ghi quyết định từ chối (bản nháp)',
+  'sourceDrift.reject.doneDetail':
+    'Quan hệ tham khảo này sẽ không trở thành cạnh chuẩn. Bằng chứng nguồn vẫn được giữ.',
+  'sourceDrift.reject.consequence':
+    'Từ chối nghĩa là quan hệ tham khảo này không được trở thành cạnh chuẩn. Nó KHÔNG từ chối và KHÔNG xoá địa điểm nào, không xoá bằng chứng nguồn, và không đổi gì đang chạy.',
+
+  'sourceDrift.materialize.action': 'Vật chất hoá',
+  'sourceDrift.materialize.confirmTitle': 'Vật chất hoá bộ quyết định',
+  'sourceDrift.materialize.confirmBody':
+    'Biến các quyết định đang có hiệu lực thành MỘT phiên bản bộ dữ liệu mới ở trạng thái Đã nhập.',
+  'sourceDrift.materialize.decisions': 'Quyết định sẽ được áp dụng',
+  'sourceDrift.materialize.rejectedNote':
+    'Quyết định từ chối không tạo cạnh nào — chúng đổi xuất xứ, không đổi nội dung.',
+  'sourceDrift.materialize.resultLabel': 'Kết quả',
+  'sourceDrift.materialize.stagedOnly':
+    'Chỉ tạo một phiên bản Đã nhập. KHÔNG tự chạy kiểm tra, KHÔNG tự publish, và không đổi gì đang chạy.',
+  'sourceDrift.materialize.empty':
+    'Chưa có quyết định nào có hiệu lực. Một bộ dữ liệu giống hệt bản nền của nó thì không phải một phiên bản.',
+  'sourceDrift.materialize.doneTitle': 'Đã tạo phiên bản dẫn xuất',
+  'sourceDrift.materialize.doneBody': 'Phiên bản mới ở trạng thái Đã nhập và chưa phục vụ ai.',
+  'sourceDrift.materialize.edges': 'Cạnh chuẩn đã ghi',
+  'sourceDrift.materialize.openDataset': 'Mở phiên bản dẫn xuất',
+  'sourceDrift.materialize.sequence':
+    'Việc còn lại: Kiểm tra → Đọc phần Thay đổi → Publish. Cho tới khi publish, resolver vẫn trả lời từ bản đang hoạt động.',
+
+  'sourceDrift.abandon.action': 'Bỏ bộ nháp',
+  'sourceDrift.abandon.confirmTitle': 'Bỏ bộ quyết định nháp',
+  'sourceDrift.abandon.confirmBody':
+    'Bộ này sẽ không nhận thêm quyết định và không vật chất hoá được.',
+  'sourceDrift.abandon.consequence':
+    'Các quyết định và lịch sử audit vẫn được giữ nguyên. Bộ dữ liệu nền và bản đang publish không đổi.',
+  'sourceDrift.abandon.reasonHint': 'Bắt buộc, và được ghi vào nhật ký.',
+  'sourceDrift.abandon.done': 'Đã bỏ bộ nháp',
+  'sourceDrift.abandon.doneDetail': 'Quyết định vẫn còn đó; bộ này không nhận thêm gì nữa.',
+
+  'sourceDrift.conflict.revision':
+    'Người khác vừa quyết định một dòng trong bộ nháp này. Dữ liệu đã tải lại — đọc lại rồi quyết định lần nữa.',
+  'sourceDrift.conflict.lifecycle':
+    'Bộ nháp hoặc bộ dữ liệu nền đã thay đổi. Dữ liệu đã tải lại; lựa chọn cũ bị bỏ.',
+
+  'error.OVERRIDE_SET_REVISION_CONFLICT':
+    'Bộ nháp đã thay đổi kể từ lúc bạn đọc. Tải lại rồi quyết định lần nữa.',
+  'error.OVERRIDE_SET_NOT_DRAFT': 'Bộ quyết định này không còn ở trạng thái soạn thảo.',
+  'error.OVERRIDE_SET_NOT_FOUND': 'Chưa có bộ nháp nào cho bộ dữ liệu này.',
+  'error.OVERRIDE_SET_EMPTY': 'Chưa có quyết định nào có hiệu lực để vật chất hoá.',
+  'error.OVERRIDE_BASE_ALREADY_MATERIALIZED':
+    'Bộ dữ liệu nền này đã tạo ra một phiên bản rồi. Vòng rà soát tiếp theo thuộc về phiên bản đó.',
+  'error.OVERRIDE_TARGET_NOT_FOUND':
+    'Bộ dữ liệu này không có đơn vị nào mang mã và ngày hiệu lực đó.',
+  'error.OVERRIDE_TARGET_NOT_CURRENT': 'Đích không phải một đơn vị cấp xã đang hoạt động.',
+  'error.OVERRIDE_TARGET_HIERARCHY_INVALID':
+    'Cấp trên của đích không phân giải được trong bộ dữ liệu này.',
+  'error.OVERRIDE_TARGET_IS_SOURCE': 'Đích trùng với chính đơn vị nguồn.',
+  'error.OVERRIDE_EDGE_ALREADY_CANONICAL': 'Cạnh này đã là cạnh chuẩn trong bộ dữ liệu.',
+  'error.QUARANTINE_ROW_NOT_FOUND': 'Không tìm thấy dòng cách ly này.',
+  'error.QUARANTINE_ROW_NOT_IN_DATASET': 'Dòng cách ly này thuộc một phiên bản bộ dữ liệu khác.',
+  'error.QUARANTINE_ROW_HAS_NO_SOURCE':
+    'Dòng tham khảo này không nêu đơn vị nguồn nên không có cạnh nào để chấp nhận.',
+  'error.BASE_DATASET_CHANGED':
+    'Bộ dữ liệu nền không còn là bản mà các quyết định này được đưa ra dựa trên nó.',
   'administrative.overview.hint':
     'Xuất xứ chính xác của phiên bản này: từng nguồn, checksum của từng nguồn và checksum tổng hợp.',
   'administrative.overview.storedDiff':
