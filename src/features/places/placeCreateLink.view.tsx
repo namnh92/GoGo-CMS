@@ -43,7 +43,11 @@ export type AppliedResolution = {
  * Google — a new stall, a private room — and a link that will not resolve must
  * not become a wall.
  */
-export function PlaceCreateLinkPanel({ onApply }: { onApply: (values: AppliedResolution) => void }) {
+export function PlaceCreateLinkPanel({
+  onApply,
+}: {
+  onApply: (values: AppliedResolution) => void
+}) {
   const t = useT()
   const navigate = useNavigate()
   const online = useOnline()
@@ -53,7 +57,8 @@ export function PlaceCreateLinkPanel({ onApply }: { onApply: (values: AppliedRes
   const [failure, setFailure] = useState<ApiError | null>(null)
 
   const reading = readGoogleLink(url)
-  const resolvable = reading.kind === 'place_id' || reading.kind === 'short_link' || reading.kind === 'hints'
+  const resolvable =
+    reading.kind === 'place_id' || reading.kind === 'short_link' || reading.kind === 'hints'
 
   const resolve = useMutation({
     mutationFn: () => resolvePlaceLink({ url: url.trim() }),
@@ -195,7 +200,9 @@ export function PlaceCreateLinkPanel({ onApply }: { onApply: (values: AppliedRes
             {result.candidates.map((option) => (
               <li key={option.googlePlaceId} className={styles.candidate}>
                 <p className={styles.candidateName}>{option.name}</p>
-                {option.address ? <p className={styles.candidateAddress}>{option.address}</p> : null}
+                {option.address ? (
+                  <p className={styles.candidateAddress}>{option.address}</p>
+                ) : null}
               </li>
             ))}
           </ul>
@@ -230,13 +237,7 @@ export function PlaceCreateLinkPanel({ onApply }: { onApply: (values: AppliedRes
   )
 }
 
-function LinkReading({
-  reading,
-  t,
-}: {
-  reading: GoogleLinkReading
-  t: ReturnType<typeof useT>
-}) {
+function LinkReading({ reading, t }: { reading: GoogleLinkReading; t: ReturnType<typeof useT> }) {
   switch (reading.kind) {
     case 'place_id':
       return <StatusBadge tone="mint" shape="check" label={t('googleLink.read.placeId')} />
@@ -246,7 +247,9 @@ function LinkReading({
       return (
         <>
           <StatusBadge tone="neutral" shape="info" label={t('googleLink.read.hints')} />
-          {reading.query ? <span>{t('googleLink.read.hintsName', { name: reading.query })}</span> : null}
+          {reading.query ? (
+            <span>{t('googleLink.read.hintsName', { name: reading.query })}</span>
+          ) : null}
         </>
       )
     case 'foreign_host':

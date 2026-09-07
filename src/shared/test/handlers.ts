@@ -846,7 +846,12 @@ export const handlers = [
           status: 'CANDIDATE_SELECTION',
           reasonCodes: ['AMBIGUOUS_NAME'],
           candidates: [
-            { googlePlaceId: 'ChIJa', name: 'Highlands Coffee', address: '1 Lê Lợi', confidence: 0.62 },
+            {
+              googlePlaceId: 'ChIJa',
+              name: 'Highlands Coffee',
+              address: '1 Lê Lợi',
+              confidence: 0.62,
+            },
             {
               googlePlaceId: 'ChIJb',
               name: 'Highlands Coffee',
@@ -858,10 +863,7 @@ export const handlers = [
         { status: 201 },
       )
     }
-    return HttpResponse.json(
-      { status: 'UNRESOLVED', reasonCodes: ['NOT_FOUND'] },
-      { status: 201 },
-    )
+    return HttpResponse.json({ status: 'UNRESOLVED', reasonCodes: ['NOT_FOUND'] }, { status: 201 })
   }),
 
   /**

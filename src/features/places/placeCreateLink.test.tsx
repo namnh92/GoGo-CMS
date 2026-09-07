@@ -183,7 +183,12 @@ describe('add a place by Google Maps link', () => {
       reasonCodes: ['AMBIGUOUS'],
       candidates: [
         { googlePlaceId: 'ChIJa', name: 'Highlands Coffee', address: '1 Lê Lợi', confidence: 0.62 },
-        { googlePlaceId: 'ChIJb', name: 'Highlands Coffee', address: '88 Hai Bà Trưng', confidence: 0.6 },
+        {
+          googlePlaceId: 'ChIJb',
+          name: 'Highlands Coffee',
+          address: '88 Hai Bà Trưng',
+          confidence: 0.6,
+        },
       ],
     })
     const user = userEvent.setup()
