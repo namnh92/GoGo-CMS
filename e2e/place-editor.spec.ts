@@ -230,14 +230,20 @@ test.describe('roles', () => {
     await expect(page.getByRole('button', { name: 'Lưu thông tin' })).toBeDisabled()
   })
 
-  test('the add-place CTA says it is unavailable instead of 404-ing', async ({ page }) => {
+  test('the add-place CTA opens the create form instead of 404-ing', async ({ page }) => {
     await signIn(page, 'editor@gogo.vn')
     await page.goto('/places')
 
-    // It navigated to `/places/new`, which `places/:id` matched — so the
-    // primary CTA opened the editor for a place id of "new" and 404ed.
-    const cta = page.getByRole('button', { name: /Thêm địa điểm: chưa mở/ })
-    await expect(cta).toBeVisible()
-    await expect(cta).toBeDisabled()
+    // The regression this guards: `/places/new` matched `places/:id`, so the
+    // primary CTA opened the editor for a place id of "new" and the screen
+    // answered 400 (#128). It then shipped disabled until GoGo-BE#452 gave it
+    // a create endpoint to call.
+    await page.getByRole('button', { name: 'Thêm địa điểm' }).click()
+
+    await expect(page).toHaveURL(/\/places\/new$/)
+    await expect(page.getByRole('heading', { name: 'Thêm địa điểm' })).toBeVisible()
+    await expect(page.getByLabel(/Tên hiển thị/)).toBeVisible()
+    // Not the editor: no place has been created yet, so there is nothing to save.
+    await expect(page.getByRole('button', { name: 'Lưu thông tin' })).toHaveCount(0)
   })
 })
