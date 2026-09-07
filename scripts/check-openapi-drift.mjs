@@ -13,7 +13,7 @@ import { join } from 'node:path'
 
 const SPEC = 'openapi/gogo.v1.yaml'
 const GENERATED = 'src/shared/api/schema.d.ts'
-const EXPECTED_VERSION = process.env.GOGO_API_VERSION ?? '1.0.0-alpha.9'
+const EXPECTED_VERSION = process.env.GOGO_API_VERSION ?? '1.0.0-alpha.10'
 
 const spec = readFileSync(SPEC, 'utf8')
 const declared = /^\s{2}version:\s*(.+)$/m.exec(spec)?.[1]?.trim()

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -21,13 +22,42 @@ import { describe, expect, it } from 'vitest'
 const read = (relative: string) => readFileSync(resolve(process.cwd(), relative), 'utf8')
 const spec = read('openapi/gogo.v1.yaml')
 const drift = read('scripts/check-openapi-drift.mjs')
+const generated = read('src/shared/api/schema.d.ts')
+const administrativeContracts = read('src/shared/api/contracts-administrative.ts')
 
-const EXPECTED = '1.0.0-alpha.9'
+const EXPECTED = '1.0.0-alpha.10'
+
+/**
+ * The vendored file byte for byte, as GoGo-BE published it.
+ *
+ * `openapi/gogo.v1.yaml` is in `.prettierignore`, so nothing in this repo may
+ * touch it — a copy that differs from the upstream by even a newline has been
+ * hand-edited, and this is what makes that visible rather than invisible. A
+ * legitimate re-vendor updates the version above and this digest together.
+ */
+const SPEC_SHA256 = '4f87edbf5574de0e0ad95d50d6d258255dae9bb59a14247616aa55d80619f7b5'
+
+/** `pnpm api:routes` on GoGo-BE reports the same number against the real router. */
+const SERVED_OPERATIONS = 247
 
 describe('the vendored OpenAPI contract', () => {
   it(`declares ${EXPECTED}, and the drift gate expects the same`, () => {
     expect(/^ {2}version: (\S+)$/m.exec(spec)?.[1]).toBe(EXPECTED)
     expect(drift).toContain(`?? '${EXPECTED}'`)
+  })
+
+  it('is byte-identical to what GoGo-BE published', () => {
+    expect(
+      createHash('sha256')
+        .update(readFileSync(resolve(process.cwd(), 'openapi/gogo.v1.yaml')))
+        .digest('hex'),
+    ).toBe(SPEC_SHA256)
+  })
+
+  it('still carries every operation the API actually serves', () => {
+    // Operations, not paths: a re-vendor that silently drops one fails here
+    // rather than at the first request the CMS makes against it.
+    expect(spec.match(/^ {6}operationId:/gm)?.length).toBe(SERVED_OPERATIONS)
   })
 
   it('keeps every administrative path the dataset screen is built on', () => {
@@ -59,6 +89,56 @@ describe('the vendored OpenAPI contract', () => {
     expect(spec).toContain('/cms/ops/costs/manual-items/{id}:')
   })
 
+  it('carries the source-drift adjudication surface from GoGo-BE#484', () => {
+    // CMS #155 is built on these. A vendor that lost them would leave the queue
+    // calling routes the contract no longer describes.
+    for (const path of [
+      '/cms/administrative-datasets/{id}/quarantine:',
+      '/cms/administrative-datasets/{id}/quarantine/{rowId}:',
+      '/cms/administrative-datasets/{id}/override-set:',
+      '/cms/administrative-datasets/{id}/quarantine/{rowId}/accept:',
+      '/cms/administrative-datasets/{id}/quarantine/{rowId}/reject:',
+      '/cms/administrative-datasets/{id}/override-set/materialize:',
+      '/cms/administrative-datasets/{id}/override-set/abandon:',
+    ]) {
+      expect(spec).toContain(path)
+    }
+  })
+
+  it('describes the queue by more than a code and a count', () => {
+    const queue = spec.slice(
+      spec.indexOf('  /cms/administrative-datasets/{id}/quarantine:'),
+      spec.indexOf('  /cms/administrative-datasets/{id}/quarantine/{rowId}:'),
+    )
+    // Both filters the screen needs, and the three count groups it must not
+    // collapse into one.
+    expect(queue).toContain('name: classification')
+    expect(queue).toContain('name: decisionState')
+    expect(queue).toContain('name: cursor')
+    expect(spec).toContain('AdministrativeQuarantineCounts')
+    for (const group of ['canonical:', 'backlog:', 'decisions:']) {
+      expect(spec).toContain(group)
+    }
+    // A code alone is not an identity; the effective period travels with it.
+    expect(spec).toContain('AdministrativeUnitIdentity')
+    expect(spec).toContain('AdministrativeQuarantineDetail')
+  })
+
+  it('requires a named target, a reason and the revision on every decision', () => {
+    const accept = spec.slice(
+      spec.indexOf('  /cms/administrative-datasets/{id}/quarantine/{rowId}/accept:'),
+      spec.indexOf('  /cms/administrative-datasets/{id}/quarantine/{rowId}/reject:'),
+    )
+    expect(accept).toContain('IdempotencyKey')
+    expect(accept).toContain('targetCode')
+    expect(accept).toContain('targetEffectiveFrom')
+    expect(accept).toContain('expectedRevision')
+    expect(accept).toContain("'409'")
+    expect(accept).toContain('OVERRIDE_SET_REVISION_CONFLICT')
+    // There is deliberately no positional way in.
+    expect(accept).not.toContain('candidateIndex')
+  })
+
   it('carries the additive validate contract from GoGo-BE#482', () => {
     const validate = spec.slice(
       spec.indexOf('/cms/administrative-datasets/{id}/validate:'),
@@ -70,5 +150,73 @@ describe('the vendored OpenAPI contract', () => {
     expect(validate).toContain('DATASET_CHANGED_DURING_VALIDATION')
     // The refusal is audited under its own action, never as a validation that ran.
     expect(validate).toContain('administrative_dataset.validate_rejected')
+  })
+})
+
+/**
+ * The generated client is what the screens actually import, and it is the half
+ * a re-vendor can get wrong silently: `api:check` regenerates and diffs, so a
+ * stale `schema.d.ts` fails there — but nothing checks that the *shape* the
+ * screens need survived generation.
+ */
+describe('the generated client', () => {
+  it('exposes every source-drift operation by name', () => {
+    for (const operation of [
+      'listAdministrativeQuarantine',
+      'getAdministrativeQuarantineRow',
+      'getAdministrativeOverrideSet',
+      'acceptAdministrativeQuarantineRow',
+      'rejectAdministrativeQuarantineRow',
+      'materializeAdministrativeOverrideSet',
+      'abandonAdministrativeOverrideSet',
+    ]) {
+      expect(generated).toContain(`${operation}:`)
+    }
+  })
+
+  it('generates the Idempotency-Key header and the concurrency field', () => {
+    const accept = generated.slice(
+      generated.indexOf('acceptAdministrativeQuarantineRow: {'),
+      generated.indexOf('rejectAdministrativeQuarantineRow: {'),
+    )
+    expect(accept).toContain('"Idempotency-Key"')
+    expect(accept).toContain('expectedRevision')
+    expect(accept).toContain('targetEffectiveFrom')
+    // 201 like every other POST in this API, and a documented 409.
+    expect(accept).toContain('201:')
+    expect(accept).toContain('409:')
+  })
+
+  it('keeps the operations the console already ships on', () => {
+    for (const operation of [
+      'listAdministrativeDatasets',
+      'getAdministrativeCapability',
+      'validateAdministrativeDataset',
+      'publishAdministrativeDataset',
+      'rollbackAdministrativeDataset',
+      'listAdministrativeMappings',
+      'verifyPlaceAdministrativeMapping',
+    ]) {
+      expect(generated).toContain(`${operation}:`)
+    }
+  })
+})
+
+describe('nothing is hand-written alongside the contract', () => {
+  it('declares no CMS-only schema for the source-drift surface', () => {
+    /*
+     * CMS #155 is not in this PR, and when it arrives its shapes come from the
+     * vendored contract. A zod schema for a quarantine row written here would
+     * be a second contract that drifts from the first in silence — which is the
+     * whole failure this file exists to prevent.
+     */
+    for (const invented of [
+      'quarantineListItemSchema',
+      'quarantineDetailSchema',
+      'overrideSetSchema',
+      'overrideDecisionSchema',
+    ]) {
+      expect(administrativeContracts).not.toContain(invented)
+    }
   })
 })
