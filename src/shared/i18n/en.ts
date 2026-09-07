@@ -449,7 +449,7 @@ export const en: Partial<Record<MessageKey, string>> = {
   'placeCreate.link.existsOpen': 'Open the existing place',
   'placeCreate.link.ambiguous': 'The link matches several branches',
   'placeCreate.link.ambiguousBody':
-    'The link carries no Place ID, so the branch is undecided. Open the right branch in Google Maps, use Share to get its own link, and paste that — it carries the Place ID.',
+    'The link carries no Place ID, so the branch is undecided. Pick the one you mean:',
   'placeCreate.link.unresolved': 'Could not identify a place from this link',
   'placeCreate.link.unresolvedBody':
     'It may not be a Google Maps link, or it may not point at one specific place. Check the link, or type the details in below.',

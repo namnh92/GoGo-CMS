@@ -19,8 +19,15 @@ export const styles = {
   questionTitle: 'flex items-center gap-1.5 text-[13px] font-semibold text-text',
   questionBody: 'mt-1 text-xs text-text-muted',
   candidateList: 'mt-2 flex flex-col gap-1.5',
-  candidate: 'rounded-compact bg-surface px-2.5 py-1.5',
-  candidateName: 'text-xs font-semibold text-text',
+  // A row is a control now (#160): full width, left-aligned like the text it
+  // replaced, and tall enough to hit — `min-h-11` is the 44px target, not decor.
+  candidate:
+    'flex w-full min-h-11 flex-col items-start gap-0.5 rounded-compact bg-surface px-2.5 py-1.5 text-left ' +
+    'transition-colors duration-[var(--duration-fast)] hover:bg-surface-muted ' +
+    'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-coral ' +
+    'disabled:cursor-not-allowed disabled:opacity-60',
+  candidateName: 'flex items-center gap-1.5 text-xs font-semibold text-text',
+  candidateSpinner: 'text-text-muted',
   candidateAddress: 'text-[11px] text-text-muted',
   problem: 'rounded-compact border border-danger/40 bg-danger-soft/50 px-3 py-2.5',
   problemTitle: 'flex items-center gap-1.5 text-[13px] font-semibold text-danger-ink',

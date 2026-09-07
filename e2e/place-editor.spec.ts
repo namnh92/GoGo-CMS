@@ -276,6 +276,28 @@ test.describe('roles', () => {
     await expect(page).toHaveURL(/\/places\/created-/)
   })
 
+  /**
+   * GoGo-CMS#160. The address-bar URL is what people actually copy, and it
+   * names a building rather than one of the three places inside it. The answer
+   * is a list; the bug was that the list did nothing.
+   */
+  test('an ambiguous link offers the branches, and the picked one resolves', async ({ page }) => {
+    await signIn(page, 'editor@gogo.vn')
+    await page.goto('/places/new')
+
+    await page
+      .getByLabel('Link Google Maps')
+      .fill('https://www.google.com/maps/place/Highlands+Coffee')
+    await page.getByRole('button', { name: 'Tìm địa điểm' }).click()
+
+    await expect(page.getByText('Link khớp với nhiều chi nhánh')).toBeVisible()
+    await page.getByRole('button', { name: /88 Hai Bà Trưng/ }).click()
+
+    await expect(page.getByText('Google trả về địa điểm này')).toBeVisible()
+    await page.getByRole('button', { name: 'Dùng dữ liệu này' }).click()
+    await expect(page.getByLabel(/Tên hiển thị/)).toHaveValue('Highlands Coffee Hai Bà Trưng')
+  })
+
   test('a link GoGo already holds opens that place instead of duplicating it', async ({ page }) => {
     await signIn(page, 'editor@gogo.vn')
     await page.goto('/places/new')

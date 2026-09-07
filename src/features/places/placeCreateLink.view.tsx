@@ -2,7 +2,7 @@ import { useState } from 'react'
 
 import { toApiError, type ApiError } from '@/shared/api/errors'
 import { useT } from '@/shared/i18n/i18n'
-import { Button } from '@/shared/ui/Button'
+import { Button, Spinner } from '@/shared/ui/Button'
 import { StatusBadge } from '@/shared/ui/Badge'
 import { TextInput } from '@/shared/ui/Field'
 import { AlertIcon, CheckIcon, InfoIcon } from '@/shared/ui/icons'
@@ -69,15 +69,20 @@ export function PlaceCreateLinkPanel({
   const [url, setUrl] = useState('')
   const [result, setResult] = useState<ResolveLinkResult | null>(null)
   const [failure, setFailure] = useState<ApiError | null>(null)
+  /** Which branch is being resolved, so only that row shows the spinner. */
+  const [picking, setPicking] = useState<string | null>(null)
 
   const reading = readGoogleLink(url)
   const resolvable =
     reading.kind === 'place_id' || reading.kind === 'short_link' || reading.kind === 'hints'
 
   const resolve = useMutation({
-    mutationFn: () => resolvePlaceLink({ url: url.trim() }),
-    onMutate: () => {
-      setResult(null)
+    mutationFn: (ask: { url: string } | { googlePlaceId: string }) => resolvePlaceLink(ask),
+    onMutate: (ask) => {
+      // A branch that turns out to be unresolvable must leave the list it was
+      // picked from on screen — otherwise one bad pick empties the panel and
+      // the editor has to paste the link again to get the other two back.
+      if ('url' in ask) setResult(null)
       setFailure(null)
     },
     onSuccess: setResult,
@@ -107,7 +112,10 @@ export function PlaceCreateLinkPanel({
           variant="secondary"
           loading={resolve.isPending}
           disabled={!resolvable || !online}
-          onClick={() => resolve.mutate()}
+          onClick={() => {
+            setPicking(null)
+            resolve.mutate({ url: url.trim() })
+          }}
         >
           {t('placeCreate.link.resolve')}
         </Button>
@@ -198,12 +206,17 @@ export function PlaceCreateLinkPanel({
       ) : null}
 
       {/*
-        The candidates carry a name, an address and a confidence — no position,
-        because the server did not fetch one for a place nobody has chosen yet.
-        So there is nothing here to apply, and offering a button that could only
-        fail would be a dead control (core rule 16). What works is naming the
-        branches and asking for that branch's own link, which carries its Place
-        ID and resolves exactly.
+        GoGo-CMS#160. The first cut of this rendered the branches read-only,
+        under a comment claiming a button here "could only fail" because the
+        candidates carry no position. That was wrong: each carries a real Google
+        Place ID, and what was missing was an endpoint that took one — which
+        GoGo-BE#469 added by exposing a resolver that already existed. Rule 16
+        offers two ways out of a dead control and wiring it to a real path is
+        the better one.
+
+        Picking re-enters `resolve` with that id, so a chosen branch lands on
+        the same preview, the same `ALREADY_EXISTS`, the same everything as a
+        link that had named it outright.
       */}
       {result?.status === 'CANDIDATE_SELECTION' && result.candidates.length > 0 ? (
         <div className={styles.question} role="status" aria-live="polite">
@@ -214,11 +227,29 @@ export function PlaceCreateLinkPanel({
           <p className={styles.questionBody}>{t('placeCreate.link.ambiguousBody')}</p>
           <ul className={styles.candidateList}>
             {result.candidates.map((option) => (
-              <li key={option.googlePlaceId} className={styles.candidate}>
-                <p className={styles.candidateName}>{option.name}</p>
-                {option.address ? (
-                  <p className={styles.candidateAddress}>{option.address}</p>
-                ) : null}
+              <li key={option.googlePlaceId}>
+                <button
+                  type="button"
+                  className={styles.candidate}
+                  // One branch at a time: two in flight would race to fill the
+                  // same form, and the loser would win.
+                  disabled={resolve.isPending || !online}
+                  aria-busy={picking === option.googlePlaceId || undefined}
+                  onClick={() => {
+                    setPicking(option.googlePlaceId)
+                    resolve.mutate({ googlePlaceId: option.googlePlaceId })
+                  }}
+                >
+                  <span className={styles.candidateName}>
+                    {picking === option.googlePlaceId && resolve.isPending ? (
+                      <Spinner className={styles.candidateSpinner} />
+                    ) : null}
+                    {option.name}
+                  </span>
+                  {option.address ? (
+                    <span className={styles.candidateAddress}>{option.address}</span>
+                  ) : null}
+                </button>
               </li>
             ))}
           </ul>

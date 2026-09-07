@@ -447,7 +447,7 @@ export const vi = {
   'placeCreate.link.existsOpen': 'Mở địa điểm đã có',
   'placeCreate.link.ambiguous': 'Link khớp với nhiều chi nhánh',
   'placeCreate.link.ambiguousBody':
-    'Link không mang Place ID nên chưa xác định được chi nhánh nào. Mở đúng chi nhánh trên Google Maps, bấm Chia sẻ để lấy link riêng của nó rồi dán lại — link đó mang sẵn Place ID.',
+    'Link không mang Place ID nên chưa xác định được chi nhánh nào. Chọn đúng chỗ bạn muốn thêm:',
   'placeCreate.link.unresolved': 'Chưa xác định được địa điểm từ link này',
   'placeCreate.link.unresolvedBody':
     'Có thể link không phải Google Maps, hoặc không trỏ tới một địa điểm cụ thể. Kiểm tra lại link, hoặc nhập tay ở dưới.',

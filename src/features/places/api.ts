@@ -212,8 +212,19 @@ export type GoogleDerivedField = (typeof GOOGLE_DERIVED_FIELDS)[number]
  * A preview. Nothing is written, and the editor sees the answer before any of
  * it reaches a form. Behind `place.write` and rate-limited per admin, because a
  * miss costs a provider request.
+ *
+ * Exactly one of `url` and `googlePlaceId`; the server rejects both and neither.
  */
-export function resolvePlaceLink(input: { url: string; cityHint?: string }) {
+export function resolvePlaceLink(input: {
+  url?: string
+  /**
+   * The branch the editor picked out of a `CANDIDATE_SELECTION` (GoGo-BE#469).
+   * Choosing is a resolution, so it takes the same route and answers the same
+   * shape — including `ALREADY_EXISTS` when GoGo already holds that branch.
+   */
+  googlePlaceId?: string
+  cityHint?: string
+}) {
   return apiFetchParsed<typeof resolveLinkResultSchema>(
     resolveLinkResultSchema,
     '/cms/places/resolve-link',
