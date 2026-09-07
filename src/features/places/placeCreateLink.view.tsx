@@ -220,11 +220,28 @@ export function PlaceCreateLinkPanel({
       */}
       {result?.status === 'CANDIDATE_SELECTION' && result.candidates.length > 0 ? (
         <div className={styles.question} role="status" aria-live="polite">
+          {/*
+            One candidate is not "several branches". The server still asks for a
+            person when it is confident enough to offer a match but not enough
+            to take it, and that happens with a single result — telling the
+            editor the link matched several places when it matched one is a
+            small lie they can see.
+          */}
           <p className={styles.questionTitle}>
             <AlertIcon size={14} aria-hidden="true" />
-            {t('placeCreate.link.ambiguous')}
+            {t(
+              result.candidates.length === 1
+                ? 'placeCreate.link.oneMaybe'
+                : 'placeCreate.link.ambiguous',
+            )}
           </p>
-          <p className={styles.questionBody}>{t('placeCreate.link.ambiguousBody')}</p>
+          <p className={styles.questionBody}>
+            {t(
+              result.candidates.length === 1
+                ? 'placeCreate.link.oneMaybeBody'
+                : 'placeCreate.link.ambiguousBody',
+            )}
+          </p>
           <ul className={styles.candidateList}>
             {result.candidates.map((option) => (
               <li key={option.googlePlaceId}>

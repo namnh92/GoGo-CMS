@@ -450,6 +450,9 @@ export const en: Partial<Record<MessageKey, string>> = {
   'placeCreate.link.ambiguous': 'The link matches several branches',
   'placeCreate.link.ambiguousBody':
     'The link carries no Place ID, so the branch is undecided. Pick the one you mean:',
+  'placeCreate.link.oneMaybe': 'This might be it',
+  'placeCreate.link.oneMaybeBody':
+    'The link carries no Place ID, so GoGo is not certain. Check it and choose if it is right:',
   'placeCreate.link.unresolved': 'Could not identify a place from this link',
   'placeCreate.link.unresolvedBody':
     'It may not be a Google Maps link, or it may not point at one specific place. Check the link, or type the details in below.',

@@ -448,6 +448,9 @@ export const vi = {
   'placeCreate.link.ambiguous': 'Link khớp với nhiều chi nhánh',
   'placeCreate.link.ambiguousBody':
     'Link không mang Place ID nên chưa xác định được chi nhánh nào. Chọn đúng chỗ bạn muốn thêm:',
+  'placeCreate.link.oneMaybe': 'Có thể là chỗ này',
+  'placeCreate.link.oneMaybeBody':
+    'Link không mang Place ID nên GoGo chưa chắc chắn. Kiểm tra rồi chọn nếu đúng:',
   'placeCreate.link.unresolved': 'Chưa xác định được địa điểm từ link này',
   'placeCreate.link.unresolvedBody':
     'Có thể link không phải Google Maps, hoặc không trỏ tới một địa điểm cụ thể. Kiểm tra lại link, hoặc nhập tay ở dưới.',
