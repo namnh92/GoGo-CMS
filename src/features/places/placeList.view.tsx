@@ -390,26 +390,14 @@ export default function PlaceListScreen() {
             >
               {t('places.bulkImport')}
             </Button>
-            {/*
-              GoGo-CMS#128 — this used to navigate to `/places/new`, a route
-              that does not exist. `places/:id` matched it, so the button opened
-              the editor with the id "new", `GET /cms/places/new` answered 404,
-              and an editor got an error screen from the primary CTA.
-
-              There is no create path to point it at: GoGo-BE has no
-              `POST /cms/places`, and a place enters the catalogue through
-              bulk import or a community submission. So the control says that
-              instead of pretending (`core.md` §16 — no dead controls). Tracked
-              as a contract gap on GoGo-BE.
-            */}
             <Button
               size="sm"
               variant="primary"
               iconLeft={<PlusIcon size={14} />}
-              disabled
-              title={t('places.addUnavailableWhy')}
+              disabled={!canWrite || !online}
+              onClick={() => navigate('/places/new')}
             >
-              {t('places.addUnavailable')}
+              {t('places.add')}
             </Button>
           </div>
         }

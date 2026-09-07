@@ -417,10 +417,20 @@ export const vi = {
     'API KPI hiện chỉ trả về sáu số tổng hợp trên cửa sổ cố định — chưa có chuỗi thời gian, tình trạng từng nhà cung cấp hay dòng hoạt động. Màn này hiển thị đúng những gì đo được.',
   'places.title': 'Quản lý địa điểm',
   'places.breadcrumb': 'Địa điểm',
-  'places.addUnavailable': 'Thêm địa điểm: chưa mở',
-  'places.addUnavailableWhy':
-    'Máy chủ chưa có route tạo địa điểm. Địa điểm vào catalog qua nhập hàng loạt hoặc đề xuất từ app.',
   'places.add': 'Thêm địa điểm',
+  'placeCreate.title': 'Thêm địa điểm',
+  'placeCreate.intro':
+    'Nhập những gì bạn biết chắc. Địa điểm được tạo ở trạng thái Nháp — giờ mở cửa, giá và ảnh nhập tiếp ở màn sửa, xuất bản là bước riêng.',
+  'placeCreate.coordinateHint':
+    'Lấy từ bản đồ. Không có toạ độ thì không tìm kiếm hay chỉ đường được.',
+  'placeCreate.submit': 'Tạo địa điểm',
+  'placeCreate.created': 'Đã tạo địa điểm ở trạng thái Nháp.',
+  'placeCreate.failed': 'Chưa tạo được địa điểm',
+  'placeCreate.duplicateTitle': 'Có thể đã có địa điểm này',
+  'placeCreate.duplicateBody':
+    'Những địa điểm dưới đây nằm trong bán kính 150m và có tên gần giống. Kiểm tra trước khi tạo thêm một bản ghi nữa.',
+  'placeCreate.duplicateOpenQueue': 'Xem danh sách trùng lặp',
+  'placeCreate.duplicateCreateAnyway': 'Đây là chỗ khác, vẫn tạo',
   'places.bulkImport': 'Nhập hàng loạt',
   'places.searchPlaceholder': 'Tìm theo tên hoặc địa chỉ…',
   'places.filter.allCategories': 'Tất cả nhóm',

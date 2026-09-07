@@ -40,39 +40,61 @@ function optionalNumber(schema: z.ZodNumber) {
  * Messages here are i18n keys, resolved by `usePlaceFieldError`. Limits come
  * from the contract mirror, so they cannot drift away from GoGo-BE silently.
  */
-export const placeIdentitySchema = z
-  .object({
-    name: z.string().trim().min(L.name.min, 'placeEditor.error.required').max(L.name.max),
-    addressText: z.string().max(L.addressText.max).optional(),
-    areaKey: z.string().max(L.areaKey.max).optional(),
-    city: z.string().max(L.city.max).optional(),
-    district: z.string().max(L.district.max).optional(),
-    /*
-     * Neither is validated for shape here. GoGo-BE normalizes a phone to E.164
-     * and a website to `http(s)`, and a second, slightly different rule in the
-     * browser would refuse values the server accepts (and accept ones it
-     * refuses). The editor sends what was typed and renders the server's
-     * `field_errors` — one normalizer, on the side that stores the value.
-     */
-    phone: z.string().max(L.phone.max).optional(),
-    website: z.string().max(L.website.max).optional(),
-    description: z.string().max(L.description.max).optional(),
-    avgVisitMinutes: optionalNumber(
-      z.number().int().min(L.avgVisitMinutes.min).max(L.avgVisitMinutes.max),
-    ),
-    lat: optionalNumber(z.number().min(L.lat.min).max(L.lat.max)),
-    lng: optionalNumber(z.number().min(L.lng.min).max(L.lng.max)),
+const placeIdentityFields = z.object({
+  name: z.string().trim().min(L.name.min, 'placeEditor.error.required').max(L.name.max),
+  addressText: z.string().max(L.addressText.max).optional(),
+  areaKey: z.string().max(L.areaKey.max).optional(),
+  city: z.string().max(L.city.max).optional(),
+  district: z.string().max(L.district.max).optional(),
+  /*
+   * Neither is validated for shape here. GoGo-BE normalizes a phone to E.164
+   * and a website to `http(s)`, and a second, slightly different rule in the
+   * browser would refuse values the server accepts (and accept ones it
+   * refuses). The editor sends what was typed and renders the server's
+   * `field_errors` — one normalizer, on the side that stores the value.
+   */
+  phone: z.string().max(L.phone.max).optional(),
+  website: z.string().max(L.website.max).optional(),
+  description: z.string().max(L.description.max).optional(),
+  avgVisitMinutes: optionalNumber(
+    z.number().int().min(L.avgVisitMinutes.min).max(L.avgVisitMinutes.max),
+  ),
+  lat: optionalNumber(z.number().min(L.lat.min).max(L.lat.max)),
+  lng: optionalNumber(z.number().min(L.lng.min).max(L.lng.max)),
+})
+
+export const placeIdentitySchema = placeIdentityFields.superRefine((values, ctx) => {
+  // The server moves the pin only when both arrive; one alone is a silent
+  // no-op there, so it is a visible rejection here.
+  if ((values.lat === undefined) === (values.lng === undefined)) return
+  ctx.addIssue({
+    code: z.ZodIssueCode.custom,
+    path: [values.lat === undefined ? 'lat' : 'lng'],
+    message: 'placeEditor.error.coordinatePair',
   })
-  .superRefine((values, ctx) => {
-    // The server moves the pin only when both arrive; one alone is a silent
-    // no-op there, so it is a visible rejection here.
-    if ((values.lat === undefined) === (values.lng === undefined)) return
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: [values.lat === undefined ? 'lat' : 'lng'],
-      message: 'placeEditor.error.coordinatePair',
-    })
-  })
+})
+
+/**
+ * GoGo-CMS#150 — the same fields, with the three a new row cannot do without.
+ *
+ * `POST /cms/places` requires a name and a position because search, routing and
+ * duplicate detection all need them; on an existing place those are already
+ * there, which is why the edit schema leaves them optional. Sharing the field
+ * definitions keeps the two forms from drifting into different limits.
+ */
+export const placeCreateSchema = placeIdentityFields.extend({
+  name: z.string().trim().min(L.name.min, 'placeEditor.error.required').max(L.name.max),
+  lat: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.coerce.number({ message: 'placeEditor.error.required' }).min(L.lat.min).max(L.lat.max),
+  ),
+  lng: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.coerce.number({ message: 'placeEditor.error.required' }).min(L.lng.min).max(L.lng.max),
+  ),
+})
+
+export type PlaceCreateForm = z.infer<typeof placeCreateSchema>
 
 /**
  * Register options for the three optional number boxes.

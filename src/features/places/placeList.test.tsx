@@ -20,13 +20,12 @@ describe('place list, by role', () => {
     renderWithProviders(<PlaceListScreen />)
 
     expect(await screen.findByText('Chào Bạn Cafe & Space')).toBeInTheDocument()
-    // Writing shows up in the row actions. "Thêm địa điểm" is not one of them:
-    // GoGo-BE has no create-place route, so the control says so for every role
-    // rather than being enabled for an editor and then 404-ing (GoGo-CMS#128).
     for (const button of screen.getAllByRole('button', { name: 'Sửa' })) {
       expect(button).toBeEnabled()
     }
-    expect(screen.getByRole('button', { name: /Thêm địa điểm: chưa mở/ })).toBeDisabled()
+    // Enabled again now that GoGo-BE#452 gave it somewhere to go; it spent a
+    // release disabled because `/places/new` led to an error screen (#128).
+    expect(screen.getByRole('button', { name: 'Thêm địa điểm' })).toBeEnabled()
   })
 
   it('lets a moderator read the catalog but not change it', async () => {

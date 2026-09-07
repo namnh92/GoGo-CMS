@@ -419,10 +419,20 @@ export const en: Partial<Record<MessageKey, string>> = {
 
   'places.title': 'Places management',
   'places.breadcrumb': 'Places',
-  'places.addUnavailable': 'Add place: not available',
-  'places.addUnavailableWhy':
-    'The server has no create-place route. Places enter the catalogue through bulk import or a community submission.',
   'places.add': 'Add place',
+  'placeCreate.title': 'Add place',
+  'placeCreate.intro':
+    'Enter what you know for certain. The place is created as a draft — hours, prices and photos come next in the editor, and publishing is a separate step.',
+  'placeCreate.coordinateHint':
+    'Read it off the map. Without coordinates a place cannot be searched or routed to.',
+  'placeCreate.submit': 'Create place',
+  'placeCreate.created': 'Place created as a draft.',
+  'placeCreate.failed': 'Could not create the place',
+  'placeCreate.duplicateTitle': 'This place may already exist',
+  'placeCreate.duplicateBody':
+    'These places sit within 150m and have a similar name. Check them before adding another record.',
+  'placeCreate.duplicateOpenQueue': 'Open duplicate queue',
+  'placeCreate.duplicateCreateAnyway': 'Different place, create anyway',
   'places.bulkImport': 'Bulk import',
   'places.tab.all': 'All',
   'places.tab.published': 'Published',
