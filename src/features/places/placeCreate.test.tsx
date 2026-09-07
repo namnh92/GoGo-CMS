@@ -79,8 +79,15 @@ describe('create a place', () => {
 
     await user.click(screen.getByRole('button', { name: 'Tạo địa điểm' }))
 
-    // Three messages, each next to its own input rather than one toast.
+    // Three messages, each next to its own input rather than one toast — and
+    // each of them a sentence. The first cut of this screen rendered the raw
+    // i18n key `placeEditor.error.required`, and this assertion only counted
+    // the alerts, so it passed anyway.
     await waitFor(() => expect(screen.getAllByRole('alert').length).toBeGreaterThanOrEqual(3))
+    for (const alert of screen.getAllByRole('alert')) {
+      expect(alert).not.toHaveTextContent(/^placeEditor\./)
+    }
+    expect(screen.getAllByText('Không được để trống').length).toBeGreaterThanOrEqual(3)
     expect(navigate).not.toHaveBeenCalledWith(expect.stringContaining('/places/'))
   })
 
