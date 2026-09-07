@@ -133,14 +133,19 @@ describe('the route enforces its own permission', () => {
     await waitFor(() => expect(calls.length).toBeGreaterThan(0))
   })
 
-  it('says plainly that the screen is not built rather than showing dead controls', async () => {
-    signInAs('ops_admin')
-    renderWithProviders(<AdministrativeDataScreen />)
+  /*
+   * The dataset screen stopped being a shell in #154; the mapping queue has
+   * not. The assertion moves rather than being deleted — a shell that quietly
+   * grew controls nobody designed is exactly what it was written to catch.
+   */
+  it('says plainly that the mapping queue is not built rather than showing dead controls', async () => {
+    signInAs('moderator')
+    renderWithProviders(<AdministrativeMappingScreen />)
 
     expect(await screen.findByText(/chưa được dựng|not built yet/i)).toBeInTheDocument()
-    // No import, publish or rollback button exists yet: a control that looks
-    // operable and is not is worse than an empty state that explains itself.
-    expect(screen.queryByRole('button', { name: /publish|xuất bản/i })).not.toBeInTheDocument()
+    for (const name of [/xác nhận|verify/i, /từ chối|reject/i, /gán lại|rematch/i]) {
+      expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
+    }
   })
 })
 
@@ -179,7 +184,10 @@ describe('capability states', () => {
     )
     renderWithProviders(<AdministrativeDataScreen />)
 
-    // The screen renders, says what is missing, and does not error the shell.
+    // The screen renders, says what is missing, and does not error the console.
     expect(await screen.findByText(/chưa nạp ranh giới|no boundary release/i)).toBeInTheDocument()
+    // Degraded, not down: the resolver still answers, and the screen says so.
+    expect(screen.getByText(/một phần|partial/i)).toBeInTheDocument()
+    expect(screen.queryByText(/state.error|không tải được/i)).not.toBeInTheDocument()
   })
 })

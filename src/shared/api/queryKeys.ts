@@ -10,6 +10,13 @@ export const queryKeys = {
   administrativeDatasets: (limit: number, offset: number) =>
     ['administrative', 'datasets', limit, offset] as const,
   administrativeMappings: (scope: string) => ['administrative', 'mappings', scope] as const,
+  /** CMS #154 — every administrative query hangs off this prefix so one publish invalidates the lot. */
+  administrativeAll: ['administrative'] as const,
+  administrativeDataset: (id: string) => ['administrative', 'dataset', id] as const,
+  administrativeDatasetDiff: (id: string, limit: number, offset: number) =>
+    ['administrative', 'dataset', id, 'diff', limit, offset] as const,
+  administrativeRestorable: () => ['administrative', 'restorable'] as const,
+  administrativeDatasetAudit: (id: string) => ['administrative', 'dataset', id, 'audit'] as const,
 
   opsKpis: ['ops', 'kpis'] as const,
   opsHealth: ['ops', 'health'] as const,

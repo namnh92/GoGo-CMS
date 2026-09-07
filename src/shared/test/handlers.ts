@@ -1,6 +1,6 @@
 import { http, HttpResponse } from 'msw'
 import type { z } from 'zod'
-import type { AdminRole, CollectionStatus, PlaceStatus } from '@/shared/api/contracts'
+import type { AdminRole, AuditEntry, CollectionStatus, PlaceStatus } from '@/shared/api/contracts'
 import {
   cmsPlaceEditMockSchema,
   cmsPlaceHoursSchema,
@@ -566,6 +566,96 @@ export const handlers = [
       observedAt: '2026-09-07T00:02:00.000Z',
     }),
   ),
+  // CMS #154 — dataset operations. Three versions in the three states the
+  // screen has to tell apart: one active, one validated and publishable, one
+  // staged whose validation failed.
+  http.get(`${BASE}/cms/administrative-datasets/restorable`, () =>
+    HttpResponse.json({
+      // Previously published, not active now — the server's own definition.
+      items: administrativeDatasets.filter(
+        (item) => item.status === 'ROLLED_BACK' && item.publishedAt !== null,
+      ),
+    }),
+  ),
+  http.get(`${BASE}/cms/administrative-datasets`, ({ request }) => {
+    const url = new URL(request.url)
+    const limit = Number(url.searchParams.get('limit') ?? 25)
+    const offset = Number(url.searchParams.get('offset') ?? 0)
+    const ordered = [...administrativeDatasets].sort((a, b) =>
+      b.importedAt.localeCompare(a.importedAt),
+    )
+    return HttpResponse.json({
+      items: ordered.slice(offset, offset + limit),
+      total: ordered.length,
+      limit,
+      offset,
+    })
+  }),
+  http.post(`${BASE}/cms/administrative-datasets/import`, () =>
+    HttpResponse.json(
+      {
+        datasetVersionId: administrativeDatasets[1]!.id,
+        combinedDatasetVersion: administrativeDatasets[1]!.combinedDatasetVersion,
+        combinedChecksum: administrativeDatasets[1]!.combinedChecksum,
+        counts: {
+          provinces: 34,
+          communes: 3321,
+          legacyDistricts: 705,
+          legacyCommunes: 10598,
+          canonicalChanges: 10598,
+          quarantined: 1033,
+        },
+        classification: { unresolved_target: 1033 },
+        warnings: [],
+      },
+      { status: 201 },
+    ),
+  ),
+  http.get(`${BASE}/cms/administrative-datasets/:id`, ({ params }) => {
+    const found = administrativeDatasets.find((item) => item.id === params.id)
+    if (!found) return envelope(404, 'DATASET_NOT_FOUND', 'no such dataset')
+    return HttpResponse.json({
+      ...found,
+      validationReport: administrativeValidationReport(found),
+      diffSummary: null,
+    })
+  }),
+  http.get(`${BASE}/cms/administrative-datasets/:id/diff`, ({ params, request }) => {
+    const url = new URL(request.url)
+    const limit = Number(url.searchParams.get('limit') ?? 100)
+    const offset = Number(url.searchParams.get('offset') ?? 0)
+    const found = administrativeDatasets.find((item) => item.id === params.id)
+    if (!found) return envelope(404, 'DATASET_NOT_FOUND', 'no such dataset')
+    return HttpResponse.json({
+      ...administrativeDiff,
+      toVersion: found.combinedDatasetVersion,
+      entries: administrativeDiff.entries.slice(offset, offset + limit),
+      pagination: {
+        offset,
+        limit,
+        totalEntries: administrativeDiff.entries.length,
+        hasMore: offset + limit < administrativeDiff.entries.length,
+      },
+    })
+  }),
+  http.post(`${BASE}/cms/administrative-datasets/:id/validate`, ({ params }) => {
+    const found = administrativeDatasets.find((item) => item.id === params.id)
+    if (!found) return envelope(404, 'DATASET_NOT_FOUND', 'no such dataset')
+    return HttpResponse.json(
+      { validation: administrativeValidationReport(found), diff: administrativeDiff },
+      { status: 201 },
+    )
+  }),
+  http.post(`${BASE}/cms/administrative-datasets/:id/publish`, ({ params }) => {
+    const found = administrativeDatasets.find((item) => item.id === params.id)
+    if (!found) return envelope(404, 'DATASET_NOT_FOUND', 'no such dataset')
+    return HttpResponse.json(administrativeTransition(found), { status: 201 })
+  }),
+  http.post(`${BASE}/cms/administrative-datasets/:id/rollback`, ({ params }) => {
+    const found = administrativeDatasets.find((item) => item.id === params.id)
+    if (!found) return envelope(404, 'DATASET_NOT_FOUND', 'no such dataset')
+    return HttpResponse.json(administrativeTransition(found), { status: 201 })
+  }),
   http.get(`${BASE}/cms/administrative-mappings`, () =>
     HttpResponse.json({
       items: [],
@@ -972,7 +1062,7 @@ export const handlers = [
     const { role } = currentActor()
     const canSeeIp = role === 'ops_admin' || role === 'super_admin'
 
-    let items = [...db.audit, ...auditEntries]
+    let items = [...db.audit, ...auditEntries, ...administrativeAuditEntries]
     if (breakGlass) items = items.filter((entry) => entry.breakGlass)
     if (resourceType) items = items.filter((entry) => entry.resourceType === resourceType)
     if (resourceId) items = items.filter((entry) => entry.resourceId === resourceId)
@@ -3203,4 +3293,275 @@ export const handlers = [
     if (!job) return envelope(404, 'NOT_FOUND', 'job not found')
     return HttpResponse.json(job)
   }),
+]
+
+/** CMS #154 — dataset fixtures. Exported so a test can build a variant rather than a second set. */
+export const administrativeDatasets = [
+  {
+    id: '11111111-1111-4111-8111-111111111111',
+    combinedDatasetVersion: 'v5.0.0+v2.4.1+7fac8c45+none+r0',
+    combinedChecksum: 'b3d1f0a90c5e4a1d8f6c2b7e9a0d3c5f1e2b4a6c8d0f2a4c6e8b0d2f4a6c8e0b',
+    status: 'PUBLISHED' as const,
+    effectiveDate: '2025-07-01',
+    overrideRevision: 0,
+    sources: {
+      currentSourceVersion: 'v5.0.0',
+      historicalSourceVersion: 'v2.4.1',
+      mappingSourceCommit: '7fac8c4512ab34cd56ef78ab90cd12ef34ab56cd',
+      boundarySourceVersion: 'v5.0.0',
+    },
+    importedAt: '2026-09-01T02:00:00.000Z',
+    publishedAt: '2026-09-01T03:00:00.000Z',
+    validation: {
+      validationId: 'val-published',
+      validatorVersion: 'adm-004.1',
+      ranAt: '2026-09-01T02:30:00.000Z',
+      errors: 0,
+      warnings: 2,
+      publishable: true,
+      warningGates: ['commune_code_reuse', 'quarantined_change_rows'],
+    },
+  },
+  {
+    id: '22222222-2222-4222-8222-222222222222',
+    combinedDatasetVersion: 'v5.1.0+v2.4.1+7fac8c45+none+r0',
+    combinedChecksum: 'c4e2a1b0d6f5b2e9a0d7c3b8f1e4d6a2c5b8e0f3a6d9c2b5e8f1a4d7c0b3e6f9',
+    status: 'VALIDATED' as const,
+    effectiveDate: '2026-01-01',
+    overrideRevision: 0,
+    sources: {
+      currentSourceVersion: 'v5.1.0',
+      historicalSourceVersion: 'v2.4.1',
+      mappingSourceCommit: '7fac8c4512ab34cd56ef78ab90cd12ef34ab56cd',
+      boundarySourceVersion: 'v5.0.0',
+    },
+    importedAt: '2026-09-06T02:00:00.000Z',
+    publishedAt: null,
+    validation: {
+      validationId: 'val-staged',
+      validatorVersion: 'adm-004.1',
+      ranAt: '2026-09-06T02:30:00.000Z',
+      errors: 0,
+      warnings: 1,
+      publishable: true,
+      warningGates: ['commune_code_reuse'],
+    },
+  },
+  {
+    id: '44444444-4444-4444-8444-444444444444',
+    combinedDatasetVersion: 'v5.2.0+v2.4.1+7fac8c45+none+r0',
+    combinedChecksum: 'e6a4c3d2f8b7d4a1c2f9e5d0b3a6f8c4e7d0a3f6b9c2e5a8d1f4b7e0a3c6d9f2',
+    status: 'STAGED' as const,
+    effectiveDate: '2026-07-01',
+    overrideRevision: 0,
+    sources: {
+      currentSourceVersion: 'v5.2.0',
+      historicalSourceVersion: 'v2.4.1',
+      mappingSourceCommit: '7fac8c4512ab34cd56ef78ab90cd12ef34ab56cd',
+      boundarySourceVersion: 'v5.0.0',
+    },
+    importedAt: '2026-09-07T02:00:00.000Z',
+    publishedAt: null,
+    validation: {
+      validationId: 'val-failed',
+      validatorVersion: 'adm-004.1',
+      ranAt: '2026-09-07T02:30:00.000Z',
+      errors: 2,
+      warnings: 1,
+      publishable: false,
+      warningGates: ['commune_code_reuse'],
+    },
+  },
+  {
+    id: '33333333-3333-4333-8333-333333333333',
+    combinedDatasetVersion: 'v4.9.0+v2.4.0+7fac8c45+none+r0',
+    combinedChecksum: 'd5f3b2c1e7a6c3f0b1e8d4c9a2f5e7b3d6c9f1a4b7e0d3c6f9a2b5e8d1c4f7a0',
+    status: 'ROLLED_BACK' as const,
+    effectiveDate: '2025-01-01',
+    overrideRevision: 0,
+    sources: {
+      currentSourceVersion: 'v4.9.0',
+      historicalSourceVersion: 'v2.4.0',
+      mappingSourceCommit: '7fac8c4512ab34cd56ef78ab90cd12ef34ab56cd',
+      boundarySourceVersion: 'v4.9.0',
+    },
+    importedAt: '2026-08-01T02:00:00.000Z',
+    publishedAt: '2026-08-01T03:00:00.000Z',
+    validation: {
+      validationId: 'val-old',
+      validatorVersion: 'adm-004.1',
+      ranAt: '2026-08-01T02:30:00.000Z',
+      errors: 0,
+      warnings: 0,
+      publishable: true,
+      warningGates: [],
+    },
+  },
+]
+
+type AdministrativeDatasetFixture = (typeof administrativeDatasets)[number]
+
+export function administrativeValidationReport(dataset: AdministrativeDatasetFixture) {
+  return {
+    datasetVersion: dataset.combinedDatasetVersion,
+    ranAt: dataset.validation.ranAt,
+    findings: [
+      ...(dataset.validation.errors > 0
+        ? [
+            {
+              gate: 'orphan_commune',
+              severity: 'ERROR' as const,
+              message: '2 communes reference a province that does not exist',
+              count: 2,
+              samples: ['00099', '00098'],
+            },
+          ]
+        : []),
+      {
+        gate: 'commune_code_reuse',
+        severity: 'WARNING' as const,
+        message: '2212 commune codes changed meaning on 2025-07-01',
+        count: 2212,
+        samples: ['00001', '00004', '00007'],
+      },
+    ],
+    errors: dataset.validation.errors,
+    warnings: dataset.validation.warnings,
+    publishable: dataset.validation.publishable,
+    counts: {
+      currentProvinces: 34,
+      currentCommunes: 3321,
+      historicalProvinces: 63,
+      historicalDistricts: 705,
+      historicalCommunes: 10598,
+      canonicalChanges: 10598,
+      quarantined: 1033,
+    },
+    validationId: dataset.validation.validationId,
+    validatorVersion: dataset.validation.validatorVersion,
+    boundTo: {
+      datasetVersionId: dataset.id,
+      combinedDatasetVersion: dataset.combinedDatasetVersion,
+      combinedChecksum: dataset.combinedChecksum,
+      snapshotFingerprint: 'fp-'.concat(dataset.id.slice(0, 8)),
+      overrideRevision: dataset.overrideRevision,
+    },
+  }
+}
+
+export const administrativeDiff = {
+  fromVersion: 'v5.0.0+v2.4.1+7fac8c45+none+r0',
+  toVersion: 'v5.1.0+v2.4.1+7fac8c45+none+r0',
+  countsByCategory: { RENAMED: 2, SOURCE_DRIFT: 1 },
+  entries: [
+    {
+      key: 'commune:00001',
+      category: 'RENAMED',
+      from: { code: '00001', effectiveFrom: '2025-07-01' },
+      to: { code: '00001', effectiveFrom: '2026-01-01' },
+      detail: 'Phường Ba Đình → Phường Ba Đình 1',
+      provenance: 'current-units v5.1.0',
+      validation: [],
+    },
+    {
+      key: 'commune:00004',
+      category: 'RENAMED',
+      from: { code: '00004', effectiveFrom: '2025-07-01' },
+      to: { code: '00004', effectiveFrom: '2026-01-01' },
+      detail: 'Phường Cống Vị → Phường Cống Vị 2',
+      provenance: 'current-units v5.1.0',
+      validation: [],
+    },
+    {
+      key: 'source:current-units',
+      category: 'SOURCE_DRIFT',
+      from: { code: 'v5.0.0', effectiveFrom: null },
+      to: { code: 'v5.1.0', effectiveFrom: null },
+      detail: 'current-units v5.0.0 → v5.1.0',
+      provenance: null,
+      validation: [],
+    },
+  ],
+  entriesTruncated: false,
+  entryLimit: 100,
+  affectedPlaces: {
+    total: 12,
+    samples: [
+      {
+        placeId: 'aaaaaaaa-1111-4111-8111-111111111111',
+        name: 'Quán Cơm Ba Đình',
+        code: '00001',
+        status: 'published',
+      },
+    ],
+    truncated: true,
+    sampleLimit: 1,
+  },
+  pagination: { offset: 0, limit: 100, totalEntries: 3, hasMore: false },
+}
+
+export function administrativeTransition(dataset: AdministrativeDatasetFixture) {
+  return {
+    datasetVersionId: dataset.id,
+    combinedDatasetVersion: dataset.combinedDatasetVersion,
+    previousActiveVersion: administrativeDatasets[0]!.combinedDatasetVersion,
+    previousActiveVersionId: administrativeDatasets[0]!.id,
+    publishedAt: '2026-09-07T12:00:00.000Z',
+    validationId: dataset.validation.validationId,
+    warnings: dataset.validation.warnings,
+    warningGates: dataset.validation.warningGates,
+    diff: administrativeDiff,
+    staleMappings: { total: 0, samples: [], truncated: false, sampleLimit: 20 },
+    cacheWarmed: true,
+  }
+}
+
+/**
+ * CMS #154 — the audit trail a dataset version carries. A refused publication
+ * is exactly the event a reviewer goes looking for later, so the mock includes
+ * one.
+ */
+export const administrativeAuditEntries: AuditEntry[] = [
+  {
+    id: 'au-adm-1',
+    action: 'administrative_dataset.import',
+    actorType: 'admin' as const,
+    actorId: 'ad-1',
+    actorRole: 'ops_admin' as const,
+    resourceType: 'administrative_dataset',
+    resourceId: '22222222-2222-4222-8222-222222222222',
+    occurredAt: '2026-09-06T02:00:00.000Z',
+    diff: { after: { combinedDatasetVersion: 'v5.1.0+v2.4.1+7fac8c45+none+r0', status: 'STAGED' } },
+    breakGlass: false,
+    requestId: 'req-adm-import',
+    authorizationPath: 'exact_role' as const,
+  },
+  {
+    id: 'au-adm-2',
+    action: 'administrative_dataset.validate',
+    actorType: 'admin' as const,
+    actorId: 'ad-1',
+    actorRole: 'ops_admin' as const,
+    resourceType: 'administrative_dataset',
+    resourceId: '22222222-2222-4222-8222-222222222222',
+    occurredAt: '2026-09-06T02:30:00.000Z',
+    diff: { after: { errors: 0, warnings: 1, publishable: true }, validationId: 'val-staged' },
+    breakGlass: false,
+    requestId: 'req-adm-validate',
+    authorizationPath: 'exact_role' as const,
+  },
+  {
+    id: 'au-adm-3',
+    action: 'administrative_dataset.publish_rejected',
+    actorType: 'admin' as const,
+    actorId: 'ad-1',
+    actorRole: 'ops_admin' as const,
+    resourceType: 'administrative_dataset',
+    resourceId: '22222222-2222-4222-8222-222222222222',
+    occurredAt: '2026-09-06T02:35:00.000Z',
+    diff: { result: 'rejected', reason: 'VALIDATION_STALE' },
+    breakGlass: false,
+    requestId: 'req-adm-refused',
+    authorizationPath: 'exact_role' as const,
+  },
 ]

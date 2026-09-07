@@ -49,6 +49,263 @@ export const vi = {
     'Chưa nạp ranh giới. Resolver vẫn chạy bằng mã và tên đã lưu, nhưng không dùng được hình học.',
   'administrative.capability.publicationBlocked': 'Duyệt đăng địa điểm đang bị chặn.',
   'administrative.capability.full': 'Đầy đủ dữ liệu hành chính và ranh giới.',
+
+  // CMS #154 — màn vận hành bộ dữ liệu hành chính (GoGo-BE ADM-005).
+  'administrative.capability.title': 'Năng lực hiện tại',
+  'administrative.capability.dataset': 'Bộ dữ liệu',
+  'administrative.capability.boundaries': 'Ranh giới',
+  'administrative.capability.resolver': 'Bộ phân giải',
+  'administrative.capability.publication': 'Duyệt đăng địa điểm',
+  'administrative.capability.activeVersion': 'Phiên bản đang hoạt động',
+  'administrative.capability.publishedAt': 'Publish lúc',
+  'administrative.capability.boundaryVersion': 'Phiên bản ranh giới',
+  'administrative.capability.boundaryLoadedAt': 'Nạp ranh giới lúc',
+  'administrative.capability.boundaryUnits': 'Đơn vị có hình học',
+  'administrative.capability.boundaryUnitsValue': '{provinces} tỉnh · {communes} phường/xã',
+  'administrative.capability.quarantined': 'Dòng bị cách ly',
+  'administrative.capability.unresolved': 'Chưa phân giải được',
+  'administrative.capability.validation': 'Kết quả kiểm tra',
+  'administrative.capability.observedAt': 'Số liệu tại thời điểm',
+  'administrative.capability.mappings': 'Địa điểm theo trạng thái ánh xạ',
+  'administrative.capability.remediation': 'Địa điểm đã duyệt theo nhóm cần xử lý',
+
+  'administrative.state.AVAILABLE': 'Có sẵn',
+  'administrative.state.MISSING': 'Chưa có',
+  'administrative.state.ERROR': 'Lỗi',
+  'administrative.resolver.FULL': 'Đầy đủ',
+  'administrative.resolver.PARTIAL': 'Một phần',
+  'administrative.resolver.UNAVAILABLE': 'Không dùng được',
+  'administrative.resolver.PARTIALHint':
+    'Vẫn trả lời được bằng mã, tên đã lưu và bảng ánh xạ lịch sử; chỉ không dùng được hình học. Ít hơn, không phải không có.',
+  'administrative.resolver.UNAVAILABLEHint':
+    'Không phân giải được đơn vị hành chính. Phần còn lại của hệ thống vẫn hoạt động bình thường.',
+  'administrative.publication.ENABLED': 'Đang mở',
+  'administrative.publication.BLOCKED': 'Đang chặn',
+
+  'administrative.status.STAGED': 'Đã nhập',
+  'administrative.status.VALIDATED': 'Đã kiểm tra',
+  'administrative.status.REJECTED': 'Đã từ chối',
+  'administrative.status.PUBLISHED': 'Đang hoạt động',
+  'administrative.status.ROLLED_BACK': 'Đã thay thế',
+  'administrative.severity.ERROR': 'Lỗi',
+  'administrative.severity.WARNING': 'Cảnh báo',
+
+  'administrative.active': 'Đang hoạt động',
+  'administrative.publishable': 'Publish được',
+  'administrative.notPublishable': 'Chưa publish được',
+  'administrative.neverValidated': 'Chưa kiểm tra',
+  'administrative.never': 'Chưa bao giờ',
+  'administrative.none': 'Không có',
+  'administrative.errorsWarnings': '{errors} lỗi · {warnings} cảnh báo',
+  'administrative.overrideRevision': 'Bản sửa thủ công (override revision)',
+  'administrative.openDetail': 'Chi tiết',
+  'administrative.copy': 'Chép',
+  'administrative.copied': 'Đã chép',
+  'administrative.copyChecksum': 'Chép giá trị đầy đủ của {label}',
+
+  'administrative.list.title': 'Các phiên bản đã nhập',
+  'administrative.list.hint':
+    'Mới nhất trước. Định danh của một bộ dữ liệu là bộ bốn nguồn đã ghim cộng với bản sửa thủ công, không phải một số phiên bản đơn lẻ.',
+  'administrative.list.empty': 'Chưa nhập bộ dữ liệu nào',
+  'administrative.list.emptyHint':
+    'Nhập bản phát hành đã ghim để tạo phiên bản đầu tiên. Nhập không publish bất cứ thứ gì.',
+  'administrative.list.summary': 'Hiển thị {shown} / {total} phiên bản',
+
+  'administrative.col.version': 'Phiên bản tổng hợp',
+  'administrative.col.status': 'Trạng thái',
+  'administrative.col.effectiveDate': 'Ngày hiệu lực',
+  'administrative.col.sources': 'Nguồn',
+  'administrative.col.checksum': 'Checksum',
+  'administrative.col.validation': 'Kiểm tra',
+  'administrative.col.imported': 'Nhập lúc',
+  'administrative.col.published': 'Publish lúc',
+  'administrative.col.actions': 'Thao tác',
+
+  'administrative.import.action': 'Nhập bản đã ghim',
+  'administrative.import.title': 'Nhập bản phát hành hành chính đã ghim',
+  'administrative.import.body':
+    'GoGo-BE nhập đúng bộ tệp đã ghim trong manifest của nó và đối chiếu checksum. Không có tệp nào để tải lên từ đây.',
+  'administrative.import.confirm': 'Nhập',
+  'administrative.import.stagedOnly':
+    'Nhập chỉ tạo một phiên bản ở trạng thái Đã nhập. Không có đường nào ở đây chạm tới bộ dữ liệu đang hoạt động.',
+  'administrative.import.overrideRevision': 'Bản sửa thủ công (override revision)',
+  'administrative.import.overrideRevisionHint':
+    'Tăng khi người duyệt quyết định, không phải khi nguồn thay đổi. Nó là một thành phần của phiên bản tổng hợp, nên tăng số này sẽ tạo ra một bộ dữ liệu mới từ nguồn không đổi. Nhập lại nguồn y hệt ở cùng số này sẽ bị từ chối là trùng.',
+  'administrative.import.currentActive': 'Đang hoạt động: {version}',
+  'administrative.import.done': 'Đã nhập xong',
+  'administrative.import.doneDetail': 'Tạo phiên bản {version} ở trạng thái Đã nhập.',
+
+  'administrative.tab.overview': 'Tổng quan',
+  'administrative.tab.validation': 'Kiểm tra',
+  'administrative.tab.diff': 'Thay đổi',
+  'administrative.tab.audit': 'Nhật ký',
+  'administrative.overview.hint':
+    'Xuất xứ chính xác của phiên bản này: từng nguồn, checksum của từng nguồn và checksum tổng hợp.',
+  'administrative.overview.storedDiff':
+    'Diff đã lưu lúc kiểm tra (so với nền lúc đó, không phải nền hiện tại)',
+  'administrative.audit.hint':
+    'Mọi lần nhập, kiểm tra, publish, rollback — kể cả những lần bị từ chối, kèm lý do.',
+
+  'administrative.source.current': 'Nguồn đơn vị hiện hành',
+  'administrative.source.historical': 'Nguồn đơn vị lịch sử',
+  'administrative.source.mapping': 'Commit bảng ánh xạ',
+  'administrative.source.boundary': 'Nguồn ranh giới',
+
+  'administrative.counts.currentProvinces': 'Tỉnh/thành hiện hành',
+  'administrative.counts.currentCommunes': 'Phường/xã hiện hành',
+  'administrative.counts.historicalProvinces': 'Tỉnh/thành lịch sử',
+  'administrative.counts.historicalDistricts': 'Quận/huyện lịch sử',
+  'administrative.counts.historicalCommunes': 'Phường/xã lịch sử',
+  'administrative.counts.canonicalChanges': 'Thay đổi chuẩn hoá',
+  'administrative.counts.quarantined': 'Dòng bị cách ly',
+  'administrative.counts.needsValidation': 'Chạy kiểm tra để có số bản ghi theo cấp.',
+
+  'administrative.validate.action': 'Kiểm tra',
+  'administrative.validate.done': 'Đã chạy kiểm tra',
+  'administrative.validate.hint':
+    'Kết quả được gắn với đúng ảnh chụp này: mã phiên bản, checksum, dấu vân tay của các dòng đã lưu và số bản sửa thủ công.',
+  'administrative.validate.ranAt': 'Chạy lúc',
+  'administrative.validate.validator': 'Phiên bản bộ kiểm tra',
+  'administrative.validate.validationId': 'Mã kết quả kiểm tra',
+  'administrative.validate.boundTo': 'Gắn với phiên bản',
+  'administrative.validate.fingerprint': 'Dấu vân tay dòng dữ liệu',
+  'administrative.validate.errorsBlock':
+    'Lỗi chặn publish và không thể bỏ qua từ CMS. Sửa nguồn rồi kiểm tra lại.',
+  'administrative.validate.warningsDoNotBlock':
+    'Cảnh báo không chặn publish. Chúng vẫn được ghi lại và hiển thị.',
+  'administrative.validate.noneOfThisSeverity': 'Không có mục nào ở mức này.',
+  'administrative.validate.rowCount': '{count} dòng',
+  'administrative.validate.neverHint':
+    'Phiên bản này chưa được kiểm tra lần nào. Chưa kiểm tra thì chưa publish được.',
+
+  'administrative.publish.action': 'Publish',
+  'administrative.publish.confirmTitle': 'Publish bộ dữ liệu hành chính',
+  'administrative.publish.confirmBody':
+    'Đây là thứ mọi lần duyệt đăng địa điểm được đối chiếu. Đọc kỹ những gì thay đổi trước khi xác nhận.',
+  'administrative.publish.done': 'Đã publish',
+  'administrative.publish.consequenceLabel': 'Hệ quả',
+  'administrative.publish.consequence':
+    'Phiên bản đang hoạt động bị hạ xuống và được giữ lại — đó chính là thứ rollback khôi phục. Không có văn bản địa chỉ nào của địa điểm bị ghi lại.',
+
+  'administrative.rollback.action': 'Rollback',
+  'administrative.rollback.confirmTitle': 'Khôi phục phiên bản đã publish trước đó',
+  'administrative.rollback.confirmBody':
+    'Rollback là một hành động tiến về phía trước, có nhật ký riêng, không phải hoàn tác.',
+  'administrative.rollback.done': 'Đã khôi phục',
+  'administrative.rollback.consequenceLabel': 'Hệ quả',
+  'administrative.rollback.consequence':
+    'Rollback đổi phiên bản bất biến đang hoạt động. Nó không sửa địa chỉ đã lưu, không đảo migration và không đổi ánh xạ nào của địa điểm — các ánh xạ không còn khớp sẽ được báo cáo, không bị ghi đè.',
+
+  'administrative.confirm.activeVersion': 'Phiên bản hoạt động',
+  'administrative.confirm.effectiveDate': 'Ngày hiệu lực',
+  'administrative.confirm.validation': 'Kết quả kiểm tra',
+  'administrative.confirm.warningsNote':
+    'Cảnh báo không chặn publish và vẫn được ghi lại. Cổng đã bật: {gates}',
+  'administrative.confirm.errorsNote': 'Lỗi chặn publish và không thể bỏ qua.',
+  'administrative.confirm.diff': 'Thay đổi so với bản đang hoạt động',
+  'administrative.confirm.diffValue': '{changes} thay đổi thuộc {categories} nhóm',
+  'administrative.confirm.affected':
+    '{count} địa điểm đang mang một khẳng định hành chính bị ảnh hưởng.',
+  'administrative.confirm.quarantine': 'Cách ly / chưa phân giải',
+  'administrative.confirm.quarantineValue': '{quarantined} cách ly · {unresolved} chưa phân giải',
+
+  'administrative.activeVersionChanged':
+    'Một lần publish khác đã thắng trong lúc thao tác này đang được chuẩn bị. Dữ liệu đã được tải lại — đọc lại phần thay đổi trước khi thử tiếp.',
+  'administrative.cacheNotWarmed':
+    'Publish đã thành công. Tiến trình này chưa làm nóng lại con trỏ bộ nhớ đệm của nó; PostgreSQL mới là nguồn quyết định và các tiến trình khác sẽ đồng bộ trong vòng 60 giây.',
+  'administrative.staleMappings': '{count} ánh xạ không còn khớp phiên bản này',
+  'administrative.staleMappingsDetail':
+    'Được báo cáo, không bị ghi đè. Việc hạ cấp một khẳng định do người thật xác nhận thuộc về hàng đợi kiểm duyệt ánh xạ.',
+
+  'administrative.diff.title': 'Thay đổi so với bản đang hoạt động',
+  'administrative.diff.hint':
+    'Tính lại khi đọc, không lưu. Số đếm theo nhóm luôn đầy đủ; danh sách bên dưới được phân trang.',
+  'administrative.diff.firstPublication':
+    'Lần publish đầu tiên: so sánh với một nền rỗng, nên không có phiên bản nguồn.',
+  'administrative.diff.baseline': 'Từ {from} sang {to}',
+  'administrative.diff.onlySourceDrift':
+    'Chỉ có định danh nguồn thay đổi. Không đơn vị hành chính nào dịch chuyển.',
+  'administrative.diff.affected': 'Địa điểm bị ảnh hưởng',
+  'administrative.diff.entryTotal': 'Tổng số thay đổi',
+  'administrative.diff.affectedSamples': 'Ví dụ địa điểm bị ảnh hưởng',
+  'administrative.diff.sampleTruncated': 'Hiển thị {shown} ví dụ trong tổng số {total}.',
+  'administrative.diff.truncated':
+    'Danh sách thay đổi bị cắt ở {limit} mục. Số đếm theo nhóm phía trên vẫn đầy đủ.',
+  'administrative.diff.empty': 'Không có thay đổi nào ở trang này',
+  'administrative.diff.emptyHint':
+    'Các nhóm phía trên cho biết toàn bộ thay đổi của phiên bản này.',
+  'administrative.diff.summary': 'Hiển thị {shown} / {total} thay đổi',
+  'administrative.diff.col.category': 'Nhóm',
+  'administrative.diff.col.from': 'Từ',
+  'administrative.diff.col.to': 'Sang',
+  'administrative.diff.col.detail': 'Chi tiết',
+  'administrative.diff.col.provenance': 'Xuất xứ',
+  'administrative.diff.col.gates': 'Cổng kiểm tra',
+
+  'administrative.diffCategory.CREATED': 'Tạo mới',
+  'administrative.diffCategory.RENAMED': 'Đổi tên',
+  'administrative.diffCategory.MERGED': 'Sáp nhập',
+  'administrative.diffCategory.SPLIT': 'Chia tách',
+  'administrative.diffCategory.REASSIGNED': 'Chuyển thuộc',
+  'administrative.diffCategory.DISSOLVED': 'Giải thể',
+  'administrative.diffCategory.PARENT_CHANGED': 'Đổi cấp trên',
+  'administrative.diffCategory.STATUS_CHANGED': 'Đổi trạng thái',
+  'administrative.diffCategory.EFFECTIVE_PERIOD_CHANGED': 'Đổi kỳ hiệu lực',
+  'administrative.diffCategory.UNRESOLVED': 'Chưa phân giải',
+  'administrative.diffCategory.SOURCE_DRIFT': 'Lệch nguồn',
+
+  'administrative.mappingStatus.UNMAPPED': 'Chưa gán',
+  'administrative.mappingStatus.AUTO_MATCHED': 'Máy khớp',
+  'administrative.mappingStatus.NEEDS_REVIEW': 'Cần xem lại',
+  'administrative.mappingStatus.VERIFIED': 'Đã xác nhận',
+  'administrative.mappingStatus.REJECTED': 'Đã từ chối',
+  'administrative.mappingStatus.STALE': 'Đã cũ',
+
+  'administrative.remediation.compliant': 'Đạt',
+  'administrative.remediation.unmapped': 'Chưa gán',
+  'administrative.remediation.auto_matched': 'Máy khớp',
+  'administrative.remediation.needs_review': 'Cần xem lại',
+  'administrative.remediation.rejected': 'Đã từ chối',
+  'administrative.remediation.stale': 'Đã cũ',
+  'administrative.remediation.verified_against_older_version': 'Xác nhận trên bản cũ hơn',
+
+  'administrative.block.NO_PERMISSION':
+    'Chỉ ops_admin mới thực hiện được thao tác này. Bạn vẫn đọc được toàn bộ dữ liệu.',
+  'administrative.block.OFFLINE': 'Mất kết nối máy chủ. Thao tác ghi tạm khoá cho tới khi có lại.',
+  'administrative.block.NOT_VALIDATABLE':
+    'Chỉ chạy kiểm tra được cho phiên bản Đã nhập hoặc Đã kiểm tra. Phiên bản này đang là {status}.',
+  'administrative.block.DATASET_ALREADY_PUBLISHED': 'Phiên bản này đang là bộ dữ liệu hoạt động.',
+  'administrative.block.DATASET_REJECTED': 'Phiên bản này đã bị từ chối và không thể publish.',
+  'administrative.block.DATASET_NOT_VALIDATED':
+    'Phiên bản này đang là {status}; chạy kiểm tra trước khi publish.',
+  'administrative.block.VALIDATION_MISSING': 'Chưa lưu kết quả kiểm tra nào cho phiên bản này.',
+  'administrative.block.VALIDATION_STALE':
+    'Kết quả kiểm tra đã lưu không còn mô tả phiên bản này. Chạy kiểm tra lại.',
+  'administrative.block.VALIDATION_HAS_ERRORS':
+    '{errors} lỗi kiểm tra đang chặn publish. Lỗi không thể bỏ qua.',
+  'administrative.block.DATASET_NEVER_PUBLISHED':
+    'Phiên bản này chưa từng hoạt động. Rollback khôi phục một bản từng hoạt động, không publish bản mới.',
+  'administrative.block.DATASET_NOT_RESTORABLE':
+    'Máy chủ không liệt kê phiên bản này trong danh sách khôi phục được (đang là {status}).',
+
+  'error.DATASET_NOT_FOUND': 'Không tìm thấy bộ dữ liệu hành chính.',
+  'error.DATASET_ALREADY_IMPORTED':
+    'Nguồn y hệt ở cùng số bản sửa đã được nhập rồi. Tăng số bản sửa nếu muốn tạo phiên bản mới.',
+  'error.DATASET_ALREADY_PUBLISHED': 'Phiên bản này đang là bộ dữ liệu hoạt động.',
+  'error.DATASET_NOT_VALIDATED': 'Phiên bản chưa được kiểm tra nên chưa publish được.',
+  'error.DATASET_REJECTED': 'Phiên bản đã bị từ chối và không thể publish.',
+  'error.DATASET_NEVER_PUBLISHED': 'Phiên bản chưa từng hoạt động nên không khôi phục được.',
+  'error.DATASET_NOT_RESTORABLE': 'Phiên bản không ở trạng thái khôi phục được.',
+  'error.DATASET_CORRUPTED':
+    'Các dòng đã lưu của phiên bản này không còn khớp ảnh chụp đã kiểm tra. Nhập lại thay vì khôi phục.',
+  'error.VALIDATION_MISSING': 'Chưa có kết quả kiểm tra cho phiên bản này.',
+  'error.VALIDATION_STALE':
+    'Kết quả kiểm tra không còn mô tả phiên bản này. Chạy kiểm tra lại rồi thử lại.',
+  'error.VALIDATION_HAS_ERRORS': 'Lỗi kiểm tra chặn publish và không thể bỏ qua.',
+  'error.SNAPSHOT_CHECKSUM_MISMATCH':
+    'Tệp nguồn đã ghim bị thiếu hoặc nội dung không còn khớp manifest.',
+  'error.ACTIVE_VERSION_CHANGED':
+    'Một lần publish khác đã thắng trong lúc thao tác này đang chuẩn bị. Tải lại và đọc lại phần thay đổi.',
   'nav.planTemplates': 'Mẫu lịch trình',
   'nav.recommendations': 'Gợi ý',
   'nav.settings': 'Cấu hình',
