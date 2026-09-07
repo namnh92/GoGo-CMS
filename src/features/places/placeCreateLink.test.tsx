@@ -5,6 +5,7 @@ import { http, HttpResponse } from 'msw'
 import { server } from '@/shared/test/server'
 import { renderWithProviders, signInAs } from '@/shared/test/render'
 import PlaceCreateScreen from './placeCreate.view'
+import { roundCoordinate } from './placeCreateLink.view'
 
 /**
  * GoGo-CMS#157 — adding a place by its Google Maps link.
@@ -50,7 +51,10 @@ const RESOLVED = {
     googlePlaceId: 'ChIJcafe',
     name: 'Cà Phê Bên Đường',
     address: '9 Nguyễn Huệ, Quận 1',
-    location: { lat: 10.7743, lng: 106.7038 },
+    // The doubles cms-dev actually answered for Landmark 81 — Google publishes
+    // 10.7951153 / 106.7221002 and JSON hands back the nearest double, which is
+    // not the same one. See the precision block at the bottom of this file.
+    location: { lat: 10.795115299999999, lng: 106.72210020000001 },
     googleRating: 4.4,
     googleRatingCount: 88,
     googleScore: 71,
@@ -106,7 +110,7 @@ describe('add a place by Google Maps link', () => {
 
     expect(await screen.findByText('Google trả về địa điểm này')).toBeInTheDocument()
     expect(screen.getByText('Cà Phê Bên Đường')).toBeInTheDocument()
-    expect(screen.getByText('10.774300, 106.703800')).toBeInTheDocument()
+    expect(screen.getByText('10.7951153, 106.7221002')).toBeInTheDocument()
     // Shown so the editor can tell two branches of a chain apart. Google
     // requires its attribution to travel with anything it supplied.
     expect(screen.getByText('4.4★ Google · 88 đánh giá')).toBeInTheDocument()
@@ -115,8 +119,8 @@ describe('add a place by Google Maps link', () => {
     await user.click(screen.getByRole('button', { name: 'Dùng dữ liệu này' }))
 
     expect(screen.getByLabelText(/Tên hiển thị/)).toHaveValue('Cà Phê Bên Đường')
-    expect(screen.getByLabelText(/Vĩ độ/)).toHaveValue(10.7743)
-    expect(screen.getByLabelText(/Kinh độ/)).toHaveValue(106.7038)
+    expect(screen.getByLabelText(/Vĩ độ/)).toHaveValue(10.7951153)
+    expect(screen.getByLabelText(/Kinh độ/)).toHaveValue(106.7221002)
   })
 
   it('sends the Google id and every field left as Google filled it', async () => {
@@ -265,5 +269,25 @@ describe('add a place by Google Maps link', () => {
       lat: 10.7769,
       lng: 106.7009,
     })
+  })
+})
+
+/**
+ * GoGo-CMS#157, found by clicking it on cms-dev rather than by any test here.
+ *
+ * The resolve endpoint answered `10.795115299999999` for Landmark 81 — the
+ * double nearest to the `10.7951153` Google publishes — and the latitude box
+ * rendered all sixteen digits. Nothing was wrong with the value; it just read
+ * as broken, which for a coordinate an editor is being asked to trust is the
+ * same thing.
+ */
+describe('coordinate precision', () => {
+  it('puts the number back where Google had it', () => {
+    expect(roundCoordinate(10.795115299999999)).toBe(10.7951153)
+    expect(roundCoordinate(106.72210020000001)).toBe(106.7221002)
+    // A whole degree stays whole rather than growing a decimal point.
+    expect(roundCoordinate(10)).toBe(10)
+    // Seven decimals is roughly a centimetre; an eighth is noise, not precision.
+    expect(roundCoordinate(10.12345678)).toBe(10.1234568)
   })
 })

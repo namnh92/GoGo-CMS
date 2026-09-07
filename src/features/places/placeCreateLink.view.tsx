@@ -15,6 +15,20 @@ import { resolvePlaceLink, type ResolveLinkResult } from './api'
 import { readGoogleLink, type GoogleLinkReading } from './googleLink'
 import { styles } from './placeCreateLink.style'
 
+/**
+ * Google publishes coordinates to seven decimals; JSON hands back the double
+ * nearest to that, and `10.7951153` arrives as `10.795115299999999`. Put
+ * straight into a number input it renders all sixteen digits, which reads as a
+ * broken value — the first thing an editor saw on cms-dev.
+ *
+ * Rounding back to seven puts the number where Google had it. The seventh
+ * decimal is about a centimetre; nothing downstream can tell the difference,
+ * and the duplicate check works in metres.
+ */
+export function roundCoordinate(value: number): number {
+  return Math.round(value * 1e7) / 1e7
+}
+
 /** What the editor gets to apply. `lat`/`lng` travel together — one position. */
 export type AppliedResolution = {
   googlePlaceId: string
@@ -118,8 +132,10 @@ export function PlaceCreateLinkPanel({
           <p className={styles.previewName}>{candidate.name}</p>
           {candidate.address ? <p className={styles.previewAddress}>{candidate.address}</p> : null}
           <div className={styles.previewFacts}>
+            {/* The same number the boxes will hold — a preview that rounds
+                differently from what it applies is its own small lie. */}
             <span className={styles.previewCoords}>
-              {candidate.location.lat.toFixed(6)}, {candidate.location.lng.toFixed(6)}
+              {`${roundCoordinate(candidate.location.lat)}, ${roundCoordinate(candidate.location.lng)}`}
             </span>
             {/*
               Shown so the editor can tell two branches of one chain apart, and
@@ -149,8 +165,8 @@ export function PlaceCreateLinkPanel({
                   googlePlaceId: candidate.googlePlaceId,
                   name: candidate.name,
                   addressText: candidate.address,
-                  lat: candidate.location.lat,
-                  lng: candidate.location.lng,
+                  lat: roundCoordinate(candidate.location.lat),
+                  lng: roundCoordinate(candidate.location.lng),
                 })
               }
             >
