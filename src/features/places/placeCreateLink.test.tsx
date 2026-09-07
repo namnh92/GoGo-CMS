@@ -294,6 +294,34 @@ describe('add a place by Google Maps link', () => {
     expect(screen.queryByRole('button', { name: 'Dùng dữ liệu này' })).not.toBeInTheDocument()
   })
 
+  it('does not call one candidate several branches', async () => {
+    signInAs('editor')
+    resolvesTo({
+      status: 'CANDIDATE_SELECTION',
+      reasonCodes: [],
+      matchConfidence: 0.78,
+      candidates: [
+        {
+          googlePlaceId: 'ChIJ4ps',
+          name: "Pizza 4P's Aeon Mall Hà Đông",
+          address: 'Dương Nội, Hà Đông, Hà Nội',
+          confidence: 0.78,
+        },
+      ],
+    })
+    const user = userEvent.setup()
+    renderWithProviders(<PlaceCreateScreen />)
+
+    await pasteAndResolve(user, 'https://maps.app.goo.gl/18TH9Y8rkdAbsrQs7')
+
+    // The heading has to match what came back. One result under "matches
+    // several branches" is a small lie the editor can see.
+    expect(await screen.findByText('Có thể là chỗ này')).toBeInTheDocument()
+    expect(screen.queryByText('Link khớp với nhiều chi nhánh')).not.toBeInTheDocument()
+    // Still a choice, because the server was not confident enough to take it.
+    expect(screen.getByRole('button', { name: /Dương Nội/ })).toBeInTheDocument()
+  })
+
   it('refuses to ask the provider about a host that only looks like Google', async () => {
     signInAs('editor')
     const calls = resolvesTo(RESOLVED)
