@@ -2647,4 +2647,8 @@ export const en: Partial<Record<MessageKey, string>> = {
   'jobDetail.administrativeUnmapped': 'Could not be placed',
   'jobDetail.administrativeAuto': 'Matched automatically — not verified',
   'jobDetail.administrativeBlocks': 'Not publishable yet: a reviewer must verify the mapping.',
+  'jobDetail.administrativeVerified': 'Verified by a reviewer',
+  'jobDetail.administrativeClear': 'The administrative mapping does not block publishing.',
+  'wizard.defaultCity': 'Search hint — default city',
+  'wizard.fieldCityHint': 'city — a search hint, not an administrative level',
 }

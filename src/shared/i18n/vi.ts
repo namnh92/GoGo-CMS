@@ -1625,7 +1625,7 @@ export const vi = {
   'wizard.sheetUrl': 'Đường dẫn Google Sheet',
   'wizard.sheetUrlHint': 'Chỉ chấp nhận liên kết docs.google.com hoặc mã spreadsheet.',
   'wizard.sheetTabs': 'Tên tab (phân tách bằng dấu phẩy)',
-  'wizard.defaultCity': 'Thành phố mặc định',
+  'wizard.defaultCity': 'Gợi ý tìm kiếm — thành phố mặc định',
   'wizard.defaultCityHint':
     'Chỉ là gợi ý để tìm địa điểm trên Google. Đơn vị hành chính của địa điểm do toạ độ quyết định, không phải ô này.',
   'wizard.districtRetired':
@@ -1635,12 +1635,15 @@ export const vi = {
   'jobDetail.administrativeNeedsReview': 'Cần người xem',
   'jobDetail.administrativeUnmapped': 'Không xác định được',
   'jobDetail.administrativeAuto': 'Máy khớp — chưa xác minh',
+  'jobDetail.administrativeVerified': 'Đã được người duyệt xác minh',
+  'jobDetail.administrativeClear': 'Ánh xạ hành chính không chặn việc đăng.',
   'jobDetail.administrativeBlocks': 'Chưa đủ điều kiện đăng: cần người duyệt ánh xạ.',
   'wizard.mode': 'Chế độ ghi',
   'wizard.modeHint': 'Chạy thử là mặc định. Chọn chế độ ghi là quyết định có chủ đích.',
   'wizard.mapping': 'Ánh xạ cột nguồn sang trường chuẩn',
   'wizard.mappingHint':
     'Cột không ánh xạ sẽ bị bỏ qua. Giá trị chọn ở đây là tên trường máy chủ nhận, gửi nguyên vẹn.',
+  'wizard.fieldCityHint': 'city — gợi ý tìm kiếm, không phải cấp hành chính',
   'wizard.mappingRequired': 'Bắt buộc',
   'wizard.mappingIgnore': 'Bỏ qua cột này',
   'wizard.samplePreview': 'Dòng mẫu',

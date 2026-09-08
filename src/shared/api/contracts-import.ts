@@ -135,6 +135,13 @@ export const importAdministrativeSchema = z.object({
   datasetVersion: z.string().nullish(),
   requiresReview: z.boolean().default(false),
   blocksPublication: z.boolean().default(false),
+  /**
+   * Why publishing is blocked, in the approval policy's own closed vocabulary,
+   * or null. `blocksPublication` is derived from this, not asserted — a row
+   * matching a place a reviewer already verified does not block, and that is
+   * the case the old "a mapping exists, so it blocks" rule got wrong.
+   */
+  approvalBlock: z.object({ code: z.string(), message: z.string() }).nullish(),
 })
 export type ImportAdministrativeIdentity = z.infer<typeof importAdministrativeSchema>
 

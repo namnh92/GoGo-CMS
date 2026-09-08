@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
 import { useI18n, useT } from '@/shared/i18n/i18n'
+import type { MessageKey } from '@/shared/i18n/vi'
 import { queryKeys } from '@/shared/api/queryKeys'
 import { useSession } from '@/shared/auth/session'
 import { useOnline } from '@/shared/ui/useOnline'
@@ -65,6 +66,18 @@ const PAGE_SIZE = 25
  * until then there is no coordinate to classify. That reads as "not yet", not
  * as "nowhere".
  */
+function blockReason(
+  t: (key: MessageKey) => string,
+  block: { code: string; message: string } | null | undefined,
+): string {
+  if (!block) return t('jobDetail.administrativeBlocks')
+  const key = `mapping.block.${block.code}` as MessageKey
+  const translated = t(key)
+  // A code this build has no phrase for still says something, rather than
+  // rendering an enum member at an operator.
+  return translated === key ? block.message : translated
+}
+
 function AdministrativeCell({ row }: { row: ImportRow }) {
   const t = useT()
   const identity = row.administrative
@@ -105,10 +118,22 @@ function AdministrativeCell({ row }: { row: ImportRow }) {
       </p>
       {/* Said in words, every time. "AUTO_MATCHED" left to speak for itself
           is the one line on this screen most likely to be read as approval. */}
-      <p className={styles.placeMeta}>{t('jobDetail.administrativeAuto')}</p>
+      {identity.status === 'VERIFIED' ? (
+        <p className={styles.placeMeta}>{t('jobDetail.administrativeVerified')}</p>
+      ) : (
+        <p className={styles.placeMeta}>{t('jobDetail.administrativeAuto')}</p>
+      )}
+      {/*
+        The reason comes from the server's approval policy, not from a rule
+        written here. A row matching a place a reviewer already verified does
+        not block, and a screen that decided that for itself would eventually
+        disagree with the publish step.
+      */}
       {identity.blocksPublication ? (
-        <p className={styles.placeMeta}>{t('jobDetail.administrativeBlocks')}</p>
-      ) : null}
+        <p className={styles.placeMeta}>{blockReason(t, identity.approvalBlock)}</p>
+      ) : (
+        <p className={styles.placeMeta}>{t('jobDetail.administrativeClear')}</p>
+      )}
     </div>
   )
 }

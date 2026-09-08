@@ -55,8 +55,19 @@ describe('the mapping step', () => {
       .map((option) => (option as HTMLOptionElement).value)
 
     expect(values).not.toContain('district')
-    // Still offered, because a place still needs one: it is a search hint.
+    // Still offered, because it is still useful: as a search hint.
     expect(values).toContain('city')
+  })
+
+  it('labels city as a search hint rather than as an administrative level', async () => {
+    await openMappingStep()
+    const select = await screen.findByLabelText('name')
+    const cityOption = within(select).getByRole('option', { name: /gợi ý tìm kiếm/ })
+    // The stored value stays the canonical wire name the server receives; only
+    // what an operator reads changes, because reading "city" next to a list of
+    // address fields is what made it look like the address.
+    expect((cityOption as HTMLOptionElement).value).toBe('city')
+    expect(cityOption).toHaveTextContent(/không phải cấp hành chính/)
   })
 
   it('says why the district choice is gone, where an operator would look for it', async () => {
@@ -89,17 +100,30 @@ describe('the review screen', () => {
     // The claim an import screen is most tempted to make. `AUTO_MATCHED` left
     // to speak for itself reads as approval; this says what it actually is.
     expect(within(row).getByText(/chưa xác minh/)).toBeInTheDocument()
-    expect(within(row).getByText(/cần người duyệt ánh xạ/)).toBeInTheDocument()
+    // And the reason comes from the server's approval policy, in its own words.
+    expect(within(row).getByText(/chưa được người thật xác nhận/)).toBeInTheDocument()
   })
 
-  it('tells the three outcomes apart in words, not in shades of one badge', async () => {
+  it('does not call a row blocked when the policy says it is not', async () => {
+    // Row 14 matched a place a reviewer already verified — the single bulk row
+    // that may legitimately publish. A screen deriving "a mapping exists, so it
+    // blocks" would contradict the publish step it is describing.
+    openJob()
+    const row = await cellFor(14)
+    expect(within(row).getByText('Đã được người duyệt xác minh')).toBeInTheDocument()
+    expect(within(row).getByText('Ánh xạ hành chính không chặn việc đăng.')).toBeInTheDocument()
+    expect(within(row).queryByText(/Chưa đủ điều kiện đăng/)).not.toBeInTheDocument()
+  })
+
+  it('tells the outcomes apart in words, not in shades of one badge', async () => {
     openJob()
     // Needs a person: the evidence disagreed with itself.
-    expect(within(await cellFor(14)).getByText('Cần người xem')).toBeInTheDocument()
+    expect(within(await cellFor(18)).getByText('Cần người xem')).toBeInTheDocument()
     // Nothing placed it — which is not a review task.
-    expect(within(await cellFor(16)).getByText('Không xác định được')).toBeInTheDocument()
+    expect(within(await cellFor(17)).getByText('Không xác định được')).toBeInTheDocument()
     // Not resolved against the provider yet: "not yet", not "nowhere".
     expect(within(await cellFor(12)).getByText('Chưa phân giải')).toBeInTheDocument()
+    expect(within(await cellFor(16)).getByText('Chưa phân giải')).toBeInTheDocument()
   })
 
   it('shows no district anywhere on the row', async () => {

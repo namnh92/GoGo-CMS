@@ -282,7 +282,15 @@ export default function ImportWizardScreen() {
                               <option value="">{t('wizard.mappingIgnore')}</option>
                               {MAPPABLE_FIELDS.map((field) => (
                                 <option key={field} value={field}>
-                                  {field}
+                                  {/*
+                                    The value stays the canonical wire name —
+                                    that is what the server receives. `city` gets
+                                    a label saying what it is for: a provider
+                                    search hint, not an administrative level.
+                                    Presenting it as the latter is what made
+                                    operators treat it as the address.
+                                  */}
+                                  {field === 'city' ? t('wizard.fieldCityHint') : field}
                                   {REQUIRED_MAPPABLE_FIELDS.includes(field) ? ' *' : ''}
                                 </option>
                               ))}
