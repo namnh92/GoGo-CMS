@@ -28,7 +28,6 @@ export type ChecklistItemId =
   | 'permission'
   | 'coordinates'
   | 'address'
-  | 'area'
   | 'hours'
   | 'photo'
   | 'price'
@@ -95,7 +94,6 @@ export function buildChecklist({ place, canTransition, target }: ChecklistInput)
       met: place.lat != null && place.lng != null,
     },
     { id: 'address', kind: 'suggested', met: Boolean(place.addressText?.trim()) },
-    { id: 'area', kind: 'suggested', met: Boolean(place.areaKey?.trim()) },
     { id: 'hours', kind: 'suggested', met: knownDays > 0, detail: { days: knownDays } },
     {
       id: 'photo',

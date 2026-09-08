@@ -53,11 +53,6 @@ test.describe('the editor composes', () => {
   test('every block of the epic is on the page and operable', async ({ page }) => {
     await openEditor(page)
 
-    // #123 — the area is a combobox over `GET /cms/areas`, not the old free
-    // text box under a hint pointing at a taxonomy kind that does not exist.
-    const area = page.getByRole('combobox', { name: /Khu vực khám phá/ })
-    await expect(area).toBeEnabled()
-
     // #123 — address and contact are writable; they used to be read-only `<dd>`
     // facts with a comment saying `cmsUpdatePlace` would not accept them.
     for (const label of [/Điện thoại/, /Website/]) {
@@ -75,27 +70,19 @@ test.describe('the editor composes', () => {
     await expect(page.getByRole('combobox', { name: /Tỉnh \/ thành phố/ })).toBeEnabled()
     await expect(page.getByRole('combobox', { name: /Phường \/ xã/ })).toBeEnabled()
     await expect(page.getByLabel(/Quận\/Huyện/)).toHaveCount(0)
+    /*
+     * ADM-108 — and no legacy Area picker either. Every stored Area value is a
+     * geographic address grouping (three of the four name dissolved districts),
+     * so beside these two it was a second, contradictory answer to "where is
+     * this place". The column is still stored; nothing offers it as an address.
+     */
+    await expect(page.getByRole('combobox', { name: /Khu vực/ })).toHaveCount(0)
 
     // #124, #125, #127, #126.
     await expect(card(page, 'Giờ mở cửa')).toBeVisible()
     await expect(card(page, 'Thư viện ảnh')).toBeVisible()
     await expect(card(page, 'Trước khi xuất bản')).toBeVisible()
     await expect(card(page, 'Liên kết Google Maps')).toBeVisible()
-  })
-
-  test('the area combobox opens on real typing and matches without accents', async ({ page }) => {
-    await openEditor(page)
-
-    const area = page.getByRole('combobox', { name: /Khu vực khám phá/ })
-    await area.click()
-    await area.fill('quan 1')
-    // Unaccented input finds the accented label, the way search normalizes.
-    await expect(page.getByRole('option', { name: /Quận 1/ }).first()).toBeVisible()
-
-    // Keyboard, not just pointer.
-    await area.press('ArrowDown')
-    await area.press('Enter')
-    await expect(area).not.toHaveValue('')
   })
 })
 
@@ -234,7 +221,9 @@ test.describe('roles', () => {
     await expect(
       page.getByRole('region', { name: 'Thứ Hai' }).getByLabel('Giờ mở ngày Thứ Hai'),
     ).toBeDisabled()
-    await expect(page.getByRole('combobox', { name: /Khu vực khám phá/ })).toBeDisabled()
+    // ADM-108 removed the legacy area picker; the administrative pair is the
+    // address, and it is disabled for a moderator like everything else here.
+    await expect(page.getByLabel(/Tỉnh \/ thành phố/)).toBeDisabled()
   })
 
   test('an ops admin reads the editor and cannot edit a place either', async ({ page }) => {

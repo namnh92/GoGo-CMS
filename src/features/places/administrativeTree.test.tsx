@@ -161,17 +161,25 @@ describe('the place list, grouped by the canonical hierarchy', () => {
     expect(lastQuery(queries).get('provinceCode')).toBeNull()
   })
 
-  it('says which unit a row is in, beside the curated collection rather than instead of it', async () => {
+  it('names the unit a row is in, and offers no second answer to the same question', async () => {
     signInAs('editor')
     wire()
     renderWithProviders(<PlaceListScreen />)
 
-    // Both headers, so no one has to guess which column is the address.
     expect(await screen.findByText('Địa chỉ hành chính')).toBeInTheDocument()
-    expect(screen.getByText('Khu vực')).toBeInTheDocument()
-    expect(screen.getByText(`${HCM.name} · ${BEN_NGHE.name}`)).toBeInTheDocument()
-    // The curated key is still there, still its own thing.
-    expect(screen.getByText('hcm_q1')).toBeInTheDocument()
+    const table = screen.getByRole('table', { name: 'Quản lý địa điểm' })
+    expect(within(table).getByText(BEN_NGHE.name)).toBeInTheDocument()
+    expect(within(table).getByText(HCM.name)).toBeInTheDocument()
+    /*
+     * ADM-108 — every stored Area value is a geographic address grouping:
+     * `hcm_q1` is "Quận 1, TP.HCM", `hn_hoankiem` is "Hoàn Kiếm, Hà Nội", and
+     * the table behind them stores a centre and a radius under a parent city.
+     * Three of the four name districts, a tier dissolved on 2025-07-01. Shown
+     * beside the canonical address it would be a second, contradictory and
+     * out-of-date answer to "where is this place", so it is not shown.
+     */
+    expect(screen.queryByText('Khu vực')).not.toBeInTheDocument()
+    expect(screen.queryByText('hcm_q1')).not.toBeInTheDocument()
   })
 
   it('lets the selection be undone without reloading the screen', async () => {

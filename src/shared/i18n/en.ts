@@ -1124,9 +1124,6 @@ export const en: Partial<Record<MessageKey, string>> = {
   'places.bulk.illegal': 'One of the selected places cannot move to this status from where it is.',
 
   'placeEditor.address': 'Address (free text)',
-  'placeEditor.areaKey': 'Discovery area',
-  'placeEditor.areaKeyHint':
-    'A key from the area catalog; it drives search and filtering, and is not the administrative address.',
   'placeEditor.contact': 'Administrative address and contact',
   'placeEditor.contactHint':
     'The administrative address is separate from the discovery area; emptying a box clears the stored value.',
@@ -1226,7 +1223,6 @@ export const en: Partial<Record<MessageKey, string>> = {
   'publishChecklist.item.permission': 'This account may change the status',
   'publishChecklist.item.coordinates': 'Has coordinates',
   'publishChecklist.item.address': 'Has an address',
-  'publishChecklist.item.area': 'Has an area',
   'publishChecklist.item.hours': 'Has opening hours',
   'publishChecklist.item.photo': 'Has an approved photo',
   'publishChecklist.item.price': 'Has a price',
@@ -1321,9 +1317,6 @@ export const en: Partial<Record<MessageKey, string>> = {
   'areaPicker.unknownHint': 'this key is not in the area catalog',
   'areaPicker.empty': 'The area catalog has no rows yet.',
   'areaPicker.noMatch': 'No area matches “{query}”.',
-
-  'places.filter.area': 'Discovery area',
-  'places.filter.areaHint': 'Search an area…',
 
   'unsaved.title': 'Leave with unsaved changes?',
   'unsaved.description': 'The changes below are lost if you leave this page.',

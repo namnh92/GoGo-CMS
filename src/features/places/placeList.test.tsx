@@ -55,9 +55,9 @@ describe('place list, by role', () => {
     renderWithProviders(<PlaceListScreen />)
 
     await screen.findByText('Chào Bạn Cafe & Space')
-    // CMS-044: the area filter is now the same combobox the editor uses, over
-    // the same `cmsListAreas` vocabulary — one filter, one list of keys.
-    expect(screen.getByRole('combobox', { name: 'Khu vực khám phá' })).toBeInTheDocument()
+    // ADM-108 — the legacy area filter is gone. Places are narrowed by the
+    // canonical hierarchy, and by nothing that looks like a second one.
+    expect(screen.queryByRole('combobox', { name: /Khu vực/ })).not.toBeInTheDocument()
     expect(screen.getByLabelText('Khoá nhóm')).toBeInTheDocument()
     expect(screen.getByLabelText('Nguồn dữ liệu')).toBeInTheDocument()
     expect(screen.getByLabelText('Sắp xếp')).toBeInTheDocument()

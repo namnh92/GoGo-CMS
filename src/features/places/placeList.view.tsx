@@ -32,7 +32,6 @@ import type {
 } from '@/shared/api/contracts'
 import { fetchPlaces, fetchStalePlaces, transitionPlace, verifyFreshness } from './api'
 import { PLACE_TRANSITIONS, PlaceStatusBadge } from './status'
-import { AreaCombobox } from './areaCombobox'
 import {
   AdministrativeTree,
   NO_SELECTION,
@@ -71,7 +70,6 @@ export default function PlaceListScreen() {
 
   const [tab, setTab] = useState<TabId>('all')
   const [search, setSearch] = useState('')
-  const [areaKey, setAreaKey] = useState('')
   /**
    * ADM-018 — which administrative unit the table is showing, if any.
    *
@@ -103,7 +101,6 @@ export default function PlaceListScreen() {
   const shared = {
     status: tab === 'stale' || tab === 'duplicates' ? ('all' as const) : tab,
     q: search || undefined,
-    areaKey: areaKey || undefined,
     category: category || undefined,
     source,
   }
@@ -254,19 +251,21 @@ export default function PlaceListScreen() {
         header: () => t('places.col.administrative'),
         cell: ({ row }) => {
           const place = row.original
-          const names = [place.provinceName, place.communeName].filter(Boolean)
-          return names.length > 0 ? (
-            <span className={styles.muted}>{names.join(' · ')}</span>
-          ) : (
-            <span className={styles.muted}>{t('places.administrative.none')}</span>
+          if (!place.provinceName && !place.communeName) {
+            return <span className={styles.muted}>{t('places.administrative.none')}</span>
+          }
+          // Two lines, commune first: it is the unit that identifies the place,
+          // and the province is the context it sits in. On one line the pair
+          // wraps into six in a dense table and reads as neither.
+          return (
+            <span className={styles.adminCell}>
+              <span className={styles.adminCommune}>{place.communeName ?? place.communeCode}</span>
+              <span className={styles.adminProvince}>
+                {place.provinceName ?? place.provinceCode}
+              </span>
+            </span>
           )
         },
-        enableSorting: false,
-      },
-      {
-        id: 'area',
-        header: () => t('places.col.area'),
-        cell: ({ row }) => <span className={styles.mono}>{row.original.areaKey ?? '—'}</span>,
         enableSorting: false,
       },
       {
@@ -495,22 +494,6 @@ export default function PlaceListScreen() {
                   resetPaging()
                 }}
                 className={styles.search}
-              />
-              {/*
-                The same vocabulary as the editor, from the same endpoint: a
-                free text box here could filter on a key no place holds and
-                answer "0 kết quả" for a typo (GoGo-BE ADR-0016).
-              */}
-              <AreaCombobox
-                label={t('places.filter.area')}
-                labelHidden
-                placeholder={t('places.filter.areaHint')}
-                value={areaKey || null}
-                onChange={(next) => {
-                  setAreaKey(next ?? '')
-                  resetPaging()
-                }}
-                className={styles.filterCombobox}
               />
               <input
                 aria-label={t('places.filter.category')}

@@ -19,8 +19,7 @@ import { useOnline } from '@/shared/ui/useOnline'
 import { createPlace, GOOGLE_DERIVED_FIELDS, type GoogleDerivedField } from './api'
 import { fetchTaxonomies } from '@/features/taxonomy/api'
 import { queryKeys } from '@/shared/api/queryKeys'
-import { AdministrativeUnitCombobox, useProvinceName } from '@/features/administrative/unitCombobox'
-import { AreaCombobox } from './areaCombobox'
+import { AdministrativeUnitCombobox } from '@/features/administrative/unitCombobox'
 import { PlaceCreateLinkPanel, type AppliedResolution } from './placeCreateLink.view'
 import { styles } from './placeCreate.style'
 import {
@@ -75,7 +74,7 @@ export default function PlaceCreateScreen() {
 
   const form = useForm<PlaceCreateForm>({
     resolver: zodResolver(placeCreateSchema),
-    defaultValues: { name: '', areaKey: undefined, categoryId: '' },
+    defaultValues: { name: '', categoryId: '' },
   })
 
   /**
@@ -115,8 +114,6 @@ export default function PlaceCreateScreen() {
    * keystroke in any field.
    */
   const provinceCode = useWatch({ control: form.control, name: 'provinceCode' }) ?? ''
-  /** The discovery-area picker groups by city, and this is the nearest thing. */
-  const provinceName = useProvinceName(provinceCode)
 
   /**
    * Which applied fields the editor left alone. Compared by value at submit
@@ -146,7 +143,6 @@ export default function PlaceCreateScreen() {
           ? { googleDerivedFields: derivedFields(values) }
           : {}),
         ...(values.addressText ? { addressText: values.addressText } : {}),
-        ...(values.areaKey ? { areaKey: values.areaKey } : {}),
         // ADM-106 — the canonical pair. `city`/`district` are legacy free text
         // and no longer have inputs, so a new place carries neither.
         ...(values.provinceCode ? { provinceCode: values.provinceCode } : {}),
@@ -410,31 +406,6 @@ export default function PlaceCreateScreen() {
                     )}
                   />
                 </div>
-
-                {/*
-                  ADM-108 — below the administrative pair and clearly not part
-                  of it. `areaKey` is a curated discovery collection shared with
-                  rooms, plans and banners; it is not an address, and standing
-                  it beside the province and commune boxes made the form offer
-                  an editor two competing ways to say where a place is. Nothing
-                  is deleted or migrated — it keeps its own filter and its own
-                  column.
-                */}
-                <Controller
-                  control={form.control}
-                  name="areaKey"
-                  render={({ field }) => (
-                    <AreaCombobox
-                      id="place-area-key"
-                      label={t('placeEditor.areaKey')}
-                      hint={t('placeEditor.areaKeyHint')}
-                      error={errorFor('areaKey')}
-                      value={field.value ? field.value : null}
-                      onChange={(next) => field.onChange(next ?? '')}
-                      preferCity={provinceName ?? undefined}
-                    />
-                  )}
-                />
 
                 <div className={styles.fieldRow}>
                   <TextInput

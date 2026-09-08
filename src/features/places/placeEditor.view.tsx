@@ -48,7 +48,6 @@ import { PlaceMediaCard } from './placeMedia.view'
 import { PLACE_STATUSES, PLACE_TRANSITIONS } from './status'
 import { AdministrativeUnitCombobox } from '@/features/administrative/unitCombobox'
 import { AdministrativeSummary } from './placeAdministrative.view'
-import { AreaCombobox } from './areaCombobox'
 import { HoursEditor } from './hoursEditor.view'
 import { GoogleLinkPanel } from './googleLink.view'
 import { PlaceLocationPanel } from './placeLocation.view'
@@ -104,7 +103,10 @@ const PROVENANCE_FIELDS = [
   { name: 'name', labelKey: 'placeEditor.name' },
   { name: 'description', labelKey: 'placeEditor.description' },
   { name: 'addressText', labelKey: 'placeEditor.address' },
-  { name: 'areaKey', labelKey: 'placeEditor.areaKey' },
+  // Legacy, like `city` and `district` below: no input offers it any more
+  // (ADM-108). The recorded origin of a value a place still carries is history
+  // worth showing, so the row stays.
+  { name: 'areaKey', labelKey: 'placeEditor.areaKeyLegacy' },
   // Legacy free text. Still provenance-tracked because existing rows carry a
   // recorded origin for them, and dropping the row would lose that history.
   { name: 'city', labelKey: 'placeEditor.city' },
@@ -196,13 +198,6 @@ export default function PlaceEditorScreen() {
 
   const place = placeQuery.data
 
-  /*
-   * The area picker groups by city, so the city currently in the form floats
-   * its own areas to the top. It is a hint, not a server filter: `city` is
-   * free text an editor may have spelled differently from the catalog, and
-   * filtering on a typo would hide the rows the picker exists to offer.
-   */
-  const cityValue = useWatch({ control: form.control, name: 'city' })
   /** ADM-106 — the commune list is fetched for whichever province is chosen. */
   const provinceCodeValue = useWatch({ control: form.control, name: 'provinceCode' }) ?? ''
 
@@ -664,33 +659,6 @@ export default function PlaceEditorScreen() {
                           ))}
                         </Select>
                       </div>
-                      {/*
-                        `areaKey` is the discovery area, and its vocabulary is
-                        `service_areas` — exposed by `cmsListAreas`. It used to
-                        be a free text box under a hint telling the editor to
-                        "chọn taxonomy", and there is no `area` taxonomy kind:
-                        the hint pointed at nothing and the box accepted keys
-                        the place filter could never match (GoGo-BE ADR-0016).
-                      */}
-                      <Controller
-                        control={form.control}
-                        name="areaKey"
-                        render={({ field }) => (
-                          <AreaCombobox
-                            label={t('placeEditor.areaKey')}
-                            hint={t('placeEditor.areaKeyHint')}
-                            disabled={!canWrite}
-                            error={fieldError('areaKey')}
-                            value={field.value ? field.value : null}
-                            // `''` and not `null`, because the form's own shape
-                            // is a string; the empty string becomes `null` on
-                            // the wire in `toPlaceEditBody`.
-                            onChange={(next) => field.onChange(next ?? '')}
-                            preferCity={cityValue}
-                            id="place-area-key"
-                          />
-                        )}
-                      />
                       <TextArea
                         label={t('placeEditor.description')}
                         rows={4}
@@ -783,9 +751,8 @@ export default function PlaceEditorScreen() {
                   </Card>
 
                   {/*
-                    The administrative address, kept apart from `areaKey` on
-                    purpose: one is where the place is, the other is where GoGo
-                    offers it. Every box here clears its column when emptied.
+                    The administrative address, and now the only address this
+                    form offers. Every box here clears its column when emptied.
                   */}
                   <Card>
                     <CardHeader

@@ -2,7 +2,6 @@ import { apiFetch, apiFetchParsed, newIdempotencyKey } from '@/shared/api/client
 import {
   attachableMediaListSchema,
   auditPageSchema,
-  cmsAreaListSchema,
   cmsPlaceDetailSchema,
   duplicateListSchema,
   placeListSchema,
@@ -10,7 +9,6 @@ import {
   staleListSchema,
   type AttachableMedia,
   type AuditPage,
-  type CmsArea,
   type CmsPlaceDetail,
   type DuplicatePair,
   type PlaceHourInput,
@@ -31,7 +29,6 @@ import {
 export type PlaceListFilters = {
   status?: PlaceStatus | 'all'
   q?: string
-  areaKey?: string
   category?: string
   source?: PlaceSourceFilter | 'all'
   staleDays?: number
@@ -56,7 +53,7 @@ export type PlaceListFilters = {
 /** The filters that mean the same thing to the list and to the counts. */
 export type PlaceCountFilters = Pick<
   PlaceListFilters,
-  'status' | 'q' | 'areaKey' | 'category' | 'source' | 'staleDays'
+  'status' | 'q' | 'category' | 'source' | 'staleDays'
 > & { provinceCode?: string }
 
 /**
@@ -76,7 +73,6 @@ export function fetchPlaceAdministrativeCounts(
       provinceCode: filters.provinceCode,
       status: filters.status && filters.status !== 'all' ? filters.status : undefined,
       q: filters.q,
-      areaKey: filters.areaKey,
       category: filters.category,
       source: filters.source && filters.source !== 'all' ? filters.source : undefined,
       staleDays: filters.staleDays,
@@ -90,7 +86,6 @@ export function fetchPlaces(filters: PlaceListFilters, signal?: AbortSignal) {
     query: {
       status: filters.status && filters.status !== 'all' ? filters.status : undefined,
       q: filters.q,
-      areaKey: filters.areaKey,
       category: filters.category,
       source: filters.source && filters.source !== 'all' ? filters.source : undefined,
       staleDays: filters.staleDays,
@@ -113,32 +108,6 @@ export function fetchPlace(id: string, signal?: AbortSignal): Promise<CmsPlaceDe
   return apiFetchParsed(cmsPlaceDetailSchema, `/cms/places/${id}`, { signal })
 }
 
-export type AreaFilters = {
-  q?: string
-  city?: string
-  /**
-   * Retired areas. Asked for whenever a value a place already holds has to be
-   * rendered: a place filed under a retired area must still resolve its label,
-   * and dropping it would make the picker hide the very value it exists to
-   * show.
-   */
-  includeInactive?: boolean
-}
-
-/** `cmsListAreas` (GoGo-BE#425) — the vocabulary behind `areaKey`. */
-export async function fetchAreas(filters: AreaFilters, signal?: AbortSignal): Promise<CmsArea[]> {
-  const { items } = await apiFetchParsed(cmsAreaListSchema, '/cms/areas', {
-    query: {
-      q: filters.q,
-      city: filters.city,
-      includeInactive: filters.includeInactive ? 'true' : undefined,
-    },
-    signal,
-  })
-  return items
-}
-
-/** The endpoint returns raw snake_case rows; normalize at the boundary. */
 export async function fetchStalePlaces(days: number, signal?: AbortSignal): Promise<StalePlace[]> {
   const rows = await apiFetchParsed(staleListSchema, '/cms/places/stale', {
     query: { days, limit: 100 },

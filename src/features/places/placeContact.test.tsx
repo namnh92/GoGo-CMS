@@ -101,10 +101,6 @@ describe('place address and contact (CMS-044)', () => {
     await user.clear(screen.getByLabelText('Mô tả'))
     await user.clear(screen.getByLabelText(/Địa chỉ \(dạng tự do\)/))
     await user.clear(screen.getByLabelText(/Thời lượng ghé trung bình/))
-    // Scoped: the province and commune pickers carry a clear button of their
-    // own now, and this test is about the discovery area.
-    const areaField = screen.getByRole('combobox', { name: /Khu vực khám phá/ }).closest('div')!
-    await user.click(within(areaField).getByRole('button', { name: 'Xoá lựa chọn' }))
 
     await save(user)
 
@@ -116,9 +112,11 @@ describe('place address and contact (CMS-044)', () => {
       website: null,
       description: null,
       addressText: null,
-      areaKey: null,
       avgVisitMinutes: null,
     })
+    // ADM-108 — the legacy area has no input any more, so a save cannot claim
+    // anything about it: absent, not `null`. The stored value is untouched.
+    expect(sent[0]).not.toHaveProperty('areaKey')
   })
 
   it('claims nothing about a field the editor never touched', async () => {
