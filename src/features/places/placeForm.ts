@@ -126,6 +126,15 @@ export const placeIdentitySchema = placeIdentityFields.superRefine((values, ctx)
  * definitions keeps the two forms from drifting into different limits.
  */
 export const placeCreateSchema = placeIdentityFields.extend({
+  /**
+   * GoGo-CMS#179 — one category, chosen at creation.
+   *
+   * The editor screen owns the full taxonomy (moods, settings, dietary) as
+   * chips; this form takes the single field a Google link can actually fill.
+   * `''` is "not chosen", the same reading every other box here gives an
+   * untouched input, and the create body then carries no `taxonomyIds` at all.
+   */
+  categoryId: z.string().max(64).optional(),
   name: z.string().trim().min(L.name.min, 'placeEditor.error.required').max(L.name.max),
   lat: z.preprocess(
     (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),

@@ -2611,6 +2611,8 @@ export interface paths {
         /**
          * Editor/ops: catalog list with server-side filter, sort and cursor paging
          * @description Keyset pagination, not offset: the catalog is written to while editors browse it (background imports), so an offset would repeat or skip rows. Pass the returned `nextCursor` back to get the next page; `nextCursor` is null only when there is genuinely nothing more. Text search runs on the normalized name — accent-insensitive, same behaviour as the consumer-facing search.
+         *
+         *     **Archived places are excluded unless `status=archived` asks for them** (ADM-018). This endpoint previously had no default status filter, so an archived place — the closest thing this schema has to a soft delete — appeared in the ordinary catalogue and in anything that counted it. Every other status behaves as before.
          */
         get: operations["cmsListPlaces"];
         put?: never;
@@ -2622,7 +2624,11 @@ export interface paths {
          *
          *     **Provenance.** A value the editor typed is recorded `editorial`, including one they read off a preview and retyped — copying does not transfer ownership (GOGO_PRODUCT_DATA_ARCHITECTURE.md). A value *applied* from `cmsResolvePlaceLink` and left alone is recorded `google_derived` with the Google Place ID as its reference, and `googleDerivedFields` says which. Coordinates carry provenance too, under the field name `geom`.
          *
-         *     No provider content is created, fetched or stored here: this endpoint makes no provider call at all, and the only Google-owned value it accepts is the Place ID, which is an identifier rather than content.
+         *     **Provider facts (PI-BE-021).** Given a `googlePlaceId`, this endpoint makes exactly one `quality` Place Details call and stores what it returns as the *provider's* facts: `ratings.provider`, `priceLevel`, the weekly `hours` at `source: provider`, and the canonical `googleMapsUri` on the place's Google source row. They are attributed to the provider, never presented as GoGo-owned, and never read as recommendation input (`docs/adr/0020-provider-facts-on-editor-created-places.md`).
+         *
+         *     The call is made here rather than replaying the preview because a preview's content may not be carried across requests (ADR-0006 §9.5) — the same reason the submission approve step re-verifies. The request body accepts none of these values: they come from the provider answer, so an editor cannot store their own number wearing Google's attribution.
+         *
+         *     A provider that is unreachable, out of quota, does not know the id, or answers about a *different* id (a place that moved) costs the enrichment, not the place: the row is created with its Google identity and no provider facts, exactly as every place created before this change. The outcome is counted as `cms_place_create_provider_enrichment_total`.
          *
          *     **Identity beats similarity.** Given a `googlePlaceId`, the catalogue is asked first whether that Google record already belongs to a place — it does, and the answer is `409 PLACE_ALREADY_LINKED` naming it; two places already claim it, and the answer is `409 PLACE_IDENTITY_CONFLICT` naming both. `allowDuplicate` does not open this gate: two GoGo places may share a name and a street corner, but never one Google record.
          *
@@ -2657,6 +2663,34 @@ export interface paths {
          *     Takes either a link or a Place ID; see the request body. A `CANDIDATE_SELECTION` answer is meant to be resolved by sending one of its `candidates[].googlePlaceId` straight back here.
          */
         post: operations["cmsResolvePlaceLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/places/administrative-summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Editor: how many places sit under each current administrative unit (ADM-018)
+         * @description The canonical hierarchy for the catalogue: Tỉnh/Thành phố → Phường/Xã/Đặc khu → the places filed under that commune. There is no district level; district-level units were dissolved on 2025-07-01 and are never current data.
+         *
+         *     One level per call. Without `provinceCode` this returns provinces; with it, the communes of that province. The console renders one of those at a time, and the alternative — the whole tree — is 3,321 communes to draw 34 rows.
+         *
+         *     **What may be grouped.** A place appears under a province and a commune only when it holds both codes, both units are current in the published dataset, the commune's parent is the province the place stores, and the mapping is `AUTO_MATCHED` or `VERIFIED`. Everything else is `review`, split by why. `AUTO_MATCHED` groups geographically and still does not authorise publication — that gate is unchanged.
+         *
+         *     **What has no bearing on it.** Free-text `city`, `district`, `addressText`, and the curated `areaKey`, which is a discovery bucket rather than an address. Grouping reads the canonical codes and nothing else.
+         *
+         *     **Counts reconcile with the list.** `totals.grouped` and `totals.review` are `GET /cms/places` with the same filters plus `administrativeState=grouped` / `review`; a unit's `placeCount` is that plus its `provinceCode`/`communeCode`; a province's `reviewCount` is `administrativeState=review` with that `provinceCode`. Archived places are outside all of it unless `status=archived` asked for them.
+         */
+        get: operations["cmsPlaceAdministrativeSummary"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -6425,6 +6459,29 @@ export interface components {
                 /** Format: date-time */
                 fetchedAt?: string;
                 attributions?: string[];
+                /**
+                 * @description PI-BE-021 — the provider's own canonical link to the place.
+                 *
+                 *     Not the URL that was submitted. A `maps.app.goo.gl` share link resolves *to* this value and never replaces it, so a client that stores or renders "the Google link" must use this one.
+                 *
+                 *     Absent (rather than null) on an answer built from a stored row without a live provider fetch: absent means this request did not look, `null` means the provider published none.
+                 */
+                googleMapsUri?: string | null;
+                /** @description 0–4, as the provider grades it. */
+                priceLevel?: number | null;
+                /** @description The provider's own primary category token. */
+                primaryType?: string | null;
+                /** @description Every type the provider assigns, `primaryType` included. Order is not meaningful — read `categoryKey` rather than position. */
+                types?: string[];
+                /** @description The GoGo category the provider's types imply, already checked against the live taxonomy. `null` when the provider described the place in terms GoGo has no category for — an ordinary answer, not a failure. Resolve it to a taxonomy id before saving. */
+                categoryKey?: string | null;
+                /** @description The weekly hours the provider publishes, in GoGo's own representation — the same shape `PlaceHours` uses. An empty array means the provider published none; it never means "closed". */
+                openingHours?: {
+                    dayOfWeek: number;
+                    openMinute: number;
+                    closeMinute: number;
+                    isOvernight: boolean;
+                }[];
             };
             candidates?: {
                 googlePlaceId?: string;
@@ -6637,6 +6694,41 @@ export interface components {
             errors?: components["schemas"]["IngestMessage"][];
             warnings?: components["schemas"]["IngestMessage"][];
         };
+        CmsPlaceAdministrativeSummary: {
+            /** @description The dataset the codes and names were read from. Null means none is published, in which case nothing can be grouped and every place is under review — which is the truth, not an error. */
+            datasetVersion: string | null;
+            /** @enum {string} */
+            level: "province" | "commune";
+            /** @description The province whose communes these are; null at province level. */
+            province: {
+                code?: string;
+                name?: string;
+            } | null;
+            units: {
+                code: string;
+                /** @description Null when the dataset has no name for a stored code. Never invented. */
+                name: string | null;
+                /** @description Places that may be grouped under this unit. A province's total is the sum of its communes' totals — both come from the same predicate over the same rows, so no place is counted twice. */
+                placeCount: number;
+                /** @description Places filed against this province whose mapping cannot enter the hierarchy. A subset of `totals.review`, never part of `placeCount`. Null on a commune row: a place under review has no commune anyone should trust it under. */
+                reviewCount: number | null;
+            }[];
+            /** @description `grouped + review` is every place the filters select. Each half is a real list query, which is what makes these numbers checkable. */
+            totals: {
+                grouped: number;
+                review: number;
+            };
+            review: {
+                byStatus: {
+                    UNMAPPED: number;
+                    NEEDS_REVIEW: number;
+                    REJECTED: number;
+                    STALE: number;
+                    /** @description `AUTO_MATCHED` or `VERIFIED`, but against a commune that is no longer current or no longer sits under the stored province. The mapping status alone cannot say this, and reporting it as `AUTO_MATCHED` would claim the mapping is fine while the place is uncountable. */
+                    INVALID_HIERARCHY: number;
+                };
+            };
+        };
         CmsPlaceListItem: {
             /** Format: uuid */
             id: string;
@@ -6654,6 +6746,13 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+            /** @description ADM-018 — the canonical administrative address as stored, so the list, the detail and the forms all name a place's units the same way. Absent when the place has none. */
+            provinceCode?: string;
+            /** @description The unit's full name in the published dataset. Absent when the dataset has no name for the stored code — never invented, and never derived from the free-text `city`. */
+            provinceName?: string;
+            communeCode?: string;
+            communeName?: string;
+            administrativeMappingStatus?: components["schemas"]["AdministrativeMappingStatus"];
         };
         EmergencyTakedownRequest: {
             /** @description Why this was taken down. Required and stored in the audit record — it is the only explanation anyone reviewing the incident later has. */
@@ -12561,6 +12660,18 @@ export interface operations {
                 source?: "google" | "community" | "manual";
                 /** @description Freshness last verified more than N days ago, or never. */
                 staleDays?: number;
+                /** @description ADM-018 — the canonical province code the place stores. Free-text `city`, `district` and the curated `areaKey` have no bearing on this filter; only the code does. */
+                provinceCode?: string;
+                /** @description The canonical commune code. Requires `provinceCode`, and the pair is validated against the published dataset — two codes that are each real but do not belong together are refused with a `400` naming the field, rather than answered with an empty page that reads as "this commune has no places". */
+                communeCode?: string;
+                /**
+                 * @description ADM-018 — which side of the canonical hierarchy to list.
+                 *
+                 *     `grouped` is a place that can honestly appear under a province and a commune: both codes present, both units current, the commune under the stored province, and the mapping `AUTO_MATCHED` or `VERIFIED`. `review` is every other place — `NEEDS_REVIEW`, `UNMAPPED`, `REJECTED`, `STALE`, or a mapping whose units no longer fit together.
+                 *
+                 *     Omitted applies no administrative constraint at all. These two values are what the counts in `cmsPlaceAdministrativeSummary` reconcile against.
+                 */
+                administrativeState?: "grouped" | "review";
                 sort?: "updated_at" | "created_at" | "name" | "confidence";
                 direction?: "asc" | "desc";
                 limit?: number;
@@ -12733,6 +12844,45 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
+        };
+    };
+    cmsPlaceAdministrativeSummary: {
+        parameters: {
+            query?: {
+                /** @description List this province's communes instead of the provinces. A code that is not a current province is refused with `ADMINISTRATIVE_UNIT_NOT_CURRENT` rather than answered with an empty list, which would read as "this province has no places". */
+                provinceCode?: string;
+                status?: "draft" | "community_submitted" | "review" | "published" | "suspended" | "archived";
+                q?: string;
+                areaKey?: string;
+                category?: string;
+                source?: "google" | "community" | "manual";
+                staleDays?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One level of the hierarchy, with its counts */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsPlaceAdministrativeSummary"];
+                };
+            };
+            /** @description ADMINISTRATIVE_UNIT_NOT_CURRENT — no such current province */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
         };
     };
     cmsStaleQueue: {

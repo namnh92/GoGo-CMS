@@ -62,6 +62,26 @@ const RESOLVED = {
     source: 'google_places',
     fetchedAt: new Date().toISOString(),
     attributions: ['Dữ liệu bản đồ ©2026 Google'],
+    // PI-BE-021 — the rest of the same Details response. `googleMapsUri` is
+    // Google's own canonical link, not the URL that was pasted.
+    googleMapsUri: 'https://maps.google.com/?cid=8871234',
+    priceLevel: 2,
+    primaryType: 'coffee_shop',
+    types: ['coffee_shop', 'cafe', 'food'],
+    categoryKey: 'cafe',
+    openingHours: [
+      { dayOfWeek: 1, openMinute: 420, closeMinute: 1320, isOvernight: false },
+      { dayOfWeek: 2, openMinute: 420, closeMinute: 1320, isOvernight: false },
+    ],
+  },
+  // ADM-017 — from the coordinate, against GoGo's own boundaries.
+  administrative: {
+    provinceCode: '79',
+    provinceName: 'Thành phố Hồ Chí Minh',
+    communeCode: '26734',
+    communeName: 'Phường Bến Nghé',
+    status: 'AUTO_MATCHED',
+    datasetVersion: 'v5.0.0+v2.4.0+7fac8c45+fixture-v1+r0',
   },
   candidates: [],
 }
@@ -404,5 +424,159 @@ describe('coordinate precision', () => {
     expect(roundCoordinate(10)).toBe(10)
     // Seven decimals is roughly a centimetre; an eighth is noise, not precision.
     expect(roundCoordinate(10.12345678)).toBe(10.1234568)
+  })
+})
+
+/**
+ * GoGo-CMS#179 — the resolve already paid for more than four fields.
+ *
+ * `quality` Place Details carries the canonical URI, the week, the price level
+ * and the types; the console applied a name, an address and a coordinate and
+ * dropped the rest, so a place created from a link came back missing exactly
+ * what the editor had just been shown.
+ */
+describe('a link fills everything it can', () => {
+  it('shows the canonical link, the week, the price level and the derived category', async () => {
+    signInAs('editor')
+    resolvesTo(RESOLVED)
+    const user = userEvent.setup()
+    renderWithProviders(<PlaceCreateScreen />)
+
+    await pasteAndResolve(user)
+    expect(await screen.findByText('Google trả về địa điểm này')).toBeInTheDocument()
+
+    // The canonical URI, opened as a link — not the URL that was pasted.
+    const open = screen.getByRole('link', { name: 'Mở trên Google Maps' })
+    expect(open).toHaveAttribute('href', 'https://maps.google.com/?cid=8871234')
+    expect(open).not.toHaveAttribute('href', LINK)
+
+    expect(screen.getByText('2 khung giờ trong tuần')).toBeInTheDocument()
+    expect(screen.getByText('2/4')).toBeInTheDocument()
+    expect(screen.getByText('Cà phê')).toBeInTheDocument()
+    // Both current levels, and no third one.
+    expect(screen.getByText('Thành phố Hồ Chí Minh · Phường Bến Nghé')).toBeInTheDocument()
+    expect(screen.queryByText(/Quận\/Huyện/)).not.toBeInTheDocument()
+  })
+
+  it('leaves out a fact the provider does not publish rather than dashing it', async () => {
+    signInAs('editor')
+    resolvesTo({
+      ...RESOLVED,
+      candidate: {
+        ...RESOLVED.candidate,
+        googleRating: null,
+        googleRatingCount: 0,
+        googleMapsUri: null,
+        priceLevel: null,
+        categoryKey: null,
+        openingHours: [],
+      },
+      administrative: null,
+    })
+    const user = userEvent.setup()
+    renderWithProviders(<PlaceCreateScreen />)
+
+    await pasteAndResolve(user)
+    expect(await screen.findByText('Google trả về địa điểm này')).toBeInTheDocument()
+
+    // An em dash where a rating or a price belongs reads as "zero" to some
+    // people and "broken" to the rest, so the row simply is not there.
+    expect(screen.queryByRole('link', { name: 'Mở trên Google Maps' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Giờ mở cửa')).not.toBeInTheDocument()
+    expect(screen.queryByText('Mức giá Google')).not.toBeInTheDocument()
+    expect(screen.queryByText(/★ Google/)).not.toBeInTheDocument()
+  })
+
+  it('sends the canonical codes and the derived category with the create', async () => {
+    signInAs('editor')
+    resolvesTo(RESOLVED)
+    const bodies = createdWith()
+    const user = userEvent.setup()
+    renderWithProviders(<PlaceCreateScreen />)
+
+    await pasteAndResolve(user)
+    await user.click(await screen.findByRole('button', { name: 'Dùng dữ liệu này' }))
+
+    // The selectors opened on the units the geometry names, and the category
+    // box on the taxonomy the provider's types imply — both still editable.
+    await waitFor(() => expect(screen.getByLabelText(/Nhóm địa điểm/)).toHaveValue('tx-cat-cafe'))
+    await user.click(screen.getByRole('button', { name: 'Tạo địa điểm' }))
+
+    await waitFor(() => expect(bodies).toHaveLength(1))
+    expect(bodies[0]).toMatchObject({
+      googlePlaceId: 'ChIJcafe',
+      provinceCode: '79',
+      communeCode: '26734',
+      taxonomyIds: ['tx-cat-cafe'],
+    })
+  })
+})
+
+/**
+ * GoGo-CMS#179 — a resolve is a network call an editor can outrun.
+ *
+ * Paste, press, notice it is the wrong branch, paste another, press again: the
+ * first answer can arrive second. Believing it would show a preview for a link
+ * that is no longer in the box and fill the form from the wrong place.
+ */
+describe('a late answer never wins', () => {
+  it('will not apply an answer that belongs to the link before this one', async () => {
+    signInAs('editor')
+    const gate: { release?: () => void } = {}
+    const slow = new Promise<void>((resolve) => {
+      gate.release = resolve
+    })
+    server.use(
+      http.post('*/cms/places/resolve-link', async () => {
+        await slow
+        return HttpResponse.json(RESOLVED, { status: 201 })
+      }),
+    )
+    const user = userEvent.setup()
+    renderWithProviders(<PlaceCreateScreen />)
+
+    await pasteAndResolve(user)
+    // The editor does not wait: they paste a different link while the first
+    // resolve is still in flight.
+    const box = screen.getByLabelText('Link Google Maps')
+    await user.clear(box)
+    await user.type(box, 'https://www.google.com/maps?place_id=ChIJkhac')
+    gate.release?.()
+
+    // The answer arrives, and it is about the link that is no longer in the box.
+    expect(await screen.findByText('Cà Phê Bên Đường')).toBeInTheDocument()
+    expect(screen.getByText(/Kết quả này thuộc về link trước đó/)).toBeInTheDocument()
+    // Rule 16: it says why rather than looking operable and filling the form
+    // from a place the editor has moved on from.
+    expect(screen.getByRole('button', { name: 'Dùng dữ liệu này' })).toBeDisabled()
+    expect(screen.getByLabelText(/Tên hiển thị/)).toHaveValue('')
+  })
+
+  it('does not overwrite a box the editor typed in while the resolve ran', async () => {
+    signInAs('editor')
+    const gate: { release?: () => void } = {}
+    const slow = new Promise<void>((resolve) => {
+      gate.release = resolve
+    })
+    server.use(
+      http.post('*/cms/places/resolve-link', async () => {
+        await slow
+        return HttpResponse.json(RESOLVED, { status: 201 })
+      }),
+    )
+    const user = userEvent.setup()
+    renderWithProviders(<PlaceCreateScreen />)
+
+    await pasteAndResolve(user)
+    // The editor does not sit and wait; they start typing the name.
+    const name = screen.getByLabelText(/Tên hiển thị/)
+    await user.type(name, 'Tên tôi tự gõ')
+    gate.release?.()
+
+    await user.click(await screen.findByRole('button', { name: 'Dùng dữ liệu này' }))
+
+    // Their name survives; the boxes they never touched are filled.
+    expect(name).toHaveValue('Tên tôi tự gõ')
+    expect(screen.getByLabelText(/Vĩ độ/)).toHaveValue(10.7951153)
   })
 })
