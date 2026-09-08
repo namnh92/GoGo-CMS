@@ -3,6 +3,7 @@ import { guessMapping, parseCsvPreview } from './csvPreview'
 import {
   IMPORT_CANONICAL_FIELDS,
   MAPPABLE_FIELDS,
+  RETIRED_MAPPABLE_FIELDS,
   SYSTEM_DERIVED_FIELDS,
   isCanonicalField,
 } from '@/shared/api/contracts-import'
@@ -52,11 +53,25 @@ describe('csv preview', () => {
 })
 
 describe('canonical mapping vocabulary', () => {
-  it('offers every canonical field except the system-derived ones', () => {
+  it('offers every canonical field except the system-derived and retired ones', () => {
     expect(MAPPABLE_FIELDS).toEqual(
-      IMPORT_CANONICAL_FIELDS.filter((f) => !SYSTEM_DERIVED_FIELDS.includes(f)),
+      IMPORT_CANONICAL_FIELDS.filter(
+        (f) => !SYSTEM_DERIVED_FIELDS.includes(f) && !RETIRED_MAPPABLE_FIELDS.includes(f),
+      ),
     )
     expect(MAPPABLE_FIELDS).not.toContain('source_row_id')
+  })
+
+  it('no longer offers district, while still accepting it on the wire (ADM-107)', () => {
+    // The tier was dissolved on 2025-07-01. Offering it in the mapping step
+    // tells an operator that GoGo files places under districts, which is the
+    // thing that stopped being true.
+    expect(MAPPABLE_FIELDS).not.toContain('district')
+    // Still canonical, because a legacy sheet has the column and the server
+    // reads it as historical name evidence — that is a different question from
+    // whether an operator should be asked to choose it.
+    expect(isCanonicalField('district')).toBe(true)
+    expect(IMPORT_CANONICAL_FIELDS).toContain('district')
   })
 
   it('carries the fields the old hand-written list was missing', () => {

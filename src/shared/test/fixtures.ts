@@ -1096,6 +1096,9 @@ export const importRows: Record<string, ImportRow[]> = {
           attributions: ['Dữ liệu © Google'],
         },
       ],
+      // ADM-107 — nothing has resolved against the provider yet, so there is no
+      // coordinate to classify. "Not yet", not "nowhere".
+      administrative: null,
       errors: [],
       warnings: [
         {
@@ -1121,6 +1124,24 @@ export const importRows: Record<string, ImportRow[]> = {
       matchConfidence: 0.99,
       matchReasons: ['EXACT_PROVIDER_ID'],
       candidates: [],
+      // Matched by the resolver, and still not a verification: this is the row
+      // that proves the screen never calls an automatic answer approved.
+      administrative: {
+        provinceCode: '79',
+        provinceName: 'Thành phố Hồ Chí Minh',
+        communeCode: '26734',
+        communeName: 'Phường Bến Nghé',
+        status: 'AUTO_MATCHED',
+        datasetVersion: 'v5.0.0+v2.4.1+7fac8c45+v5.0.0+r0',
+        requiresReview: false,
+        blocksPublication: true,
+        // The policy's own words, not the screen's: AUTO_MATCHED is a resolver
+        // result, and only a moderator's VERIFIED permits publishing.
+        approvalBlock: {
+          code: 'MAPPING_NOT_VERIFIED',
+          message: 'the administrative mapping is AUTO_MATCHED: a resolver result, not an approval',
+        },
+      },
       errors: [],
       warnings: [],
     },
@@ -1140,6 +1161,24 @@ export const importRows: Record<string, ImportRow[]> = {
       matchConfidence: 0.97,
       matchReasons: ['EXACT_PROVIDER_ID'],
       candidates: [],
+      // Two deterministic sources named different communes, so nobody chooses.
+      /*
+       * A duplicate row is about the place it matched, so it reports that
+       * place's stored mapping — and this one a reviewer verified. It is the
+       * case the old "a mapping exists, so it blocks" rule got wrong: the row
+       * would have read as blocked while the publish step went ahead.
+       */
+      administrative: {
+        provinceCode: '79',
+        provinceName: 'Thành phố Hồ Chí Minh',
+        communeCode: '26734',
+        communeName: 'Phường Bến Nghé',
+        status: 'VERIFIED',
+        datasetVersion: 'v5.0.0+v2.4.1+7fac8c45+v5.0.0+r0',
+        requiresReview: false,
+        blocksPublication: false,
+        approvalBlock: null,
+      },
       errors: [],
       warnings: [],
     },
@@ -1170,9 +1209,74 @@ export const importRows: Record<string, ImportRow[]> = {
       matchConfidence: 0.42,
       matchReasons: ['LOW_CONFIDENCE'],
       candidates: [],
+      // The provider never answered, so there is no coordinate to classify.
+      administrative: null,
+
       errors: [
         { code: 'PLACE_NOT_FOUND', field: null, message: 'Không tìm thấy trên nhà cung cấp' },
       ],
+      warnings: [],
+    },
+    {
+      id: 'row-17',
+      rowNumber: 17,
+      sourceRowId: '17',
+      status: 'ready',
+      normalized: { name: 'Quán Bên Sông', address: 'Km 12 QL1A' },
+      resolvedGooglePlaceId: 'ChIJ_ben_song',
+      matchedPlaceId: null,
+      matchedPlaceName: null,
+      matchConfidence: 0.88,
+      matchReasons: ['EXACT_NAME_CITY'],
+      candidates: [],
+      // Resolved against the provider, and its coordinate falls in no polygon
+      // the pinned release carries. Not a review task: there is nothing for a
+      // person to choose between.
+      administrative: {
+        provinceCode: null,
+        provinceName: null,
+        communeCode: null,
+        communeName: null,
+        status: 'UNMAPPED',
+        datasetVersion: null,
+        requiresReview: false,
+        blocksPublication: true,
+        approvalBlock: {
+          code: 'MAPPING_UNMAPPED',
+          message: 'this place has no administrative mapping; resolve and verify one first',
+        },
+      },
+      errors: [],
+      warnings: [],
+    },
+    {
+      id: 'row-18',
+      rowNumber: 18,
+      sourceRowId: '18',
+      status: 'ready',
+      normalized: { name: 'Bánh Cuốn Bà Hoành', address: '66 Tô Hiến Thành' },
+      resolvedGooglePlaceId: 'ChIJ_banh_cuon',
+      matchedPlaceId: null,
+      matchedPlaceName: null,
+      matchConfidence: 0.91,
+      matchReasons: ['EXACT_NAME_CITY'],
+      candidates: [],
+      // Two deterministic sources named different communes, so nobody chooses.
+      administrative: {
+        provinceCode: null,
+        provinceName: null,
+        communeCode: null,
+        communeName: null,
+        status: 'NEEDS_REVIEW',
+        datasetVersion: 'v5.0.0+v2.4.1+7fac8c45+v5.0.0+r0',
+        requiresReview: true,
+        blocksPublication: true,
+        approvalBlock: {
+          code: 'MAPPING_NOT_VERIFIED',
+          message: 'the administrative mapping is NEEDS_REVIEW: a resolver result, not an approval',
+        },
+      },
+      errors: [],
       warnings: [],
     },
   ],
