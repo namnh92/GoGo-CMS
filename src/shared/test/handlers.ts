@@ -1302,6 +1302,27 @@ export const handlers = [
       lng: Number(body.lng ?? 0),
       addressText: (body.addressText as string | undefined) ?? null,
       media: [],
+      /*
+       * ADM-016 — the server resolves the mapping inside the create
+       * transaction, so the record it answers with already carries one. It is
+       * AUTO_MATCHED and blocked, because nothing about creating a place
+       * verifies its mapping.
+       */
+      administrative: {
+        status: 'AUTO_MATCHED' as const,
+        provinceCode: (body.provinceCode as string | undefined) ?? null,
+        provinceName: (body.provinceCode as string | undefined) ? 'Thành phố Hà Nội' : null,
+        communeCode: (body.communeCode as string | undefined) ?? null,
+        communeName: (body.communeCode as string | undefined) ? 'Phường Ba Đình' : null,
+        method: body.provinceCode ? 'trusted_code' : 'boundary_point_in_polygon',
+        datasetVersion: ACTIVE_DATASET_VERSION,
+        activeDatasetVersion: ACTIVE_DATASET_VERSION,
+        mappedAt: new Date().toISOString(),
+        approvalBlock: {
+          code: 'MAPPING_NOT_VERIFIED',
+          message: 'the administrative mapping is AUTO_MATCHED: a resolver result, not an approval',
+        },
+      },
       updatedAt: new Date().toISOString(),
     }
     db.places.push(created as (typeof db.places)[number])
@@ -1435,7 +1456,38 @@ export const handlers = [
       )
     }
 
-    Object.assign(place, input)
+    /*
+     * ADM-016 — the codes are not columns on the record the console reads back.
+     * The server resolves them inside the same transaction and answers with the
+     * *stored* mapping, so the mock does the same: a mock that echoed
+     * `provinceCode` at the top level would let the console ship a form that
+     * reads its own submission back and never notices the server disagreed.
+     */
+    const { provinceCode, communeCode, ...rest } = input
+    Object.assign(place, rest)
+    if (provinceCode !== undefined || communeCode !== undefined) {
+      const nextProvince =
+        provinceCode === undefined ? place.administrative?.provinceCode : provinceCode
+      const nextCommune =
+        communeCode === undefined ? place.administrative?.communeCode : communeCode
+      place.administrative = {
+        ...(place.administrative ?? {
+          status: 'AUTO_MATCHED' as const,
+          method: 'trusted_code',
+          datasetVersion: ACTIVE_DATASET_VERSION,
+          activeDatasetVersion: ACTIVE_DATASET_VERSION,
+          mappedAt: new Date().toISOString(),
+          approvalBlock: {
+            code: 'MAPPING_NOT_VERIFIED',
+            message: 'a resolver result, not an approval',
+          },
+        }),
+        provinceCode: nextProvince ?? null,
+        provinceName: nextProvince ? unitNameFor(nextProvince) : null,
+        communeCode: nextCommune ?? null,
+        communeName: nextCommune ? unitNameFor(nextCommune) : null,
+      }
+    }
     place.updatedAt = new Date().toISOString()
     return HttpResponse.json(place)
   }),
@@ -4355,6 +4407,17 @@ function mappingDetail(row: MappingFixture) {
     approval: { blocked: blocksApproval(row), block: approvalBlock(row) },
     permittedActions: permittedActions(row),
   }
+}
+
+/** The display name of a fixture unit code, at either level. */
+function unitNameFor(code: string): string | null {
+  const province = PROVINCES.find((p) => p.code === code)
+  if (province) return province.fullName
+  for (const communes of Object.values(COMMUNES)) {
+    const commune = communes.find((c) => c.code === code)
+    if (commune) return commune.fullName
+  }
+  return null
 }
 
 /** Accent-insensitive, the way GoGo-BE normalises Vietnamese for search. */

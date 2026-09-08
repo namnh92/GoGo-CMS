@@ -44,7 +44,7 @@ const save = async (user: ReturnType<typeof userEvent.setup>) =>
   user.click(await screen.findByRole('button', { name: 'Lưu thông tin' }))
 
 describe('place address and contact (CMS-044)', () => {
-  it('writes city, district, phone and website, and reads back what the server stored', async () => {
+  it('writes phone and website, and reads back what the server stored', async () => {
     const user = userEvent.setup()
     openLive()
 
@@ -54,12 +54,6 @@ describe('place address and contact (CMS-044)', () => {
     const website = screen.getByLabelText('Website')
     await user.clear(website)
     await user.type(website, 'chaoban.vn')
-    const city = screen.getByLabelText('Tỉnh/Thành phố')
-    await user.clear(city)
-    await user.type(city, 'TP.HCM')
-    const district = screen.getByLabelText(/Quận\/Huyện/)
-    await user.clear(district)
-    await user.type(district, 'Quận 1')
 
     await save(user)
 
@@ -68,12 +62,25 @@ describe('place address and contact (CMS-044)', () => {
     // it stored — not the string that was typed at them.
     await waitFor(() => expect(screen.getByLabelText('Điện thoại')).toHaveValue('+842838229999'))
     expect(screen.getByLabelText('Website')).toHaveValue('https://chaoban.vn/')
-    expect(screen.getByLabelText(/Quận\/Huyện/)).toHaveValue('Quận 1')
     // Only a stored http(s) value is offered as a link.
     expect(screen.getByRole('link', { name: 'Mở website đang lưu' })).toHaveAttribute(
       'href',
       'https://chaoban.vn/',
     )
+  })
+
+  it('has no free-text city or district box left to type into (ADM-106)', async () => {
+    openLive()
+    await screen.findByLabelText('Điện thoại')
+
+    // The district tier was dissolved on 2025-07-01. Offering a box for it asks
+    // an editor to fill in a unit that does not exist, and the free-text city
+    // box could never express the identity anything downstream needs.
+    expect(screen.queryByLabelText('Tỉnh/Thành phố')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/Quận\/Huyện/)).not.toBeInTheDocument()
+    // What replaces them: the two levels Vietnam currently has.
+    expect(screen.getByRole('combobox', { name: 'Tỉnh / thành phố' })).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: /Phường \/ xã/ })).toBeInTheDocument()
   })
 
   it('sends null for every field the editor emptied', async () => {
@@ -89,14 +96,15 @@ describe('place address and contact (CMS-044)', () => {
       avgVisitMinutes: 90,
     })
 
-    await user.clear(await screen.findByLabelText('Tỉnh/Thành phố'))
-    await user.clear(screen.getByLabelText(/Quận\/Huyện/))
-    await user.clear(screen.getByLabelText('Điện thoại'))
+    await user.clear(await screen.findByLabelText('Điện thoại'))
     await user.clear(screen.getByLabelText('Website'))
     await user.clear(screen.getByLabelText('Mô tả'))
     await user.clear(screen.getByLabelText(/Địa chỉ \(dạng tự do\)/))
     await user.clear(screen.getByLabelText(/Thời lượng ghé trung bình/))
-    await user.click(screen.getByRole('button', { name: 'Xoá lựa chọn' }))
+    // Scoped: the province and commune pickers carry a clear button of their
+    // own now, and this test is about the discovery area.
+    const areaField = screen.getByRole('combobox', { name: /Khu vực khám phá/ }).closest('div')!
+    await user.click(within(areaField).getByRole('button', { name: 'Xoá lựa chọn' }))
 
     await save(user)
 
@@ -104,8 +112,6 @@ describe('place address and contact (CMS-044)', () => {
     // `null` clears, an absent key leaves it alone — before #425 an emptied box
     // arrived as an absent key, so a filled value could never be removed.
     expect(sent[0]).toMatchObject({
-      city: null,
-      district: null,
       phone: null,
       website: null,
       description: null,
@@ -119,14 +125,14 @@ describe('place address and contact (CMS-044)', () => {
     const user = userEvent.setup()
     const sent = openCaptured()
 
-    const city = await screen.findByLabelText('Tỉnh/Thành phố')
-    await user.clear(city)
-    await user.type(city, 'Đà Nẵng')
+    const address = await screen.findByLabelText(/Địa chỉ \(dạng tự do\)/)
+    await user.clear(address)
+    await user.type(address, '1 Lê Duẩn')
     await save(user)
 
     await waitFor(() => expect(sent).toHaveLength(1))
     // A save of one field must not restamp the provenance of seven others.
-    expect(Object.keys(sent[0]!).sort()).toEqual(['city', 'expectedUpdatedAt'])
+    expect(Object.keys(sent[0]!).sort()).toEqual(['addressText', 'expectedUpdatedAt'])
   })
 
   it('always sends the version the form was loaded from', async () => {

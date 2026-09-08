@@ -206,6 +206,26 @@ export const places: CmsPlaceDetail[] = [
       },
       areaKey: { sourceType: 'editorial', sourceReference: null, verifiedAt: iso(60 * 24 * 9) },
     },
+    /*
+     * ADM-016 — the stored administrative identity, `AUTO_MATCHED`: the
+     * resolver's answer, which is exactly the state that blocks publishing and
+     * is most likely to be misread as "verified".
+     */
+    administrative: {
+      status: 'AUTO_MATCHED' as const,
+      provinceCode: '79',
+      provinceName: 'Thành phố Hồ Chí Minh',
+      communeCode: '26734',
+      communeName: 'Phường Bến Nghé',
+      method: 'boundary_point_in_polygon',
+      datasetVersion: 'v5.0.0+v2.4.1+7fac8c45+v5.0.0+r0',
+      activeDatasetVersion: 'v5.0.0+v2.4.1+7fac8c45+v5.0.0+r0',
+      mappedAt: iso(60 * 24 * 2),
+      approvalBlock: {
+        code: 'MAPPING_NOT_VERIFIED',
+        message: 'the administrative mapping is AUTO_MATCHED: a resolver result, not an approval',
+      },
+    },
     ratings: {
       provider: { rating: 4.8, count: 1240 },
       gogo: { rating: 4.9, count: 86 },

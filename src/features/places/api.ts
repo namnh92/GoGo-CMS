@@ -153,8 +153,27 @@ export type UpdatePlaceInput = {
   addressText?: string | null
   /** A `cmsListAreas` key: the discovery area, not the postal address. */
   areaKey?: string | null
+  /**
+   * ADR-0016 legacy free text. Not the administrative identity, and it selects
+   * no code — `provinceCode`/`communeCode` are that.
+   */
   city?: string | null
+  /**
+   * Legacy only: the district tier was dissolved on 2025-07-01. The console no
+   * longer offers it, so this is only ever sent by something older.
+   */
   district?: string | null
+  /**
+   * ADM-016 — the canonical administrative address, as codes.
+   *
+   * They travel as a pair: a province with no commune is not an address, and a
+   * commune with no province has no hierarchy to be checked against. GoGo-BE
+   * validates the pair against the dataset published at commit time, and the
+   * codes enter its resolver as evidence — they are not an instruction, and
+   * they verify nothing.
+   */
+  provinceCode?: string | null
+  communeCode?: string | null
   /** Sent as typed; GoGo-BE normalizes to E.164 and answers on `phone`. */
   phone?: string | null
   /** Sent as typed; GoGo-BE enforces http(s) and answers on `website`. */
