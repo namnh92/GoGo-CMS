@@ -1263,6 +1263,12 @@ export const en: Partial<Record<MessageKey, string>> = {
   'combobox.count': '{count} entries',
   'combobox.deniedHint': 'Your account cannot read this catalog.',
 
+  'unitPicker.provincePlaceholder': 'Search provinces…',
+  'unitPicker.communePlaceholder': 'Search wards / communes / special zones…',
+  'unitPicker.chooseProvinceFirst': 'Choose a province first.',
+  'unitPicker.provinceEmpty': 'The active dataset carries no provinces.',
+  'unitPicker.communeEmpty': 'This province has no communes in the active dataset.',
+  'unitPicker.noMatch': 'No unit matches “{query}”.',
   'areaPicker.placeholder': 'Search an area by name or key…',
   'areaPicker.placeCount': '{count} places',
   'areaPicker.noCity': 'No city recorded',

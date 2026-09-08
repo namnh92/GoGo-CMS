@@ -782,22 +782,37 @@ export const handlers = [
   // forbids fetching administrative data from anywhere else, and the identities
   // a reviewer picks must come from the dataset the decision is validated
   // against.
-  http.get(`${BASE}/administrative/provinces`, () =>
-    HttpResponse.json({
-      items: PROVINCES.map((p) => unitDto(p, 'PROVINCE', null)),
-      nextCursor: null,
-      datasetVersion: ACTIVE_DATASET_VERSION,
-    }),
+  http.get(`${BASE}/administrative/provinces`, ({ request }) =>
+    unitPage(
+      request,
+      PROVINCES.map((p) => unitDto(p, 'PROVINCE', null)),
+    ),
   ),
-  http.get(`${BASE}/administrative/provinces/:provinceCode/communes`, ({ params }) =>
-    HttpResponse.json({
-      items: (COMMUNES[String(params.provinceCode)] ?? []).map((c) =>
+  http.get(`${BASE}/administrative/provinces/:provinceCode/communes`, ({ request, params }) =>
+    unitPage(
+      request,
+      (COMMUNES[String(params.provinceCode)] ?? []).map((c) =>
         unitDto(c, 'COMMUNE', String(params.provinceCode)),
       ),
-      nextCursor: null,
-      datasetVersion: ACTIVE_DATASET_VERSION,
-    }),
+    ),
   ),
+  // ADM-105 — the same normalisation the server does, so "ba dinh" finds
+  // "Phường Ba Đình" here exactly as it does in DEV.
+  http.get(`${BASE}/administrative/search`, ({ request }) => {
+    const url = new URL(request.url)
+    const query = fold(url.searchParams.get('query') ?? '')
+    const provinceCode = url.searchParams.get('provinceCode')
+    const rows = [
+      ...PROVINCES.map((p) => unitDto(p, 'PROVINCE', null)),
+      ...Object.entries(COMMUNES).flatMap(([parent, communes]) =>
+        communes.map((c) => unitDto(c, 'COMMUNE', parent)),
+      ),
+    ].filter((unit) => {
+      if (provinceCode && unit.level === 'COMMUNE' && unit.parentCode !== provinceCode) return false
+      return fold(unit.fullName).includes(query) || fold(unit.name).includes(query)
+    })
+    return unitPage(request, rows)
+  }),
 
   http.get(`${BASE}/cms/administrative-mappings/remediation`, () =>
     HttpResponse.json({
@@ -4340,6 +4355,49 @@ function mappingDetail(row: MappingFixture) {
     approval: { blocked: blocksApproval(row), block: approvalBlock(row) },
     permittedActions: permittedActions(row),
   }
+}
+
+/** Accent-insensitive, the way GoGo-BE normalises Vietnamese for search. */
+function fold(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/gi, 'd')
+    .trim()
+    .toLowerCase()
+}
+
+/**
+ * One page of administrative units, with the real API's limits.
+ *
+ * The 400 is the point of this helper. `fetchCommunes` used to send `limit=500`
+ * against a maximum of 200; DEV answered 400 and the reviewer's commune box
+ * went empty, while every test passed against a fixture that cheerfully
+ * returned everything for any limit. A fixture more permissive than the server
+ * is a fixture that certifies a broken client.
+ */
+function unitPage(request: Request, rows: ReturnType<typeof unitDto>[]) {
+  const url = new URL(request.url)
+  const rawLimit = url.searchParams.get('limit')
+  const limit = rawLimit === null ? 50 : Number(rawLimit)
+  if (!Number.isInteger(limit) || limit < 1 || limit > 200) {
+    return envelope(400, 'VALIDATION_FAILED', `limit must be between 1 and 200, got ${rawLimit}`)
+  }
+  const cursor = url.searchParams.get('cursor')
+  // The real cursor is the last code returned, base64url-encoded.
+  const after = cursor ? atob(cursor.replace(/-/g, '+').replace(/_/g, '/')) : null
+  const sorted = [...rows].sort((a, b) => a.code.localeCompare(b.code))
+  const start = after ? sorted.findIndex((r) => r.code > after) : 0
+  const from = start === -1 ? sorted.length : start
+  const page = sorted.slice(from, from + limit)
+  const more = from + page.length < sorted.length
+  const last = page.at(-1)
+  return HttpResponse.json({
+    items: page,
+    nextCursor: more && last ? btoa(last.code).replace(/\+/g, '-').replace(/\//g, '_') : null,
+    total: sorted.length,
+    datasetVersion: ACTIVE_DATASET_VERSION,
+  })
 }
 
 function unitDto(

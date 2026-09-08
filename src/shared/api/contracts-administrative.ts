@@ -689,6 +689,14 @@ export type AdministrativeUnitDto = z.infer<typeof administrativeUnitSchema>
 export const administrativeUnitPageSchema = z.object({
   items: z.array(administrativeUnitSchema),
   nextCursor: z.string().nullish(),
+  /**
+   * How many units the request matched in total, not how many this page holds.
+   *
+   * It is what lets a caller check it has the whole set without knowing how
+   * many provinces or communes Vietnam currently has — a number that has
+   * changed twice in two years and will change again.
+   */
+  total: z.number().int().nonnegative(),
   datasetVersion: z.string(),
 })
 export type AdministrativeUnitPage = z.infer<typeof administrativeUnitPageSchema>

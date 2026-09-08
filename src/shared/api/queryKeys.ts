@@ -30,6 +30,13 @@ export const queryKeys = {
   administrativeProvinces: () => ['administrative', 'units', 'provinces'] as const,
   administrativeCommunes: (provinceCode: string) =>
     ['administrative', 'units', 'communes', provinceCode] as const,
+  /**
+   * ADM-105 — a server-side unit search. Keyed by level *and* province because
+   * the same text means different things in a province box and in the commune
+   * box of one province.
+   */
+  administrativeUnitSearch: (level: string, provinceCode: string, query: string) =>
+    ['administrative', 'units', 'search', level, provinceCode, query] as const,
 
   opsKpis: ['ops', 'kpis'] as const,
   opsHealth: ['ops', 'health'] as const,
