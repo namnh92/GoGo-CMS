@@ -60,9 +60,21 @@ test.describe('the editor composes', () => {
 
     // #123 — address and contact are writable; they used to be read-only `<dd>`
     // facts with a comment saying `cmsUpdatePlace` would not accept them.
-    for (const label of [/Tỉnh\/Thành phố/, /Quận\/Huyện/, /Điện thoại/, /Website/]) {
+    for (const label of [/Điện thoại/, /Website/]) {
       await expect(page.getByLabel(label)).toBeEditable()
     }
+
+    /*
+     * ADM-106 — the address is the two administrative levels Vietnam currently
+     * has, as pickers over GoGo's own dataset.
+     *
+     * The free-text "Tỉnh/Thành phố" and "Quận/Huyện" boxes this used to assert
+     * are gone: the second named a tier dissolved on 2025-07-01, and the first
+     * could not express an identity anything downstream could use.
+     */
+    await expect(page.getByRole('combobox', { name: /Tỉnh \/ thành phố/ })).toBeEnabled()
+    await expect(page.getByRole('combobox', { name: /Phường \/ xã/ })).toBeEnabled()
+    await expect(page.getByLabel(/Quận\/Huyện/)).toHaveCount(0)
 
     // #124, #125, #127, #126.
     await expect(card(page, 'Giờ mở cửa')).toBeVisible()
