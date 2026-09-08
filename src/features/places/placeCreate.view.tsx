@@ -338,22 +338,6 @@ export default function PlaceCreateScreen() {
                   />
                 </div>
 
-                <Controller
-                  control={form.control}
-                  name="areaKey"
-                  render={({ field }) => (
-                    <AreaCombobox
-                      id="place-area-key"
-                      label={t('placeEditor.areaKey')}
-                      hint={t('placeEditor.areaKeyHint')}
-                      error={errorFor('areaKey')}
-                      value={field.value ? field.value : null}
-                      onChange={(next) => field.onChange(next ?? '')}
-                      preferCity={provinceName ?? undefined}
-                    />
-                  )}
-                />
-
                 <TextInput
                   label={t('placeEditor.address')}
                   error={errorFor('addressText')}
@@ -426,6 +410,31 @@ export default function PlaceCreateScreen() {
                     )}
                   />
                 </div>
+
+                {/*
+                  ADM-108 — below the administrative pair and clearly not part
+                  of it. `areaKey` is a curated discovery collection shared with
+                  rooms, plans and banners; it is not an address, and standing
+                  it beside the province and commune boxes made the form offer
+                  an editor two competing ways to say where a place is. Nothing
+                  is deleted or migrated — it keeps its own filter and its own
+                  column.
+                */}
+                <Controller
+                  control={form.control}
+                  name="areaKey"
+                  render={({ field }) => (
+                    <AreaCombobox
+                      id="place-area-key"
+                      label={t('placeEditor.areaKey')}
+                      hint={t('placeEditor.areaKeyHint')}
+                      error={errorFor('areaKey')}
+                      value={field.value ? field.value : null}
+                      onChange={(next) => field.onChange(next ?? '')}
+                      preferCity={provinceName ?? undefined}
+                    />
+                  )}
+                />
 
                 <div className={styles.fieldRow}>
                   <TextInput

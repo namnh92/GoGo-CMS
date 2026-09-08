@@ -262,6 +262,21 @@ export const cmsPlaceSchema = z.object({
   freshnessCheckedAt: z.string().nullish(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  /**
+   * ADM-018 — the canonical administrative address as stored, so the list, the
+   * detail screen and the forms name a place's units the same way.
+   *
+   * A name is `nullish` independently of its code: the dataset may hold no name
+   * for a code a place still carries, and the row then shows the code rather
+   * than inventing a label. Neither is derived from the free-text `city`.
+   */
+  provinceCode: z.string().nullish(),
+  provinceName: z.string().nullish(),
+  communeCode: z.string().nullish(),
+  communeName: z.string().nullish(),
+  administrativeMappingStatus: z
+    .enum(['UNMAPPED', 'AUTO_MATCHED', 'NEEDS_REVIEW', 'VERIFIED', 'REJECTED', 'STALE'])
+    .nullish(),
 })
 export type CmsPlace = z.infer<typeof cmsPlaceSchema>
 
@@ -328,6 +343,55 @@ export const placeAdministrativeSummarySchema = z.object({
   approvalBlock: z.object({ code: z.string(), message: z.string() }).nullish(),
 })
 export type PlaceAdministrativeSummary = z.infer<typeof placeAdministrativeSummarySchema>
+
+/**
+ * ADM-018 — one level of the canonical hierarchy, with its counts.
+ *
+ * `totals.grouped + totals.review` is every place the same filters select, and
+ * each half is a real list query (`administrativeState=grouped` / `review`).
+ * That is what makes a number on screen something an editor can click through
+ * and check rather than something they have to believe.
+ */
+export const placeAdministrativeCountsSchema = z.object({
+  datasetVersion: z.string().nullish(),
+  level: z.enum(['province', 'commune']),
+  province: z.object({ code: z.string(), name: z.string() }).nullish(),
+  units: z
+    .array(
+      z.object({
+        code: z.string(),
+        /** Null when the dataset has no name for a stored code. Never invented. */
+        name: z.string().nullish(),
+        placeCount: z.number().int().default(0),
+        /**
+         * Places filed against this province whose mapping cannot enter the
+         * hierarchy — a subset of `totals.review`, never part of `placeCount`.
+         * Null on a commune row: a place under review has no commune anyone
+         * should trust it under.
+         */
+        reviewCount: z.number().int().nullish(),
+      }),
+    )
+    .default([]),
+  totals: z.object({ grouped: z.number().int().default(0), review: z.number().int().default(0) }),
+  review: z.object({
+    byStatus: z
+      .object({
+        UNMAPPED: z.number().int().default(0),
+        NEEDS_REVIEW: z.number().int().default(0),
+        REJECTED: z.number().int().default(0),
+        STALE: z.number().int().default(0),
+        /**
+         * `AUTO_MATCHED` or `VERIFIED` against a commune that is no longer
+         * current, or no longer under the stored province. A status alone
+         * cannot say this.
+         */
+        INVALID_HIERARCHY: z.number().int().default(0),
+      })
+      .default({}),
+  }),
+})
+export type PlaceAdministrativeCounts = z.infer<typeof placeAdministrativeCountsSchema>
 
 /** `CmsPlaceDetail` (GoGo-BE#157) — every field `cmsUpdatePlace` accepts, plus relations. */
 export const cmsPlaceDetailSchema = z.object({

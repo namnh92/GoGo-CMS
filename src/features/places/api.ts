@@ -15,6 +15,8 @@ import {
   type DuplicatePair,
   type PlaceHourInput,
   type PlaceMedia,
+  type PlaceAdministrativeCounts,
+  placeAdministrativeCountsSchema,
   type PlaceMediaModeration,
   type PlaceSort,
   type PlaceSourceFilter,
@@ -33,10 +35,54 @@ export type PlaceListFilters = {
   category?: string
   source?: PlaceSourceFilter | 'all'
   staleDays?: number
+  /**
+   * ADM-018 — the canonical administrative address, as codes. Free-text `city`,
+   * `district` and the curated `areaKey` never influence this: the codes do.
+   * `communeCode` needs its province, and the server validates the pair.
+   */
+  provinceCode?: string
+  communeCode?: string
+  /**
+   * `grouped` — placeable in the current hierarchy; `review` — everything else.
+   * Omitted applies no administrative constraint, which is the old behaviour.
+   */
+  administrativeState?: 'grouped' | 'review'
   sort?: PlaceSort
   direction?: 'asc' | 'desc'
   limit?: number
   cursor?: string | null
+}
+
+/** The filters that mean the same thing to the list and to the counts. */
+export type PlaceCountFilters = Pick<
+  PlaceListFilters,
+  'status' | 'q' | 'areaKey' | 'category' | 'source' | 'staleDays'
+> & { provinceCode?: string }
+
+/**
+ * ADM-018 — how many places sit under each current administrative unit.
+ *
+ * Without `provinceCode` this answers with provinces; with it, the communes of
+ * that province. The counts are computed from the same predicates the list
+ * uses, so every number here can be reached by a list query — which is what
+ * makes it checkable rather than merely plausible.
+ */
+export function fetchPlaceAdministrativeCounts(
+  filters: PlaceCountFilters,
+  signal?: AbortSignal,
+): Promise<PlaceAdministrativeCounts> {
+  return apiFetchParsed(placeAdministrativeCountsSchema, '/cms/places/administrative-summary', {
+    query: {
+      provinceCode: filters.provinceCode,
+      status: filters.status && filters.status !== 'all' ? filters.status : undefined,
+      q: filters.q,
+      areaKey: filters.areaKey,
+      category: filters.category,
+      source: filters.source && filters.source !== 'all' ? filters.source : undefined,
+      staleDays: filters.staleDays,
+    },
+    signal,
+  })
 }
 
 export function fetchPlaces(filters: PlaceListFilters, signal?: AbortSignal) {
@@ -48,6 +94,9 @@ export function fetchPlaces(filters: PlaceListFilters, signal?: AbortSignal) {
       category: filters.category,
       source: filters.source && filters.source !== 'all' ? filters.source : undefined,
       staleDays: filters.staleDays,
+      provinceCode: filters.provinceCode,
+      communeCode: filters.communeCode,
+      administrativeState: filters.administrativeState,
       sort: filters.sort ?? 'updated_at',
       direction: filters.direction ?? 'desc',
       limit: filters.limit ?? 50,

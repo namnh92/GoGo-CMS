@@ -126,6 +126,13 @@ export const queryKeys = {
     attachableMedia: (id: string) => ['places', 'media', 'attachable', id] as const,
     stale: (days: number) => ['places', 'stale', days] as const,
     duplicates: ['places', 'duplicates'] as const,
+    /**
+     * ADM-018 — one level of the hierarchy under one set of list filters. Both
+     * belong in the key: the counts change with the filters, and a cached
+     * province row is not the answer for a different `status` or search.
+     */
+    administrative: (filters: Record<string, unknown>) =>
+      ['places', 'administrative', filters] as const,
   },
 
   /**
