@@ -40,6 +40,7 @@ import {
   type AdministrativeRemediation,
   type AdministrativeRestorable,
   type AdministrativeTransitionResult,
+  type AdministrativeUnitDto,
   type AdministrativeUnitPage,
   type AdministrativeValidateResult,
 } from '@/shared/api/contracts-administrative'
@@ -331,32 +332,110 @@ export function abandonOverrideSet(
   )
 }
 
-// --- current administrative units, for the reviewer's selectors (ADM-003) -----
+// --- current administrative units, for every unit selector (ADM-003) ---------
 
 /**
- * The 34 current provinces, from GoGo-BE.
+ * The maximum the public read API accepts. Asking for more is not "ask for
+ * everything" — it is a 400, and that is exactly what happened: `fetchCommunes`
+ * sent `limit=500`, DEV answered `400`, and the reviewer's Phường/Xã box was
+ * empty. An empty box reads as "this province has no communes", which is a
+ * different and much more believable lie than "the request was malformed".
+ */
+export const ADMINISTRATIVE_PAGE_LIMIT = 200
+
+/**
+ * A guard, not a limit. 200 × 200 is 40,000 units — an order of magnitude more
+ * than Vietnam has at any level — so reaching it means the cursor is not
+ * advancing, and looping forever on a server bug is worse than showing a
+ * shorter list.
+ */
+const MAX_PAGES = 200
+
+/**
+ * Every page of one administrative list.
+ *
+ * The old fetchers took one page and stopped. That happened to work for
+ * provinces, because 34 fit inside a limit of 100 — and "happened to work" is
+ * the problem: the count has changed twice in two years, and the first release
+ * that pushes it past a page would silently drop provinces off the end of a
+ * dropdown with nothing to show that it had.
+ *
+ * `total` comes back on every page, so the result can be checked against what
+ * the server said it had rather than against a number written here.
+ */
+async function fetchAllPages(
+  path: string,
+  query: Record<string, string | number | undefined>,
+  signal?: AbortSignal,
+): Promise<AdministrativeUnitPage> {
+  const items: AdministrativeUnitDto[] = []
+  let cursor: string | undefined
+  let last: AdministrativeUnitPage | null = null
+
+  for (let page = 0; page < MAX_PAGES; page += 1) {
+    const result: AdministrativeUnitPage = await apiFetchParsed(
+      administrativeUnitPageSchema,
+      path,
+      { query: { ...query, limit: ADMINISTRATIVE_PAGE_LIMIT, cursor }, signal },
+    )
+    items.push(...result.items)
+    last = result
+    if (!result.nextCursor || result.nextCursor === cursor) break
+    cursor = result.nextCursor
+  }
+
+  return {
+    items,
+    // The whole set is in hand, so there is nothing left to page to.
+    nextCursor: null,
+    total: last?.total ?? items.length,
+    datasetVersion: last?.datasetVersion ?? '',
+  }
+}
+
+/**
+ * Every current province, from GoGo-BE.
  *
  * The public read, not an upstream one: ADR-0019 §9.5 forbids fetching
  * administrative data from anywhere else, and the identities a reviewer picks
  * have to come from the same dataset the decision will be validated against.
  */
 export function fetchProvinces(signal?: AbortSignal): Promise<AdministrativeUnitPage> {
-  return apiFetchParsed(administrativeUnitPageSchema, '/administrative/provinces', {
-    query: { limit: 100 },
-    signal,
-  })
+  return fetchAllPages('/administrative/provinces', {}, signal)
 }
 
-/** The communes of one province, in the active dataset. */
+/** Every current commune of one province, in the active dataset. */
 export function fetchCommunes(
   provinceCode: string,
   signal?: AbortSignal,
 ): Promise<AdministrativeUnitPage> {
-  return apiFetchParsed(
-    administrativeUnitPageSchema,
-    `/administrative/provinces/${provinceCode}/communes`,
-    { query: { limit: 500 }, signal },
-  )
+  return fetchAllPages(`/administrative/provinces/${provinceCode}/communes`, {}, signal)
+}
+
+/**
+ * Server-side search over the active dataset.
+ *
+ * Typing is how an editor finds a commune among thousands, and the server
+ * already normalises Vietnamese the way the catalogue does — so "ba dinh"
+ * finds "Phường Ba Đình" here and would not find it in a client-side
+ * `includes()` over accented strings.
+ *
+ * Legacy units are excluded, and not by an option: this search feeds pickers
+ * for the two levels that currently exist, and offering a district dissolved on
+ * 2025-07-01 as something to choose would be offering a unit that is gone.
+ */
+export function searchAdministrativeUnits(
+  input: { query: string; provinceCode?: string | undefined },
+  signal?: AbortSignal,
+): Promise<AdministrativeUnitPage> {
+  return apiFetchParsed(administrativeUnitPageSchema, '/administrative/search', {
+    query: {
+      query: input.query,
+      provinceCode: input.provinceCode,
+      limit: ADMINISTRATIVE_PAGE_LIMIT,
+    },
+    signal,
+  })
 }
 
 // --- mapping moderation (ADM-009) --------------------------------------------

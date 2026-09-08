@@ -1,16 +1,13 @@
-import { useQuery } from '@tanstack/react-query'
 import { useI18n, useT } from '@/shared/i18n/i18n'
 import type { MessageKey } from '@/shared/i18n/vi'
 import { formatNumber } from '@/shared/format'
 import { Badge, StatusBadge, type BadgeShape, type Tone } from '@/shared/ui/Badge'
-import { Select } from '@/shared/ui/Field'
-import { queryKeys } from '@/shared/api/queryKeys'
 import type {
   AdministrativeApprovalBlockCode,
   AdministrativeMappingStatus,
   AdministrativeStaleVerdict,
 } from '@/shared/api/contracts-administrative'
-import { fetchCommunes, fetchProvinces } from './api'
+import { AdministrativeUnitCombobox } from './unitCombobox'
 import { styles } from './mapping.style'
 
 /**
@@ -140,6 +137,13 @@ export function RemediationCounts({ counts }: { counts: Record<string, number> }
  * all; and changing the province clears the commune, because the previous one
  * is no longer in the list the reviewer is choosing from. Display text is never
  * the identifier — the code the API returned is what gets sent.
+ *
+ * ADM-105 — the two `<select>`s became the shared `AdministrativeUnitCombobox`.
+ * The commune list was arriving empty here, and not because a province had no
+ * communes: the fetch asked for `limit=500` against an API whose maximum is
+ * 200, DEV answered 400, and a `<select>` has nowhere to say so. The picker
+ * that replaces it pages the whole list, searches on the server, and has a
+ * visible error state.
  */
 export function UnitSelector({
   provinceCode,
@@ -156,60 +160,31 @@ export function UnitSelector({
 }) {
   const t = useT()
 
-  const provinces = useQuery({
-    queryKey: queryKeys.administrativeProvinces(),
-    queryFn: ({ signal }) => fetchProvinces(signal),
-    staleTime: 5 * 60_000,
-  })
-
-  const communes = useQuery({
-    queryKey: queryKeys.administrativeCommunes(provinceCode ?? ''),
-    queryFn: ({ signal }) => fetchCommunes(provinceCode!, signal),
-    enabled: Boolean(provinceCode),
-    staleTime: 5 * 60_000,
-  })
-
   return (
     <div className={styles.selectors}>
-      <Select
+      <AdministrativeUnitCombobox
+        level="PROVINCE"
         label={t('mapping.selector.province')}
         hint={t('mapping.selector.provinceHint')}
-        value={provinceCode ?? ''}
-        disabled={disabled || provinces.isPending}
-        onChange={(event) => {
-          const next = event.target.value || null
+        value={provinceCode}
+        disabled={disabled}
+        onChange={(next) => {
           onProvince(next)
           // The commune belonged to the old province's list; keeping it would
           // submit a pair the hierarchy does not hold.
           onCommune(null)
         }}
-      >
-        <option value="">{t('mapping.selector.choose')}</option>
-        {(provinces.data?.items ?? []).map((unit) => (
-          <option key={unit.code} value={unit.code}>
-            {unit.fullName} ({unit.code})
-          </option>
-        ))}
-      </Select>
+      />
 
-      <Select
+      <AdministrativeUnitCombobox
+        level="COMMUNE"
+        provinceCode={provinceCode}
         label={t('mapping.selector.commune')}
-        hint={
-          provinceCode
-            ? t('mapping.selector.communeHint')
-            : t('mapping.selector.chooseProvinceFirst')
-        }
-        value={communeCode ?? ''}
-        disabled={disabled || !provinceCode || communes.isPending}
-        onChange={(event) => onCommune(event.target.value || null)}
-      >
-        <option value="">{t('mapping.selector.choose')}</option>
-        {(communes.data?.items ?? []).map((unit) => (
-          <option key={unit.code} value={unit.code}>
-            {unit.fullName} ({unit.code})
-          </option>
-        ))}
-      </Select>
+        hint={provinceCode ? t('mapping.selector.communeHint') : undefined}
+        value={communeCode}
+        disabled={disabled}
+        onChange={onCommune}
+      />
     </div>
   )
 }

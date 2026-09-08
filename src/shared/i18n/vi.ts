@@ -1388,6 +1388,13 @@ export const vi = {
   'combobox.count': '{count} mục',
   'combobox.deniedHint': 'Tài khoản của bạn không đọc được danh mục này.',
 
+  'unitPicker.provincePlaceholder': 'Tìm tỉnh / thành phố…',
+  'unitPicker.communePlaceholder': 'Tìm phường / xã / đặc khu…',
+  'unitPicker.chooseProvinceFirst': 'Chọn tỉnh / thành phố trước.',
+  'unitPicker.provinceEmpty': 'Bộ dữ liệu đang hoạt động chưa có tỉnh / thành phố nào.',
+  'unitPicker.communeEmpty':
+    'Tỉnh / thành phố này chưa có phường / xã nào trong bộ dữ liệu đang hoạt động.',
+  'unitPicker.noMatch': 'Không có đơn vị nào khớp “{query}”.',
   'areaPicker.placeholder': 'Tìm khu vực theo tên hoặc khoá…',
   'areaPicker.placeCount': '{count} địa điểm',
   'areaPicker.noCity': 'Chưa gán tỉnh/thành',

@@ -70,13 +70,21 @@ async function openRow(
 /**
  * The commune list is fetched for the province the mapping already claims, so
  * the options arrive a tick after the drawer does.
+ *
+ * ADM-105 — a searchable combobox now, not a `<select>`: a province has
+ * hundreds of communes, and the list is fetched, so it needs states a
+ * `<select>` has nowhere to put.
  */
-async function chooseCommune(drawer: HTMLElement, code: string) {
-  const commune = within(drawer).getByLabelText(/^Phường \/ xã$/)
-  await waitFor(() => expect(within(commune).getByText(new RegExp(code))).toBeInTheDocument())
-  await userEvent.selectOptions(commune, code)
-  return commune
+async function chooseUnit(drawer: HTMLElement, label: RegExp, code: string) {
+  const input = within(drawer).getByRole('combobox', { name: label })
+  await userEvent.click(input)
+  const option = await screen.findByRole('option', { name: new RegExp(code) })
+  await userEvent.click(option)
+  return input
 }
+
+const chooseCommune = (drawer: HTMLElement, code: string) =>
+  chooseUnit(drawer, /^Phường \/ xã$/, code)
 
 describe('access', () => {
   it.each(['editor', 'moderator', 'ops_admin', 'super_admin'] as const)(
@@ -228,18 +236,34 @@ describe('the detail', () => {
 describe('the unit selector', () => {
   it('offers communes only from the chosen province, and clears on change', async () => {
     const drawer = await openRow('moderator', NEEDS_REVIEW)
-    const province = within(drawer).getByLabelText(/^Tỉnh \/ thành$/)
-    const commune = within(drawer).getByLabelText(/^Phường \/ xã$/)
-
-    await userEvent.selectOptions(province, '01')
-    await waitFor(() => expect(within(commune).getByText(/Phường Ba Đình/)).toBeInTheDocument())
-    await userEvent.selectOptions(commune, '00163')
-    expect(commune).toHaveValue('00163')
+    await chooseUnit(drawer, /^Tỉnh \/ thành$/, '01')
+    const commune = await chooseCommune(drawer, '00163')
+    expect(commune).toHaveValue('Phường Ba Đình')
 
     // A different province cannot keep the previous province's commune.
-    await userEvent.selectOptions(province, '79')
+    await chooseUnit(drawer, /^Tỉnh \/ thành$/, '79')
     await waitFor(() => expect(commune).toHaveValue(''))
-    await waitFor(() => expect(within(commune).queryByText(/Ba Đình/)).not.toBeInTheDocument())
+
+    // And the old province's communes are not on offer any more.
+    await userEvent.click(commune)
+    const listbox = await screen.findByRole('listbox', { name: /Phường \/ xã/ })
+    await waitFor(() =>
+      expect(within(listbox).queryByRole('option', { name: /Ba Đình/ })).not.toBeInTheDocument(),
+    )
+    expect(within(listbox).getByRole('option', { name: /Bến Nghé/ })).toBeInTheDocument()
+  })
+
+  it('finds a commune by typing, with the server doing the Vietnamese folding', async () => {
+    const drawer = await openRow('moderator', NEEDS_REVIEW)
+    const commune = within(drawer).getByRole('combobox', { name: /^Phường \/ xã$/ })
+    await userEvent.click(commune)
+    await userEvent.type(commune, 'ngoc ha')
+
+    // "ngoc ha" finds "Phường Ngọc Hà": a client-side `includes()` over the
+    // accented string would not.
+    const option = await screen.findByRole('option', { name: /Ngọc Hà/ })
+    await userEvent.click(option)
+    expect(commune).toHaveValue('Phường Ngọc Hà')
   })
 
   it('says the legacy district is preserved rather than offering a made-up list', async () => {
