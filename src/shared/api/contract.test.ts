@@ -25,7 +25,7 @@ const drift = read('scripts/check-openapi-drift.mjs')
 const generated = read('src/shared/api/schema.d.ts')
 const administrativeContracts = read('src/shared/api/contracts-administrative.ts')
 
-const EXPECTED = '1.0.0-alpha.15'
+const EXPECTED = '1.0.0-alpha.18'
 
 /**
  * The vendored file byte for byte, as GoGo-BE published it.
@@ -35,7 +35,7 @@ const EXPECTED = '1.0.0-alpha.15'
  * hand-edited, and this is what makes that visible rather than invisible. A
  * legitimate re-vendor updates the version above and this digest together.
  */
-const SPEC_SHA256 = 'cfe37de741a0fba5ded305876fca6ea38df6361f87dd3379015ff99afb9c9fdb'
+const SPEC_SHA256 = '28d240da099e99d13569a5e7e147ac60b3fcf5560e350d3d8fd08960f4de0f69'
 
 /** `pnpm api:routes` on GoGo-BE reports the same number against the real router. */
 const SERVED_OPERATIONS = 249
@@ -139,6 +139,33 @@ describe('the vendored OpenAPI contract', () => {
     const item = spec.slice(spec.indexOf('    CmsPlaceListItem:'))
     expect(item.slice(0, 2_500)).toContain('administrativeMappingStatus:')
     expect(item.slice(0, 2_500)).toContain('communeName:')
+  })
+
+  it('carries the import identity and GoGo-owned columns (GoGo-BE#506/#507)', () => {
+    // PI-BE-024/025. These are enum values on `ImportCanonicalField`, so a
+    // re-vendor that dropped them would pass every path check above while the
+    // wizard silently went back to offering thirteen columns.
+    const vocabulary = spec.slice(spec.indexOf('    ImportCanonicalField:'))
+    for (const field of [
+      'google_place_id',
+      'phone',
+      'website',
+      'avg_visit_minutes',
+      'is_lodging',
+      'curated_rank',
+    ]) {
+      expect(vocabulary.slice(0, 2_500), field).toContain(`- ${field}`)
+    }
+    // `audiences` is the operator-facing vocabulary for who a place suits;
+    // `places.suitability` is the score GoGo derives from it and is deliberately
+    // not something a spreadsheet authors.
+    expect(vocabulary.slice(0, 2_500)).toContain('- audiences')
+    expect(vocabulary.slice(0, 2_500)).not.toContain('- suitability')
+    // The identity rules and the price-unit refusal, documented where an
+    // integrator reads them rather than only in the code.
+    const upload = spec.slice(spec.indexOf('      operationId: createPlaceImport'))
+    expect(upload.slice(0, 6_000)).toContain('PLACE_ID_URL_MISMATCH')
+    expect(upload.slice(0, 6_000)).toContain('PRICE_UNIT_UNSUPPORTED')
   })
 
   it('keeps the manual-cost paths that were already on develop', () => {

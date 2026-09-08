@@ -34,13 +34,21 @@ describe('import wizard mapping step', () => {
       .filter(Boolean)
 
     expect(values).toEqual([...MAPPABLE_FIELDS])
-    // The three fields the server has no column for are gone…
+    // The field the server still has no column for is gone…
     expect(values).not.toContain('address')
-    expect(values).not.toContain('phone')
-    expect(values).not.toContain('website')
-    // …as is the camelCase spelling the server used to discard.
+    // …as is the camelCase spelling the server used to discard…
     expect(values).not.toContain('googleMapsUrl')
     expect(values).toContain('google_maps_url')
+    // …and the legacy free-text columns, which read old sheets and should not
+    // be chosen for a new one (PI-CMS-009).
+    for (const legacy of ['district', 'category_raw', 'price_raw', 'audiences_raw', 'vibes_raw']) {
+      expect(values, legacy).not.toContain(legacy)
+    }
+    // `phone` and `website` are offered now: PI-BE-025 gave them columns, so a
+    // header mapped onto either is stored rather than dropped.
+    expect(values).toContain('phone')
+    expect(values).toContain('website')
+    expect(values).toContain('google_place_id')
   })
 
   it('does not offer source_row_id: the server derives it', async () => {

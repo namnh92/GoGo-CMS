@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: GoGo API
-  version: 1.0.0-alpha.15
+  version: 1.0.0-alpha.18
   description: |
     Public contract for GoGo clients (Mobile, Web, Mini App). This page is the
     integration guide — every rule below is enforced by the API, not advisory.
@@ -2964,6 +2964,74 @@ paths:
         Re-uploading identical bytes in the same mode returns the existing job
         (`reused: true`) instead of re-billing the provider. `dry_run` validates
         only and never calls the provider.
+
+
+        **Row identity (PI-BE-024).** A row identifies its place with
+        `google_place_id`, `google_maps_url`, both, or neither:
+
+
+        - **id only** — Details is fetched for that id directly. No URL parsing,
+          no text search.
+
+        - **url only** — the link is parsed and a short link expanded; a link
+          carrying a Place ID resolves by it, otherwise the row falls to text
+          search.
+
+        - **both** — the two must agree, and agreement is established rather
+          than assumed. A URL carrying an explicit Places id (`place_id`,
+          `placeid`, `query_place_id`), including one a short link expands to,
+          is compared locally and costs no Places request. A URL carrying none —
+          which is most real share links, since `/maps/place/<name>/data=…`
+          holds a hex feature id and not a Places id — is resolved through the
+          ordinary provider path and the **resolved** id is compared instead.
+          A disagreement fails the row with `PLACE_ID_URL_MISMATCH`. A link
+          whose identity cannot be settled at all fails with
+          `PLACE_ID_URL_UNVERIFIABLE`: finding no second id is not agreement.
+
+        - **neither** — `google_maps_query`, or `name` plus `city`/`district` as
+          search hints.
+
+
+        `city` is required only in that last case. A row carrying an id or a
+        link needs none: the administrative identity comes from the coordinate,
+        not from a typed city, and `district` is never administrative evidence.
+
+
+        The canonical `googleMapsUri` is whatever Google returns; the submitted
+        URL is never stored or treated as canonical.
+
+
+        **GoGo-owned columns (PI-BE-025).** `phone`, `website`,
+        `avg_visit_minutes`, `is_lodging` and `curated_rank` are accepted and
+        persisted, validated by the same rules the console uses: phone
+        normalises to E.164, website to `http(s)`, `avg_visit_minutes` is
+        10–720. Every one of them fails the row explicitly rather than being
+        dropped on commit. Values from the file are recorded `editorial` in
+        `place_field_provenance`.
+
+
+        `places.suitability` is deliberately **not** an import column.
+        `audiences` is the operator-facing vocabulary for the same product
+        concept — who a place suits — and `suitability` is the weighted score
+        GoGo derives from it and from editorial curation. Asking a spreadsheet
+        to author both would be asking one person to write the same fact at two
+        levels of abstraction and keep them consistent. The column and every
+        other API path that writes it are unchanged.
+
+
+        `phone` and `website` are no longer retired mapping values; `address`
+        still is, because `address_text` is written from the provider's
+        formatted address and a sheet's own address string has no writer.
+
+
+        **Price units (PI-BE-026).** `place_prices.unit` is `per_person`,
+        `per_item`, `per_hour` or `per_night`. A row that states a price must
+        state a unit this table can hold: `per_group` fails with
+        `PRICE_UNIT_UNSUPPORTED` and `unknown` — which is also the default when
+        the column is absent — fails with `PRICE_UNIT_REQUIRED`. Both used to be
+        accepted and then dropped the price on commit without a word. `free` is
+        stored as `per_person` with a zero amount. A row with no price at all is
+        unaffected.
       requestBody:
         required: true
         content:
@@ -11937,6 +12005,7 @@ components:
         - district
         - google_maps_url
         - google_maps_query
+        - google_place_id
         - category
         - category_raw
         - price_min
@@ -11949,6 +12018,11 @@ components:
         - vibes_raw
         - highlight
         - note
+        - phone
+        - website
+        - avg_visit_minutes
+        - is_lodging
+        - curated_rank
     ImportJob:
       allOf:
         - $ref: '#/components/schemas/ImportJobSummary'

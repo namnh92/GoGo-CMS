@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useT } from '@/shared/i18n/i18n'
+import { useT, type MessageKey } from '@/shared/i18n/i18n'
 import { queryKeys } from '@/shared/api/queryKeys'
 import { useSession } from '@/shared/auth/session'
 import { useOnline } from '@/shared/ui/useOnline'
@@ -22,6 +22,7 @@ import {
 } from '@/shared/api/contracts-import'
 import { createFileImport, createSheetImport } from './api'
 import { guessMapping, readCsvPreview, type CsvPreview } from './csvPreview'
+import { buildImportTemplateCsv } from './importTemplate'
 import { styles } from './importWizard.style'
 
 type Step = 'source' | 'mapping' | 'review'
@@ -29,6 +30,20 @@ type SourceKind = 'file' | 'sheet'
 
 const MODES: ImportMode[] = ['dry_run', 'create_drafts', 'publish_approved']
 const STEPS: Step[] = ['source', 'mapping', 'review']
+
+/**
+ * PI-CMS-009 — the four fields whose canonical name does not say enough.
+ *
+ * The wire name stays the option's value; only what an operator reads changes.
+ * `city` says it is a search hint because presenting it as an address is what
+ * made operators treat it as one; `suitability` says which of the two
+ * suitability-shaped columns it is; `note` says it never reaches the place.
+ */
+const FIELD_LABELS: Partial<Record<ImportCanonicalField, MessageKey>> = {
+  city: 'wizard.fieldCityHint',
+  google_place_id: 'wizard.field.google_place_id',
+  note: 'wizard.field.note',
+}
 
 export default function ImportWizardScreen() {
   const t = useT()
@@ -120,6 +135,20 @@ export default function ImportWizardScreen() {
   const mappingBlocked = Boolean(preview) && missingRequired.length > 0
   const sourceReady = sourceKind === 'file' ? file !== null : sheetUrl.trim().length > 0
 
+  /**
+   * Built here rather than served from the API: it is a constant, and a route
+   * for it would be one more thing that can disagree with `TEMPLATE_COLUMNS`.
+   */
+  const downloadTemplate = () => {
+    const blob = new Blob([buildImportTemplateCsv()], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'gogo-place-import-template.csv'
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <>
       <PageHeader
@@ -141,6 +170,22 @@ export default function ImportWizardScreen() {
           <Card>
             <CardHeader title={t('wizard.step.source')} hint={t('wizard.fileHint')} />
             <CardBody className="flex flex-col gap-4">
+              {/*
+                PI-CMS-009 — the template, offered before the file picker rather
+                than after it. Every sheet in circulation was copied from a spec
+                example written before Place IDs existed, which is how `district`
+                kept arriving in files long after the tier was dissolved.
+              */}
+              <div className={styles.templateRow}>
+                <div>
+                  <p className={styles.templateTitle}>{t('wizard.template')}</p>
+                  <p className={styles.templateHint}>{t('wizard.templateHint')}</p>
+                </div>
+                <Button type="button" size="sm" variant="secondary" onClick={downloadTemplate}>
+                  {t('wizard.templateDownload')}
+                </Button>
+              </div>
+
               <div className={styles.sourceGrid}>
                 <button
                   type="button"
@@ -290,7 +335,7 @@ export default function ImportWizardScreen() {
                                     Presenting it as the latter is what made
                                     operators treat it as the address.
                                   */}
-                                  {field === 'city' ? t('wizard.fieldCityHint') : field}
+                                  {FIELD_LABELS[field] ? t(FIELD_LABELS[field]!) : field}
                                   {REQUIRED_MAPPABLE_FIELDS.includes(field) ? ' *' : ''}
                                 </option>
                               ))}

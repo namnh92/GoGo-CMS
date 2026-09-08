@@ -209,6 +209,7 @@ export const IMPORT_CANONICAL_FIELDS = [
   'district',
   'google_maps_url',
   'google_maps_query',
+  'google_place_id',
   'category',
   'category_raw',
   'price_min',
@@ -221,6 +222,11 @@ export const IMPORT_CANONICAL_FIELDS = [
   'vibes_raw',
   'highlight',
   'note',
+  'phone',
+  'website',
+  'avg_visit_minutes',
+  'is_lodging',
+  'curated_rank',
 ] as const satisfies readonly ImportCanonicalField[]
 
 /**
@@ -258,7 +264,23 @@ export const SYSTEM_DERIVED_FIELDS: readonly ImportCanonicalField[] = ['source_r
  * Auto-detection on the server is unaffected, so a sheet whose header says
  * "Quận/Huyện" still contributes that evidence without anyone selecting it.
  */
-export const RETIRED_MAPPABLE_FIELDS: readonly ImportCanonicalField[] = ['district']
+export const RETIRED_MAPPABLE_FIELDS: readonly ImportCanonicalField[] = [
+  'district',
+  /**
+   * PI-CMS-009 — the legacy free-text columns.
+   *
+   * Every one of them exists to read a sheet nobody writes any more:
+   * `category_raw` needs an editor to map a string GoGo has no key for,
+   * `price_raw` is parsed into the three columns beside it, and the two `*_raw`
+   * lists are parsed into keyed ones. The API still reads all four, so an old
+   * file uploads exactly as before — they simply stop being something an
+   * operator is invited to choose for a new one.
+   */
+  'category_raw',
+  'price_raw',
+  'audiences_raw',
+  'vibes_raw',
+]
 
 /** Fields an operator can choose in the mapping step. */
 export const MAPPABLE_FIELDS: readonly ImportCanonicalField[] = IMPORT_CANONICAL_FIELDS.filter(
