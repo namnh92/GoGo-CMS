@@ -32,7 +32,11 @@ import type {
 } from '@/shared/api/contracts'
 import { fetchPlaces, fetchStalePlaces, transitionPlace, verifyFreshness } from './api'
 import { PLACE_TRANSITIONS, PlaceStatusBadge } from './status'
-import { AreaCombobox } from './areaCombobox'
+import {
+  AdministrativeTree,
+  NO_SELECTION,
+  type AdministrativeSelection,
+} from './administrativeTree.view'
 import { DuplicateQueue } from './duplicateQueue.view'
 import { styles } from './placeList.style'
 
@@ -66,7 +70,15 @@ export default function PlaceListScreen() {
 
   const [tab, setTab] = useState<TabId>('all')
   const [search, setSearch] = useState('')
-  const [areaKey, setAreaKey] = useState('')
+  /**
+   * ADM-018 — which administrative unit the table is showing, if any.
+   *
+   * Kept beside the other filters rather than inside the tree, because it *is*
+   * a filter: the tree shows counts, and selecting a row narrows the same list
+   * query the toolbar narrows. Two ideas of "which province" is how a panel
+   * starts disagreeing with the table next to it.
+   */
+  const [unit, setUnit] = useState<AdministrativeSelection>(NO_SELECTION)
   const [category, setCategory] = useState('')
   const [source, setSource] = useState<PlaceSourceFilter | 'all'>('all')
   const [sort, setSort] = useState<PlaceSort>('updated_at')
@@ -85,12 +97,21 @@ export default function PlaceListScreen() {
   // Break-glass is open to every active admin, by design (SEC-001).
   const canTakedown = can('emergency.takedown')
 
-  const filters = {
+  /** Everything both the table and the hierarchy counts read the same way. */
+  const shared = {
     status: tab === 'stale' || tab === 'duplicates' ? ('all' as const) : tab,
     q: search || undefined,
-    areaKey: areaKey || undefined,
     category: category || undefined,
     source,
+  }
+
+  const filters = {
+    ...shared,
+    // The tree's selection and the table's filter are one value, so a count an
+    // editor clicked returns exactly the rows it promised.
+    provinceCode: unit.provinceCode || undefined,
+    communeCode: unit.communeCode || undefined,
+    administrativeState: unit.state ?? undefined,
     sort,
     direction,
     limit: PAGE_SIZE,
@@ -219,9 +240,32 @@ export default function PlaceListScreen() {
         enableSorting: false,
       },
       {
-        id: 'area',
-        header: () => t('places.col.area'),
-        cell: ({ row }) => <span className={styles.mono}>{row.original.areaKey ?? '—'}</span>,
+        /*
+         * ADM-018 — the canonical address, beside the curated bucket rather
+         * than instead of it. They are different facts: one is where the place
+         * is, the other is where GoGo offers it, and the column headers now say
+         * which is which. A place with no usable mapping says so in words —
+         * there is no code to render, and an em dash would read as "none".
+         */
+        id: 'administrative',
+        header: () => t('places.col.administrative'),
+        cell: ({ row }) => {
+          const place = row.original
+          if (!place.provinceName && !place.communeName) {
+            return <span className={styles.muted}>{t('places.administrative.none')}</span>
+          }
+          // Two lines, commune first: it is the unit that identifies the place,
+          // and the province is the context it sits in. On one line the pair
+          // wraps into six in a dense table and reads as neither.
+          return (
+            <span className={styles.adminCell}>
+              <span className={styles.adminCommune}>{place.communeName ?? place.communeCode}</span>
+              <span className={styles.adminProvince}>
+                {place.provinceName ?? place.provinceCode}
+              </span>
+            </span>
+          )
+        },
         enableSorting: false,
       },
       {
@@ -451,22 +495,6 @@ export default function PlaceListScreen() {
                 }}
                 className={styles.search}
               />
-              {/*
-                The same vocabulary as the editor, from the same endpoint: a
-                free text box here could filter on a key no place holds and
-                answer "0 kết quả" for a typo (GoGo-BE ADR-0016).
-              */}
-              <AreaCombobox
-                label={t('places.filter.area')}
-                labelHidden
-                placeholder={t('places.filter.areaHint')}
-                value={areaKey || null}
-                onChange={(next) => {
-                  setAreaKey(next ?? '')
-                  resetPaging()
-                }}
-                className={styles.filterCombobox}
-              />
               <input
                 aria-label={t('places.filter.category')}
                 placeholder={t('places.filter.categoryHint')}
@@ -519,68 +547,79 @@ export default function PlaceListScreen() {
               </InlineSelect>
             </div>
 
-            <Card className={styles.tableCard}>
-              <AsyncBoundary
-                status={listQuery.status}
-                error={listQuery.error}
-                data={rows}
-                isEmpty={(items) => items.length === 0}
-                onRetry={() => void listQuery.refetch()}
-                empty={<EmptyState />}
-              >
-                {(items) => (
-                  <>
-                    <DataTable
-                      data={items}
-                      columns={columns}
-                      getRowId={(place) => place.id}
-                      selectedIds={selected}
-                      caption={t('places.title')}
-                      onRowClick={(place) => navigate(`/places/${place.id}`)}
-                      rowTone={(place) =>
-                        place.status === 'suspended'
-                          ? 'danger'
-                          : place.status === 'review'
-                            ? 'warning'
-                            : 'default'
-                      }
-                    />
-                    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3">
-                      <p className="text-xs text-text-subtle">
-                        {t('places.pageInfo', { count: formatNumber(items.length, locale) })}
-                        {nextCursor === null ? ` · ${t('places.lastPage')}` : ''}
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          disabled={pageIndex === 0}
-                          onClick={() => setPageIndex((index) => Math.max(0, index - 1))}
-                        >
-                          {t('action.previous')}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          disabled={nextCursor === null}
-                          onClick={() => {
-                            setCursors((current) => {
-                              const next = current.slice(0, pageIndex + 1)
-                              next.push(nextCursor)
-                              return next
-                            })
-                            setPageIndex((index) => index + 1)
-                            setSelected([])
-                          }}
-                        >
-                          {t('action.next')}
-                        </Button>
+            <div className={styles.hierarchyLayout}>
+              <AdministrativeTree
+                filters={shared}
+                value={unit}
+                onChange={(next) => {
+                  setUnit(next)
+                  resetPaging()
+                }}
+              />
+
+              <Card className={styles.tableCard}>
+                <AsyncBoundary
+                  status={listQuery.status}
+                  error={listQuery.error}
+                  data={rows}
+                  isEmpty={(items) => items.length === 0}
+                  onRetry={() => void listQuery.refetch()}
+                  empty={<EmptyState />}
+                >
+                  {(items) => (
+                    <>
+                      <DataTable
+                        data={items}
+                        columns={columns}
+                        getRowId={(place) => place.id}
+                        selectedIds={selected}
+                        caption={t('places.title')}
+                        onRowClick={(place) => navigate(`/places/${place.id}`)}
+                        rowTone={(place) =>
+                          place.status === 'suspended'
+                            ? 'danger'
+                            : place.status === 'review'
+                              ? 'warning'
+                              : 'default'
+                        }
+                      />
+                      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3">
+                        <p className="text-xs text-text-subtle">
+                          {t('places.pageInfo', { count: formatNumber(items.length, locale) })}
+                          {nextCursor === null ? ` · ${t('places.lastPage')}` : ''}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            disabled={pageIndex === 0}
+                            onClick={() => setPageIndex((index) => Math.max(0, index - 1))}
+                          >
+                            {t('action.previous')}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            disabled={nextCursor === null}
+                            onClick={() => {
+                              setCursors((current) => {
+                                const next = current.slice(0, pageIndex + 1)
+                                next.push(nextCursor)
+                                return next
+                              })
+                              setPageIndex((index) => index + 1)
+                              setSelected([])
+                            }}
+                          >
+                            {t('action.next')}
+                          </Button>
+                        </div>
                       </div>
-                    </div>
-                  </>
-                )}
-              </AsyncBoundary>
-            </Card>
+                    </>
+                  )}
+                </AsyncBoundary>
+              </Card>
+            </div>
 
             <p className="text-[11px] text-text-subtle">{t('places.ratingNote')}</p>
 

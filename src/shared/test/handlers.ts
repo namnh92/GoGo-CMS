@@ -520,6 +520,42 @@ function recordManualCostAudit(action: string, resourceId: string, diff: unknown
   })
 }
 
+/**
+ * ADM-018 — the filters the list and the counts must read identically.
+ *
+ * Archived is out unless asked for by name: it is the closest thing the schema
+ * has to a soft delete, and a deleted place inflating a commune's total is the
+ * exact count nobody can reconcile.
+ */
+function filteredPlaces(url: URL) {
+  const status = url.searchParams.get('status')
+  const q = url.searchParams.get('q')?.toLowerCase()
+  const areaKey = url.searchParams.get('areaKey')
+  let items = status
+    ? db.places.filter((place) => place.status === status)
+    : db.places.filter((place) => place.status !== 'archived')
+  if (q) {
+    items = items.filter(
+      (place) =>
+        place.name.toLowerCase().includes(q) || (place.addressText ?? '').toLowerCase().includes(q),
+    )
+  }
+  if (areaKey) items = items.filter((place) => place.areaKey === areaKey)
+  return items
+}
+
+/**
+ * A place that may appear beneath a province and a commune: both codes, the
+ * commune under that province in the fixture's own hierarchy, and a mapping a
+ * machine or a person actually settled.
+ */
+function isGroupable(place: (typeof db.places)[number]): boolean {
+  const identity = place.administrative
+  if (!identity?.provinceCode || !identity.communeCode) return false
+  if (identity.status !== 'AUTO_MATCHED' && identity.status !== 'VERIFIED') return false
+  return (COMMUNES[identity.provinceCode] ?? []).some((c) => c.code === identity.communeCode)
+}
+
 export const handlers = [
   // Runs before every other handler: MSW walks this list in order, and
   // returning nothing falls through to the real handler below.
@@ -1163,19 +1199,100 @@ export const handlers = [
     return HttpResponse.json({ created: true }, { status: 201 })
   }),
 
+  /**
+   * ADM-018 — the counts, over the same rows and the same rules the list uses.
+   *
+   * Deliberately shares `filteredPlaces` and `isGroupable` with the list
+   * handler below: a fixture where the panel and the table disagree would let a
+   * screen ship that lies about its own numbers, which is the failure the
+   * server-side test suite exists to prevent. Declared before `/cms/places/:id`
+   * — MSW matches in order.
+   */
+  http.get(`${BASE}/cms/places/administrative-summary`, ({ request }) => {
+    const url = new URL(request.url)
+    const provinceCode = url.searchParams.get('provinceCode')
+    const scoped = filteredPlaces(url)
+    const groupable = scoped.filter(isGroupable)
+    const review = scoped.filter((place) => !isGroupable(place))
+
+    const counts = new Map<string, number>()
+    const rows = provinceCode
+      ? groupable.filter((place) => place.administrative?.provinceCode === provinceCode)
+      : groupable
+    for (const place of rows) {
+      const code = provinceCode
+        ? (place.administrative?.communeCode ?? '')
+        : (place.administrative?.provinceCode ?? '')
+      if (code) counts.set(code, (counts.get(code) ?? 0) + 1)
+    }
+
+    const reviewByProvince = new Map<string, number>()
+    const byStatus: Record<string, number> = {
+      UNMAPPED: 0,
+      NEEDS_REVIEW: 0,
+      REJECTED: 0,
+      STALE: 0,
+      INVALID_HIERARCHY: 0,
+    }
+    for (const place of review) {
+      const status = place.administrative?.status ?? 'UNMAPPED'
+      const bucket = status in byStatus ? status : 'INVALID_HIERARCHY'
+      byStatus[bucket] = (byStatus[bucket] ?? 0) + 1
+      const province = place.administrative?.provinceCode
+      if (province) reviewByProvince.set(province, (reviewByProvince.get(province) ?? 0) + 1)
+    }
+
+    const level = provinceCode ? 'commune' : 'province'
+    const nameOf = (code: string) =>
+      level === 'province'
+        ? (PROVINCES.find((p) => p.code === code)?.fullName ?? null)
+        : (Object.values(COMMUNES)
+            .flat()
+            .find((c) => c.code === code)?.fullName ?? null)
+
+    const units = [...counts.entries()].map(([code, placeCount]) => ({
+      code,
+      name: nameOf(code),
+      placeCount,
+      reviewCount: level === 'province' ? (reviewByProvince.get(code) ?? 0) : null,
+    }))
+    if (level === 'province') {
+      for (const [code, count] of reviewByProvince) {
+        if (units.some((unit) => unit.code === code)) continue
+        units.push({ code, name: nameOf(code), placeCount: 0, reviewCount: count })
+      }
+    }
+
+    return HttpResponse.json({
+      datasetVersion: ACTIVE_DATASET_VERSION,
+      level,
+      province: provinceCode
+        ? { code: provinceCode, name: PROVINCES.find((p) => p.code === provinceCode)?.fullName }
+        : null,
+      units,
+      totals: { grouped: rows.length, review: review.length },
+      review: { byStatus },
+    })
+  }),
+
   http.get(`${BASE}/cms/places`, ({ request }) => {
     const url = new URL(request.url)
-    const status = url.searchParams.get('status')
-    const q = url.searchParams.get('q')?.toLowerCase()
-    let items = db.places
-    if (status) items = items.filter((place) => place.status === status)
-    if (q) {
-      items = items.filter(
-        (place) =>
-          place.name.toLowerCase().includes(q) ||
-          (place.addressText ?? '').toLowerCase().includes(q),
-      )
+    let items = filteredPlaces(url)
+
+    // ADM-018 — the canonical codes, and only those. A free-text city or a
+    // curated area key never moves a place between provinces.
+    const provinceCode = url.searchParams.get('provinceCode')
+    const communeCode = url.searchParams.get('communeCode')
+    const state = url.searchParams.get('administrativeState')
+    if (provinceCode) {
+      items = items.filter((place) => place.administrative?.provinceCode === provinceCode)
     }
+    if (communeCode) {
+      items = items.filter((place) => place.administrative?.communeCode === communeCode)
+    }
+    if (state === 'grouped') items = items.filter(isGroupable)
+    if (state === 'review') items = items.filter((place) => !isGroupable(place))
+
     // `GET /cms/places` returns the lean list item, not the detail row.
     return HttpResponse.json({
       items: items.map((place) => ({
@@ -1188,6 +1305,11 @@ export const handlers = [
         freshnessCheckedAt: place.freshnessCheckedAt,
         createdAt: place.createdAt,
         updatedAt: place.updatedAt,
+        provinceCode: place.administrative?.provinceCode ?? null,
+        provinceName: place.administrative?.provinceName ?? null,
+        communeCode: place.administrative?.communeCode ?? null,
+        communeName: place.administrative?.communeName ?? null,
+        administrativeMappingStatus: place.administrative?.status ?? 'UNMAPPED',
       })),
       nextCursor: null,
     })

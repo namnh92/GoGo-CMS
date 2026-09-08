@@ -6,7 +6,11 @@ export const styles = {
   // The area picker needs room for a label and a popup; the bare filter boxes
   // beside it do not.
   filterCombobox: 'w-52',
-  tableCard: 'overflow-hidden',
+  // The hierarchy sits beside the table on a wide screen and above it on a
+  // narrow one — it is a filter, and a filter belongs where the thing it
+  // filters can be seen.
+  hierarchyLayout: 'grid items-start gap-4 xl:grid-cols-[18rem_minmax(0,1fr)]',
+  tableCard: 'overflow-hidden min-w-0',
   cover: 'h-10 w-10 shrink-0 rounded-compact object-cover',
   coverFallback:
     'flex h-10 w-10 shrink-0 items-center justify-center rounded-compact bg-surface-sunken text-[10px] font-bold text-text-subtle',
@@ -19,6 +23,9 @@ export const styles = {
   ratingLabel: 'w-10 text-text-subtle',
   ratingValue: 'font-semibold text-text',
   muted: 'text-[12px] text-text-muted',
+  adminCell: 'flex min-w-[8.5rem] flex-col leading-tight',
+  adminCommune: 'text-[12px] text-text',
+  adminProvince: 'text-[11px] text-text-subtle',
   mono: 'font-mono text-[11px] text-text-subtle',
   actions: 'flex items-center justify-end gap-0.5',
   duplicateGrid: 'grid gap-3 lg:grid-cols-2',

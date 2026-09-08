@@ -117,6 +117,30 @@ describe('the vendored OpenAPI contract', () => {
     expect(candidate.slice(0, 8_000)).toContain('ImportAdministrativeIdentity')
   })
 
+  it('carries the hierarchy counts and the filters they reconcile with (GoGo-BE#502)', () => {
+    // ADM-018. The path, the operation and the three list parameters that make
+    // a count clickable — a re-vendor that lost any of them would leave the
+    // panel reading numbers the table cannot reproduce.
+    expect(spec).toContain('/cms/places/administrative-summary:')
+    expect(spec).toContain('operationId: cmsPlaceAdministrativeSummary')
+    expect(spec).toContain('CmsPlaceAdministrativeSummary:')
+
+    const list = spec.slice(spec.indexOf('      operationId: cmsListPlaces'))
+    for (const parameter of [
+      'name: provinceCode',
+      'name: communeCode',
+      'name: administrativeState',
+    ]) {
+      expect(list.slice(0, 6_000)).toContain(parameter)
+    }
+
+    // The list row now names the unit it is in, so the list, the detail and the
+    // forms all say a place's address the same way.
+    const item = spec.slice(spec.indexOf('    CmsPlaceListItem:'))
+    expect(item.slice(0, 2_500)).toContain('administrativeMappingStatus:')
+    expect(item.slice(0, 2_500)).toContain('communeName:')
+  })
+
   it('keeps the manual-cost paths that were already on develop', () => {
     // COST-CMS-010 (#106) merged long before the administrative work. The
     // branch it came from still carries an alpha.1 spec, and re-vendoring from

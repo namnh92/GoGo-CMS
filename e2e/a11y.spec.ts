@@ -69,15 +69,15 @@ test('the place editor is operable from the keyboard end to end', async ({ page 
   await page.goto('/places/pl-chao-ban')
   await expect(page.getByRole('heading', { name: /Chào Bạn/ })).toBeVisible()
 
-  // The area picker is a combobox, so it answers to the combobox keys rather
-  // than needing a click on an option.
-  const area = page.getByRole('combobox', { name: /Khu vực khám phá/ })
-  await area.focus()
-  await expect(area).toBeFocused()
-  await area.press('ArrowDown')
-  await expect(area).toHaveAttribute('aria-expanded', 'true')
-  await area.press('Escape')
-  await expect(area).toHaveAttribute('aria-expanded', 'false')
+  // ADM-108 replaced the legacy area picker with the administrative pair. Same
+  // combobox behaviour, and now over the vocabulary that is actually an address.
+  const province = page.getByRole('combobox', { name: /Tỉnh \/ thành phố/ })
+  await province.focus()
+  await expect(province).toBeFocused()
+  await province.press('ArrowDown')
+  await expect(province).toHaveAttribute('aria-expanded', 'true')
+  await province.press('Escape')
+  await expect(province).toHaveAttribute('aria-expanded', 'false')
 
   // A day's state is a radiogroup: focus the group, choose with the keyboard.
   const sunday = page.getByRole('region', { name: 'Chủ Nhật' })
