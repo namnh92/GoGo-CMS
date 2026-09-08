@@ -194,3 +194,22 @@ export function AdministrativeUnitCombobox({
     />
   )
 }
+
+/**
+ * The display name of one province code, from the same list the picker uses.
+ *
+ * A convenience for callers that need the *name* for something other than the
+ * picker — the discovery-area list groups by city, and the province is the
+ * nearest thing GoGo has to one. It shares the query key, so it costs nothing
+ * beyond the fetch the picker already made.
+ */
+export function useProvinceName(provinceCode: string | null | undefined): string | null {
+  const provinces = useQuery({
+    queryKey: queryKeys.administrativeProvinces(),
+    queryFn: ({ signal }) => fetchProvinces(signal),
+    enabled: Boolean(provinceCode),
+    staleTime: 5 * 60_000,
+  })
+  if (!provinceCode) return null
+  return provinces.data?.items.find((unit) => unit.code === provinceCode)?.fullName ?? null
+}

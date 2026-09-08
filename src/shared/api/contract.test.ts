@@ -25,7 +25,7 @@ const drift = read('scripts/check-openapi-drift.mjs')
 const generated = read('src/shared/api/schema.d.ts')
 const administrativeContracts = read('src/shared/api/contracts-administrative.ts')
 
-const EXPECTED = '1.0.0-alpha.10'
+const EXPECTED = '1.0.0-alpha.12'
 
 /**
  * The vendored file byte for byte, as GoGo-BE published it.
@@ -35,7 +35,7 @@ const EXPECTED = '1.0.0-alpha.10'
  * hand-edited, and this is what makes that visible rather than invisible. A
  * legitimate re-vendor updates the version above and this digest together.
  */
-const SPEC_SHA256 = '4f87edbf5574de0e0ad95d50d6d258255dae9bb59a14247616aa55d80619f7b5'
+const SPEC_SHA256 = 'bc7fa0bc291437042d62540bba27940f753b6c03ca0de8d753b1f48b22dd8dfb'
 
 /** `pnpm api:routes` on GoGo-BE reports the same number against the real router. */
 const SERVED_OPERATIONS = 247
@@ -79,6 +79,24 @@ describe('the vendored OpenAPI contract', () => {
     ]) {
       expect(spec).toContain(path)
     }
+  })
+
+  it('carries the administrative surface the place forms now depend on (GoGo-BE#496/#497)', () => {
+    // ADM-106/107. These are properties rather than paths, so a re-vendor that
+    // dropped them would not fail the path checks above — and the console would
+    // go on sending codes the contract no longer describes.
+    expect(spec).toContain('PlaceAdministrativeSummary:')
+    expect(spec).toContain('ImportAdministrativeIdentity:')
+    expect(administrativeContracts).toBeTruthy()
+
+    const editBody = spec.slice(spec.indexOf('      operationId: cmsUpdatePlace'))
+    expect(editBody.slice(0, 12_000)).toContain('provinceCode:')
+    expect(editBody.slice(0, 12_000)).toContain('communeCode:')
+
+    const detail = spec.slice(spec.indexOf('    CmsPlaceDetail:'))
+    expect(detail.slice(0, 4_000)).toContain(
+      "administrative:\n          $ref: '#/components/schemas/PlaceAdministrativeSummary'",
+    )
   })
 
   it('keeps the manual-cost paths that were already on develop', () => {

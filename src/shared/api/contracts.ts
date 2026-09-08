@@ -302,6 +302,33 @@ export const placeProvenanceSchema = z.object({
 })
 export type PlaceProvenance = z.infer<typeof placeProvenanceSchema>
 
+/**
+ * ADM-016 — the stored administrative identity of one place.
+ *
+ * Two levels, because Vietnam has two: a province/municipality and a
+ * ward/commune/special zone. The district tier was dissolved on 2025-07-01 and
+ * is not represented here at all.
+ *
+ * `approvalBlock` is the same policy the publish transaction enforces, so the
+ * screen cannot promise a publish the server will refuse. `AUTO_MATCHED` is the
+ * resolver's answer and permits nothing — only a moderator's `VERIFIED` does.
+ */
+export const placeAdministrativeSummarySchema = z.object({
+  status: z.enum(['UNMAPPED', 'AUTO_MATCHED', 'NEEDS_REVIEW', 'VERIFIED', 'REJECTED', 'STALE']),
+  provinceCode: z.string().nullish(),
+  provinceName: z.string().nullish(),
+  communeCode: z.string().nullish(),
+  communeName: z.string().nullish(),
+  method: z.string().nullish(),
+  /** The release the mapping was decided against — provenance, not a gate. */
+  datasetVersion: z.string().nullish(),
+  /** What is published now. Null when this deployment has no dataset at all. */
+  activeDatasetVersion: z.string().nullish(),
+  mappedAt: z.string().nullish(),
+  approvalBlock: z.object({ code: z.string(), message: z.string() }).nullish(),
+})
+export type PlaceAdministrativeSummary = z.infer<typeof placeAdministrativeSummarySchema>
+
 /** `CmsPlaceDetail` (GoGo-BE#157) — every field `cmsUpdatePlace` accepts, plus relations. */
 export const cmsPlaceDetailSchema = z.object({
   id: z.string(),
@@ -311,10 +338,20 @@ export const cmsPlaceDetailSchema = z.object({
   addressText: z.string().nullish(),
   /** The discovery area — a `service_areas` key, never the postal address. */
   areaKey: z.string().nullish(),
-  /** Administrative address, free text. Separate from `areaKey` by design. */
+  /**
+   * ADR-0016 legacy free text, as it was written. **Not** the administrative
+   * identity — `administrative` below is — and never rendered as a current
+   * unit.
+   */
   city: z.string().nullish(),
-  /** Optional: an address with no district is valid (GoGo-BE ADR-0016). */
+  /**
+   * Legacy only. District-level units were dissolved on 2025-07-01, so this
+   * names no current level. Read so an existing value is not silently lost;
+   * never offered as something to choose.
+   */
   district: z.string().nullish(),
+  /** ADM-016 — the two current levels, their names, and why publishing is blocked. */
+  administrative: placeAdministrativeSummarySchema.nullish(),
   lat: z.number().nullish(),
   lng: z.number().nullish(),
   phone: z.string().nullish(),

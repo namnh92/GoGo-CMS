@@ -1263,6 +1263,22 @@ export const en: Partial<Record<MessageKey, string>> = {
   'combobox.count': '{count} entries',
   'combobox.deniedHint': 'Your account cannot read this catalog.',
 
+  'placeEditor.error.provinceRequired': 'Choose the province this commune belongs to.',
+  'placeEditor.error.communeRequired': 'Choose a commune — a province alone is not an address.',
+  'placeEditor.province': 'Province',
+  'placeEditor.provinceHint': 'From GoGo’s active administrative dataset.',
+  'placeEditor.commune': 'Ward / commune / special zone',
+  'placeEditor.communeHint': 'Only units inside the chosen province.',
+  'placeEditor.administrative': 'Administrative unit',
+  'placeEditor.administrativeLegacyNote':
+    'The district tier was dissolved on 2025-07-01. A legacy free-text address may still mention one; GoGo no longer treats it as a current level.',
+  'placeEditor.administrativeUnmapped': 'No administrative unit resolved yet.',
+  'placeEditor.administrativeStatus': 'Mapping status',
+  'placeEditor.administrativeDataset': 'Dataset',
+  'placeEditor.administrativeBlocked': 'Cannot be published yet',
+  'placeEditor.administrativeOk': 'The administrative mapping does not block publishing.',
+  'placeEditor.administrativeNoDataset':
+    'This environment has no published administrative dataset.',
   'unitPicker.provincePlaceholder': 'Search provinces…',
   'unitPicker.communePlaceholder': 'Search wards / communes / special zones…',
   'unitPicker.chooseProvinceFirst': 'Choose a province first.',

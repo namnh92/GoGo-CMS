@@ -84,7 +84,7 @@ describe('place editor save (GoGo-CMS#122)', () => {
     const user = userEvent.setup()
     open({ avgVisitMinutes: null, lat: null, lng: null })
 
-    await user.type(await screen.findByLabelText(/Quận\/Huyện/), 'Quận 3')
+    await user.type(await screen.findByLabelText(/Địa chỉ \(dạng tự do\)/), ', Quận 3')
     expect(screen.getAllByText('Có thay đổi chưa lưu').length).toBeGreaterThan(0)
 
     await user.click(screen.getByRole('button', { name: 'Lưu thông tin' }))
@@ -100,7 +100,7 @@ describe('place editor save (GoGo-CMS#122)', () => {
     const user = userEvent.setup()
     open({ avgVisitMinutes: null, lat: null, lng: null })
 
-    await user.type(await screen.findByLabelText(/Quận\/Huyện/), 'Quận 3')
+    await user.type(await screen.findByLabelText(/Địa chỉ \(dạng tự do\)/), ', Quận 3')
     await user.click(screen.getByRole('button', { name: 'Lưu thông tin' }))
     await screen.findByText('Đã lưu thông tin định danh')
 

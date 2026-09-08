@@ -6376,6 +6376,14 @@ export interface components {
             existingPlaceId?: string;
             /** @description Opaque, short-lived proof that this request verified the Google Place ID with the provider (#337). Present only when the answer came from a live provider check and the place is operational; send it back on `POST /place-submissions` to skip the duplicate verification fetch. It carries no provider content and authorises nothing — an expired or edited token is rejected with a retryable `RESOLUTION_TOKEN_INVALID` and the client resolves again. */
             resolutionToken?: string;
+            /**
+             * @description ADM-017 — the two current administrative levels the candidate's coordinate falls in, so a create form can open on a real identity instead of two empty boxes.
+             *
+             *     A preview: this request stores nothing, and the mapping is written when the place is created. Absent when the deployment has no published administrative dataset — a link still resolves, GoGo just cannot say anything about units, and saying nothing is the honest form of that.
+             *
+             *     `requiresReview` and `blocksPublication` mean what they mean everywhere: `AUTO_MATCHED` here permits nothing, and the place created from it is still a draft awaiting a moderator.
+             */
+            administrative?: components["schemas"]["ImportAdministrativeIdentity"] | null;
             candidate?: {
                 googlePlaceId?: string;
                 name?: string;
@@ -6525,6 +6533,28 @@ export interface components {
             lat?: number;
             lng?: number;
         };
+        /**
+         * @description ADM-017 — which of Vietnam's two current administrative levels a place falls in: a province/municipality and a ward/commune/special zone. The district tier was dissolved on 2025-07-01 and is not represented here at all; the legacy `city`/`district` cells of a spreadsheet are free text the resolver reads as evidence, not an identity.
+         *
+         *     Resolved from geometry against GoGo's pinned boundary release. No provider is asked — that is what makes these GoGo facts rather than provider content (ADR-0019 §10).
+         */
+        ImportAdministrativeIdentity: {
+            provinceCode?: string | null;
+            provinceName?: string | null;
+            communeCode?: string | null;
+            communeName?: string | null;
+            /**
+             * @description `AUTO_MATCHED` — the evidence decided it. `NEEDS_REVIEW` — the evidence disagreed with itself, or was ambiguous, and a person has to choose. `UNMAPPED` — nothing placed it. `null` — the row has not been resolved against the provider yet, so there is no coordinate to classify.
+             * @enum {string|null}
+             */
+            status: "UNMAPPED" | "AUTO_MATCHED" | "NEEDS_REVIEW" | "VERIFIED" | "REJECTED" | "STALE" | null;
+            /** @description The administrative release this was decided against. A code is not an identity across releases — 2,212 of the 3,321 current commune codes named a different unit before 2025-07-01 — so a mapping without its version cannot be compared with anything. */
+            datasetVersion?: string | null;
+            /** @description About the **mapping** rather than the place — the resolver could not decide, and a person has to. */
+            requiresReview: boolean;
+            /** @description About **publication**. True whenever a mapping exists here, because no import result is a verification: only a moderator's `VERIFIED` permits publishing a place, and an import has no path that writes it. A screen that renders `AUTO_MATCHED` as "đã xác minh" is claiming something the server will refuse to act on. */
+            blocksPublication: boolean;
+        };
         ImportRow: {
             /** Format: uuid */
             id?: string;
@@ -6542,6 +6572,12 @@ export interface components {
             matchReasons?: string[];
             /** @description Present on PLACE_MATCH_AMBIGUOUS rows (spec §10.4). */
             candidates?: components["schemas"]["ImportCandidate"][];
+            /**
+             * @description ADM-017 — the preview while the job is reviewable, and what was actually stored once the row is `imported`.
+             *
+             *     The two are produced by the same resolver over the same coordinate, which is what makes comparing them worth anything; a preview that agreed by construction would prove nothing. Null until the row has resolved against the provider, and on any deployment with no published administrative dataset.
+             */
+            administrative?: components["schemas"]["ImportAdministrativeIdentity"] | null;
             errors?: components["schemas"]["IngestMessage"][];
             warnings?: components["schemas"]["IngestMessage"][];
         };
@@ -6554,6 +6590,8 @@ export interface components {
             matchedPlaceId?: string | null;
             /** Format: float */
             matchConfidence?: number | null;
+            /** @description ADM-017 — the same identity the row carries in `listPlaceImportRows`. */
+            administrative?: components["schemas"]["ImportAdministrativeIdentity"] | null;
             errors?: components["schemas"]["IngestMessage"][];
             warnings?: components["schemas"]["IngestMessage"][];
         };
@@ -6686,6 +6724,39 @@ export interface components {
             /** Format: date-time */
             createdAt?: string | null;
         };
+        /**
+         * @description ADM-016 / ADR-0019 — the two current administrative levels this place is mapped to, **as stored**, plus why that mapping does or does not permit publishing it.
+         *
+         *     Two levels, not three. Vietnam's district tier was dissolved on 2025-07-01, so a current address is a province/municipality and a ward/commune/special zone and nothing between them. The legacy `city`/`district` strings on the same record are free text kept for compatibility and are not this.
+         *
+         *     This is the *stored* mapping, deliberately. The moderation surface (`cmsAdministrativeMappingDetail`) recomputes the resolver on every read — a point-in-polygon query, an evidence sweep, a staleness evaluation — because a reviewer needs to know what the machine says now. An editor opening a place to fix its phone number does not, and buying that work on the most-opened screen in the console would be paying for an answer nobody asked for.
+         */
+        PlaceAdministrativeSummary: {
+            /**
+             * @description `AUTO_MATCHED` is the resolver's answer, not a person's, and it does **not** permit publication — only a moderator's `VERIFIED` does. A console that renders it as "đã xác minh" is saying something the server will refuse to act on.
+             * @enum {string}
+             */
+            status: "UNMAPPED" | "AUTO_MATCHED" | "NEEDS_REVIEW" | "VERIFIED" | "REJECTED" | "STALE";
+            provinceCode?: string | null;
+            /** @description Resolved from the active dataset, latest period first, so a code whose unit has since ended still has a name to show. Null when the active dataset does not carry the code at all — which is itself the reason `approvalBlock` will be set. */
+            provinceName?: string | null;
+            communeCode?: string | null;
+            communeName?: string | null;
+            /** @description How the stored mapping was arrived at. `editor` means a person decided it; everything else is machine evidence. */
+            method?: string | null;
+            /** @description The release the mapping was decided against — provenance, not a gate. Every publication mints a new version, and requiring a match would un-approve the whole catalogue on every release. */
+            datasetVersion?: string | null;
+            /** @description What is published now. Null when this deployment has no dataset. */
+            activeDatasetVersion?: string | null;
+            /** Format: date-time */
+            mappedAt?: string | null;
+            /** @description Why this mapping does not permit publishing the place, or null. The same policy the publish transaction enforces, so the screen cannot promise a publish the server will refuse. */
+            approvalBlock?: {
+                /** @enum {string} */
+                code: "ADMINISTRATIVE_DATASET_UNAVAILABLE" | "MAPPING_UNMAPPED" | "MAPPING_NOT_VERIFIED" | "MAPPING_REJECTED" | "MAPPING_STALE" | "MAPPING_INCOMPLETE" | "MAPPING_UNIT_NOT_CURRENT" | "MAPPING_HIERARCHY_INVALID";
+                message: string;
+            } | null;
+        };
         CmsPlaceDetail: {
             /** Format: uuid */
             id: string;
@@ -6696,10 +6767,11 @@ export interface components {
             addressText?: string | null;
             /** @description Discovery area — a `service_areas` key, the same vocabulary the place-list filter sends. Not the postal address. */
             areaKey?: string | null;
-            /** @description Administrative address. */
+            /** @description ADR-0016 legacy free text, as it was written. Not the administrative identity — `administrative` below is. */
             city?: string | null;
-            /** @description Administrative address; optional. */
+            /** @description **Legacy only.** District-level units were dissolved on 2025-07-01. Returned so an existing value is not silently lost, and because a free-text address may still read that way; a console must not render it as a current administrative level. */
             district?: string | null;
+            administrative?: components["schemas"]["PlaceAdministrativeSummary"];
             lat?: number;
             lng?: number;
             /** @description E.164. */
@@ -12463,8 +12535,14 @@ export interface operations {
                     description?: string | null;
                     addressText?: string | null;
                     areaKey?: string | null;
+                    /** @description ADR-0016 legacy free text, kept for rows that carry it and read by the resolver as one piece of evidence. It is **not** the administrative identity and selects no code — send `provinceCode`/`communeCode` for that. */
                     city?: string | null;
+                    /** @description Legacy only. District-level units were dissolved on 2025-07-01, so nothing current is expressed here. Accepted so an existing value survives, and read by the resolver as historical name evidence. Consoles must not offer it as a current administrative level. */
                     district?: string | null;
+                    /** @description ADM-016 / ADR-0019 — the canonical administrative address, with `communeCode`. See `cmsUpdatePlace` for the pair rule and the errors. */
+                    provinceCode?: string | null;
+                    /** @description The ward / commune / special zone, from `getAdministrativeCommunes` or `searchAdministrativeUnits`. Send the code the API returned; never rebuild one from a name or a list position. */
+                    communeCode?: string | null;
                     /** @description Normalized to E.164 on write, same as `cmsUpdatePlace`. */
                     phone?: string | null;
                     website?: string | null;
@@ -12699,10 +12777,26 @@ export interface operations {
                     addressText?: string | null;
                     /** @description Enforced: at most 64 characters. A key from `cmsListAreas` — the discovery area, not the postal address. Not validated against the catalog: rows predating it carry keys it does not list. */
                     areaKey?: string | null;
-                    /** @description Administrative address; free text, never a code. */
+                    /** @description ADR-0016 legacy free text. It was the closest thing to an administrative address before ADR-0019 and it is not one now: it selects no code, overrides no resolver evidence, and is read only as one piece of evidence among five. Kept because rows carry it and because an editor must be able to write an address no catalog holds. */
                     city?: string | null;
-                    /** @description Optional. An address with no district is valid — Vietnamese administrative units are reorganised and not every place has one. */
+                    /** @description **Legacy only.** District-level units were dissolved on 2025-07-01, so this names no current level of the Vietnamese hierarchy. It is still accepted, still stored, and still read by the resolver as historical name evidence — a dissolved unit with exactly one canonical successor is how a place mapped before the reorganisation gets found. A console must not present it as a current administrative field. */
                     district?: string | null;
+                    /**
+                     * @description ADM-016 / ADR-0019 — the canonical administrative address, as codes, and one half of a pair.
+                     *
+                     *     **The pair travels together.** A province with no commune is not an address, and a commune with no province is a code with no hierarchy to check it against; either alone is `400 ADMINISTRATIVE_CODES_INCOMPLETE`. An absent key leaves the stored value in place, which means sending one half against a stored other half is checked as the pair it forms — that is what makes a cross-province combination `400 HIERARCHY_INVALID` rather than a silent half-write.
+                     *
+                     *     Validated against the dataset published **at commit time**, inside the transaction that stores them: `400 PROVINCE_NOT_CURRENT` / `400 COMMUNE_NOT_CURRENT` when a code is not a current unit of that release, and `503 ADMINISTRATIVE_DATASET_UNAVAILABLE` when the deployment has no published dataset to check a claim against.
+                     *
+                     *     The codes are **evidence, not an instruction**. They enter the resolver as `trusted_code` and are weighed against the geometry in the same request; two sources naming different communes produce `NEEDS_REVIEW` with both candidates rather than whichever one the code happened to trust. Nothing here verifies anything: `AUTO_MATCHED` is a resolver result, and only a moderator's `VERIFIED` permits publication.
+                     */
+                    provinceCode?: string | null;
+                    /**
+                     * @description The ward / commune / special zone. Take it from `getAdministrativeCommunes` or `searchAdministrativeUnits` and send it back unchanged — a code rebuilt from a display name or a list position is a different claim.
+                     *
+                     *     A code is not an identity: 2,212 of the 3,321 current commune codes named a different unit before 2025-07-01, which is why every check here names the dataset version it was made against.
+                     */
+                    communeCode?: string | null;
                     /** @description Normalized to E.164 on write (`0283 822 9999` → `+842838229999`). A bare subscriber number with neither a trunk `0` nor a country code is refused rather than assumed Vietnamese. */
                     phone?: string | null;
                     /** @description `http`/`https` only, host required. A bare host is upgraded to `https://`. Other schemes are refused — the value is rendered as an href in three clients. */

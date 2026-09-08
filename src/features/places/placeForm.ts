@@ -44,8 +44,28 @@ const placeIdentityFields = z.object({
   name: z.string().trim().min(L.name.min, 'placeEditor.error.required').max(L.name.max),
   addressText: z.string().max(L.addressText.max).optional(),
   areaKey: z.string().max(L.areaKey.max).optional(),
+  /**
+   * ADR-0016 legacy free text. Kept in the model because existing places carry
+   * it and the detail screen shows it; **not** offered as an input any more —
+   * the administrative address is `provinceCode` + `communeCode`.
+   */
   city: z.string().max(L.city.max).optional(),
+  /**
+   * Legacy only, and no longer editable anywhere: district-level units were
+   * dissolved on 2025-07-01. Present so a stored value round-trips untouched.
+   */
   district: z.string().max(L.district.max).optional(),
+  /**
+   * ADM-106 — the canonical administrative address.
+   *
+   * `''` is "not chosen", the way every other text field in this form reads an
+   * untouched input. The pair rule is GoGo-BE's and is enforced there against
+   * the published dataset; what this form guarantees is that a commune is only
+   * ever picked from the chosen province's own list, so the pair it sends is
+   * one the hierarchy holds.
+   */
+  provinceCode: z.string().max(L.provinceCode.max).optional(),
+  communeCode: z.string().max(L.communeCode.max).optional(),
   /*
    * Neither is validated for shape here. GoGo-BE normalizes a phone to E.164
    * and a website to `http(s)`, and a second, slightly different rule in the
@@ -64,6 +84,29 @@ const placeIdentityFields = z.object({
 })
 
 export const placeIdentitySchema = placeIdentityFields.superRefine((values, ctx) => {
+  /*
+   * ADM-106 — a province with no commune is not an address, and a commune with
+   * no province is a code with nothing to check it against. GoGo-BE answers
+   * `400 ADMINISTRATIVE_CODES_INCOMPLETE` for either; saying so here points at
+   * the empty box instead of raising a toast.
+   */
+  const province = (values.provinceCode ?? '').trim()
+  const commune = (values.communeCode ?? '').trim()
+  if (province !== '' && commune === '') {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['communeCode'],
+      message: 'placeEditor.error.communeRequired',
+    })
+  }
+  if (commune !== '' && province === '') {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['provinceCode'],
+      message: 'placeEditor.error.provinceRequired',
+    })
+  }
+
   // The server moves the pin only when both arrive; one alone is a silent
   // no-op there, so it is a visible rejection here.
   if ((values.lat === undefined) === (values.lng === undefined)) return
@@ -127,6 +170,8 @@ export const PLACE_IDENTITY_FIELDS = [
   'areaKey',
   'city',
   'district',
+  'provinceCode',
+  'communeCode',
   'phone',
   'website',
   'description',
@@ -205,7 +250,17 @@ export function toPlaceEditBody(
 ): UpdatePlaceInput {
   const body: UpdatePlaceInput = {}
 
-  const text = (field: 'addressText' | 'areaKey' | 'city' | 'district' | 'phone' | 'website') => {
+  const text = (
+    field:
+      | 'addressText'
+      | 'areaKey'
+      | 'city'
+      | 'district'
+      | 'provinceCode'
+      | 'communeCode'
+      | 'phone'
+      | 'website',
+  ) => {
     const next = textOf(values[field])
     if (!baseline) {
       if (next) body[field] = next
@@ -234,8 +289,14 @@ export function toPlaceEditBody(
 
   text('addressText')
   text('areaKey')
+  // ADM-106 — `city` and `district` are no longer editable, so the diff below
+  // finds them unchanged and sends nothing. They are still listed because a
+  // form seeded from an older draft could still carry a value, and dropping
+  // them from the diff would let that value be silently lost instead of sent.
   text('city')
   text('district')
+  text('provinceCode')
+  text('communeCode')
   text('phone')
   text('website')
 

@@ -28,6 +28,8 @@ export type PlaceFieldName =
   | 'areaKey'
   | 'city'
   | 'district'
+  | 'provinceCode'
+  | 'communeCode'
   | 'phone'
   | 'website'
   | 'lat'
@@ -51,6 +53,13 @@ export const PLACE_FIELD_LIMITS = {
   areaKey: { kind: 'text', max: 64 },
   city: { kind: 'text', max: 120 },
   district: { kind: 'text', max: 120 },
+  /**
+   * ADM-016 — an administrative code is 2 to 5 digits. Mirrored from
+   * `ADMINISTRATIVE_CODE` in GoGo-BE's `cms.controllers.ts`; the console never
+   * types one, it sends back what the units API returned.
+   */
+  provinceCode: { kind: 'text', min: 2, max: 5 },
+  communeCode: { kind: 'text', min: 2, max: 5 },
   phone: { kind: 'text', max: 40 },
   website: { kind: 'text', max: 500 },
   lat: { kind: 'number', min: -90, max: 90 },
@@ -75,6 +84,8 @@ export const PLACE_CLEARABLE_FIELDS = [
   'areaKey',
   'city',
   'district',
+  'provinceCode',
+  'communeCode',
   'phone',
   'website',
   'avgVisitMinutes',
@@ -165,6 +176,12 @@ export function placeFieldLimit(field: string): PlaceFieldLimit | undefined {
 
 const L = PLACE_FIELD_LIMITS
 
+/** GoGo-BE: `/^[0-9]{2,5}$/` — every level of the Vietnamese code system. */
+const ADMINISTRATIVE_CODE = z
+  .string()
+  .trim()
+  .regex(/^[0-9]{2,5}$/, 'an administrative code is 2 to 5 digits')
+
 function buildPlaceEditSchema(taxonomyId: z.ZodType<string>) {
   return z.object({
     name: z.string().trim().min(L.name.min).max(L.name.max).optional(),
@@ -173,6 +190,14 @@ function buildPlaceEditSchema(taxonomyId: z.ZodType<string>) {
     areaKey: z.string().trim().max(L.areaKey.max).nullable().optional(),
     city: z.string().trim().max(L.city.max).nullable().optional(),
     district: z.string().trim().max(L.district.max).nullable().optional(),
+    /**
+     * ADM-016 — mirrored from `ADMINISTRATIVE_CODE` in GoGo-BE. The pattern is
+     * here, not just a length, because a mock that accepted "Hà Nội" as a
+     * province code would let the console ship a picker that sends display text
+     * — the exact mistake the code/label split exists to prevent.
+     */
+    provinceCode: ADMINISTRATIVE_CODE.nullable().optional(),
+    communeCode: ADMINISTRATIVE_CODE.nullable().optional(),
     phone: z.string().trim().max(L.phone.max).nullable().optional(),
     website: z.string().trim().max(L.website.max).nullable().optional(),
     lat: z.number().min(L.lat.min).max(L.lat.max).optional(),

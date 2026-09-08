@@ -46,6 +46,8 @@ import {
 } from './api'
 import { PlaceMediaCard } from './placeMedia.view'
 import { PLACE_STATUSES, PLACE_TRANSITIONS } from './status'
+import { AdministrativeUnitCombobox } from '@/features/administrative/unitCombobox'
+import { AdministrativeSummary } from './placeAdministrative.view'
 import { AreaCombobox } from './areaCombobox'
 import { HoursEditor } from './hoursEditor.view'
 import { GoogleLinkPanel } from './googleLink.view'
@@ -103,6 +105,8 @@ const PROVENANCE_FIELDS = [
   { name: 'description', labelKey: 'placeEditor.description' },
   { name: 'addressText', labelKey: 'placeEditor.address' },
   { name: 'areaKey', labelKey: 'placeEditor.areaKey' },
+  // Legacy free text. Still provenance-tracked because existing rows carry a
+  // recorded origin for them, and dropping the row would lose that history.
   { name: 'city', labelKey: 'placeEditor.city' },
   { name: 'district', labelKey: 'placeEditor.district' },
   { name: 'phone', labelKey: 'placeEditor.phone' },
@@ -199,6 +203,8 @@ export default function PlaceEditorScreen() {
    * filtering on a typo would hide the rows the picker exists to offer.
    */
   const cityValue = useWatch({ control: form.control, name: 'city' })
+  /** ADM-106 — the commune list is fetched for whichever province is chosen. */
+  const provinceCodeValue = useWatch({ control: form.control, name: 'provinceCode' }) ?? ''
 
   const hoursDirty = useMemo(
     () => hoursBaseline !== null && weekSignature(week) !== hoursBaseline,
@@ -242,6 +248,10 @@ export default function PlaceEditorScreen() {
         areaKey: detail.areaKey ?? '',
         city: detail.city ?? '',
         district: detail.district ?? '',
+        // ADM-106 — the stored pair, preselected so an edit starts from what
+        // the place actually claims rather than from empty boxes.
+        provinceCode: detail.administrative?.provinceCode ?? '',
+        communeCode: detail.administrative?.communeCode ?? '',
         // Whatever the server normalized the last save to — E.164, `https://…`.
         phone: detail.phone ?? '',
         website: detail.website ?? '',
@@ -789,24 +799,62 @@ export default function PlaceEditorScreen() {
                         error={fieldError('addressText')}
                         {...register('addressText')}
                       />
+                      {/*
+                        ADM-106 — the address, as the two levels Vietnam
+                        currently has.
+
+                        The free-text "Tỉnh/Thành phố" and "Quận/Huyện" boxes
+                        are gone. The second named a tier dissolved on
+                        2025-07-01, so it asked an editor to fill in a unit that
+                        no longer exists; the first was free text that could not
+                        express the identity anything downstream needs. The
+                        stored legacy values are untouched and still readable in
+                        the address line above.
+                      */}
                       <div className={styles.fieldRow}>
-                        <TextInput
-                          label={t('placeEditor.city')}
-                          disabled={!canWrite}
-                          error={fieldError('city')}
-                          {...register('city')}
+                        <Controller
+                          control={form.control}
+                          name="provinceCode"
+                          render={({ field }) => (
+                            <AdministrativeUnitCombobox
+                              id="place-province-code"
+                              level="PROVINCE"
+                              label={t('placeEditor.province')}
+                              hint={t('placeEditor.provinceHint')}
+                              disabled={!canWrite}
+                              error={fieldError('provinceCode')}
+                              value={field.value ? field.value : null}
+                              knownName={place?.administrative?.provinceName ?? null}
+                              onChange={(next) => {
+                                field.onChange(next ?? '')
+                                // The commune belonged to the old province's
+                                // list; keeping it would send a pair the
+                                // hierarchy does not hold.
+                                form.setValue('communeCode', '', { shouldDirty: true })
+                              }}
+                            />
+                          )}
                         />
-                        <TextInput
-                          label={t('placeEditor.district')}
-                          // Not required, and the hint says so: Vietnamese
-                          // administrative units get reorganised and an address
-                          // with no district is a valid address.
-                          hint={t('placeEditor.districtHint')}
-                          disabled={!canWrite}
-                          error={fieldError('district')}
-                          {...register('district')}
+                        <Controller
+                          control={form.control}
+                          name="communeCode"
+                          render={({ field }) => (
+                            <AdministrativeUnitCombobox
+                              id="place-commune-code"
+                              level="COMMUNE"
+                              provinceCode={provinceCodeValue || null}
+                              label={t('placeEditor.commune')}
+                              hint={provinceCodeValue ? t('placeEditor.communeHint') : undefined}
+                              disabled={!canWrite}
+                              error={fieldError('communeCode')}
+                              value={field.value ? field.value : null}
+                              knownName={place?.administrative?.communeName ?? null}
+                              onChange={(next) => field.onChange(next ?? '')}
+                            />
+                          )}
                         />
                       </div>
+                      <AdministrativeSummary summary={place?.administrative ?? null} />
                       <div className={styles.fieldRow}>
                         <TextInput
                           label={t('placeEditor.phone')}

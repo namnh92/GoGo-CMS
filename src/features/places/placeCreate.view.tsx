@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Controller, useForm } from 'react-hook-form'
+import { Controller, useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
@@ -17,6 +17,7 @@ import { useToast } from '@/shared/ui/Toast'
 import { useOnline } from '@/shared/ui/useOnline'
 
 import { createPlace, GOOGLE_DERIVED_FIELDS, type GoogleDerivedField } from './api'
+import { AdministrativeUnitCombobox, useProvinceName } from '@/features/administrative/unitCombobox'
 import { AreaCombobox } from './areaCombobox'
 import { PlaceCreateLinkPanel, type AppliedResolution } from './placeCreateLink.view'
 import { styles } from './placeCreate.style'
@@ -75,6 +76,16 @@ export default function PlaceCreateScreen() {
     defaultValues: { name: '', areaKey: undefined },
   })
 
+  /*
+   * ADM-106 — the commune list is fetched for whichever province is chosen, so
+   * the two boxes have to re-render together. `useWatch` rather than
+   * `form.watch()` in the body: the latter re-renders the whole form on every
+   * keystroke in any field.
+   */
+  const provinceCode = useWatch({ control: form.control, name: 'provinceCode' }) ?? ''
+  /** The discovery-area picker groups by city, and this is the nearest thing. */
+  const provinceName = useProvinceName(provinceCode)
+
   /**
    * Which applied fields the editor left alone. Compared by value at submit
    * time, so retyping Google's own answer character for character is treated as
@@ -104,8 +115,10 @@ export default function PlaceCreateScreen() {
           : {}),
         ...(values.addressText ? { addressText: values.addressText } : {}),
         ...(values.areaKey ? { areaKey: values.areaKey } : {}),
-        ...(values.city ? { city: values.city } : {}),
-        ...(values.district ? { district: values.district } : {}),
+        // ADM-106 — the canonical pair. `city`/`district` are legacy free text
+        // and no longer have inputs, so a new place carries neither.
+        ...(values.provinceCode ? { provinceCode: values.provinceCode } : {}),
+        ...(values.communeCode ? { communeCode: values.communeCode } : {}),
         ...(values.phone ? { phone: values.phone } : {}),
         ...(values.website ? { website: values.website } : {}),
         ...(values.description ? { description: values.description } : {}),
@@ -257,7 +270,7 @@ export default function PlaceCreateScreen() {
                       error={errorFor('areaKey')}
                       value={field.value ? field.value : null}
                       onChange={(next) => field.onChange(next ?? '')}
-                      preferCity={form.watch('city') ?? undefined}
+                      preferCity={provinceName ?? undefined}
                     />
                   )}
                 />
@@ -268,16 +281,49 @@ export default function PlaceCreateScreen() {
                   {...form.register('addressText')}
                 />
 
+                {/*
+                  ADM-106 — two levels, because Vietnam has two. The district
+                  tier was dissolved on 2025-07-01, so there is no third box:
+                  offering one would be asking an editor to fill in a unit that
+                  no longer exists.
+                */}
                 <div className={styles.fieldRow}>
-                  <TextInput
-                    label={t('placeEditor.city')}
-                    error={errorFor('city')}
-                    {...form.register('city')}
+                  <Controller
+                    control={form.control}
+                    name="provinceCode"
+                    render={({ field }) => (
+                      <AdministrativeUnitCombobox
+                        id="place-province-code"
+                        level="PROVINCE"
+                        label={t('placeEditor.province')}
+                        hint={t('placeEditor.provinceHint')}
+                        error={errorFor('provinceCode')}
+                        value={field.value ? field.value : null}
+                        onChange={(next) => {
+                          field.onChange(next ?? '')
+                          // The commune came from the old province's list;
+                          // keeping it would send a pair the hierarchy does not
+                          // hold, and GoGo-BE would refuse the save.
+                          form.setValue('communeCode', '', { shouldDirty: true })
+                        }}
+                      />
+                    )}
                   />
-                  <TextInput
-                    label={t('placeEditor.district')}
-                    error={errorFor('district')}
-                    {...form.register('district')}
+                  <Controller
+                    control={form.control}
+                    name="communeCode"
+                    render={({ field }) => (
+                      <AdministrativeUnitCombobox
+                        id="place-commune-code"
+                        level="COMMUNE"
+                        provinceCode={provinceCode || null}
+                        label={t('placeEditor.commune')}
+                        hint={provinceCode ? t('placeEditor.communeHint') : undefined}
+                        error={errorFor('communeCode')}
+                        value={field.value ? field.value : null}
+                        onChange={(next) => field.onChange(next ?? '')}
+                      />
+                    )}
                   />
                 </div>
 
