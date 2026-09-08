@@ -1,7 +1,7 @@
 import { useState } from 'react'
 
 import { toApiError, type ApiError } from '@/shared/api/errors'
-import { useT } from '@/shared/i18n/i18n'
+import { useLabel, useT } from '@/shared/i18n/i18n'
 import { Button, Spinner } from '@/shared/ui/Button'
 import { StatusBadge } from '@/shared/ui/Badge'
 import { TextInput } from '@/shared/ui/Field'
@@ -29,13 +29,42 @@ export function roundCoordinate(value: number): number {
   return Math.round(value * 1e7) / 1e7
 }
 
-/** What the editor gets to apply. `lat`/`lng` travel together — one position. */
+/**
+ * What the editor gets to apply.
+ *
+ * Two halves, and the split is the point. The top block is **theirs**: it lands
+ * in form boxes, they may change any of it before submitting, and whatever they
+ * leave alone is recorded `google_derived`. `lat`/`lng` travel together — one
+ * position, one provenance row.
+ *
+ * `provider` is **not** theirs and is not editable. Rating, review count, the
+ * week and the canonical link are facts GoGo-BE fetches for itself when the
+ * place is created (PI-BE-021 / ADR-0020), so the panel renders them as what
+ * the row will carry rather than as inputs. A box an editor could type a Google
+ * rating into would be a box for authoring one.
+ */
 export type AppliedResolution = {
   googlePlaceId: string
   name: string
   addressText: string
   lat: number
   lng: number
+  /**
+   * ADM-017 — from the coordinate, against GoGo's own boundaries. Empty string
+   * where the resolve could not name a unit: the selector then opens empty
+   * rather than on a guess, and Google's address components are never used.
+   */
+  provinceCode: string
+  communeCode: string
+  /** PI-BE-021 — a taxonomy key the server already checked exists. */
+  categoryKey: string
+  provider: {
+    googleMapsUri: string | null
+    rating: number | null
+    ratingCount: number | null
+    priceLevel: number | null
+    openingHourCount: number
+  }
 }
 
 /**
@@ -59,15 +88,27 @@ export type AppliedResolution = {
  */
 export function PlaceCreateLinkPanel({
   onApply,
+  onResolveStart,
 }: {
   onApply: (values: AppliedResolution) => void
+  /**
+   * Fired the moment a resolve leaves, so the form can remember what it held.
+   * That snapshot is what lets an apply skip a box the editor has typed in
+   * since — a late answer must not land on newer work.
+   */
+  onResolveStart?: () => void
 }) {
   const t = useT()
+  const label = useLabel()
   const navigate = useNavigate()
   const online = useOnline()
   const describeError = useErrorMessage()
   const [url, setUrl] = useState('')
-  const [result, setResult] = useState<ResolveLinkResult | null>(null)
+  const [answer, setAnswer] = useState<{
+    /** The URL this answer is about, or null when a branch id was resolved. */
+    answersFor: string | null
+    data: ResolveLinkResult
+  } | null>(null)
   const [failure, setFailure] = useState<ApiError | null>(null)
   /** Which branch is being resolved, so only that row shows the spinner. */
   const [picking, setPicking] = useState<string | null>(null)
@@ -82,16 +123,41 @@ export function PlaceCreateLinkPanel({
       // A branch that turns out to be unresolvable must leave the list it was
       // picked from on screen — otherwise one bad pick empties the panel and
       // the editor has to paste the link again to get the other two back.
-      if ('url' in ask) setResult(null)
+      if ('url' in ask) setAnswer(null)
       setFailure(null)
+      onResolveStart?.()
     },
-    onSuccess: setResult,
+    /**
+     * GoGo-CMS#179 — the answer is stored with the link it answers about.
+     *
+     * Resolving takes a second or two, and an editor does not wait: they paste
+     * a different link while the first is still in flight. The answer then
+     * arrives about a URL that is no longer in the box, and applying it would
+     * fill the form from a place the editor has already moved on from —
+     * silently, because the preview looks exactly like a fresh one.
+     *
+     * Keeping the URL beside the result is what makes that visible. The answer
+     * is not thrown away — it was paid for, and re-pasting the old link would
+     * pay for it again — it simply stops being applicable until the box agrees
+     * with it.
+     */
+    onSuccess: (data, ask) => setAnswer({ answersFor: 'url' in ask ? ask.url : null, data }),
     // The link the editor pasted stays in the box: a provider that is down is
     // a reason to press the button again, not to retype the URL.
     onError: (error) => setFailure(toApiError(error)),
   })
 
+  const result = answer?.data ?? null
   const candidate = result?.candidate
+  /**
+   * The answer on screen is about a link the box no longer holds.
+   *
+   * Not an error and not thrown away — it is a real answer GoGo paid for, and
+   * it is still the answer to the question that was asked. It has simply
+   * stopped being the answer to the one the form is now about, so it may be
+   * read and may not be applied.
+   */
+  const answersOldLink = answer?.answersFor != null && answer.answersFor !== url.trim()
 
   return (
     <div className={styles.wrap}>
@@ -146,10 +212,10 @@ export function PlaceCreateLinkPanel({
               {`${roundCoordinate(candidate.location.lat)}, ${roundCoordinate(candidate.location.lng)}`}
             </span>
             {/*
-              Shown so the editor can tell two branches of one chain apart, and
-              for nothing else. There is no field on the create endpoint that
-              would accept it: per GOGO_PRODUCT_DATA_ARCHITECTURE.md §2, Google
-              rating is "No by default" and never becomes a GoGo fact.
+              PI-BE-021 / ADR-0020. The rating is the provider's and is stored
+              as the provider's: GoGo-BE fetches it again for itself when the
+              place is created, so nothing here authors it. It also still does
+              what it always did — tell two branches of one chain apart.
             */}
             {typeof candidate.googleRating === 'number' ? (
               <span>
@@ -160,14 +226,99 @@ export function PlaceCreateLinkPanel({
               </span>
             ) : null}
           </div>
+
+          {/*
+            ADM-017 — where the coordinate falls, against GoGo's own pinned
+            boundaries. Never Google's address components: those are the
+            provider's opinion of an address, and the codes GoGo stores have to
+            be reproducible from geometry (ADR-0019 §10).
+
+            Two levels, and only two. The district tier was dissolved on
+            2025-07-01; nothing here names one.
+          */}
+          {result.administrative &&
+          (result.administrative.provinceName || result.administrative.communeName) ? (
+            <p className={styles.previewUnits}>
+              {[result.administrative.provinceName, result.administrative.communeName]
+                .filter(Boolean)
+                .join(' · ')}
+            </p>
+          ) : null}
+
+          {/*
+            What the row will carry, rendered as facts rather than as inputs —
+            there is no box here to type a Google rating into. A value the
+            provider does not publish is left out entirely: an em dash where a
+            price or a rating belongs reads as "free" to some people and
+            "broken" to the rest.
+          */}
+          <dl className={styles.providerFacts}>
+            {candidate.googleMapsUri ? (
+              <div>
+                <dt className={styles.providerLabel}>{t('placeCreate.link.canonicalUrl')}</dt>
+                <dd>
+                  <a
+                    className={styles.providerLink}
+                    href={candidate.googleMapsUri}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                  >
+                    {t('placeCreate.link.openInMaps')}
+                  </a>
+                </dd>
+              </div>
+            ) : null}
+            {candidate.openingHours.length > 0 ? (
+              <div>
+                <dt className={styles.providerLabel}>{t('placeCreate.link.hours')}</dt>
+                <dd className={styles.providerValue}>
+                  {t('placeCreate.link.hoursCount', {
+                    count: String(candidate.openingHours.length),
+                  })}
+                </dd>
+              </div>
+            ) : null}
+            {typeof candidate.priceLevel === 'number' ? (
+              <div>
+                <dt className={styles.providerLabel}>{t('placeCreate.link.priceLevel')}</dt>
+                <dd className={styles.providerValue}>{`${candidate.priceLevel}/4`}</dd>
+              </div>
+            ) : null}
+            {candidate.categoryKey ? (
+              <div>
+                <dt className={styles.providerLabel}>{t('placeCreate.link.category')}</dt>
+                {/* A taxonomy key is stable by contract but the client does
+                    not assume the server's vocabulary is closed: an unknown key
+                    renders as itself rather than as a blank cell. */}
+                <dd className={styles.providerValue}>
+                  {label(`taxonomy.key.${candidate.categoryKey}`, candidate.categoryKey)}
+                </dd>
+              </div>
+            ) : null}
+          </dl>
+          <p className={styles.providerNote}>{t('placeCreate.link.providerNote')}</p>
+
           {candidate.attributions.length > 0 ? (
             <p className={styles.attribution}>{candidate.attributions.join(' · ')}</p>
+          ) : null}
+          {/*
+            Rule 16 — a control that cannot do what it says must not look
+            operable. The answer stays on screen because it is still a real
+            answer; the button says why it will not act on it, and resolving
+            the link now in the box makes it applicable again.
+          */}
+          {answersOldLink ? (
+            <p className={styles.staleNote} role="status">
+              <InfoIcon size={14} aria-hidden="true" />
+              {t('placeCreate.link.stale')}
+            </p>
           ) : null}
           <div className={styles.actions}>
             <Button
               type="button"
               size="sm"
               variant="primary"
+              disabled={answersOldLink}
               onClick={() =>
                 onApply({
                   googlePlaceId: candidate.googlePlaceId,
@@ -175,6 +326,16 @@ export function PlaceCreateLinkPanel({
                   addressText: candidate.address,
                   lat: roundCoordinate(candidate.location.lat),
                   lng: roundCoordinate(candidate.location.lng),
+                  provinceCode: result.administrative?.provinceCode ?? '',
+                  communeCode: result.administrative?.communeCode ?? '',
+                  categoryKey: candidate.categoryKey ?? '',
+                  provider: {
+                    googleMapsUri: candidate.googleMapsUri ?? null,
+                    rating: candidate.googleRating ?? null,
+                    ratingCount: candidate.googleRatingCount ?? null,
+                    priceLevel: candidate.priceLevel ?? null,
+                    openingHourCount: candidate.openingHours.length,
+                  },
                 })
               }
             >

@@ -2432,6 +2432,28 @@ export type PrivacyExecuteResult = z.infer<typeof privacyExecuteResultSchema>
  * union keeps the parse honest — the server may add a status this build has
  * never heard of, and a union would reject the whole response for it.
  */
+/**
+ * ADM-017 — the administrative preview a resolve returns.
+ *
+ * Deliberately not `importAdministrativeSchema`: that one carries
+ * `requiresReview` and `blocksPublication` with `false` defaults, and defaulting
+ * them here would have this client assert "publishing is not blocked" about a
+ * request that said nothing on the subject. A resolve previews units; the
+ * approval question belongs to the place, and is answered by
+ * `CmsPlaceDetail.administrative`.
+ */
+export const resolvedAdministrativeSchema = z.object({
+  provinceCode: z.string().nullish(),
+  provinceName: z.string().nullish(),
+  communeCode: z.string().nullish(),
+  communeName: z.string().nullish(),
+  status: z
+    .enum(['UNMAPPED', 'AUTO_MATCHED', 'NEEDS_REVIEW', 'VERIFIED', 'REJECTED', 'STALE'])
+    .nullish(),
+  datasetVersion: z.string().nullish(),
+})
+export type ResolvedAdministrative = z.infer<typeof resolvedAdministrativeSchema>
+
 export const resolvedCandidateSchema = z.object({
   googlePlaceId: z.string(),
   name: z.string(),
@@ -2442,6 +2464,35 @@ export const resolvedCandidateSchema = z.object({
   businessStatus: z.string().nullish(),
   /** Google requires its attribution to travel with anything it supplied. */
   attributions: z.array(z.string()).default([]),
+  /**
+   * PI-BE-021 — the rest of the same Details response.
+   *
+   * `googleMapsUri` is the provider's own canonical link and is **not** the URL
+   * the editor pasted: a `maps.app.goo.gl` share link resolves to it. Nothing
+   * here is written by this client — the server fetches these again when the
+   * place is created, so the form renders them as facts rather than as inputs.
+   *
+   * `nullish` throughout, because absent and null mean different things and
+   * both are real: absent is an answer built from a stored row without a live
+   * fetch, null is the provider publishing none.
+   */
+  googleMapsUri: z.string().nullish(),
+  priceLevel: z.number().int().nullish(),
+  primaryType: z.string().nullish(),
+  types: z.array(z.string()).default([]),
+  /** Already checked against the live taxonomy server-side; resolve to an id. */
+  categoryKey: z.string().nullish(),
+  /** An empty week means the provider publishes none — never "closed". */
+  openingHours: z
+    .array(
+      z.object({
+        dayOfWeek: z.number().int(),
+        openMinute: z.number().int(),
+        closeMinute: z.number().int(),
+        isOvernight: z.boolean().default(false),
+      }),
+    )
+    .default([]),
 })
 export type ResolvedCandidate = z.infer<typeof resolvedCandidateSchema>
 
@@ -2450,6 +2501,17 @@ export const resolveLinkResultSchema = z.object({
   reasonCodes: z.array(z.string()).default([]),
   existingPlaceId: z.string().nullish(),
   candidate: resolvedCandidateSchema.nullish(),
+  /**
+   * ADM-017 — the two current administrative levels the candidate's coordinate
+   * falls in, resolved against GoGo's own pinned boundaries.
+   *
+   * A preview. Nothing is stored by the resolve, and Google's address
+   * components are never the evidence: the codes come from a point-in-polygon
+   * query, which is what makes them GoGo facts. Absent when the deployment has
+   * no published dataset — the form then opens on empty selectors rather than
+   * on a guess.
+   */
+  administrative: resolvedAdministrativeSchema.nullish(),
   candidates: z
     .array(
       z.object({

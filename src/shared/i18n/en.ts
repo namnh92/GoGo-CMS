@@ -1077,6 +1077,20 @@ export const en: Partial<Record<MessageKey, string>> = {
   'placeCreate.link.unresolvedBody':
     'It may not be a Google Maps link, or it may not point at one specific place. Check the link, or type the details in below.',
   'placeCreate.link.failed': 'Could not look up the link',
+  'placeCreate.category': 'Category',
+  'placeCreate.categoryHint':
+    'Prefilled from the type the provider reports. Change it or leave it empty; the rest of the taxonomy lives on the place detail screen.',
+  'placeCreate.categoryNone': 'Not chosen',
+  'placeCreate.link.canonicalUrl': 'Canonical Google link',
+  'placeCreate.link.openInMaps': 'Open in Google Maps',
+  'placeCreate.link.hours': 'Opening hours',
+  'placeCreate.link.hoursCount': '{count} periods this week',
+  'placeCreate.link.priceLevel': 'Google price level',
+  'placeCreate.link.category': 'Derived category',
+  'placeCreate.link.providerNote':
+    'The rating, review count, opening hours and canonical Google link are fetched by the server itself when the place is created. Shown here to check, not to edit.',
+  'placeCreate.link.stale':
+    'This answer belongs to the previous link — the box now holds a different one. Resolve again to use the current link.',
   'places.bulkImport': 'Bulk import',
   'places.tab.all': 'All',
   'places.tab.published': 'Published',

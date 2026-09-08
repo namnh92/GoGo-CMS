@@ -25,7 +25,7 @@ const drift = read('scripts/check-openapi-drift.mjs')
 const generated = read('src/shared/api/schema.d.ts')
 const administrativeContracts = read('src/shared/api/contracts-administrative.ts')
 
-const EXPECTED = '1.0.0-alpha.13'
+const EXPECTED = '1.0.0-alpha.15'
 
 /**
  * The vendored file byte for byte, as GoGo-BE published it.
@@ -35,10 +35,10 @@ const EXPECTED = '1.0.0-alpha.13'
  * hand-edited, and this is what makes that visible rather than invisible. A
  * legitimate re-vendor updates the version above and this digest together.
  */
-const SPEC_SHA256 = '4521d26bcb145a6fd098b36cac5a14af1186641b4ec511ba7f3793e245bf58f6'
+const SPEC_SHA256 = 'cfe37de741a0fba5ded305876fca6ea38df6361f87dd3379015ff99afb9c9fdb'
 
 /** `pnpm api:routes` on GoGo-BE reports the same number against the real router. */
-const SERVED_OPERATIONS = 248
+const SERVED_OPERATIONS = 249
 
 describe('the vendored OpenAPI contract', () => {
   it(`declares ${EXPECTED}, and the drift gate expects the same`, () => {
@@ -97,6 +97,24 @@ describe('the vendored OpenAPI contract', () => {
     expect(detail.slice(0, 4_000)).toContain(
       "administrative:\n          $ref: '#/components/schemas/PlaceAdministrativeSummary'",
     )
+  })
+
+  it('carries the whole resolve answer the create form now applies (GoGo-BE#501)', () => {
+    // PI-BE-021. These are properties on `ResolveLinkResult.candidate`, so a
+    // re-vendor that dropped them would pass every path check above while the
+    // console silently went back to filling three boxes out of nine.
+    const candidate = spec.slice(spec.indexOf('    ResolveLinkResult:'))
+    for (const field of [
+      'googleMapsUri:',
+      'priceLevel:',
+      'primaryType:',
+      'categoryKey:',
+      'openingHours:',
+    ]) {
+      expect(candidate.slice(0, 8_000)).toContain(field)
+    }
+    // The administrative preview the province/commune selectors open on.
+    expect(candidate.slice(0, 8_000)).toContain('ImportAdministrativeIdentity')
   })
 
   it('keeps the manual-cost paths that were already on develop', () => {

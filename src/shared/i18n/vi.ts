@@ -1084,6 +1084,20 @@ export const vi = {
   'placeCreate.link.unresolvedBody':
     'Có thể link không phải Google Maps, hoặc không trỏ tới một địa điểm cụ thể. Kiểm tra lại link, hoặc nhập tay ở dưới.',
   'placeCreate.link.failed': 'Chưa tra được link',
+  'placeCreate.category': 'Nhóm địa điểm',
+  'placeCreate.categoryHint':
+    'Điền sẵn từ loại hình Google mô tả, sửa hoặc bỏ trống thoải mái. Các thẻ còn lại (không khí, phù hợp với ai…) đặt ở màn hình chi tiết.',
+  'placeCreate.categoryNone': 'Chưa chọn',
+  'placeCreate.link.canonicalUrl': 'Link Google chuẩn',
+  'placeCreate.link.openInMaps': 'Mở trên Google Maps',
+  'placeCreate.link.hours': 'Giờ mở cửa',
+  'placeCreate.link.hoursCount': '{count} khung giờ trong tuần',
+  'placeCreate.link.priceLevel': 'Mức giá Google',
+  'placeCreate.link.category': 'Nhóm suy ra',
+  'placeCreate.link.providerNote':
+    'Đánh giá, số lượt đánh giá, giờ mở cửa và link Google chuẩn do máy chủ lấy trực tiếp từ Google khi tạo địa điểm — hiển thị ở đây để bạn kiểm tra, không sửa tay được.',
+  'placeCreate.link.stale':
+    'Kết quả này thuộc về link trước đó — link trong ô đã đổi. Bấm “Tìm địa điểm” lần nữa để dùng dữ liệu của link hiện tại.',
   'places.bulkImport': 'Nhập hàng loạt',
   'places.searchPlaceholder': 'Tìm theo tên hoặc địa chỉ…',
   'places.filter.allCategories': 'Tất cả nhóm',

@@ -1,7 +1,7 @@
-import { useState } from 'react'
-import { Controller, useForm, useWatch } from 'react-hook-form'
+import { useMemo, useRef, useState } from 'react'
+import { Controller, useForm, useWatch, type Path, type PathValue } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 
 import { PageBody, PageHeader } from '@/app/PageHeader'
@@ -10,13 +10,15 @@ import { useT } from '@/shared/i18n/i18n'
 import { useSession } from '@/shared/auth/session'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardBody } from '@/shared/ui/Card'
-import { TextArea, TextInput } from '@/shared/ui/Field'
+import { Select, TextArea, TextInput } from '@/shared/ui/Field'
 import { AlertIcon, InfoIcon } from '@/shared/ui/icons'
 import { PermissionDeniedState, useErrorMessage } from '@/shared/ui/State'
 import { useToast } from '@/shared/ui/Toast'
 import { useOnline } from '@/shared/ui/useOnline'
 
 import { createPlace, GOOGLE_DERIVED_FIELDS, type GoogleDerivedField } from './api'
+import { fetchTaxonomies } from '@/features/taxonomy/api'
+import { queryKeys } from '@/shared/api/queryKeys'
 import { AdministrativeUnitCombobox, useProvinceName } from '@/features/administrative/unitCombobox'
 import { AreaCombobox } from './areaCombobox'
 import { PlaceCreateLinkPanel, type AppliedResolution } from './placeCreateLink.view'
@@ -73,8 +75,38 @@ export default function PlaceCreateScreen() {
 
   const form = useForm<PlaceCreateForm>({
     resolver: zodResolver(placeCreateSchema),
-    defaultValues: { name: '', areaKey: undefined },
+    defaultValues: { name: '', areaKey: undefined, categoryId: '' },
   })
+
+  /**
+   * GoGo-CMS#179 — the categories a link can fill.
+   *
+   * The resolve answers with a taxonomy *key*, already checked against the live
+   * vocabulary server-side; the save takes an id. This is the map between them,
+   * and it is also what makes the box a real choice rather than a display of
+   * whatever Google implied.
+   */
+  const categoryQuery = useQuery({
+    queryKey: queryKeys.taxonomies.byKind('category'),
+    queryFn: ({ signal }) => fetchTaxonomies({ kind: 'category', isActive: true }, signal),
+  })
+  const categoryIdByKey = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const item of categoryQuery.data ?? []) map.set(item.key, item.id)
+    return map
+  }, [categoryQuery.data])
+
+  /**
+   * GoGo-CMS#179 — what the form held when the current resolve left.
+   *
+   * A resolve is a network call an editor can outrun. Applying its answer must
+   * not land on a box they have typed in since it started: the snapshot is the
+   * only way to tell "still holds what it held" from "changed while we waited",
+   * and only the first may be overwritten. A field they edited keeps their
+   * value — including a field an *earlier* resolution filled and they then
+   * corrected.
+   */
+  const snapshot = useRef<PlaceCreateForm | null>(null)
 
   /*
    * ADM-106 — the commune list is fetched for whichever province is chosen, so
@@ -125,6 +157,9 @@ export default function PlaceCreateScreen() {
         ...(values.avgVisitMinutes !== undefined
           ? { avgVisitMinutes: values.avgVisitMinutes }
           : {}),
+        // One category or none. The editor screen owns the rest of the
+        // taxonomy; this is the field a Google link can honestly fill.
+        ...(values.categoryId ? { taxonomyIds: [values.categoryId] } : {}),
         ...(values.allowDuplicate ? { allowDuplicate: true } : {}),
       }),
     onSuccess: (place) => {
@@ -198,6 +233,26 @@ export default function PlaceCreateScreen() {
     })
   }
 
+  /**
+   * Write an applied value, unless the editor has changed that box since the
+   * resolve behind it started.
+   *
+   * The comparison is against the snapshot rather than react-hook-form's
+   * `dirtyFields`, which cannot tell "the editor typed this" from "the last
+   * resolution filled it": both are dirty. What matters is whether the value
+   * moved *while this request was in flight*, and only the snapshot answers
+   * that.
+   */
+  const applyField = <K extends Path<PlaceCreateForm>>(
+    field: K,
+    next: PathValue<PlaceCreateForm, K>,
+  ) => {
+    const before = snapshot.current
+    const current = form.getValues(field)
+    if (before !== null && current !== before[field as keyof PlaceCreateForm]) return
+    form.setValue(field, next, { shouldDirty: true })
+  }
+
   const submit = form.handleSubmit((values) => create.mutate(values))
 
   return (
@@ -211,15 +266,39 @@ export default function PlaceCreateScreen() {
           <Card>
             <CardBody>
               <PlaceCreateLinkPanel
+                onResolveStart={() => {
+                  snapshot.current = form.getValues()
+                }}
                 onApply={(values) => {
                   setApplied(values)
-                  // `shouldDirty` so the unsaved-changes guard treats an applied
-                  // resolution as work in progress, which it is.
-                  form.setValue('name', values.name, { shouldDirty: true })
-                  form.setValue('addressText', values.addressText, { shouldDirty: true })
-                  form.setValue('lat', values.lat, { shouldDirty: true })
-                  form.setValue('lng', values.lng, { shouldDirty: true })
-                  form.clearErrors(['name', 'addressText', 'lat', 'lng'])
+                  /*
+                   * `shouldDirty` so the unsaved-changes guard treats an applied
+                   * resolution as work in progress, which it is. `applyField`
+                   * skips a box the editor has typed in since this resolve
+                   * began — a link may replace what a previous link filled, and
+                   * may not replace what a person wrote.
+                   */
+                  applyField('name', values.name)
+                  applyField('addressText', values.addressText)
+                  applyField('lat', values.lat)
+                  applyField('lng', values.lng)
+                  // ADM-017 — from the coordinate, against GoGo's boundaries.
+                  // Empty when the resolve could not name a unit: the selectors
+                  // then open empty rather than on a guess.
+                  applyField('provinceCode', values.provinceCode)
+                  applyField('communeCode', values.communeCode)
+                  const categoryId = values.categoryKey
+                    ? (categoryIdByKey.get(values.categoryKey) ?? '')
+                    : ''
+                  if (categoryId) applyField('categoryId', categoryId)
+                  form.clearErrors([
+                    'name',
+                    'addressText',
+                    'lat',
+                    'lng',
+                    'provinceCode',
+                    'communeCode',
+                  ])
                 }}
               />
             </CardBody>
@@ -280,6 +359,27 @@ export default function PlaceCreateScreen() {
                   error={errorFor('addressText')}
                   {...form.register('addressText')}
                 />
+
+                {/*
+                  GoGo-CMS#179 — prefilled from what the provider's types imply,
+                  and editable like everything else here. An empty selection is
+                  a real answer: Google describes plenty of places in terms GoGo
+                  has no category for, and guessing one would put a wrong
+                  category on a place nobody chose it for.
+                */}
+                <Select
+                  label={t('placeCreate.category')}
+                  hint={t('placeCreate.categoryHint')}
+                  disabled={categoryQuery.isPending}
+                  {...form.register('categoryId')}
+                >
+                  <option value="">{t('placeCreate.categoryNone')}</option>
+                  {(categoryQuery.data ?? []).map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.labels.vi ?? item.labels.en ?? item.key}
+                    </option>
+                  ))}
+                </Select>
 
                 {/*
                   ADM-106 — two levels, because Vietnam has two. The district
