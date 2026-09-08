@@ -2637,4 +2637,14 @@ export const en: Partial<Record<MessageKey, string>> = {
   'costRun.stillRunning': 'Still running',
   'costRun.scopeAll': 'Every service',
   'costRun.budgetDeclared': 'Soft budget the run declared:',
+  'wizard.defaultCityHint':
+    'A hint for finding the place on Google, nothing more. A place’s administrative unit comes from its coordinate, not from this box.',
+  'wizard.districtRetired':
+    'There is no “district” field to map: the district tier was dissolved on 2025-07-01. A legacy sheet’s column is still accepted and still read as historical name evidence.',
+  'jobDetail.col.administrative': 'Administrative unit',
+  'jobDetail.administrativePending': 'Not resolved yet',
+  'jobDetail.administrativeNeedsReview': 'Needs a person',
+  'jobDetail.administrativeUnmapped': 'Could not be placed',
+  'jobDetail.administrativeAuto': 'Matched automatically — not verified',
+  'jobDetail.administrativeBlocks': 'Not publishable yet: a reviewer must verify the mapping.',
 }

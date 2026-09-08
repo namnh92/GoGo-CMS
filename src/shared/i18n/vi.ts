@@ -1626,6 +1626,16 @@ export const vi = {
   'wizard.sheetUrlHint': 'Chỉ chấp nhận liên kết docs.google.com hoặc mã spreadsheet.',
   'wizard.sheetTabs': 'Tên tab (phân tách bằng dấu phẩy)',
   'wizard.defaultCity': 'Thành phố mặc định',
+  'wizard.defaultCityHint':
+    'Chỉ là gợi ý để tìm địa điểm trên Google. Đơn vị hành chính của địa điểm do toạ độ quyết định, không phải ô này.',
+  'wizard.districtRetired':
+    'Không còn trường “Quận/Huyện” để ánh xạ: cấp quận/huyện đã giải thể từ 01/07/2025. Cột này trong file cũ vẫn được nhận và vẫn dùng làm bằng chứng tên gọi lịch sử.',
+  'jobDetail.col.administrative': 'Đơn vị hành chính',
+  'jobDetail.administrativePending': 'Chưa phân giải',
+  'jobDetail.administrativeNeedsReview': 'Cần người xem',
+  'jobDetail.administrativeUnmapped': 'Không xác định được',
+  'jobDetail.administrativeAuto': 'Máy khớp — chưa xác minh',
+  'jobDetail.administrativeBlocks': 'Chưa đủ điều kiện đăng: cần người duyệt ánh xạ.',
   'wizard.mode': 'Chế độ ghi',
   'wizard.modeHint': 'Chạy thử là mặc định. Chọn chế độ ghi là quyết định có chủ đích.',
   'wizard.mapping': 'Ánh xạ cột nguồn sang trường chuẩn',

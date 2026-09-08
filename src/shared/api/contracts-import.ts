@@ -107,6 +107,37 @@ export const importCandidateSchema = z.object({
 })
 export type ImportCandidate = z.infer<typeof importCandidateSchema>
 
+/**
+ * ADM-107 — which of Vietnam's two current administrative levels a row lands
+ * in, and what that means for the row.
+ *
+ * The same shape before and after the commit: while the job is reviewable it is
+ * a **preview** computed from the coordinate the provider returned; once the
+ * row is `imported` it is what GoGo actually stored. Both come from the same
+ * resolver over the same coordinate, which is what makes comparing them worth
+ * anything.
+ *
+ * `requiresReview` and `blocksPublication` are different questions and are kept
+ * apart on purpose. The first is about the **mapping** — the resolver could not
+ * decide, and a person must. The second is about **publication**, and is true
+ * whenever a mapping exists at all: no import result is a verification, and a
+ * screen that rendered `AUTO_MATCHED` as "đã xác minh" would claim something
+ * the server refuses to act on.
+ */
+export const importAdministrativeSchema = z.object({
+  provinceCode: z.string().nullish(),
+  provinceName: z.string().nullish(),
+  communeCode: z.string().nullish(),
+  communeName: z.string().nullish(),
+  status: z
+    .enum(['UNMAPPED', 'AUTO_MATCHED', 'NEEDS_REVIEW', 'VERIFIED', 'REJECTED', 'STALE'])
+    .nullish(),
+  datasetVersion: z.string().nullish(),
+  requiresReview: z.boolean().default(false),
+  blocksPublication: z.boolean().default(false),
+})
+export type ImportAdministrativeIdentity = z.infer<typeof importAdministrativeSchema>
+
 export const importRowSchema = z.object({
   id: z.string(),
   rowNumber: z.number().int(),
@@ -119,6 +150,8 @@ export const importRowSchema = z.object({
   matchConfidence: z.number().nullish(),
   matchReasons: z.array(z.string()).default([]),
   candidates: z.array(importCandidateSchema).default([]),
+  /** ADM-107. Null until the row has resolved against the provider. */
+  administrative: importAdministrativeSchema.nullish(),
   errors: z.array(ingestMessageSchema).default([]),
   warnings: z.array(ingestMessageSchema).default([]),
 })
@@ -135,6 +168,7 @@ export const importRowDecisionSchema = z.object({
   resolvedGooglePlaceId: z.string().nullish(),
   matchedPlaceId: z.string().nullish(),
   matchConfidence: z.number().nullish(),
+  administrative: importAdministrativeSchema.nullish(),
   errors: z.array(ingestMessageSchema).default([]),
   warnings: z.array(ingestMessageSchema).default([]),
 })
@@ -203,9 +237,25 @@ void _everyFieldIsListed
  */
 export const SYSTEM_DERIVED_FIELDS: readonly ImportCanonicalField[] = ['source_row_id']
 
+/**
+ * ADM-107 — fields the wizard no longer offers, though the API still takes them.
+ *
+ * `district` names a tier dissolved on 2025-07-01. It stays in the canonical
+ * vocabulary and stays accepted, because a legacy sheet has that column and the
+ * server reads it as *historical* name evidence — a dissolved unit with exactly
+ * one canonical successor is how a place mapped before the reorganisation gets
+ * found. What it must not be is a **choice**: presenting it in the mapping step
+ * tells an operator that GoGo files places under districts, which is the thing
+ * that stopped being true.
+ *
+ * Auto-detection on the server is unaffected, so a sheet whose header says
+ * "Quận/Huyện" still contributes that evidence without anyone selecting it.
+ */
+export const RETIRED_MAPPABLE_FIELDS: readonly ImportCanonicalField[] = ['district']
+
 /** Fields an operator can choose in the mapping step. */
 export const MAPPABLE_FIELDS: readonly ImportCanonicalField[] = IMPORT_CANONICAL_FIELDS.filter(
-  (field) => !SYSTEM_DERIVED_FIELDS.includes(field),
+  (field) => !SYSTEM_DERIVED_FIELDS.includes(field) && !RETIRED_MAPPABLE_FIELDS.includes(field),
 )
 
 /**

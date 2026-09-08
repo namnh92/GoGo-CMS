@@ -18,6 +18,8 @@ export const styles = {
   required: 'ml-1 text-danger',
   footer: 'flex flex-wrap items-center justify-between gap-3',
   warn: 'flex items-start gap-2 rounded-compact border border-amber/45 bg-amber-soft px-3 py-2 text-xs text-text',
+  /** Explanatory, not a warning: nothing here is wrong, it is just gone. */
+  hint: 'text-xs text-text-muted',
   // Informational, not blocking: a dropped column is worth saying out loud but
   // does not stop the import, so it must not borrow the warning's colour.
   note: 'flex items-start gap-2 rounded-compact border border-line bg-surface-muted px-3 py-2 text-xs text-text-muted',

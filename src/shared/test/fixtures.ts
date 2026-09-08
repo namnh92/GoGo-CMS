@@ -1096,6 +1096,9 @@ export const importRows: Record<string, ImportRow[]> = {
           attributions: ['Dữ liệu © Google'],
         },
       ],
+      // ADM-107 — nothing has resolved against the provider yet, so there is no
+      // coordinate to classify. "Not yet", not "nowhere".
+      administrative: null,
       errors: [],
       warnings: [
         {
@@ -1121,6 +1124,18 @@ export const importRows: Record<string, ImportRow[]> = {
       matchConfidence: 0.99,
       matchReasons: ['EXACT_PROVIDER_ID'],
       candidates: [],
+      // Matched by the resolver, and still not a verification: this is the row
+      // that proves the screen never calls an automatic answer approved.
+      administrative: {
+        provinceCode: '79',
+        provinceName: 'Thành phố Hồ Chí Minh',
+        communeCode: '26734',
+        communeName: 'Phường Bến Nghé',
+        status: 'AUTO_MATCHED',
+        datasetVersion: 'v5.0.0+v2.4.1+7fac8c45+v5.0.0+r0',
+        requiresReview: false,
+        blocksPublication: true,
+      },
       errors: [],
       warnings: [],
     },
@@ -1140,6 +1155,17 @@ export const importRows: Record<string, ImportRow[]> = {
       matchConfidence: 0.97,
       matchReasons: ['EXACT_PROVIDER_ID'],
       candidates: [],
+      // Two deterministic sources named different communes, so nobody chooses.
+      administrative: {
+        provinceCode: null,
+        provinceName: null,
+        communeCode: null,
+        communeName: null,
+        status: 'NEEDS_REVIEW',
+        datasetVersion: 'v5.0.0+v2.4.1+7fac8c45+v5.0.0+r0',
+        requiresReview: true,
+        blocksPublication: true,
+      },
       errors: [],
       warnings: [],
     },
@@ -1170,6 +1196,19 @@ export const importRows: Record<string, ImportRow[]> = {
       matchConfidence: 0.42,
       matchReasons: ['LOW_CONFIDENCE'],
       candidates: [],
+      // Nothing placed it. Not a review task — there is nothing for a person to
+      // decide between.
+      administrative: {
+        provinceCode: null,
+        provinceName: null,
+        communeCode: null,
+        communeName: null,
+        status: 'UNMAPPED',
+        datasetVersion: null,
+        requiresReview: false,
+        blocksPublication: true,
+      },
+
       errors: [
         { code: 'PLACE_NOT_FOUND', field: null, message: 'Không tìm thấy trên nhà cung cấp' },
       ],

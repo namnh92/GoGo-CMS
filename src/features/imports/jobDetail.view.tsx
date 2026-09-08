@@ -48,6 +48,71 @@ import { styles } from './jobDetail.style'
 
 const PAGE_SIZE = 25
 
+/**
+ * ADM-107 — the administrative identity of one import row.
+ *
+ * Three outcomes an operator has to be able to tell apart, so each is a
+ * different sentence rather than a different shade of the same badge:
+ *
+ * - **matched automatically** — the resolver decided, and that is *not* a
+ *   verification. The row can be imported; it cannot be published on this
+ *   basis, and the line says so in words rather than leaving "AUTO_MATCHED"
+ *   to be read as approval;
+ * - **needs a person** — the evidence was ambiguous or disagreed with itself;
+ * - **could not be placed** — nothing put it anywhere.
+ *
+ * Absent entirely until the row has resolved against the provider, because
+ * until then there is no coordinate to classify. That reads as "not yet", not
+ * as "nowhere".
+ */
+function AdministrativeCell({ row }: { row: ImportRow }) {
+  const t = useT()
+  const identity = row.administrative
+
+  if (!identity || !identity.status) {
+    return <span className={styles.placeMeta}>{t('jobDetail.administrativePending')}</span>
+  }
+
+  if (identity.status === 'NEEDS_REVIEW') {
+    return (
+      <div className={styles.reasons}>
+        <Badge tone="amber">{t('jobDetail.administrativeNeedsReview')}</Badge>
+      </div>
+    )
+  }
+
+  if (identity.status === 'UNMAPPED' || !identity.communeCode) {
+    return (
+      <div className={styles.reasons}>
+        <Badge tone="neutral">{t('jobDetail.administrativeUnmapped')}</Badge>
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      {/* Name and code together: the name is what a person can judge, the code
+          is what gets stored and quoted when something is wrong. */}
+      <p className={styles.placeName}>
+        {identity.communeName
+          ? `${identity.communeName} (${identity.communeCode})`
+          : identity.communeCode}
+      </p>
+      <p className={styles.placeMeta}>
+        {identity.provinceName
+          ? `${identity.provinceName} (${identity.provinceCode ?? '—'})`
+          : (identity.provinceCode ?? '—')}
+      </p>
+      {/* Said in words, every time. "AUTO_MATCHED" left to speak for itself
+          is the one line on this screen most likely to be read as approval. */}
+      <p className={styles.placeMeta}>{t('jobDetail.administrativeAuto')}</p>
+      {identity.blocksPublication ? (
+        <p className={styles.placeMeta}>{t('jobDetail.administrativeBlocks')}</p>
+      ) : null}
+    </div>
+  )
+}
+
 export default function ImportJobScreen() {
   const t = useT()
   const { locale } = useI18n()
@@ -177,6 +242,21 @@ export default function ImportJobScreen() {
         id: 'status',
         header: () => t('jobDetail.col.status'),
         cell: ({ row }) => <RowStatusBadge status={row.original.status} />,
+        enableSorting: false,
+      },
+      {
+        /*
+         * ADM-107 — which commune this row lands in.
+         *
+         * While the job is reviewable this is a preview from the coordinate the
+         * provider returned; once the row is `imported` it is what GoGo stored.
+         * Same column either way, because it is the same question and the same
+         * resolver answered it — and this is the last screen where an operator
+         * can still act on the answer.
+         */
+        id: 'administrative',
+        header: () => t('jobDetail.col.administrative'),
+        cell: ({ row }) => <AdministrativeCell row={row.original} />,
         enableSorting: false,
       },
       {

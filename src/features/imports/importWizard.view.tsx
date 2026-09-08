@@ -209,6 +209,10 @@ export default function ImportWizardScreen() {
 
               <TextInput
                 label={t('wizard.defaultCity')}
+                // ADM-107 — it is a provider search hint, not an administrative
+                // level. GoGo files a place under the province and ward its
+                // coordinate falls in; this text only helps find the place.
+                hint={t('wizard.defaultCityHint')}
                 value={defaultCity}
                 onChange={(event) => setDefaultCity(event.target.value)}
                 className="max-w-sm"
@@ -295,6 +299,14 @@ export default function ImportWizardScreen() {
                   {t('wizard.mappingHint')}
                 </p>
               )}
+
+              {/*
+                ADM-107 — said once, where an operator looking for the missing
+                "Quận/Huyện" choice will read it. The column is still accepted
+                and still useful as historical evidence; it is no longer a level
+                anything is filed under.
+              */}
+              <p className={styles.hint}>{t('wizard.districtRetired')}</p>
 
               {mappingBlocked ? (
                 <p role="alert" className={styles.warn}>
