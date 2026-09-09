@@ -7,6 +7,8 @@ import {
 } from '@/shared/api/contracts-import'
 import { buildImportTemplateCsv, TEMPLATE_COLUMNS } from './importTemplate'
 import { guessMapping } from './csvPreview'
+import { en } from '@/shared/i18n/en'
+import { vi } from '@/shared/i18n/vi'
 
 /**
  * PI-CMS-009 — the template is an instruction, so it must not instruct anybody
@@ -139,6 +141,17 @@ describe('the mapping vocabulary', () => {
     // least likely to check.
     expect(guessMapping(['Google Place ID'])['Google Place ID']).toBe('google_place_id')
     expect(guessMapping(['Link Google Maps'])['Link Google Maps']).toBe('google_maps_url')
+  })
+
+  it('never names a column the file cannot carry', () => {
+    // The job detail screen tells an operator which values came out of their
+    // file. `suitability` is a score GoGo derives, has never been an import
+    // column, and listing it there invites a column the server will refuse.
+    for (const dictionary of [vi, en]) {
+      const copy = dictionary['jobDetail.sourceFileFields']
+      expect(copy).not.toContain('suitability')
+      expect(copy).toContain('audiences')
+    }
   })
 
   it('guesses the Vietnamese headers an operator actually types', () => {

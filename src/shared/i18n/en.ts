@@ -726,7 +726,7 @@ export const en: Partial<Record<MessageKey, string>> = {
     'Three sources that look identical in the table below. Fixing the wrong one means knowing which is which.',
   'jobDetail.sourceFile': 'Your file',
   'jobDetail.sourceFileFields':
-    'name, category, vibes, audiences, highlight, price, phone, website, avg_visit_minutes, suitability, is_lodging, curated_rank. Wrong here means fix the file and re-import.',
+    'name, category, vibes, audiences, highlight, price, phone, website, avg_visit_minutes, is_lodging, curated_rank. Wrong here means fix the file and re-import.',
   'jobDetail.sourceGoogle': 'Fetched from Google',
   'jobDetail.sourceGoogleFields':
     'Display name, address, coordinates, canonical Google link, rating, review count, price level, opening hours, business status, types. Read-only — check the link or Place ID instead.',
