@@ -12,6 +12,7 @@ const scheduled = cmsCampaigns.find((campaign) => campaign.id === 'cp-le-2-9')!
 const sending = cmsCampaigns.find((campaign) => campaign.id === 'cp-dang-gui')!
 const sent = cmsCampaigns.find((campaign) => campaign.id === 'cp-da-gui')!
 const failed = cmsCampaigns.find((campaign) => campaign.id === 'cp-loi')!
+const reachedNobody = cmsCampaigns.find((campaign) => campaign.id === 'cp-khong-toi-ai')!
 const drafts = cmsCampaigns.filter((campaign) => campaign.status === 'draft').length
 
 function Routed() {
@@ -127,6 +128,36 @@ describe('campaign delivery (CMS-029)', () => {
     renderWithProviders(<Routed />, { route: `/campaigns/${failed.id}` })
 
     expect(await screen.findByText(/OneSignal 401/)).toBeInTheDocument()
+  })
+
+  it('shows the delivery counts on a campaign that reached nobody', async () => {
+    // #191 / GoGo-BE#516. These two numbers are the only thing explaining a
+    // failed dispatch, and the console used to render them as "Chưa gửi"
+    // because it gated on `status === 'sent' | 'sending'`.
+    signInAs('ops_admin')
+    renderWithProviders(<Routed />, { route: `/campaigns/${reachedNobody.id}` })
+
+    // Scoped to the delivery card, and read through each label: "Gửi lỗi" is
+    // also the status badge's text, and a bare `3` matches half the page.
+    // `Provider đã nhận` is unique on the page; its label sits in a pair div
+    // inside the facts grid, so two hops up is the grid itself.
+    const grid = (await screen.findByText('Provider đã nhận')).parentElement!.parentElement!
+    const fact = (label: string) =>
+      within(grid).getByText(label).parentElement?.textContent?.replace(label, '').trim()
+
+    expect(fact('Số người nhận')).toBe('3')
+    expect(fact('Provider đã nhận')).toBe('0')
+    expect(fact('Gửi lỗi')).toBe('3')
+    expect(within(grid).queryByText('Chưa gửi')).not.toBeInTheDocument()
+  })
+
+  it('explains a no-acceptance failure in words, not as an error code', async () => {
+    signInAs('ops_admin')
+    renderWithProviders(<Routed />, { route: `/campaigns/${reachedNobody.id}` })
+
+    expect(await screen.findByText(/Không thiết bị nào nhận được/)).toBeInTheDocument()
+    // The raw code belongs in a log, not in front of an operator.
+    expect(screen.queryByText(/NO_SUBSCRIPTION_ACCEPTED/)).not.toBeInTheDocument()
   })
 
   it('says the recipient count is resolved at send time rather than showing zero', async () => {

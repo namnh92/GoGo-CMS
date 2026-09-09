@@ -36,6 +36,7 @@ import {
   testSendCampaign,
   updateCampaign,
 } from './api'
+import { campaignErrorMessage } from './campaignError'
 import { CampaignStatusBadge } from './campaignStatus'
 import { styles } from './campaign.style'
 
@@ -504,7 +505,7 @@ export default function CampaignDetailScreen() {
                   {item!.lastError ? (
                     <p className={styles.danger}>
                       <span aria-hidden="true">⚠</span>
-                      {t('campaigns.lastError', { message: item!.lastError })}
+                      {t('campaigns.lastError', { message: campaignErrorMessage(item!.lastError, t) })}
                     </p>
                   ) : null}
                   <p className={styles.hint}>{t('campaigns.testSendNote')}</p>
@@ -534,7 +535,11 @@ export default function CampaignDetailScreen() {
                     <div>
                       <p className={styles.factLabel}>{t('campaigns.field.sentCount')}</p>
                       <p className={styles.factValue}>
-                        {item!.status === 'sent' || item!.status === 'sending'
+                        {/* Gated on the worker having run, not on the status.
+                            GoGo-BE#516 ends a campaign that reached nobody as
+                            `failed`, and that is exactly when these two numbers
+                            are the only thing explaining what happened. */}
+                        {item!.startedAt
                           ? formatNumber(item!.sentCount, locale)
                           : t('campaigns.notSentYet')}
                       </p>
@@ -542,7 +547,7 @@ export default function CampaignDetailScreen() {
                     <div>
                       <p className={styles.factLabel}>{t('campaigns.field.failedCount')}</p>
                       <p className={styles.factValue}>
-                        {item!.status === 'sent' || item!.status === 'sending'
+                        {item!.startedAt
                           ? formatNumber(item!.failedCount, locale)
                           : t('campaigns.notSentYet')}
                       </p>
