@@ -2674,6 +2674,8 @@ export const en: Partial<Record<MessageKey, string>> = {
   'costRun.budgetDeclared': 'Soft budget the run declared:',
   'wizard.defaultCityHint':
     'A hint for finding the place on Google, nothing more. A place’s administrative unit comes from its coordinate, not from this box.',
+  'wizard.categoryDerived':
+    'No category column: the server derives the category from the provider types when it resolves. A row whose types say nothing GoGo maps still fails with CATEGORY_REQUIRED — fill in a category for that row.',
   'wizard.districtRetired':
     'There is no “district” field to map: the district tier was dissolved on 2025-07-01. A legacy sheet’s column is still accepted and still read as historical name evidence.',
   'jobDetail.col.administrative': 'Administrative unit',

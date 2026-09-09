@@ -1675,6 +1675,8 @@ export const vi = {
   'wizard.mappingIgnore': 'Bỏ qua cột này',
   'wizard.samplePreview': 'Dòng mẫu',
   'wizard.unmapped': 'Cột chưa ánh xạ, dữ liệu sẽ bị bỏ qua: {headers}',
+  'wizard.categoryDerived':
+    'Không có cột category: máy chủ suy category từ loại hình Google khi resolve. Dòng nào Google không nói được loại hình thì vẫn báo CATEGORY_REQUIRED — điền category cho riêng dòng đó.',
   'wizard.rowIdDerived':
     'Không cần cột source_row_id: máy chủ suy ra định danh từ vị trí dòng. Định danh này đổi khi chèn hoặc sắp xếp lại dòng — sheet còn định nhập lại nhiều lần nên có cột source_row_id riêng.',
   'wizard.back': 'Quay lại',
