@@ -73,9 +73,23 @@ export async function readCsvPreview(file: File): Promise<CsvPreview> {
  * `source_row_id` is not guessed at — the server derives it.
  */
 const HEADER_HINTS: { field: ImportCanonicalField; hints: string[] }[] = [
+  /*
+   * PI-CMS-009 — first in the table, ahead of `name`.
+   *
+   * `name`'s hints include `place`, and "Google Place ID" contains it. Ordered
+   * any lower, that header guesses onto `name` — wrong in the one column an
+   * operator is least likely to re-check, because the guess looks plausible.
+   */
+  { field: 'google_place_id', hints: ['place id', 'place_id', 'placeid', 'ma dia diem google'] },
   { field: 'name', hints: ['name', 'ten', 'tên', 'place', 'địa điểm', 'dia diem'] },
   { field: 'city', hints: ['city', 'thanh pho', 'thành phố', 'tinh', 'tỉnh'] },
   { field: 'district', hints: ['district', 'quan', 'quận', 'huyen', 'huyện', 'khu vuc'] },
+  /*
+   * Ahead of `google_maps_url`, whose `google` hint would otherwise swallow the
+   * header `google_maps_query` — the template writes both columns, so the two
+   * have to be told apart by the more specific hint winning first.
+   */
+  { field: 'google_maps_query', hints: ['maps_query', 'tu khoa', 'từ khoá', 'từ khóa'] },
   { field: 'google_maps_url', hints: ['google', 'maps', 'link', 'url'] },
   { field: 'category', hints: ['category', 'loai', 'loại', 'nhom', 'nhóm'] },
   { field: 'price_min', hints: ['price_min', 'gia_min', 'giá thấp', 'min'] },
@@ -90,6 +104,15 @@ const HEADER_HINTS: { field: ImportCanonicalField; hints: string[] }[] = [
   // `note`, not `notes` — the singular is the canonical field, and a sheet
   // column called `notes` was being dropped for want of this alias.
   { field: 'note', hints: ['note', 'notes', 'ghi chu', 'ghi chú'] },
+  // PI-BE-025 — GoGo's own facts, now columns rather than retired values.
+  { field: 'phone', hints: ['phone', 'sdt', 'sđt', 'dien thoai', 'điện thoại'] },
+  { field: 'website', hints: ['website', 'web'] },
+  {
+    field: 'avg_visit_minutes',
+    hints: ['avg_visit', 'thoi luong', 'thời lượng', 'visit_minutes'],
+  },
+  { field: 'is_lodging', hints: ['is_lodging', 'luu tru', 'lưu trú'] },
+  { field: 'curated_rank', hints: ['curated', 'thu tu', 'thứ tự'] },
 ]
 
 /** Best-effort first guess. The operator always confirms before submitting. */

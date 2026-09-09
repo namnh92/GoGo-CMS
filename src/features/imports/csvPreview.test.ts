@@ -35,13 +35,14 @@ describe('csv preview', () => {
   })
 
   it('never guesses a field the server has no column for', () => {
-    // `address`, `phone` and `website` were offered by the old wizard and
-    // silently discarded by the server.
+    // `address` was offered by the old wizard and silently discarded by the
+    // server. `phone` and `website` were too, until PI-BE-025 gave them columns.
     const guessed = Object.values(guessMapping(['dia chi', 'so dien thoai', 'website', 'ten quan']))
     for (const field of guessed) expect(isCanonicalField(field)).toBe(true)
     expect(guessed).not.toContain('address')
-    expect(guessed).not.toContain('phone')
-    expect(guessed).not.toContain('website')
+    // Now stored rather than dropped, so guessing them is the right answer.
+    expect(guessed).toContain('phone')
+    expect(guessed).toContain('website')
   })
 
   it('never guesses a system-derived field', () => {
@@ -76,13 +77,9 @@ describe('canonical mapping vocabulary', () => {
 
   it('carries the fields the old hand-written list was missing', () => {
     for (const field of [
-      'category_raw',
       'price_unit',
-      'price_raw',
       'audiences',
-      'audiences_raw',
       'vibes',
-      'vibes_raw',
       'highlight',
       'google_maps_query',
     ] as const) {
@@ -90,17 +87,31 @@ describe('canonical mapping vocabulary', () => {
     }
   })
 
-  it('drops the three fields the server never accepted', () => {
-    for (const field of ['address', 'phone', 'website']) {
-      expect(isCanonicalField(field)).toBe(false)
+  it('stops offering the legacy free-text columns while still accepting them', () => {
+    // PI-CMS-009. Each exists to read a sheet nobody writes any more: the two
+    // `*_raw` lists and `price_raw` are parsed into the keyed columns beside
+    // them, and `category_raw` needs an editor to map a string GoGo has no key
+    // for. The server still reads all four, so an old file uploads unchanged.
+    for (const field of ['category_raw', 'price_raw', 'audiences_raw', 'vibes_raw'] as const) {
+      expect(MAPPABLE_FIELDS, field).not.toContain(field)
+      expect(IMPORT_CANONICAL_FIELDS, field).toContain(field)
     }
+  })
+
+  it('drops the one field the server still never accepts', () => {
+    // `address_text` comes from the provider's formatted address; a sheet's own
+    // address string has no writer beside it. `phone` and `website` left this
+    // list in PI-BE-025, when they got columns.
+    expect(isCanonicalField('address')).toBe(false)
+    expect(isCanonicalField('phone')).toBe(true)
+    expect(isCanonicalField('website')).toBe(true)
   })
 
   it('emits no legacy camelCase wire value anywhere', () => {
     // The server still normalises these for older `/v1` callers, but this
     // client must never be one of them — compatibility is for clients that
     // cannot be updated, and this one just was.
-    const legacy = ['googleMapsUrl', 'priceMin', 'priceMax', 'address', 'phone', 'website']
+    const legacy = ['googleMapsUrl', 'priceMin', 'priceMax', 'address']
     for (const value of legacy) {
       expect(IMPORT_CANONICAL_FIELDS as readonly string[]).not.toContain(value)
       expect(MAPPABLE_FIELDS as readonly string[]).not.toContain(value)

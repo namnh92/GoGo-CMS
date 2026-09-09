@@ -1,4 +1,8 @@
 export const styles = {
+  sourceLegend: 'grid gap-3 sm:grid-cols-3',
+  sourceTerm: 'text-[11px] font-semibold uppercase tracking-wide text-text-subtle',
+  sourceList: 'mt-1 text-[12px] leading-relaxed text-text',
+  sourceNote: 'mt-3 text-[11px] text-text-subtle',
   summaryGrid: 'grid gap-4 sm:grid-cols-2 xl:grid-cols-5',
   validationGrid: 'grid gap-4 p-5 pt-0 sm:grid-cols-2 xl:grid-cols-4',
   validationFoot: 'border-t border-line px-5 py-3 text-[11px] text-text-subtle',
@@ -12,6 +16,7 @@ export const styles = {
   reasons: 'flex max-w-[12rem] flex-wrap gap-1',
   reason: 'rounded-pill bg-surface-sunken px-2 py-0.5 font-mono text-[10px] text-text-muted',
   messages: 'flex max-w-[14rem] flex-col gap-0.5',
+  errorCode: 'font-mono text-[10px] font-semibold uppercase tracking-wide',
   errorMsg: 'text-[11px] font-medium text-danger',
   warnMsg: 'text-[11px] text-amber',
   actions: 'flex items-center justify-end gap-1',

@@ -9,7 +9,7 @@ import { useSession } from '@/shared/auth/session'
 import { useOnline } from '@/shared/ui/useOnline'
 import { formatNumber, formatRelative } from '@/shared/format'
 import { PageBody, PageHeader } from '@/app/PageHeader'
-import { Card, CardHeader, KpiCard } from '@/shared/ui/Card'
+import { Card, CardHeader, KpiCard, CardBody } from '@/shared/ui/Card'
 import { Button, IconButton } from '@/shared/ui/Button'
 import { Badge } from '@/shared/ui/Badge'
 import { InlineSelect } from '@/shared/ui/Field'
@@ -319,7 +319,13 @@ export default function ImportJobScreen() {
           <div className={styles.messages}>
             {row.original.errors.map((message, index) => (
               <span key={`e${index}`} className={styles.errorMsg}>
-                ⚠ {message.message ?? message.code}
+                {/*
+                  PI-CMS-009 — the code beside the sentence. The message is what
+                  an operator acts on; the code is what they quote in a ticket,
+                  and `PLACE_ID_URL_MISMATCH` means nothing if the screen only
+                  ever showed the prose.
+                */}
+                ⚠ <span className={styles.errorCode}>{message.code}</span> {message.message ?? ''}
               </span>
             ))}
             {row.original.warnings.map((message, index) => (
@@ -606,6 +612,36 @@ export default function ImportJobScreen() {
                     </div>
                   ) : null}
                 </div>
+              </Card>
+
+              {/*
+                PI-CMS-009 — three sources, named.
+                
+                The rows table mixes values that came from three places and
+                looked identical in every column: what the file said, what
+                Google answered, and what GoGo worked out from the coordinate.
+                An operator reading a wrong address had no way to tell whether
+                to fix their sheet, re-check the link, or raise a mapping issue.
+              */}
+              <Card>
+                <CardHeader title={t('jobDetail.sources')} hint={t('jobDetail.sourcesHint')} />
+                <CardBody>
+                  <dl className={styles.sourceLegend}>
+                    <div>
+                      <dt className={styles.sourceTerm}>{t('jobDetail.sourceFile')}</dt>
+                      <dd className={styles.sourceList}>{t('jobDetail.sourceFileFields')}</dd>
+                    </div>
+                    <div>
+                      <dt className={styles.sourceTerm}>{t('jobDetail.sourceGoogle')}</dt>
+                      <dd className={styles.sourceList}>{t('jobDetail.sourceGoogleFields')}</dd>
+                    </div>
+                    <div>
+                      <dt className={styles.sourceTerm}>{t('jobDetail.sourceDerived')}</dt>
+                      <dd className={styles.sourceList}>{t('jobDetail.sourceDerivedFields')}</dd>
+                    </div>
+                  </dl>
+                  <p className={styles.sourceNote}>{t('jobDetail.sourceReadOnly')}</p>
+                </CardBody>
               </Card>
 
               <Card>

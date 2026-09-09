@@ -721,6 +721,20 @@ export const en: Partial<Record<MessageKey, string>> = {
   'moderation.historyEmpty': 'No decision has been recorded for this item yet.',
 
   'jobDetail.validation.title': 'Validation outcome',
+  'jobDetail.sources': 'Where each value came from',
+  'jobDetail.sourcesHint':
+    'Three sources that look identical in the table below. Fixing the wrong one means knowing which is which.',
+  'jobDetail.sourceFile': 'Your file',
+  'jobDetail.sourceFileFields':
+    'name, category, vibes, audiences, highlight, price, phone, website, avg_visit_minutes, suitability, is_lodging, curated_rank. Wrong here means fix the file and re-import.',
+  'jobDetail.sourceGoogle': 'Fetched from Google',
+  'jobDetail.sourceGoogleFields':
+    'Display name, address, coordinates, canonical Google link, rating, review count, price level, opening hours, business status, types. Read-only — check the link or Place ID instead.',
+  'jobDetail.sourceDerived': 'Derived by GoGo',
+  'jobDetail.sourceDerivedFields':
+    'Province and commune codes and names, mapping status, dataset version, publication blocker, category derived from the provider types. Computed from the coordinate; never typed.',
+  'jobDetail.sourceReadOnly':
+    "Google's facts are read-only. GoGo-owned values stay editable on the place detail screen after it is created.",
   'jobDetail.validation.hint':
     'Counted across the whole job by the server, not the page on screen.',
   'jobDetail.validation.valid': 'Valid',
@@ -2671,5 +2685,11 @@ export const en: Partial<Record<MessageKey, string>> = {
   'jobDetail.administrativeVerified': 'Verified by a reviewer',
   'jobDetail.administrativeClear': 'The administrative mapping does not block publishing.',
   'wizard.defaultCity': 'Search hint — default city',
+  'wizard.template': 'Import template',
+  'wizard.templateHint':
+    'Supported columns only, with four example rows: link only, Place ID only, both, and search by name. Older columns are still read if your file has them; do not add new ones.',
+  'wizard.templateDownload': 'Download CSV template',
+  'wizard.field.google_place_id': 'google_place_id — the strongest identity; no city needed',
+  'wizard.field.note': 'note — job commentary, never stored on the place',
   'wizard.fieldCityHint': 'city — a search hint, not an administrative level',
 }

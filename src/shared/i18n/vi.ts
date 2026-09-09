@@ -1634,6 +1634,12 @@ export const vi = {
   'importSource.mobile_link': 'Link từ app',
 
   'wizard.title': 'Tạo phiên nhập mới',
+  'wizard.template': 'Mẫu file import',
+  'wizard.templateHint':
+    'Chỉ gồm các cột đang được hỗ trợ, kèm bốn dòng ví dụ: chỉ link, chỉ Place ID, có cả hai, và tìm theo tên. Các cột cũ (Quận/Huyện, loại hình dạng chữ, khoảng giá dạng chữ…) vẫn đọc được nếu file bạn đang có mang chúng, nhưng đừng thêm mới.',
+  'wizard.templateDownload': 'Tải mẫu CSV',
+  'wizard.field.google_place_id': 'google_place_id — định danh mạnh nhất, không cần thành phố',
+  'wizard.field.note': 'note — ghi chú của phiên nhập, không lưu vào địa điểm',
   'wizard.step.source': 'Chọn nguồn',
   'wizard.step.mapping': 'Ánh xạ cột',
   'wizard.step.review': 'Chạy thử và xác nhận',
@@ -1680,6 +1686,20 @@ export const vi = {
 
   'jobDetail.breadcrumb': 'Nhập liệu / Chi tiết phiên',
   'jobDetail.rows': 'Danh sách dòng',
+  'jobDetail.sources': 'Giá trị này từ đâu ra',
+  'jobDetail.sourcesHint':
+    'Ba nguồn, trông giống nhau trên bảng bên dưới. Sửa sai ở đúng chỗ thì phải biết giá trị đến từ đâu.',
+  'jobDetail.sourceFile': 'File của bạn',
+  'jobDetail.sourceFileFields':
+    'name, category, vibes, audiences, highlight, giá, phone, website, avg_visit_minutes, suitability, is_lodging, curated_rank. Sai thì sửa file rồi nhập lại.',
+  'jobDetail.sourceGoogle': 'Google trả về',
+  'jobDetail.sourceGoogleFields':
+    'Tên hiển thị, địa chỉ, toạ độ, link Google chuẩn, đánh giá, số lượt đánh giá, mức giá, giờ mở cửa, trạng thái kinh doanh, loại hình. Không sửa được ở đây — kiểm tra lại link hoặc Place ID.',
+  'jobDetail.sourceDerived': 'GoGo suy ra',
+  'jobDetail.sourceDerivedFields':
+    'Mã và tên Tỉnh/Phường, trạng thái ánh xạ, phiên bản bộ dữ liệu, lý do chặn xuất bản, nhóm suy ra từ loại hình Google. Tính từ toạ độ, không nhập tay được.',
+  'jobDetail.sourceReadOnly':
+    'Fact của Google chỉ đọc. Giá trị GoGo sở hữu vẫn sửa được ở màn hình chi tiết địa điểm sau khi tạo.',
   'jobDetail.rowsHint': 'Lọc theo trạng thái để xử lý dòng cần can thiệp.',
   'jobDetail.summary': 'Tổng quan phiên',
   'jobDetail.totals.rows': 'Tổng dòng',

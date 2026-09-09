@@ -1,4 +1,8 @@
 export const styles = {
+  templateRow:
+    'flex flex-wrap items-center justify-between gap-3 rounded-compact border border-line bg-surface-muted px-3 py-2.5',
+  templateTitle: 'text-[13px] font-semibold text-text',
+  templateHint: 'text-[11px] text-text-subtle',
   sourceGrid: 'grid gap-3 md:grid-cols-2',
   sourceOption: 'flex flex-col gap-2 rounded-card border-2 p-4 text-left transition-colors',
   sourceOptionActive: 'border-coral bg-coral-soft/40',
