@@ -12,15 +12,19 @@ import { MAPPABLE_FIELDS } from '@/shared/api/contracts-import'
 
 const CSV = ['name,category,tags,notes,city', 'Lacàph,cafe,coffee,Specialty,Ho Chi Minh'].join('\n')
 
-async function openMappingStep() {
+async function openMapping(csv: string, filename: string) {
   signInAs('ops_admin')
   const user = userEvent.setup()
   renderWithProviders(<ImportWizardScreen />)
 
-  const file = new File([CSV], 'hcm.csv', { type: 'text/csv' })
+  const file = new File([csv], filename, { type: 'text/csv' })
   await user.upload(screen.getByLabelText(/chọn tệp|file/i), file)
   await user.click(await screen.findByRole('button', { name: /tiếp tục/i }))
   return user
+}
+
+async function openMappingStep() {
+  return openMapping(CSV, 'hcm.csv')
 }
 
 describe('import wizard mapping step', () => {
@@ -88,16 +92,57 @@ describe('import wizard mapping step', () => {
   })
 
   it('blocks before the import when a required column is genuinely absent', async () => {
-    signInAs('ops_admin')
-    const user = userEvent.setup()
-    renderWithProviders(<ImportWizardScreen />)
-
-    const file = new File(['name,city\nQuán A,HCM'], 'nocat.csv', { type: 'text/csv' })
-    await user.upload(screen.getByLabelText(/chọn tệp|file/i), file)
-    await user.click(await screen.findByRole('button', { name: /tiếp tục/i }))
+    // Nothing here identifies a place — no link, no Place ID, no query, no
+    // name — so the server cannot derive a category and the operator must.
+    await openMapping('city,note\nHà Nội,ghi chú', 'nocat.csv')
 
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('category')
     expect(screen.getByRole('button', { name: /tiếp tục/i })).toBeDisabled()
+  })
+
+  /**
+   * PI-CMS-032 — the wizard used to demand a `category` column from every file,
+   * including the two shapes the published template teaches. An operator who
+   * followed the template hit a dead end, and the way out was an empty column.
+   */
+  it('lets a link-only file through without a category column', async () => {
+    await openMapping(
+      'name,google_maps_url\nAeon MaxValu,https://www.google.com/maps/place/Aeon+MaxValu/@21.02,105.79,17z',
+      'link-only.csv',
+    )
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /tiếp tục/i })).not.toBeDisabled()
+    // And it says why the column is missing rather than leaving it unexplained.
+    expect(screen.getByText(/suy category từ loại hình google/i)).toBeInTheDocument()
+  })
+
+  it('lets a Place-ID-only file through without a category column', async () => {
+    await openMapping('google_place_id\nChIJNz9FhWqpNTEROakgr0rjnAM', 'place-id-only.csv')
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /tiếp tục/i })).not.toBeDisabled()
+    expect(screen.getByText(/suy category từ loại hình google/i)).toBeInTheDocument()
+  })
+
+  it('stops marking category required once the file identifies the place', async () => {
+    await openMapping('name,google_place_id\nQuán A,ChIJNz9FhWqpNTEROakgr0rjnAM', 'both.csv')
+
+    const select = await screen.findByLabelText('name')
+    const category = within(select)
+      .getAllByRole('option')
+      .find((option) => (option as HTMLOptionElement).value === 'category')
+    // The asterisk is a promise about what the wizard will refuse; it must not
+    // outlive the refusal.
+    expect(category?.textContent).not.toContain('*')
+  })
+
+  it('keeps quiet about derivation when the operator mapped a category column', async () => {
+    // A mapped column is the operator's answer, even when a cell is blank — the
+    // note is about a missing column, so it stays quiet here.
+    await openMapping('name,category\nQuán A,cafe', 'withcat.csv')
+
+    expect(screen.queryByText(/suy category từ loại hình google/i)).not.toBeInTheDocument()
   })
 })

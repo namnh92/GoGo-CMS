@@ -16,7 +16,7 @@ import { PermissionDeniedState, useErrorMessage } from '@/shared/ui/State'
 import { useToast } from '@/shared/ui/Toast'
 import {
   MAPPABLE_FIELDS,
-  REQUIRED_MAPPABLE_FIELDS,
+  requiredMappableFields,
   type ImportCanonicalField,
   type ImportMode,
 } from '@/shared/api/contracts-import'
@@ -121,11 +121,14 @@ export default function ImportWizardScreen() {
   }
 
   const mappedFields = new Set(Object.values(mapping))
-  // Only fields the operator must actually supply. `source_row_id` is not one:
-  // the server derives it from row position, so demanding a column for it
-  // would block a file that imports perfectly well. `city` is not one either —
-  // a default city satisfies it without a column.
-  const missingRequired = REQUIRED_MAPPABLE_FIELDS.filter((field) => !mappedFields.has(field))
+  // What this particular file must still supply. `category` drops off the list
+  // as soon as something identifies the place, because the server derives it
+  // from the provider's types then.
+  const requiredFields = requiredMappableFields(mappedFields)
+  const missingRequired = requiredFields.filter((field) => !mappedFields.has(field))
+  // Derived, not supplied — and only worth saying when the operator left the
+  // column out, which is the case the wizard used to refuse.
+  const categoryDerived = requiredFields.length === 0 && !mappedFields.has('category')
 
   // Headers the operator left unmapped: their cells are dropped, so say which
   // before the import runs rather than after.
@@ -336,7 +339,7 @@ export default function ImportWizardScreen() {
                                     operators treat it as the address.
                                   */}
                                   {FIELD_LABELS[field] ? t(FIELD_LABELS[field]!) : field}
-                                  {REQUIRED_MAPPABLE_FIELDS.includes(field) ? ' *' : ''}
+                                  {requiredFields.includes(field) ? ' *' : ''}
                                 </option>
                               ))}
                             </select>
@@ -365,6 +368,13 @@ export default function ImportWizardScreen() {
                 <p role="alert" className={styles.warn}>
                   <span aria-hidden="true">⚠</span>
                   {t('wizard.mappingRequired')}: {missingRequired.join(', ')}
+                </p>
+              ) : null}
+
+              {categoryDerived ? (
+                <p className={styles.note}>
+                  <span aria-hidden="true">ℹ</span>
+                  {t('wizard.categoryDerived')}
                 </p>
               ) : null}
 

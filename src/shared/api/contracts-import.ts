@@ -288,12 +288,33 @@ export const MAPPABLE_FIELDS: readonly ImportCanonicalField[] = IMPORT_CANONICAL
 )
 
 /**
- * Required columns, mirroring `resolveMapping`'s own list. `source_row_id` is
- * absent on purpose: the server derives it. `city` is required as a *value*,
- * not as a column — a default city satisfies it — so the server decides, and
- * the wizard reads `missingRequiredColumns` rather than guessing.
+ * Columns the server can turn into a provider lookup — its own `resolvable`
+ * test, in the same order. Any one of them and the row has an identity to
+ * resolve, which is what decides whether `category` is required.
  */
-export const REQUIRED_MAPPABLE_FIELDS: readonly ImportCanonicalField[] = ['category']
+export const IDENTIFYING_MAPPABLE_FIELDS: readonly ImportCanonicalField[] = [
+  'google_place_id',
+  'google_maps_url',
+  'google_maps_query',
+  'name',
+]
+
+/**
+ * Columns an operator must supply *for this mapping*. `source_row_id` is never
+ * one: the server derives it from row position. `city` is never one either — a
+ * default city satisfies it without a column.
+ *
+ * `category` is one only when nothing in the file identifies the place. A row
+ * the server can resolve gets its category from `types[]` (PI-BE-023), so
+ * demanding the column would block exactly the link-only and Place-ID-only
+ * files the template teaches people to write — and would teach them instead to
+ * add an empty column to get past the wizard.
+ */
+export function requiredMappableFields(
+  mapped: ReadonlySet<ImportCanonicalField>,
+): readonly ImportCanonicalField[] {
+  return IDENTIFYING_MAPPABLE_FIELDS.some((field) => mapped.has(field)) ? [] : ['category']
+}
 
 export function isCanonicalField(value: string): value is ImportCanonicalField {
   return (IMPORT_CANONICAL_FIELDS as readonly string[]).includes(value)
