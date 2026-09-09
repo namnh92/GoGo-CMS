@@ -1158,10 +1158,110 @@ export const placeSubmissionSchema = z.object({
   resultPlaceName: z.string().nullish(),
   fromRegisteredUser: z.boolean(),
   createdAt: z.string(),
+  updatedAt: z.string().nullish(),
   decidedAt: z.string().nullish(),
   decisionReason: z.string().nullish(),
+  /**
+   * GoGo-BE#528 — a name for the row, when GoGo actually has one.
+   *
+   * Absent for a fresh proposal, and the queue says so rather than showing a
+   * Place ID dressed up as a name: Google's name for a place is not stored, and
+   * fetching Details once per row to fill a column would bill a page of
+   * twenty-five to open the screen.
+   */
+  displayName: z.string().nullish(),
+  displayNameSource: z.enum(['review', 'catalogue']).nullish(),
+  hasReview: z.boolean().default(false),
+  reviewedAt: z.string().nullish(),
+  /** The catalogue place this Google record already belongs to — the duplicate. */
+  linkedPlaceId: z.string().nullish(),
+  identityConflict: z.boolean().default(false),
 })
 export type PlaceSubmission = z.infer<typeof placeSubmissionSchema>
+
+/**
+ * GoGo-BE#528 — the GoGo-owned fields a reviewer may supplement before
+ * approving a contribution.
+ *
+ * Read side only: the form owns its own schema (`reviewForm.ts`) with the same
+ * limits, because a form and a wire shape want different things from an empty
+ * box. What matters here is that `null` and absent are kept apart — `null`
+ * clears a field at approval, absent leaves Google's answer standing.
+ */
+export const submissionReviewDraftSchema = z.object({
+  name: z.string().nullish(),
+  description: z.string().nullish(),
+  addressText: z.string().nullish(),
+  phone: z.string().nullish(),
+  website: z.string().nullish(),
+  avgVisitMinutes: z.number().nullish(),
+  suitability: z.record(z.string(), z.number()).nullish(),
+  taxonomyIds: z.array(z.string()).nullish(),
+  isLodging: z.boolean().nullish(),
+  curatedRank: z.number().nullish(),
+  priceMin: z.number().nullish(),
+  priceMax: z.number().nullish(),
+  priceUnit: z.string().nullish(),
+})
+export type SubmissionReviewDraft = z.infer<typeof submissionReviewDraftSchema>
+
+/** `GET /cms/place-submissions/{id}` — everything a decision needs, no provider call. */
+export const placeSubmissionDetailSchema = z.object({
+  id: z.string(),
+  googlePlaceId: z.string(),
+  googleMapsUrl: z.string(),
+  status: z.enum(['pending', 'approved', 'rejected', 'merged']),
+  submissionCount: z.number(),
+  fromRegisteredUser: z.boolean(),
+  roomId: z.string().nullish(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  decidedAt: z.string().nullish(),
+  decisionReason: z.string().nullish(),
+  contribution: z
+    .object({
+      categoryKey: z.string().nullish(),
+      estimatedPrice: z.object({ min: z.number(), max: z.number(), unit: z.string() }).nullish(),
+      vibeKeys: z.array(z.string()).default([]),
+      note: z.string().nullish(),
+    })
+    .default({ vibeKeys: [] }),
+  review: z
+    .object({
+      draft: submissionReviewDraftSchema,
+      reviewedAt: z.string().nullish(),
+      reviewedByAdminId: z.string().nullish(),
+    })
+    .nullish(),
+  existingPlace: z
+    .object({
+      id: z.string(),
+      name: z.string(),
+      status: z.string(),
+      addressText: z.string().nullish(),
+    })
+    .nullish(),
+  identityConflict: z.array(z.string()).nullish(),
+  history: z
+    .array(
+      z.object({
+        action: z.string(),
+        actorId: z.string().nullish(),
+        actorName: z.string().nullish(),
+        at: z.string(),
+        detail: z.unknown().nullish(),
+      }),
+    )
+    .default([]),
+})
+export type PlaceSubmissionDetail = z.infer<typeof placeSubmissionDetailSchema>
+
+export const submissionReviewSavedSchema = z.object({
+  id: z.string(),
+  draft: submissionReviewDraftSchema,
+  reviewedAt: z.string().nullish(),
+  updatedAt: z.string(),
+})
 
 export const placeSubmissionListSchema = z.object({
   items: z.array(placeSubmissionSchema),

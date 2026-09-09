@@ -1379,8 +1379,17 @@ export const placeSubmissions = [
     resultPlaceName: null,
     fromRegisteredUser: true,
     createdAt: '2026-08-27T02:00:00.000Z',
+    updatedAt: '2026-08-27T02:00:00.000Z',
     decidedAt: null,
     decisionReason: null,
+    // GoGo-BE#528 — a fresh proposal has no name GoGo may show: Google's is
+    // not stored, and nobody has supplemented one yet.
+    displayName: null,
+    displayNameSource: null,
+    hasReview: false,
+    reviewedAt: null,
+    linkedPlaceId: null,
+    identityConflict: false,
   },
   {
     id: '9a1d0c00-0000-4000-8000-000000000002',
@@ -1396,10 +1405,124 @@ export const placeSubmissions = [
     resultPlaceName: null,
     fromRegisteredUser: false,
     createdAt: '2026-08-27T01:00:00.000Z',
+    updatedAt: '2026-08-27T04:00:00.000Z',
     decidedAt: null,
     decisionReason: null,
+    // A reviewer has already supplemented this one, so the queue has a name to
+    // show and says where it came from.
+    displayName: 'Cà phê Ngọc Hà',
+    displayNameSource: 'review' as const,
+    hasReview: true,
+    reviewedAt: '2026-08-27T04:00:00.000Z',
+    linkedPlaceId: null,
+    identityConflict: false,
   },
 ]
+
+/** `GET /cms/place-submissions/{id}` — what a decision is actually made on. */
+export const placeSubmissionDetails: Record<string, unknown> = {
+  '9a1d0c00-0000-4000-8000-000000000001': {
+    id: '9a1d0c00-0000-4000-8000-000000000001',
+    googlePlaceId: 'ChIJpopular',
+    googleMapsUrl: 'https://www.google.com/maps/place/?q=place_id:ChIJpopular',
+    status: 'pending',
+    submissionCount: 4,
+    fromRegisteredUser: true,
+    createdAt: '2026-08-27T02:00:00.000Z',
+    updatedAt: '2026-08-27T02:00:00.000Z',
+    contribution: {
+      categoryKey: 'cafe',
+      estimatedPrice: { min: 60_000, max: 120_000, unit: 'per_person' },
+      vibeKeys: ['chill'],
+      note: 'Quán mới mở, view đẹp',
+    },
+    history: [],
+  },
+  '9a1d0c00-0000-4000-8000-000000000002': {
+    id: '9a1d0c00-0000-4000-8000-000000000002',
+    googlePlaceId: 'ChIJguest',
+    googleMapsUrl: 'https://www.google.com/maps/place/?q=place_id:ChIJguest',
+    status: 'pending',
+    submissionCount: 1,
+    fromRegisteredUser: false,
+    createdAt: '2026-08-27T01:00:00.000Z',
+    updatedAt: '2026-08-27T04:00:00.000Z',
+    contribution: { vibeKeys: [] },
+    review: {
+      draft: { name: 'Cà phê Ngọc Hà', description: 'Sân vườn, hợp nhóm bạn.' },
+      reviewedAt: '2026-08-27T04:00:00.000Z',
+      reviewedByAdminId: '00000000-0000-4000-8000-00000000000a',
+    },
+    history: [
+      {
+        action: 'place_submission.reviewed',
+        actorName: 'Mod A',
+        at: '2026-08-27T04:00:00.000Z',
+      },
+    ],
+  },
+}
+
+/**
+ * What `POST /cms/place-submissions/{id}/provider-preview` answers — one
+ * `quality` Details, rendered and discarded. The mock counts the calls so a
+ * test can prove the screen makes none until asked.
+ */
+/** A submission already approved, with the place its approval made. */
+export const decidedSubmissionDetail = {
+  id: '9a1d0c00-0000-4000-8000-000000000003',
+  googlePlaceId: 'ChIJdecided',
+  googleMapsUrl: 'https://www.google.com/maps/place/?q=place_id:ChIJdecided',
+  status: 'approved',
+  submissionCount: 1,
+  fromRegisteredUser: true,
+  createdAt: '2026-08-27T01:00:00.000Z',
+  updatedAt: '2026-08-27T05:00:00.000Z',
+  decidedAt: '2026-08-27T05:00:00.000Z',
+  decisionReason: 'đủ thông tin',
+  contribution: { vibeKeys: [] },
+  existingPlace: {
+    id: 'pl-chao-ban',
+    name: 'Chào Bạn Cafe & Space',
+    status: 'community_submitted',
+    addressText: '12 Ngọc Hà, Ba Đình, Hà Nội',
+  },
+  history: [{ action: 'place_submission.decided', at: '2026-08-27T05:00:00.000Z' }],
+}
+
+export const submissionProviderPreview = {
+  status: 'RESOLVED',
+  reasonCodes: ['CID_EXACT_MATCH'],
+  matchConfidence: 1,
+  candidate: {
+    googlePlaceId: 'ChIJpopular',
+    name: 'Bảo tàng Hà Nội',
+    address: 'Đường Phạm Hùng, Từ Liêm, Hà Nội 100000',
+    location: { lat: 21.0055, lng: 105.7823 },
+    googleRating: 4.4,
+    googleRatingCount: 1_312,
+    businessStatus: 'OPERATIONAL',
+    attributions: ['Google Maps'],
+    googleMapsUri: 'https://maps.google.com/?cid=7719147873670591563',
+    priceLevel: 2,
+    primaryType: 'museum',
+    types: ['museum'],
+    categoryKey: 'culture',
+    openingHours: [
+      { dayOfWeek: 1, openMinute: 480, closeMinute: 1_020, isOvernight: false },
+      { dayOfWeek: 2, openMinute: 480, closeMinute: 1_020, isOvernight: false },
+    ],
+  },
+  administrative: {
+    provinceCode: '01',
+    provinceName: 'Thành phố Hà Nội',
+    communeCode: '00592',
+    communeName: 'Phường Từ Liêm',
+    status: 'AUTO_MATCHED',
+    datasetVersion: 'v5.0.0+r0',
+  },
+  candidates: [],
+}
 
 export const decidedSubmissions = [
   {

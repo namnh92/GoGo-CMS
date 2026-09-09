@@ -117,6 +117,9 @@ export const router = createBrowserRouter([
           { path: 'moderation/reviews', element: <ReviewListScreen /> },
           { path: 'moderation/reviews/:reviewId', element: <ReviewListScreen /> },
           { path: 'submissions', element: <SubmissionQueueScreen /> },
+          // GoGo-CMS#194 — the review drawer opens over the queue on its own
+          // route, so a moderator can send a colleague the exact proposal.
+          { path: 'submissions/:submissionId', element: <SubmissionQueueScreen /> },
           // CMS #153/#154 — the dataset screens are built; the mapping queue is
           // still a shell (#156). Each enforces its own permission rather than
           // trusting the nav to hide it.
