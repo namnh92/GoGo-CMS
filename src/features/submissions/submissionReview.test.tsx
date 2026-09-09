@@ -26,6 +26,7 @@ function SubmissionRoutes() {
 
 const FRESH = '/submissions/9a1d0c00-0000-4000-8000-000000000001'
 const REVIEWED = '/submissions/9a1d0c00-0000-4000-8000-000000000002'
+const DECIDED = '/submissions/9a1d0c00-0000-4000-8000-000000000003'
 
 /**
  * The drawer, once its data has arrived. `findByRole` alone resolves while the
@@ -232,11 +233,18 @@ describe('the decisions', () => {
     ).toBeInTheDocument()
   })
 
-  it('offers no decision on a submission that is already decided', async () => {
+  it('offers no decision on a submission that is already decided, and points at the place', async () => {
     signInAs('moderator')
-    mockDb.decisions.length = 0
-    renderWithProviders(<SubmissionRoutes />, { route: FRESH })
+    renderWithProviders(<SubmissionRoutes />, { route: DECIDED })
+
     const dialog = await openDrawer()
-    expect(within(dialog).getByRole('button', { name: 'Duyệt' })).toBeInTheDocument()
+    // The decision is done; what is left to do lives on the place.
+    expect(within(dialog).queryByRole('button', { name: 'Duyệt' })).not.toBeInTheDocument()
+    expect(within(dialog).getByText(/Đề xuất này đã được quyết định/)).toBeInTheDocument()
+    expect(within(dialog).getByText(/Mở để xác minh hành chính và xuất bản/)).toBeInTheDocument()
+    expect(within(dialog).getByRole('link', { name: 'Mở địa điểm' })).toHaveAttribute(
+      'href',
+      '/places/pl-chao-ban',
+    )
   })
 })

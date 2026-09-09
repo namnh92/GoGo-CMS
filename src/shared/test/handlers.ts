@@ -31,6 +31,7 @@ import {
   experiments,
   placeSubmissions,
   placeSubmissionDetails,
+  decidedSubmissionDetail,
   submissionProviderPreview,
   places,
   rankingConfigs,
@@ -147,10 +148,10 @@ function seedDb() {
     communityPlaces: communityPlaceQueue.map((row) => ({ ...row })),
     reviewQueue: JSON.parse(JSON.stringify(moderationReviewQueue)) as typeof moderationReviewQueue,
     submissions: placeSubmissions.map((item) => ({ ...item })),
-    submissionDetails: structuredClone(placeSubmissionDetails) as Record<
-      string,
-      Record<string, unknown>
-    >,
+    submissionDetails: structuredClone({
+      ...placeSubmissionDetails,
+      [decidedSubmissionDetail.id]: decidedSubmissionDetail,
+    }) as Record<string, Record<string, unknown>>,
     /** How many times the console asked Google about a submission (GoGo-BE#528). */
     providerPreviewCalls: 0,
     reviewSaves: [] as { id: string; draft: Record<string, unknown> }[],

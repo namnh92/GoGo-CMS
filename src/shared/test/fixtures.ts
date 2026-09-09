@@ -1468,6 +1468,28 @@ export const placeSubmissionDetails: Record<string, unknown> = {
  * `quality` Details, rendered and discarded. The mock counts the calls so a
  * test can prove the screen makes none until asked.
  */
+/** A submission already approved, with the place its approval made. */
+export const decidedSubmissionDetail = {
+  id: '9a1d0c00-0000-4000-8000-000000000003',
+  googlePlaceId: 'ChIJdecided',
+  googleMapsUrl: 'https://www.google.com/maps/place/?q=place_id:ChIJdecided',
+  status: 'approved',
+  submissionCount: 1,
+  fromRegisteredUser: true,
+  createdAt: '2026-08-27T01:00:00.000Z',
+  updatedAt: '2026-08-27T05:00:00.000Z',
+  decidedAt: '2026-08-27T05:00:00.000Z',
+  decisionReason: 'đủ thông tin',
+  contribution: { vibeKeys: [] },
+  existingPlace: {
+    id: 'pl-chao-ban',
+    name: 'Chào Bạn Cafe & Space',
+    status: 'community_submitted',
+    addressText: '12 Ngọc Hà, Ba Đình, Hà Nội',
+  },
+  history: [{ action: 'place_submission.decided', at: '2026-08-27T05:00:00.000Z' }],
+}
+
 export const submissionProviderPreview = {
   status: 'RESOLVED',
   reasonCodes: ['CID_EXACT_MATCH'],

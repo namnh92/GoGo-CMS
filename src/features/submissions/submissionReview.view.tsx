@@ -279,6 +279,15 @@ export function SubmissionReviewDrawer({
                       <strong>{t('submissions.existingPlace')}:</strong>{' '}
                       {submission.existingPlace.name}
                     </div>
+                    {/*
+                     * After a decision this is the place the decision made, and
+                     * the next two steps live on it: the administrative mapping
+                     * still has to be verified before anything can be published,
+                     * and opening hours are edited there rather than here.
+                     */}
+                    {submission.status !== 'pending' ? (
+                      <div>{t('submissions.afterDecision')}</div>
+                    ) : null}
                     <a className={styles.link} href={`/places/${submission.existingPlace.id}`}>
                       {t('submissions.openPlace')}
                     </a>
