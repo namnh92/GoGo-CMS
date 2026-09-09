@@ -30,6 +30,8 @@ import {
   opsKpis,
   experiments,
   placeSubmissions,
+  placeSubmissionDetails,
+  submissionProviderPreview,
   places,
   rankingConfigs,
   rankingEvaluation,
@@ -145,6 +147,14 @@ function seedDb() {
     communityPlaces: communityPlaceQueue.map((row) => ({ ...row })),
     reviewQueue: JSON.parse(JSON.stringify(moderationReviewQueue)) as typeof moderationReviewQueue,
     submissions: placeSubmissions.map((item) => ({ ...item })),
+    submissionDetails: structuredClone(placeSubmissionDetails) as Record<
+      string,
+      Record<string, unknown>
+    >,
+    /** How many times the console asked Google about a submission (GoGo-BE#528). */
+    providerPreviewCalls: 0,
+    reviewSaves: [] as { id: string; draft: Record<string, unknown> }[],
+    decisions: [] as Record<string, unknown>[],
     experiments: experiments.map((item) => ({ ...item })),
     items: JSON.parse(JSON.stringify(collectionItems)) as typeof collectionItems,
     decidedSubmissions: decidedSubmissions.map((item) => ({ ...item })),
@@ -191,6 +201,26 @@ let db = seedDb()
  */
 export function resetMockDb(): void {
   db = seedDb()
+}
+
+/**
+ * Read-only view of what the mock recorded, for the assertions a rendered
+ * screen cannot make about itself — chiefly "did opening this cost a provider
+ * request?" (GoGo-BE#528).
+ */
+export const mockDb = {
+  get providerPreviewCalls(): number {
+    return db.providerPreviewCalls
+  },
+  set providerPreviewCalls(value: number) {
+    db.providerPreviewCalls = value
+  },
+  get reviewSaves(): { id: string; draft: Record<string, unknown> }[] {
+    return db.reviewSaves
+  },
+  get decisions(): Record<string, unknown>[] {
+    return db.decisions
+  },
 }
 
 /**
@@ -2192,11 +2222,63 @@ export const handlers = [
     return HttpResponse.json({ items, nextCursor: null })
   }),
 
+  /**
+   * GoGo-BE#528 — stored facts only, and the mock proves it: nothing here
+   * touches `providerPreviewCalls`, so a test can assert that opening a
+   * submission costs no provider request.
+   */
+  http.get(`${BASE}/cms/place-submissions/:id`, ({ params }) => {
+    const detail = db.submissionDetails[String(params.id)]
+    if (!detail) return envelope(404, 'SUBMISSION_NOT_FOUND', 'Submission not found')
+    return HttpResponse.json(detail)
+  }),
+
+  http.post(`${BASE}/cms/place-submissions/:id/provider-preview`, () => {
+    db.providerPreviewCalls += 1
+    return HttpResponse.json(submissionProviderPreview, { status: 201 })
+  }),
+
+  http.put(`${BASE}/cms/place-submissions/:id/review`, async ({ params, request }) => {
+    const body = (await request.json()) as {
+      draft: Record<string, unknown>
+      expectedUpdatedAt?: string
+    }
+    const id = String(params.id)
+    const detail = db.submissionDetails[id] as
+      { updatedAt: string; review?: { draft: Record<string, unknown> } } | undefined
+    if (!detail) return envelope(404, 'SUBMISSION_NOT_FOUND', 'Submission not found')
+    // The server's optimistic-concurrency rule, enforced here so the console
+    // cannot pass in tests and lose somebody's work in production.
+    if (body.expectedUpdatedAt !== undefined && body.expectedUpdatedAt !== detail.updatedAt) {
+      return envelope(409, 'SUBMISSION_MODIFIED', 'This submission changed')
+    }
+    const updatedAt = new Date(Date.parse(detail.updatedAt) + 60_000).toISOString()
+    detail.updatedAt = updatedAt
+    detail.review = { draft: body.draft }
+    db.reviewSaves.push({ id, draft: body.draft })
+    return HttpResponse.json({ id, draft: body.draft, updatedAt })
+  }),
+
   http.post(`${BASE}/cms/place-submissions/:id/decide`, async ({ params, request }) => {
-    const body = (await request.json()) as { decision: string; reason: string }
+    const body = (await request.json()) as {
+      decision: string
+      reason: string
+      mergeIntoPlaceId?: string
+    }
     if (!body.reason || body.reason.trim().length < 3) {
       return envelope(400, 'REASON_REQUIRED', 'reason is mandatory')
     }
+    // GoGo-BE#528 — a merge target must exist, and the server says which
+    // problem it is rather than failing on a foreign key.
+    if (body.decision === 'merged') {
+      if (!body.mergeIntoPlaceId) {
+        return envelope(400, 'MERGE_TARGET_REQUIRED', 'mergeIntoPlaceId is required')
+      }
+      if (!db.places.some((place: { id: string }) => place.id === body.mergeIntoPlaceId)) {
+        return envelope(404, 'MERGE_TARGET_NOT_FOUND', 'Target place not found')
+      }
+    }
+    db.decisions.push({ id: String(params.id), ...body })
     db.communityPlaces = db.communityPlaces.filter((item) => item.id !== params.id)
     db.submissions = db.submissions.filter((item: { id: string }) => item.id !== params.id)
     return HttpResponse.json({ decided: true }, { status: 201 })

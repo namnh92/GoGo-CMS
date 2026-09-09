@@ -184,6 +184,12 @@ export const queryKeys = {
     all: ['submissions'] as const,
     list: (status: string, cursor?: string) =>
       ['submissions', 'list', status, cursor ?? 'first'] as const,
+    detail: (id: string) => ['submissions', 'detail', id] as const,
+    /**
+     * Cached per submission because it costs a provider request: reopening the
+     * same proposal in one sitting must not buy the same Details twice.
+     */
+    provider: (id: string) => ['submissions', 'provider', id] as const,
   },
 
   flags: {

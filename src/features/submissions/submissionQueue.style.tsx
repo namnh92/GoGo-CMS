@@ -1,10 +1,11 @@
 export const styles = {
-  layout: 'grid gap-5 xl:grid-cols-3',
-  list: 'flex flex-col gap-3 xl:col-span-2',
+  list: 'flex flex-col gap-3',
   row: 'flex w-full flex-col gap-2 rounded-card border border-line bg-surface p-4 text-left',
   rowActive: 'border-coral bg-coral-soft/40',
   rowIdle: 'hover:border-line-strong hover:bg-surface-sunken',
   rowTop: 'flex flex-wrap items-center justify-between gap-2',
+  title: 'text-[15px] font-bold text-text',
+  badges: 'flex flex-wrap items-center gap-2',
   placeId: 'font-mono text-[12px] text-text-muted',
   meta: 'flex flex-wrap items-center gap-3 text-[12px] text-text-muted',
   count: 'font-semibold tabular-nums text-text',
