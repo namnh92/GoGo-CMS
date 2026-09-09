@@ -505,7 +505,9 @@ export default function CampaignDetailScreen() {
                   {item!.lastError ? (
                     <p className={styles.danger}>
                       <span aria-hidden="true">⚠</span>
-                      {t('campaigns.lastError', { message: campaignErrorMessage(item!.lastError, t) })}
+                      {t('campaigns.lastError', {
+                        message: campaignErrorMessage(item!.lastError, t),
+                      })}
                     </p>
                   ) : null}
                   <p className={styles.hint}>{t('campaigns.testSendNote')}</p>

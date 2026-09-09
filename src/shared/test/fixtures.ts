@@ -2131,8 +2131,7 @@ export const cmsCampaigns: CmsCampaign[] = [
     recipientCount: 3,
     sentCount: 0,
     failedCount: 3,
-    lastError:
-      'NO_SUBSCRIPTION_ACCEPTED: the provider created no message for any of 3 recipients',
+    lastError: 'NO_SUBSCRIPTION_ACCEPTED: the provider created no message for any of 3 recipients',
     testSendRequestedAt: null,
     testSendCompletedAt: null,
     createdByAdminId: 'adm-ops',

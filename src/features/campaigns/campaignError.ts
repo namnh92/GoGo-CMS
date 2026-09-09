@@ -12,10 +12,7 @@ const CAMPAIGN_ERROR_KEYS = {
   EMPTY_AUDIENCE: 'campaigns.error.emptyAudience',
 } as const
 
-export function campaignErrorMessage(
-  lastError: string,
-  t: (key: never) => string,
-): string {
+export function campaignErrorMessage(lastError: string, t: (key: never) => string): string {
   const code = lastError.split(':', 1)[0]?.trim() as keyof typeof CAMPAIGN_ERROR_KEYS | undefined
   const key = code ? CAMPAIGN_ERROR_KEYS[code] : undefined
   return key ? t(key as never) : lastError
