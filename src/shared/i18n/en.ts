@@ -1308,6 +1308,11 @@ export const en: Partial<Record<MessageKey, string>> = {
   'placeEditor.commune': 'Ward / commune / special zone',
   'placeEditor.communeHint': 'Only units inside the chosen province.',
   'placeEditor.administrative': 'Administrative unit',
+  'placeEditor.administrativeReview': 'Review the administrative mapping',
+  'placeEditor.administrativeReviewHint':
+    'Opens the mapping review: verify, correct the province/commune pair and verify, or reject the mapping. Rejecting a mapping neither rejects nor deletes the place.',
+  'placeEditor.administrativeReviewQueue':
+    'You cannot decide this mapping. Open the mapping review queue focused on this place →',
   'placeEditor.administrativeLegacyNote':
     'The district tier was dissolved on 2025-07-01. A legacy free-text address may still mention one; GoGo no longer treats it as a current level.',
   'placeEditor.administrativeUnmapped': 'No administrative unit resolved yet.',

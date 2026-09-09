@@ -15,6 +15,30 @@ describe('csv preview', () => {
     expect(preview.sampleRows[0]).toEqual(['Chào Bạn', '126 NTMK, Q.3'])
   })
 
+  it('keeps a quoted Google URL whole, commas and all', () => {
+    /*
+     * A `/maps/place/…/@lat,lng,zoom` URL carries two commas. Split on them and
+     * the row still imports — with a truncated link that resolves to something
+     * else or to nothing, which is worse than a rejected file because nothing
+     * says it happened. Real sheets quote it; the parser has to honour that.
+     */
+    const csv = [
+      'name,google_maps_url,google_place_id',
+      'Vincom Plaza Biên Hòa,"https://www.google.com/maps/place/Vincom/@10.9483,106.8225,16z",ChIJsQehRCDcdDERzh8HEarjgfE',
+      'GO! Nha Trang,,ChIJWSyhWnddcDERnSHL-cXjM6Q',
+    ].join('\r\n')
+    const preview = parseCsvPreview(csv)
+
+    expect(preview.headers).toEqual(['name', 'google_maps_url', 'google_place_id'])
+    expect(preview.sampleRows[0]![1]).toBe(
+      'https://www.google.com/maps/place/Vincom/@10.9483,106.8225,16z',
+    )
+    // Three columns on both rows: a split URL would have made the first row
+    // five cells wide and shifted the Place ID out of its column.
+    expect(preview.sampleRows[0]).toHaveLength(3)
+    expect(preview.sampleRows[1]).toEqual(['GO! Nha Trang', '', 'ChIJWSyhWnddcDERnSHL-cXjM6Q'])
+  })
+
   it('guesses Vietnamese headers onto the wire values the server accepts', () => {
     const mapping = guessMapping(['ten quan', 'link google maps', 'khoang gia'])
     expect(mapping['ten quan']).toBe('name')

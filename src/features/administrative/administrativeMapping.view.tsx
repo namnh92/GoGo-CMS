@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
@@ -76,16 +76,25 @@ export default function AdministrativeMappingScreen() {
   const status = params.get('status') ?? ACTIONABLE
   const blockedOnly = params.get('blocked') === 'true'
   const cursor = params.get('cursor')
-  const [openPlace, setOpenPlace] = useState<string | null>(null)
+  /*
+   * PI-CMS-033 — the drawer's identity lives in the URL, so a place whose
+   * blocker was met somewhere else (the editor's screen, an alert, a message)
+   * can be linked to directly. local component state alone made this screen the only door.
+   */
+  const openPlace = params.get('place')
 
   const setParam = (key: string, value: string | null) => {
     const next = new URLSearchParams(params)
     if (value) next.set(key, value)
     else next.delete(key)
-    // The cursor keys on the previous page; a filter change invalidates it.
-    if (key !== 'cursor') next.delete('cursor')
+    // The cursor keys on the previous page, so a *filter* change invalidates
+    // it. Opening a row is not a filter change: paging back to where the
+    // reviewer was would be losing their place, twice over.
+    if (key !== 'cursor' && key !== 'place') next.delete('cursor')
     setParams(next, { replace: true })
   }
+
+  const setOpenPlace = (placeId: string | null) => setParam('place', placeId)
 
   const scope = `${status}|${blockedOnly}|${cursor ?? ''}`
   const queue = useQuery({

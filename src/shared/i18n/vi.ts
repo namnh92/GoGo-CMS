@@ -1416,6 +1416,11 @@ export const vi = {
   'placeEditor.commune': 'Phường / xã / đặc khu',
   'placeEditor.communeHint': 'Chỉ hiện đơn vị thuộc tỉnh / thành phố đã chọn.',
   'placeEditor.administrative': 'Đơn vị hành chính',
+  'placeEditor.administrativeReview': 'Rà soát ánh xạ hành chính',
+  'placeEditor.administrativeReviewHint':
+    'Mở đúng màn duyệt ánh xạ: xác minh, sửa cặp Tỉnh/Phường rồi xác minh, hoặc từ chối ánh xạ. Từ chối ánh xạ không từ chối và không xoá địa điểm.',
+  'placeEditor.administrativeReviewQueue':
+    'Bạn không có quyền quyết định ánh xạ. Mở hàng đợi duyệt ánh xạ ở đúng địa điểm này →',
   'placeEditor.administrativeLegacyNote':
     'Cấp quận / huyện đã giải thể từ 01/07/2025. Địa chỉ tự do cũ có thể vẫn nhắc tới nó; GoGo không còn dùng nó làm cấp hiện hành.',
   'placeEditor.administrativeUnmapped': 'Chưa xác định được đơn vị hành chính.',

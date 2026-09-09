@@ -865,17 +865,19 @@ export const handlers = [
     }),
   ),
   http.get(`${BASE}/cms/places/:id/administrative-mapping`, ({ params }) => {
-    const row = mappingRows.find((r) => r.placeId === params.id)
+    const row = mappingRows.find((r) => r.placeId === params.id) ?? adoptCataloguePlace(params.id)
     if (!row) return envelope(404, 'PLACE_NOT_FOUND', 'no such place')
     return HttpResponse.json(mappingDetail(row))
   }),
   http.post(`${BASE}/cms/places/:id/administrative-mapping/verify`, async ({ params, request }) => {
+    const refused = refuseUnpermitted('verify')
+    if (refused) return refused
     const body = (await request.json()) as {
       provinceCode: string
       communeCode: string
       expectedUpdatedAt: string
     }
-    const row = mappingRows.find((r) => r.placeId === params.id)
+    const row = mappingRows.find((r) => r.placeId === params.id) ?? adoptCataloguePlace(params.id)
     if (!row) return envelope(404, 'PLACE_NOT_FOUND', 'no such place')
     if (body.expectedUpdatedAt !== row.updatedAt) {
       return envelope(409, 'PLACE_MODIFIED', 'the place changed since it was read')
@@ -898,13 +900,15 @@ export const handlers = [
   http.post(
     `${BASE}/cms/places/:id/administrative-mapping/correct`,
     async ({ params, request }) => {
+      const refused = refuseUnpermitted('correct')
+      if (refused) return refused
       const body = (await request.json()) as {
         provinceCode: string
         communeCode: string
         reason: string
         expectedUpdatedAt: string
       }
-      const row = mappingRows.find((r) => r.placeId === params.id)
+      const row = mappingRows.find((r) => r.placeId === params.id) ?? adoptCataloguePlace(params.id)
       if (!row) return envelope(404, 'PLACE_NOT_FOUND', 'no such place')
       if (body.expectedUpdatedAt !== row.updatedAt) {
         return envelope(409, 'PLACE_MODIFIED', 'the place changed since it was read')
@@ -919,8 +923,10 @@ export const handlers = [
     },
   ),
   http.post(`${BASE}/cms/places/:id/administrative-mapping/reject`, async ({ params, request }) => {
+    const refused = refuseUnpermitted('reject')
+    if (refused) return refused
     const body = (await request.json()) as { reason: string; expectedUpdatedAt: string }
-    const row = mappingRows.find((r) => r.placeId === params.id)
+    const row = mappingRows.find((r) => r.placeId === params.id) ?? adoptCataloguePlace(params.id)
     if (!row) return envelope(404, 'PLACE_NOT_FOUND', 'no such place')
     if (body.expectedUpdatedAt !== row.updatedAt) {
       return envelope(409, 'PLACE_MODIFIED', 'the place changed since it was read')
@@ -932,8 +938,10 @@ export const handlers = [
   http.post(
     `${BASE}/cms/places/:id/administrative-mapping/rematch`,
     async ({ params, request }) => {
+      const refused = refuseUnpermitted('rematch')
+      if (refused) return refused
       const body = (await request.json()) as { reason: string; expectedUpdatedAt: string }
-      const row = mappingRows.find((r) => r.placeId === params.id)
+      const row = mappingRows.find((r) => r.placeId === params.id) ?? adoptCataloguePlace(params.id)
       if (!row) return envelope(404, 'PLACE_NOT_FOUND', 'no such place')
       if (row.status === 'VERIFIED') {
         return envelope(409, 'VERIFIED_NOT_REMATCHABLE', 'a verified mapping is not rematchable')
@@ -4459,6 +4467,54 @@ function permittedActions(row: MappingFixture): string[] {
   }
   if (ops) actions.push('reconcile')
   return actions
+}
+
+/**
+ * A catalogue place reviewed from the editor's screen rather than from the
+ * queue (PI-CMS-033).
+ *
+ * The server has one mapping per place and computes it on read; the fixture
+ * had two disjoint sets, so a place with a blocker in `db.places` answered 404
+ * on the moderation read. Adopting it into `mappingRows` keeps one row per
+ * place here too — decisions taken from the editor mutate exactly the row the
+ * queue then shows, which is the behaviour worth testing.
+ */
+function adoptCataloguePlace(id: unknown): MappingFixture | undefined {
+  const place = db.places.find((item) => item.id === id)
+  const administrative = place?.administrative
+  if (!place || !administrative) return undefined
+  const row: MappingFixture = {
+    placeId: place.id,
+    name: place.name,
+    placeStatus: place.status,
+    status: administrative.status,
+    addressText: place.addressText ?? '',
+    city: place.city ?? null,
+    district: place.district ?? null,
+    provinceCode: administrative.provinceCode ?? null,
+    communeCode: administrative.communeCode ?? null,
+    method: administrative.method ?? null,
+    confidence: null,
+    datasetVersion: administrative.datasetVersion ?? null,
+    reviewer: null,
+    updatedAt: place.updatedAt,
+    identityValid: true,
+  }
+  mappingRows.push(row)
+  return row
+}
+
+/**
+ * The server's own gate, mirrored (GoGo-BE `AdministrativeMappingController`).
+ *
+ * Without it the mock answered every decision for every role, and a console
+ * that hid a button would have passed its tests while a hand-crafted request
+ * still went through — the exact failure `.claude/rules/core.md` #5 is about.
+ */
+function refuseUnpermitted(action: string) {
+  const actions = permittedActions({ status: 'NEEDS_REVIEW' } as MappingFixture)
+  if (actions.includes(action)) return null
+  return envelope(403, 'FORBIDDEN', `role may not ${action} a mapping`)
 }
 
 function mappingDetail(row: MappingFixture) {
