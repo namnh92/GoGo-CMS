@@ -24,6 +24,8 @@ const STALE = mappingRows[1]!.placeId
 /** Reachable through the filter, never through the default queue. */
 const UNMAPPED = mappingRows[2]!.placeId
 const VERIFIED = mappingRows[3]!.placeId
+/** The resolver's proposal, unconfirmed: the row the two-answer surface is for. */
+const AUTO_MATCHED = mappingRows[4]!.placeId
 
 beforeEach(() => resetMappingModeration())
 afterEach(() => window.sessionStorage.clear())
@@ -169,40 +171,67 @@ describe('what each role may do', () => {
     expect(
       within(drawer).getByText(/Quyết định về ánh xạ thuộc về người kiểm duyệt/),
     ).toBeInTheDocument()
-    for (const name of [/^Xác nhận$/, /^Từ chối ánh xạ$/, /^Gán lại$/, /^Đối chiếu lại$/]) {
+    for (const name of [/^Duyệt ánh xạ$/, /^Từ chối ánh xạ$/, /^Xác nhận đơn vị đã chọn$/]) {
       expect(within(drawer).queryByRole('button', { name })).not.toBeInTheDocument()
     }
   })
 
-  it('gives a moderator the mapping decisions and no publish control', async () => {
-    const drawer = await openRow('moderator', NEEDS_REVIEW)
-    expect(within(drawer).getByRole('button', { name: /^Xác nhận$/ })).toBeInTheDocument()
+  /**
+   * PI-CMS-034 — the surface is two answers.
+   *
+   * A reviewer says the proposal is right or it is not. Re-deriving a mapping
+   * and re-evaluating one against the dataset are real operations with real
+   * routes, and neither is something to make somebody choose between here.
+   */
+  it('gives a moderator exactly approve and reject on a proposal', async () => {
+    const drawer = await openRow('moderator', AUTO_MATCHED)
+    expect(within(drawer).getByRole('button', { name: /^Duyệt ánh xạ$/ })).toBeInTheDocument()
     expect(within(drawer).getByRole('button', { name: /^Từ chối ánh xạ$/ })).toBeInTheDocument()
     expect(within(drawer).queryByRole('button', { name: /Đăng|Publish/ })).not.toBeInTheDocument()
-    expect(
-      within(drawer).queryByRole('button', { name: /^Đối chiếu lại$/ }),
-    ).not.toBeInTheDocument()
+    for (const gone of [/^Gán lại$/, /^Đối chiếu lại$/]) {
+      expect(within(drawer).queryByRole('button', { name: gone })).not.toBeInTheDocument()
+    }
+    // Approving confirms what is on screen, so there is nothing to retype.
+    expect(within(drawer).queryByRole('combobox', { name: /Tỉnh/ })).not.toBeInTheDocument()
   })
 
-  it('gives ops reconcile and none of the moderator decisions', async () => {
+  it('asks the reviewer to choose when there is no pair to approve', async () => {
+    // NEEDS_REVIEW here has a province and no commune: nothing to say yes to.
+    const drawer = await openRow('moderator', NEEDS_REVIEW)
+    expect(
+      within(drawer).getByRole('button', { name: /^Xác nhận đơn vị đã chọn$/ }),
+    ).toBeInTheDocument()
+    expect(within(drawer).queryByRole('button', { name: /^Duyệt ánh xạ$/ })).not.toBeInTheDocument()
+    expect(within(drawer).getByRole('combobox', { name: /Tỉnh/ })).toBeInTheDocument()
+  })
+
+  it('offers ops no decision on this screen', async () => {
     const drawer = await openRow('ops_admin', STALE)
-    expect(within(drawer).getByRole('button', { name: /^Đối chiếu lại$/ })).toBeInTheDocument()
-    for (const name of [/^Xác nhận$/, /^Từ chối ánh xạ$/, /^Gán lại$/]) {
+    for (const name of [
+      /^Duyệt ánh xạ$/,
+      /^Từ chối ánh xạ$/,
+      /^Gán lại$/,
+      /^Đối chiếu lại$/,
+      /^Xác nhận đơn vị đã chọn$/,
+    ]) {
       expect(within(drawer).queryByRole('button', { name })).not.toBeInTheDocument()
     }
   })
 
-  it('gives super_admin both through the existing bypass', async () => {
-    const drawer = await openRow('super_admin', NEEDS_REVIEW)
-    expect(within(drawer).getByRole('button', { name: /^Xác nhận$/ })).toBeInTheDocument()
-    expect(within(drawer).getByRole('button', { name: /^Đối chiếu lại$/ })).toBeInTheDocument()
+  it('gives super_admin the moderator surface through the existing bypass', async () => {
+    const drawer = await openRow('super_admin', AUTO_MATCHED)
+    expect(within(drawer).getByRole('button', { name: /^Duyệt ánh xạ$/ })).toBeInTheDocument()
+    expect(within(drawer).getByRole('button', { name: /^Từ chối ánh xạ$/ })).toBeInTheDocument()
   })
 
-  it('offers no rematch on a verified mapping', async () => {
+  it('keeps correction as the only thing offered on a verified mapping', async () => {
     const drawer = await openRow('moderator', VERIFIED)
-    // The server refuses it; the console does not offer it either.
-    expect(within(drawer).queryByRole('button', { name: /^Gán lại$/ })).not.toBeInTheDocument()
+    // Changing a decision somebody recorded is a different act, and the audit
+    // row names both people — so it is not folded into approve/reject.
     expect(within(drawer).getByRole('button', { name: /^Sửa ánh xạ$/ })).toBeInTheDocument()
+    for (const gone of [/^Duyệt ánh xạ$/, /^Từ chối ánh xạ$/, /^Gán lại$/]) {
+      expect(within(drawer).queryByRole('button', { name: gone })).not.toBeInTheDocument()
+    }
   })
 })
 
@@ -275,7 +304,7 @@ describe('the unit selector', () => {
 describe('verifying', () => {
   it('needs a full identity, and says it does not publish', async () => {
     const drawer = await openRow('moderator', NEEDS_REVIEW)
-    const verify = within(drawer).getByRole('button', { name: /^Xác nhận$/ })
+    const verify = within(drawer).getByRole('button', { name: /^Xác nhận đơn vị đã chọn$/ })
     // The row has a province but no commune: not yet a complete identity.
     expect(verify).toBeDisabled()
 
@@ -290,11 +319,11 @@ describe('verifying', () => {
   it('records the reviewer, leaves confidence unscored and does not publish', async () => {
     const drawer = await openRow('moderator', NEEDS_REVIEW)
     await chooseCommune(drawer, '00163')
-    await userEvent.click(within(drawer).getByRole('button', { name: /^Xác nhận$/ }))
+    await userEvent.click(within(drawer).getByRole('button', { name: /^Xác nhận đơn vị đã chọn$/ }))
     await userEvent.click(
       within(await screen.findByRole('dialog', { name: /Xác nhận ánh xạ hành chính/ })).getByRole(
         'button',
-        { name: /^Xác nhận$/ },
+        { name: /^Xác nhận đơn vị đã chọn$/ },
       ),
     )
 
@@ -314,10 +343,10 @@ describe('verifying', () => {
     )
     const drawer = await openRow('moderator', NEEDS_REVIEW)
     await chooseCommune(drawer, '00163')
-    await userEvent.click(within(drawer).getByRole('button', { name: /^Xác nhận$/ }))
+    await userEvent.click(within(drawer).getByRole('button', { name: /^Xác nhận đơn vị đã chọn$/ }))
     await userEvent.click(
       within(await screen.findByRole('dialog', { name: /Xác nhận ánh xạ/ })).getByRole('button', {
-        name: /^Xác nhận$/,
+        name: /^Xác nhận đơn vị đã chọn$/,
       }),
     )
 
@@ -337,10 +366,10 @@ describe('verifying', () => {
     )
     const drawer = await openRow('moderator', NEEDS_REVIEW)
     const commune = await chooseCommune(drawer, '00163')
-    await userEvent.click(within(drawer).getByRole('button', { name: /^Xác nhận$/ }))
+    await userEvent.click(within(drawer).getByRole('button', { name: /^Xác nhận đơn vị đã chọn$/ }))
     await userEvent.click(
       within(await screen.findByRole('dialog', { name: /Xác nhận ánh xạ/ })).getByRole('button', {
-        name: /^Xác nhận$/,
+        name: /^Xác nhận đơn vị đã chọn$/,
       }),
     )
 
@@ -368,7 +397,7 @@ describe('correcting', () => {
 
 describe('rejecting a mapping is not rejecting a place', () => {
   it('says so in the confirmation and in the result', async () => {
-    const drawer = await openRow('moderator', NEEDS_REVIEW)
+    const drawer = await openRow('moderator', AUTO_MATCHED)
     await userEvent.type(within(drawer).getByLabelText(/^Lý do$/), 'sai phường')
     await userEvent.click(within(drawer).getByRole('button', { name: /^Từ chối ánh xạ$/ }))
 
@@ -383,58 +412,35 @@ describe('rejecting a mapping is not rejecting a place', () => {
   })
 
   it('requires a reason', async () => {
-    const drawer = await openRow('moderator', NEEDS_REVIEW)
+    const drawer = await openRow('moderator', AUTO_MATCHED)
     expect(within(drawer).getByRole('button', { name: /^Từ chối ánh xạ$/ })).toBeDisabled()
   })
-})
 
-describe('rematching', () => {
-  it('clears the reviewer and never claims the requester verified anything', async () => {
-    const drawer = await openRow('moderator', STALE)
-    await userEvent.type(within(drawer).getByLabelText(/^Lý do$/), 'nguồn đã đổi')
-    await userEvent.click(within(drawer).getByRole('button', { name: /^Gán lại$/ }))
-
-    const dialog = await screen.findByRole('dialog', { name: /Cho bộ phân giải chạy lại/ })
-    expect(within(dialog).getByText(/KHÔNG phải là xác nhận/)).toBeInTheDocument()
-    await userEvent.click(within(dialog).getByRole('button', { name: /^Gán lại$/ }))
-
-    expect(await screen.findByText(/Bộ phân giải đã chạy/)).toBeInTheDocument()
-    expect(await screen.findByText(/Không ai xác nhận kết quả này/)).toBeInTheDocument()
-    await waitFor(() =>
-      expect(within(drawer).getByText(/Chưa có người xác nhận/)).toBeInTheDocument(),
-    )
-  })
-})
-
-describe('reconciling', () => {
-  it('writes nothing when an older version is still valid', async () => {
-    const drawer = await openRow('ops_admin', VERIFIED)
-    // Labelled with an older dataset and still true: REVALIDATED, not stale.
-    expect(within(drawer).getByText(/vẫn đúng/)).toBeInTheDocument()
-    expect(within(drawer).getByText(/Còn hiệu lực/)).toBeInTheDocument()
-
-    await userEvent.click(within(drawer).getByRole('button', { name: /^Đối chiếu lại$/ }))
-    const dialog = await screen.findByRole('dialog', { name: /Đối chiếu ánh xạ/ })
-    expect(
-      within(dialog).getByText(/người đối chiếu không được ghi là người xác nhận/),
-    ).toBeInTheDocument()
-    await userEvent.click(within(dialog).getByRole('button', { name: /^Đối chiếu lại$/ }))
-
-    expect(await screen.findByText(/Không ghi gì: ánh xạ vẫn hợp lệ/)).toBeInTheDocument()
-    // And the person who verified it is still the person answerable.
-    await waitFor(() => expect(within(drawer).getByText('moderator')).toBeInTheDocument())
-  })
-
-  it('reports a materially invalid identity as stale', async () => {
-    const drawer = await openRow('ops_admin', STALE)
-    await userEvent.click(within(drawer).getByRole('button', { name: /^Đối chiếu lại$/ }))
+  /**
+   * PI-CMS-034 — rejecting is the first half of an answer, not a dead end. The
+   * reviewer who says the proposal is wrong is the one who then says what is
+   * right, and the same `verify` route records it under their name.
+   */
+  it('opens the selector so the reviewer supplies the right unit', async () => {
+    const drawer = await openRow('moderator', AUTO_MATCHED)
+    await userEvent.type(within(drawer).getByLabelText(/^Lý do$/), 'sai phường')
+    await userEvent.click(within(drawer).getByRole('button', { name: /^Từ chối ánh xạ$/ }))
     await userEvent.click(
-      within(await screen.findByRole('dialog', { name: /Đối chiếu ánh xạ/ })).getByRole('button', {
-        name: /^Đối chiếu lại$/,
-      }),
+      within(await screen.findByRole('dialog', { name: /Từ chối ánh xạ hành chính/ })).getByRole(
+        'button',
+        { name: /^Từ chối ánh xạ$/ },
+      ),
     )
-    expect(await screen.findByText(/ánh xạ vẫn hợp lệ|không còn hợp lệ/)).toBeInTheDocument()
-    expect(within(drawer).getByText(/không có trong bộ dữ liệu đang hoạt động/)).toBeInTheDocument()
+
+    // The rejection landed, and the screen now asks for the identity rather
+    // than leaving the reviewer on a row nobody will come back to.
+    expect(await within(drawer).findByText(/Chọn đơn vị đúng/)).toBeInTheDocument()
+    expect(
+      within(drawer).getByRole('button', { name: /^Xác nhận đơn vị đã chọn$/ }),
+    ).toBeInTheDocument()
+    expect(
+      within(drawer).queryByRole('button', { name: /^Từ chối ánh xạ$/ }),
+    ).not.toBeInTheDocument()
   })
 })
 
@@ -447,7 +453,7 @@ describe('concurrency and idempotency', () => {
         return undefined
       }),
     )
-    const drawer = await openRow('moderator', NEEDS_REVIEW)
+    const drawer = await openRow('moderator', AUTO_MATCHED)
     await userEvent.type(within(drawer).getByLabelText(/^Lý do$/), 'sai phường')
     await userEvent.click(within(drawer).getByRole('button', { name: /^Từ chối ánh xạ$/ }))
     const dialog = await screen.findByRole('dialog', { name: /Từ chối ánh xạ hành chính/ })
@@ -469,7 +475,7 @@ describe('concurrency and idempotency', () => {
         )
       }),
     )
-    const drawer = await openRow('moderator', NEEDS_REVIEW)
+    const drawer = await openRow('moderator', AUTO_MATCHED)
     await userEvent.type(within(drawer).getByLabelText(/^Lý do$/), 'sai phường')
     await userEvent.click(within(drawer).getByRole('button', { name: /^Từ chối ánh xạ$/ }))
     await userEvent.click(
@@ -495,7 +501,7 @@ describe('concurrency and idempotency', () => {
           : HttpResponse.json({ code: 'INTERNAL', message: 'boom' }, { status: 500 })
       }),
     )
-    const drawer = await openRow('moderator', NEEDS_REVIEW)
+    const drawer = await openRow('moderator', AUTO_MATCHED)
     await userEvent.type(within(drawer).getByLabelText(/^Lý do$/), 'sai phường')
 
     const press = async () => {
@@ -535,10 +541,10 @@ describe('concurrency and idempotency', () => {
     const drawer = await openRow('moderator', NEEDS_REVIEW)
     await chooseCommune(drawer, '00163')
     const before = listReads
-    await userEvent.click(within(drawer).getByRole('button', { name: /^Xác nhận$/ }))
+    await userEvent.click(within(drawer).getByRole('button', { name: /^Xác nhận đơn vị đã chọn$/ }))
     await userEvent.click(
       within(await screen.findByRole('dialog', { name: /Xác nhận ánh xạ/ })).getByRole('button', {
-        name: /^Xác nhận$/,
+        name: /^Xác nhận đơn vị đã chọn$/,
       }),
     )
     await screen.findByText(/Đã xác nhận ánh xạ/)
@@ -575,7 +581,7 @@ describe('the rest of the console is untouched', () => {
      * Escape closed the confirmation *and* the drawer, throwing away the
      * reviewer's selection. Only the topmost dialog answers now.
      */
-    const drawer = await openRow('moderator', NEEDS_REVIEW)
+    const drawer = await openRow('moderator', AUTO_MATCHED)
     await userEvent.type(within(drawer).getByLabelText(/^Lý do$/), 'sai phường')
     await userEvent.click(within(drawer).getByRole('button', { name: /^Từ chối ánh xạ$/ }))
     await screen.findByRole('dialog', { name: /Từ chối ánh xạ hành chính/ })

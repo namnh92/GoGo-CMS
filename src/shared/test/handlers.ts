@@ -4378,6 +4378,28 @@ const BASE_MAPPINGS: MappingFixture[] = [
     // Valid under a newer dataset: REVALIDATED, and emphatically not stale.
     identityValid: true,
   },
+  {
+    /*
+     * The state an imported place lands in: the resolver named both levels and
+     * nobody has confirmed them. It is the row the review surface is shaped
+     * around — one proposal to approve or reject.
+     */
+    placeId: 'm5555555-5555-4555-8555-555555555555',
+    name: 'Trà Chanh Ngọc Hà',
+    placeStatus: 'draft',
+    status: 'AUTO_MATCHED',
+    addressText: '8 Hoàng Hoa Thám, Hà Nội',
+    city: 'Hà Nội',
+    district: 'Ba Đình',
+    provinceCode: '01',
+    communeCode: '00166',
+    method: 'boundary_point_in_polygon',
+    confidence: '1.00',
+    datasetVersion: ACTIVE_DATASET_VERSION,
+    reviewer: null,
+    updatedAt: '2026-09-07T09:20:00.000Z',
+    identityValid: true,
+  },
 ]
 
 export const mappingRows: MappingFixture[] = BASE_MAPPINGS.map((row) => ({ ...row }))

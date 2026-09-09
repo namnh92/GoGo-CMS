@@ -79,7 +79,7 @@ describe('reviewing a place mapping from the editor', () => {
     const drawer = await screen.findByRole('dialog', { name: /Chào Bạn/ })
     // The moderation drawer itself — same title, same evidence, same buttons —
     // not a second confirmation model living on the editor's screen.
-    expect(within(drawer).getByRole('button', { name: /^Xác nhận$/ })).toBeInTheDocument()
+    expect(within(drawer).getByRole('button', { name: /^Duyệt ánh xạ$/ })).toBeInTheDocument()
     expect(within(drawer).getByRole('button', { name: 'Từ chối ánh xạ' })).toBeInTheDocument()
   })
 
@@ -146,11 +146,11 @@ describe('reviewing a place mapping from the editor', () => {
       await within(await summary()).findByRole('button', { name: /Rà soát ánh xạ/ }),
     )
     const drawer = await screen.findByRole('dialog', { name: /Chào Bạn/ })
-    await userEvent.click(within(drawer).getByRole('button', { name: /^Xác nhận$/ }))
+    await userEvent.click(within(drawer).getByRole('button', { name: /^Duyệt ánh xạ$/ }))
     await userEvent.click(
       within(await screen.findByRole('dialog', { name: /Xác nhận ánh xạ hành chính/ })).getByRole(
         'button',
-        { name: /^Xác nhận$/ },
+        { name: /^Duyệt ánh xạ$/ },
       ),
     )
 
@@ -223,11 +223,11 @@ describe('reviewing a place mapping from the editor', () => {
       await within(await summary()).findByRole('button', { name: /Rà soát ánh xạ/ }),
     )
     const drawer = await screen.findByRole('dialog', { name: /Chào Bạn/ })
-    await userEvent.click(within(drawer).getByRole('button', { name: /^Xác nhận$/ }))
+    await userEvent.click(within(drawer).getByRole('button', { name: /^Duyệt ánh xạ$/ }))
     await userEvent.click(
       within(await screen.findByRole('dialog', { name: /Xác nhận ánh xạ hành chính/ })).getByRole(
         'button',
-        { name: /^Xác nhận$/ },
+        { name: /^Duyệt ánh xạ$/ },
       ),
     )
 
