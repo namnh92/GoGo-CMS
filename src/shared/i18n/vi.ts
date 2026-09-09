@@ -1691,7 +1691,7 @@ export const vi = {
     'Ba nguồn, trông giống nhau trên bảng bên dưới. Sửa sai ở đúng chỗ thì phải biết giá trị đến từ đâu.',
   'jobDetail.sourceFile': 'File của bạn',
   'jobDetail.sourceFileFields':
-    'name, category, vibes, audiences, highlight, giá, phone, website, avg_visit_minutes, suitability, is_lodging, curated_rank. Sai thì sửa file rồi nhập lại.',
+    'name, category, vibes, audiences, highlight, giá, phone, website, avg_visit_minutes, is_lodging, curated_rank. Sai thì sửa file rồi nhập lại.',
   'jobDetail.sourceGoogle': 'Google trả về',
   'jobDetail.sourceGoogleFields':
     'Tên hiển thị, địa chỉ, toạ độ, link Google chuẩn, đánh giá, số lượt đánh giá, mức giá, giờ mở cửa, trạng thái kinh doanh, loại hình. Không sửa được ở đây — kiểm tra lại link hoặc Place ID.',
