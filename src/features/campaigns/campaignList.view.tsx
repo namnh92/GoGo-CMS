@@ -166,8 +166,11 @@ export default function CampaignListScreen() {
         header: () => t('campaigns.col.sent'),
         cell: ({ row }) =>
           // Absent until the worker has run: a zero here would read as "sent to
-          // nobody" rather than "not sent yet".
-          row.original.status === 'sent' || row.original.status === 'sending' ? (
+          // nobody" rather than "not sent yet". Gated on `startedAt` rather than
+          // on the status, because GoGo-BE#516 ends a campaign that reached
+          // nobody as `failed` — and 0 · 3 failures is the whole story of that
+          // row, not something to blank out.
+          row.original.startedAt ? (
             <span className={styles.count}>
               {formatNumber(row.original.sentCount, locale)}
               {row.original.failedCount > 0

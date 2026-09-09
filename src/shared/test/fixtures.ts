@@ -2108,6 +2108,36 @@ export const cmsCampaigns: CmsCampaign[] = [
     createdAt: iso(60 * 24 * 6),
     updatedAt: iso(60 * 24 * 5),
   },
+  /**
+   * #191 — the shape the DEV failure actually had: the provider answered, and
+   * created no message for anybody. Counts and a translatable reason code, so
+   * the console has to render both rather than blanking a `failed` row.
+   */
+  {
+    id: 'cp-khong-toi-ai',
+    name: 'Ưu đãi iOS tháng 9',
+    title: 'Cuối tuần đi đâu?',
+    body: 'Gợi ý mới đang chờ bạn.',
+    imageKey: null,
+    ctaLabel: null,
+    audienceType: 'platform',
+    audienceFilter: { platform: 'ios' },
+    destinationType: 'home',
+    destinationValue: null,
+    status: 'failed',
+    scheduledAt: iso(60 * 3),
+    startedAt: iso(60 * 3),
+    completedAt: iso(60 * 3 - 1),
+    recipientCount: 3,
+    sentCount: 0,
+    failedCount: 3,
+    lastError: 'NO_SUBSCRIPTION_ACCEPTED: the provider created no message for any of 3 recipients',
+    testSendRequestedAt: null,
+    testSendCompletedAt: null,
+    createdByAdminId: 'adm-ops',
+    createdAt: iso(60 * 4),
+    updatedAt: iso(60 * 3 - 1),
+  },
 ]
 
 /**

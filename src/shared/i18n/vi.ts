@@ -2413,6 +2413,10 @@ export const vi = {
   'campaigns.failedShort': '{count} lỗi',
   'campaigns.estimate': 'Ước tính {count} người nhận (tại {at}).',
   'campaigns.estimateShort': 'Ước tính {count} người nhận',
+  'campaigns.error.noSubscriptionAccepted':
+    'Không thiết bị nào nhận được: provider không tạo bản gửi nào cho danh sách người nhận.',
+  'campaigns.error.emptyAudience':
+    'Không ai khớp tệp người nhận lúc gửi, nên chiến dịch không gửi cho ai cả.',
   'campaigns.lastError': 'Lỗi gần nhất: {message}',
   'campaigns.confirmSendTitle': 'Gửi chiến dịch ngay?',
   'campaigns.confirmScheduleTitle': 'Lên lịch gửi chiến dịch?',

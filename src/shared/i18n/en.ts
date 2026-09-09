@@ -1770,6 +1770,10 @@ export const en: Partial<Record<MessageKey, string>> = {
   'campaigns.failedShort': '{count} failed',
   'campaigns.estimate': 'About {count} recipients (as of {at}).',
   'campaigns.estimateShort': 'About {count} recipients',
+  'campaigns.error.noSubscriptionAccepted':
+    'No device could be reached: the provider created no message for any recipient.',
+  'campaigns.error.emptyAudience':
+    'Nobody matched this audience at send time, so the campaign reached no one.',
   'campaigns.lastError': 'Last error: {message}',
   'campaigns.confirmSendTitle': 'Send this campaign now?',
   'campaigns.confirmScheduleTitle': 'Schedule this campaign?',
