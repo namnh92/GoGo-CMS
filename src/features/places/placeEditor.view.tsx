@@ -821,7 +821,10 @@ export default function PlaceEditorScreen() {
                           )}
                         />
                       </div>
-                      <AdministrativeSummary summary={place?.administrative ?? null} />
+                      <AdministrativeSummary
+                        summary={place?.administrative ?? null}
+                        placeId={place?.id ?? null}
+                      />
                       <div className={styles.fieldRow}>
                         <TextInput
                           label={t('placeEditor.phone')}

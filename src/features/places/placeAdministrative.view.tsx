@@ -1,8 +1,23 @@
+import { useState } from 'react'
+import { Link } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { useT } from '@/shared/i18n/i18n'
 import type { MessageKey } from '@/shared/i18n/vi'
 import { Badge } from '@/shared/ui/Badge'
+import { Button } from '@/shared/ui/Button'
+import { queryKeys } from '@/shared/api/queryKeys'
+import { useSession } from '@/shared/auth/session'
+import { fetchPlaceAdministrativeMapping } from '@/features/administrative/api'
+import { MappingDetailDrawer } from '@/features/administrative/mappingDetail.view'
 import { MappingStatusBadge } from '@/features/administrative/mappingParts'
 import type { PlaceAdministrativeSummary } from '@/shared/api/contracts'
+
+/**
+ * The decisions that make a review worth opening. `view` and `reconcile` are
+ * not among them: reading changes nothing, and reconciling is ops re-evaluating
+ * a mapping against the dataset — emphatically not a verification (ADM-009).
+ */
+const REVIEW_ACTIONS = ['verify', 'correct', 'reject', 'rematch'] as const
 
 /**
  * ADM-106 — what a place's administrative identity is, on the editor's screen.
@@ -28,10 +43,33 @@ import type { PlaceAdministrativeSummary } from '@/shared/api/contracts'
  */
 export function AdministrativeSummary({
   summary,
+  placeId,
 }: {
   summary: PlaceAdministrativeSummary | null | undefined
+  /** Omitted while a place is being created: there is no mapping to review yet. */
+  placeId?: string | null
 }) {
   const t = useT()
+  const { can } = useSession()
+  const [reviewing, setReviewing] = useState(false)
+
+  const blocked = Boolean(summary?.approvalBlock)
+  /*
+   * ADM-009 — asked only when there is a blocker to lift, because this is the
+   * moderation read: it re-runs the resolver server-side, and an editor opening
+   * a place to fix a phone number has no reason to pay for that. The role gate
+   * here decides whether to *ask*; what may be *done* comes back from the
+   * server in `permittedActions` and nothing else.
+   */
+  const mapping = useQuery({
+    queryKey: queryKeys.administrativeMappingDetail(placeId ?? ''),
+    queryFn: ({ signal }) => fetchPlaceAdministrativeMapping(placeId!, signal),
+    enabled: Boolean(placeId) && blocked && can('administrativeMapping.read'),
+    staleTime: 30_000,
+  })
+
+  const permitted = mapping.data?.permittedActions ?? []
+  const mayReview = REVIEW_ACTIONS.some((action) => permitted.includes(action))
 
   if (!summary) {
     // Older API, or a response that carried no summary at all. Saying nothing
@@ -74,7 +112,43 @@ export function AdministrativeSummary({
         <p className="text-xs text-text-muted">{t('placeEditor.administrativeOk')}</p>
       )}
 
+      {/*
+        The way out of the blocker, on the screen that shows it. Which of the
+        two appears is the server's answer, not this component's guess: a
+        reviewer gets the decision drawer the moderation queue uses, and
+        everybody else gets the queue itself, focused on this place, so a
+        blocker is never the end of the road.
+      */}
+      {blocked && placeId ? (
+        mayReview ? (
+          <div>
+            <Button variant="secondary" onClick={() => setReviewing(true)}>
+              {t('placeEditor.administrativeReview')}
+            </Button>
+            <p className="mt-1 text-xs text-text-subtle">
+              {t('placeEditor.administrativeReviewHint')}
+            </p>
+          </div>
+        ) : (
+          <p className="text-xs">
+            <Link
+              className="text-coral underline underline-offset-2"
+              to={`/administrative-mapping?status=&place=${placeId}`}
+            >
+              {t('placeEditor.administrativeReviewQueue')}
+            </Link>
+          </p>
+        )
+      ) : null}
+
       <p className="text-xs text-text-subtle">{t('placeEditor.administrativeLegacyNote')}</p>
+
+      {placeId ? (
+        <MappingDetailDrawer
+          placeId={reviewing ? placeId : null}
+          onClose={() => setReviewing(false)}
+        />
+      ) : null}
     </section>
   )
 }

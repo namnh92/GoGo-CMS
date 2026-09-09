@@ -126,6 +126,26 @@ describe('import wizard mapping step', () => {
     expect(screen.getByText(/suy category từ loại hình google/i)).toBeInTheDocument()
   })
 
+  it('lets a realistic multi-row file through without a category column', async () => {
+    // The shape an operator actually uploads: several places, mixed identity
+    // columns, a quoted URL with commas in it, and no `category` anywhere.
+    await openMapping(
+      [
+        'source_row_id,name,google_maps_url,google_place_id',
+        'MR-1,,,ChIJFyNHg-BZSjERa6O2TveU9Oo',
+        "MR-2,Pizza 4P's Âu Cơ,https://maps.app.goo.gl/TjLSD3qvSzSvycDU7,",
+        'MR-3,Vincom Plaza Biên Hòa,"https://www.google.com/maps/place/Vincom/@10.9483,106.8225,16z",ChIJsQehRCDcdDERzh8HEarjgfE',
+      ].join('\r\n'),
+      'multirow.csv',
+    )
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /tiếp tục/i })).not.toBeDisabled()
+    expect(screen.getByText(/suy category từ loại hình google/i)).toBeInTheDocument()
+    // The quoted URL survived the parse: the sample cell still has both commas.
+    expect(screen.getByText(/@10\.9483,106\.8225,16z/)).toBeInTheDocument()
+  })
+
   it('stops marking category required once the file identifies the place', async () => {
     await openMapping('name,google_place_id\nQuán A,ChIJNz9FhWqpNTEROakgr0rjnAM', 'both.csv')
 

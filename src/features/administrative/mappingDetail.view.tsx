@@ -42,6 +42,26 @@ import { styles } from './mapping.style'
  */
 type Action = 'verify' | 'correct' | 'reject' | 'rematch' | 'reconcile'
 
+/**
+ * PI-CMS-034 — a review is two answers, not five.
+ *
+ * The screen used to offer verify, correct, reject, rematch and reconcile side
+ * by side, which asked a reviewer to know the difference between re-deriving a
+ * mapping and re-evaluating one against the dataset before they could say the
+ * only two things they actually mean: this is right, or it is not.
+ *
+ * So the surface is **Duyệt** and **Từ chối**. Rejecting is not the end of the
+ * road: the mapping goes to REJECTED with a reason, the unit selector opens,
+ * and the reviewer picks the pair that *is* right and confirms it — the same
+ * `verify` endpoint, now carrying their codes instead of the resolver's.
+ * Correcting stays for a mapping somebody already certified, because changing
+ * another person's decision is a different act with a different audit row.
+ *
+ * `rematch` and `reconcile` keep their API clients and their server routes;
+ * they are simply not decisions this screen asks a reviewer to choose between.
+ */
+type Stage = 'approve' | 'reselect' | 'correct'
+
 export function MappingDetailDrawer({
   placeId,
   onClose,
@@ -205,6 +225,22 @@ export function MappingDetailDrawer({
   const identityChosen = Boolean(province && commune)
   const reasonGiven = reason.trim().length > 0
 
+  /**
+   * What this mapping is asking for right now.
+   *
+   * `approve` — there is a proposed pair to say yes or no to.
+   * `reselect` — it was rejected, or there is no pair to approve (UNMAPPED),
+   *   so the reviewer supplies the identity themselves.
+   * `correct` — somebody already verified it; changing that names both people.
+   */
+  const hasProposedPair = Boolean(mapping?.provinceCode && mapping?.communeCode)
+  const stage: Stage =
+    mapping?.status === 'VERIFIED'
+      ? 'correct'
+      : mapping?.status === 'REJECTED' || !hasProposedPair
+        ? 'reselect'
+        : 'approve'
+
   return (
     <>
       <Drawer
@@ -218,26 +254,8 @@ export function MappingDetailDrawer({
             <Button variant="secondary" onClick={onClose} disabled={pending}>
               {t('action.close')}
             </Button>
-            {may('reconcile') ? (
-              <Button
-                variant="secondary"
-                loading={reconcile.isPending}
-                disabled={pending}
-                onClick={() => setConfirming('reconcile')}
-              >
-                {t('mapping.reconcile.action')}
-              </Button>
-            ) : null}
-            {may('rematch') ? (
-              <Button
-                variant="secondary"
-                disabled={pending || !reasonGiven}
-                onClick={() => setConfirming('rematch')}
-              >
-                {t('mapping.rematch.action')}
-              </Button>
-            ) : null}
-            {may('reject') ? (
+            {/* Rejecting is only on offer while there is a proposal to reject. */}
+            {may('reject') && stage === 'approve' ? (
               <Button
                 variant="danger"
                 disabled={pending || !reasonGiven}
@@ -246,7 +264,7 @@ export function MappingDetailDrawer({
                 {t('mapping.reject.action')}
               </Button>
             ) : null}
-            {may('correct') ? (
+            {may('correct') && stage === 'correct' ? (
               <Button
                 variant="primary"
                 disabled={pending || !identityChosen || !reasonGiven}
@@ -255,13 +273,13 @@ export function MappingDetailDrawer({
                 {t('mapping.correct.action')}
               </Button>
             ) : null}
-            {may('verify') ? (
+            {may('verify') && stage !== 'correct' ? (
               <Button
                 variant="primary"
                 disabled={pending || !identityChosen}
                 onClick={() => setConfirming('verify')}
               >
-                {t('mapping.verify.action')}
+                {t(stage === 'approve' ? 'mapping.approve.action' : 'mapping.reselect.action')}
               </Button>
             ) : null}
           </div>
@@ -402,9 +420,20 @@ export function MappingDetailDrawer({
                 </section>
               ) : null}
 
-              {may('verify') || may('correct') ? (
+              {/*
+                Approving confirms the pair already on screen, so no selector is
+                shown for it: a box asking a reviewer to retype what they are
+                agreeing with is how a proposal gets changed by accident.
+              */}
+              {(may('verify') && stage === 'reselect') ||
+              (may('correct') && stage === 'correct') ? (
                 <section className={styles.section}>
-                  <p className={styles.factLabel}>{t('mapping.detail.decide')}</p>
+                  <p className={styles.factLabel}>
+                    {t(stage === 'reselect' ? 'mapping.reselect.title' : 'mapping.detail.decide')}
+                  </p>
+                  {stage === 'reselect' ? (
+                    <p className={styles.meta}>{t('mapping.reselect.hint')}</p>
+                  ) : null}
                   <UnitSelector
                     provinceCode={province}
                     communeCode={commune}
@@ -416,7 +445,7 @@ export function MappingDetailDrawer({
                 </section>
               ) : null}
 
-              {may('verify') || may('reject') || may('rematch') || may('correct') ? (
+              {(may('reject') && stage === 'approve') || (may('correct') && stage === 'correct') ? (
                 <TextArea
                   label={t('mapping.detail.reasonLabel')}
                   hint={t('mapping.detail.reasonHint')}
@@ -443,7 +472,7 @@ export function MappingDetailDrawer({
         onConfirm={() => verify.mutate()}
         title={t('mapping.verify.confirmTitle')}
         description={t('mapping.verify.confirmBody')}
-        confirmLabel={t('mapping.verify.action')}
+        confirmLabel={t(stage === 'approve' ? 'mapping.approve.action' : 'mapping.reselect.action')}
         loading={verify.isPending}
         tone="primary"
         irreversible={false}
@@ -483,44 +512,6 @@ export function MappingDetailDrawer({
         changes={[
           { label: t('mapping.col.status'), from: mapping?.status, to: 'REJECTED' },
           { label: t('mapping.reject.consequenceLabel'), note: t('mapping.reject.consequence') },
-        ]}
-      />
-
-      <ConfirmDialog
-        open={confirming === 'rematch'}
-        onClose={() => setConfirming(null)}
-        onConfirm={() => rematch.mutate()}
-        title={t('mapping.rematch.confirmTitle')}
-        description={t('mapping.rematch.confirmBody')}
-        confirmLabel={t('mapping.rematch.action')}
-        loading={rematch.isPending}
-        irreversible={false}
-        changes={[
-          { label: t('mapping.detail.reviewer'), from: mapping?.reviewer?.displayName, to: '—' },
-          { label: t('mapping.rematch.consequenceLabel'), note: t('mapping.rematch.consequence') },
-        ]}
-      />
-
-      <ConfirmDialog
-        open={confirming === 'reconcile'}
-        onClose={() => setConfirming(null)}
-        onConfirm={() => reconcile.mutate()}
-        title={t('mapping.reconcile.confirmTitle')}
-        description={t('mapping.reconcile.confirmBody')}
-        confirmLabel={t('mapping.reconcile.action')}
-        loading={reconcile.isPending}
-        tone="primary"
-        irreversible={false}
-        changes={[
-          {
-            label: t('mapping.detail.datasetVersion'),
-            from: data?.staleness.storedDatasetVersion ?? '—',
-            to: data?.staleness.activeDatasetVersion,
-          },
-          {
-            label: t('mapping.reconcile.consequenceLabel'),
-            note: t('mapping.reconcile.consequence'),
-          },
         ]}
       />
     </>

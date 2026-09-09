@@ -255,6 +255,11 @@ export const en: Partial<Record<MessageKey, string>> = {
   'mapping.selector.legacyNote':
     'The legacy district keeps its stored value: the current contract offers no selector for that level.',
 
+  'mapping.approve.action': 'Approve the mapping',
+  'mapping.reselect.action': 'Confirm the chosen unit',
+  'mapping.reselect.title': 'Choose the right unit',
+  'mapping.reselect.hint':
+    'The previous mapping was rejected. Choose the correct province and commune and confirm — this pair becomes yours.',
   'mapping.verify.action': 'Verify',
   'mapping.verify.confirmTitle': 'Verify the administrative mapping',
   'mapping.verify.confirmBody': 'You become answerable for this place being in the chosen unit.',
@@ -1308,6 +1313,11 @@ export const en: Partial<Record<MessageKey, string>> = {
   'placeEditor.commune': 'Ward / commune / special zone',
   'placeEditor.communeHint': 'Only units inside the chosen province.',
   'placeEditor.administrative': 'Administrative unit',
+  'placeEditor.administrativeReview': 'Review the administrative mapping',
+  'placeEditor.administrativeReviewHint':
+    'Opens the mapping review: verify, correct the province/commune pair and verify, or reject the mapping. Rejecting a mapping neither rejects nor deletes the place.',
+  'placeEditor.administrativeReviewQueue':
+    'You cannot decide this mapping. Open the mapping review queue focused on this place →',
   'placeEditor.administrativeLegacyNote':
     'The district tier was dissolved on 2025-07-01. A legacy free-text address may still mention one; GoGo no longer treats it as a current level.',
   'placeEditor.administrativeUnmapped': 'No administrative unit resolved yet.',

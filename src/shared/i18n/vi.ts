@@ -158,6 +158,11 @@ export const vi = {
   'mapping.selector.legacyNote':
     'Quận/huyện lịch sử giữ nguyên giá trị đang có: hợp đồng hiện tại không cung cấp bộ chọn cho cấp này.',
 
+  'mapping.approve.action': 'Duyệt ánh xạ',
+  'mapping.reselect.action': 'Xác nhận đơn vị đã chọn',
+  'mapping.reselect.title': 'Chọn đơn vị đúng',
+  'mapping.reselect.hint':
+    'Ánh xạ cũ đã bị từ chối. Chọn Tỉnh/Thành và Phường/Xã đúng rồi xác nhận — bạn là người chịu trách nhiệm cho cặp này.',
   'mapping.verify.action': 'Xác nhận',
   'mapping.verify.confirmTitle': 'Xác nhận ánh xạ hành chính',
   'mapping.verify.confirmBody': 'Bạn nhận trách nhiệm rằng địa điểm này nằm ở đơn vị đã chọn.',
@@ -1416,6 +1421,11 @@ export const vi = {
   'placeEditor.commune': 'Phường / xã / đặc khu',
   'placeEditor.communeHint': 'Chỉ hiện đơn vị thuộc tỉnh / thành phố đã chọn.',
   'placeEditor.administrative': 'Đơn vị hành chính',
+  'placeEditor.administrativeReview': 'Rà soát ánh xạ hành chính',
+  'placeEditor.administrativeReviewHint':
+    'Mở đúng màn duyệt ánh xạ: xác minh, sửa cặp Tỉnh/Phường rồi xác minh, hoặc từ chối ánh xạ. Từ chối ánh xạ không từ chối và không xoá địa điểm.',
+  'placeEditor.administrativeReviewQueue':
+    'Bạn không có quyền quyết định ánh xạ. Mở hàng đợi duyệt ánh xạ ở đúng địa điểm này →',
   'placeEditor.administrativeLegacyNote':
     'Cấp quận / huyện đã giải thể từ 01/07/2025. Địa chỉ tự do cũ có thể vẫn nhắc tới nó; GoGo không còn dùng nó làm cấp hiện hành.',
   'placeEditor.administrativeUnmapped': 'Chưa xác định được đơn vị hành chính.',
