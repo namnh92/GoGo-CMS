@@ -1483,6 +1483,8 @@ export const vi = {
   'placeMedia.error.reasonTooShort': 'Lý do cần ít nhất {min} ký tự.',
   'placeMedia.photoUncaptioned': 'Ảnh địa điểm, chưa có chú thích mô tả',
   'placeMedia.noStorage': 'Chưa có kho ảnh',
+  /* Khác với `noStorage`: có URL, nhưng tải ảnh không thành công. */
+  'placeMedia.thumbUnavailable': 'Không tải được ảnh',
   'placeMedia.noStorageReason':
     'Chưa cấu hình lưu trữ ảnh ở môi trường này, nên không xem được ảnh — và không quyết định kiểm duyệt được thứ mình không nhìn thấy.',
   'placeMedia.cover': 'Ảnh bìa',
@@ -2352,6 +2354,7 @@ export const vi = {
   'media.replace': 'Đổi ảnh',
   'media.noImage': 'Chưa có ảnh',
   'media.noPreview': 'Chưa xem trước được',
+  'media.previewUnavailable': 'Không tải được ảnh',
   'media.error.contentType': 'Định dạng ảnh không được hỗ trợ. Dùng JPEG, PNG, WebP hoặc HEIC.',
 
   'banners.title': 'Banner trang chủ',

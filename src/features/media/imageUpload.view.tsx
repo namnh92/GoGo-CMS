@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { useT } from '@/shared/i18n/i18n'
 import { Button } from '@/shared/ui/Button'
@@ -47,6 +47,15 @@ export function ImageUploadField({
   const inputId = useId()
   const inputRef = useRef<HTMLInputElement>(null)
   const [localError, setLocalError] = useState<string>()
+  /*
+   * A `previewUrl` only says the server composed one; it does not say the
+   * object is there. Catalogue images were written to the private bucket and
+   * read from the public host, so every one of these resolved and 404'd — and
+   * a broken-image glyph tells an editor nothing about which of "no image",
+   * "no hosting" and "hosting is wrong" they are looking at.
+   */
+  const [previewFailed, setPreviewFailed] = useState(false)
+  useEffect(() => setPreviewFailed(false), [previewUrl])
 
   const upload = useMutation({
     mutationFn: ({ file, contentType }: { file: File; contentType: CmsUploadContentType }) =>
@@ -84,11 +93,20 @@ export function ImageUploadField({
       </label>
 
       <div className={styles.dropzone}>
-        {previewUrl ? (
-          <img src={previewUrl} alt="" className={styles.preview} />
+        {previewUrl && !previewFailed ? (
+          <img
+            src={previewUrl}
+            alt=""
+            className={styles.preview}
+            onError={() => setPreviewFailed(true)}
+          />
         ) : (
           <p className={styles.placeholder}>
-            {imageKey ? t('media.noPreview') : t('media.noImage')}
+            {previewFailed
+              ? t('media.previewUnavailable')
+              : imageKey
+                ? t('media.noPreview')
+                : t('media.noImage')}
           </p>
         )}
 

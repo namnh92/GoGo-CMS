@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: GoGo API
-  version: 1.0.0-alpha.21
+  version: 1.0.0-alpha.28
   description: |
     Public contract for GoGo clients (Mobile, Web, Mini App). This page is the
     integration guide — every rule below is enforced by the API, not advisory.
@@ -365,47 +365,149 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
 
   /me:
-    patch:
-      operationId: updateProfile
-      tags: [me]
-      summary: Update display name / locale
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                displayName: { type: string, minLength: 1, maxLength: 50 }
-                locale: { type: string, enum: [vi, en] }
-      responses:
-        '200': { description: Updated profile facts }
-    delete:
-      operationId: deleteAccount
-      tags: [me]
-      summary: Delete account — PII nulled, sessions revoked, content pseudonymized
-      responses:
-        '200': { description: '{ deleted: true }' }
     get:
       operationId: getMe
       tags: [me]
-      summary: Current actor profile facts
+      summary: Current actor — the private profile for a user, session facts for a guest
+      description: >
+        ADR-0022. A user receives the whole profile, including the fields
+        nobody else ever sees (email, home area, interests, usual budget), and
+        `capabilities.avatarUpload`, which says before a picker opens whether
+        this environment can take an avatar at all. A guest receives its
+        session facts: `roomId`, `displayName`, `expiresAt`.
       responses:
         '200':
           description: Actor profile (shape depends on actorType)
           content:
             application/json:
-              schema:
-                type: object
-                required: [actorType, id]
-                properties:
-                  actorType: { type: string, enum: [user, guest] }
-                  id: { type: string, format: uuid }
-                  displayName: { type: string }
-                  email: { type: string }
-                  locale: { type: string }
-                  roomId: { type: string, format: uuid }
-                  expiresAt: { type: string, format: date-time }
+              schema: { $ref: '#/components/schemas/Me' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+    patch:
+      operationId: updateProfile
+      tags: [me]
+      summary: Update the profile — null clears an optional field, omitted keeps it
+      description: >
+        `displayName` and `locale` are never null. `homeAreaKey` must be an
+        active service area. `interests` carries stable taxonomy keys by kind
+        and only `mood` is accepted (ADR-0022); an unknown key or an
+        unsupported kind is `INVALID_TAXONOMY_KEYS`. `usualBudget.perPerson` is
+        integer minor units, a create-room default, never a room constraint.
+        Users only: a guest gets 403.
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProfilePatch' }
+      responses:
+        '200':
+          description: The updated profile
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Me' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+    delete:
+      operationId: deleteAccount
+      tags: [me]
+      summary: Delete account — login disabled, personal data removed, contributions kept
+      description: >
+        ADR-0023. A soft delete with a named retention list, and clients must
+        describe it as such rather than as erasing everything.
+
+
+        Removed: login (status `deleted`, email and password hash nulled, so no
+        credential addresses the account again), every session, device tokens
+        and push subscriptions, the profile (display name replaced, avatar,
+        home area, usual budget, interests), the processed avatar in the public
+        bucket and its edge cache entry, saved items, notifications and
+        notification preferences. The name on room membership rows is replaced.
+
+
+        Kept: the technical account record and its id, reviews written by the
+        account, and photos contributed to a place. A room keeps the membership
+        row so it still adds up for the people left in it.
+
+
+        Irreversible from the application. Idempotent on an account already
+        deleted.
+      responses:
+        '200': { description: '{ deleted: true }' }
+
+  /me/avatar:
+    put:
+      operationId: setAvatar
+      tags: [me]
+      summary: Attach an uploaded original, process it, publish the avatar
+      description: >
+        ADR-0022. `uploadKey` is what `POST /uploads { purpose: 'avatar' }`
+        returned, after the bytes were PUT to its URL. The key must belong to
+        this user, for this purpose, and be pending and unexpired — or already
+        attached to this same user, so a retry is idempotent; every miss is
+        `INVALID_UPLOAD_KEY` without saying which condition failed. The
+        original is decoded under a 16-megapixel cap and a 3-second clock,
+        oriented, centre-cropped to 512×512 WebP with all metadata dropped,
+        and published under a random immutable key in the public bucket. The
+        previous avatar and the original are scheduled for deletion in the
+        same transaction that stores the new key.
+
+
+        A failed request is never left dangling: the original and any public
+        object already written are scheduled away with a grace period, so a
+        retry with the same `uploadKey` still works.
+
+
+        Users only; guests get 403. Five calls a minute per user.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [uploadKey]
+              additionalProperties: false
+              properties:
+                uploadKey: { type: string, maxLength: 300 }
+      responses:
+        '200':
+          description: The profile with the new `avatarUrl`
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Me' }
+        '400':
+          description: >
+            `INVALID_UPLOAD_KEY` (not yours, wrong purpose, expired),
+            `AVATAR_UPLOAD_MISSING` (nothing was PUT to the key),
+            `FILE_TOO_LARGE`.
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422':
+          description: >
+            `AVATAR_UNPROCESSABLE` — undecodable, over the pixel cap, over the
+            clock, or not the type it was declared as. Choose another image.
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503':
+          description: >
+            `AVATAR_BUSY` (retryable, too many concurrent processings) or
+            `AVATAR_STORAGE_UNAVAILABLE` (retryable, storage not answering).
+    delete:
+      operationId: removeAvatar
+      tags: [me]
+      summary: Remove the avatar — idempotent
+      description: >
+        Clears the key and schedules the public object for deletion and an
+        edge purge in the same transaction. A purge cannot revoke a copy a
+        device already holds; what is guaranteed is that no new fetch of the
+        old URL succeeds once the edge cache lifetime (one day) has passed.
+      responses:
+        '200':
+          description: 'The profile with `avatarUrl: null`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Me' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
 
   /rooms:
     get:
@@ -919,6 +1021,13 @@ paths:
         Content type and size are enforced server-side and the content type is
         part of what is signed, so storage refuses an upload that does not
         match what was authorized.
+
+
+        Purpose `avatar` (ADR-0022): users only, `image/jpeg`, `image/png`
+        or `image/webp` — never HEIC, which the client converts first. The
+        key lands in a private, one-day-lifetime prefix and is attached with
+        `PUT /me/avatar`, which processes it and publishes the result. Answers
+        503 where `GET /me` reports `capabilities.avatarUpload: unavailable`.
       requestBody:
         required: true
         content:
@@ -929,10 +1038,11 @@ paths:
               properties:
                 purpose:
                   type: string
-                  enum: [checkin_photo, bill_photo, place_photo]
+                  enum: [checkin_photo, bill_photo, place_photo, avatar]
                 contentType:
                   type: string
                   enum: [image/jpeg, image/png, image/webp, image/heic]
+                  description: HEIC is refused for purpose `avatar`.
                 contentLength:
                   type: integer
                   description: Declared up front, so an oversized file is refused before a URL exists.
@@ -952,8 +1062,9 @@ paths:
                   expiresAt: { type: string, format: date-time }
                   maxBytes: { type: integer }
         '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '503':
-          description: Object storage is not configured in this environment
+          description: Object storage (or, for `avatar`, the public bucket) is not configured in this environment
 
   /administrative/version:
     get:
@@ -2613,6 +2724,29 @@ paths:
         '200': { description: '{ id, status, reasonCode?, placeId? }' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
+  /service-areas:
+    get:
+      operationId: listServiceAreas
+      tags: [places]
+      summary: The curated service areas — a profile's home area comes from here
+      description: >
+        ADR-0022. The same table the areas autocomplete falls back to, whole,
+        ordered for a picker and grouped by `city` on the client. Only active
+        areas. No PII, no provider call, cached at the edge for an hour. A
+        `homeAreaKey` sent to `PATCH /me` must be one of these keys.
+      security: []
+      responses:
+        '200':
+          description: Active service areas in display order
+          headers:
+            Cache-Control:
+              schema: { type: string }
+              description: 'public, max-age=3600'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServiceAreaList' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
   /places/areas:
     get:
       operationId: suggestAreas
@@ -2697,6 +2831,12 @@ paths:
       operationId: exportMyData
       tags: [me]
       summary: Export all actor-owned data (privacy rule)
+      description: >
+        Everything the account owns, as JSON, from an explicit allowlist:
+        profile (display name, email, locale, avatar URL, home area, interests,
+        usual budget — ADR-0022), memberships, preferences, votes, saved
+        items, reviews. Never a credential, a session, or an upload key.
+        Audit-logged and recorded in the privacy ledger.
       responses:
         '200': { description: JSON export; audit-logged }
         '429': { $ref: '#/components/responses/RateLimited' }
@@ -4439,10 +4579,11 @@ paths:
       tags: [cms]
       summary: "Super admin: erase an account on its holder's behalf"
       description: >
-        Runs the same erasure as the consumer `DELETE /me` — PII nulled,
-        sessions revoked, content pseudonymized, address freed. One
-        implementation, not two: two versions of "erase this person" drift, and
-        the one that drifts is the one that leaves a table behind.
+        Runs the same erasure as the consumer `DELETE /me`, with the same
+        retention list (ADR-0023): login disabled, personal data removed,
+        technical account record and contributions kept. One implementation, not
+        two: two versions of "erase this person" drift, and the one that drifts
+        is the one that leaves a table behind.
 
 
         `super_admin` only. It is the only action here that cannot be undone,
@@ -9774,8 +9915,102 @@ components:
         accessibilityKeys:
           type: array
           items: { type: string }
+    ServiceArea:
+      type: object
+      description: A curated service area with its centre — a map fact, so a client can set a room origin from it.
+      required: [key, name, lat, lng]
+      properties:
+        key: { type: string }
+        name: { type: string }
+        city: { type: string, nullable: true }
+        lat: { type: number }
+        lng: { type: number }
+    ServiceAreaList:
+      type: object
+      required: [areas]
+      properties:
+        areas:
+          type: array
+          items: { $ref: '#/components/schemas/ServiceArea' }
+    HomeArea:
+      type: object
+      description: A curated service area (`GET /service-areas`), never a provider prediction key.
+      required: [key, name]
+      properties:
+        key: { type: string }
+        name: { type: string }
+        city: { type: string, nullable: true }
+    ProfileInterests:
+      type: object
+      description: Stable taxonomy keys by kind. Only `mood` is accepted in this wave (ADR-0022).
+      required: [mood]
+      properties:
+        mood:
+          type: array
+          maxItems: 20
+          items: { type: string }
+    UsualBudget:
+      type: object
+      description: Per-person upper bound in integer minor units. A create-room default, never a room constraint.
+      required: [perPerson, currency]
+      properties:
+        perPerson: { type: integer, minimum: 0 }
+        currency: { type: string, minLength: 3, maxLength: 3 }
+    Me:
+      type: object
+      description: >
+        Shape depends on `actorType`. A user carries the private profile; a
+        guest carries `roomId`, `displayName`, `expiresAt` and none of the
+        profile fields.
+      required: [actorType, id]
+      properties:
+        actorType: { type: string, enum: [user, guest] }
+        id: { type: string, format: uuid }
+        displayName: { type: string }
+        email: { type: string }
+        locale: { type: string }
+        roomId: { type: string, format: uuid }
+        expiresAt: { type: string, format: date-time }
+        avatarUrl:
+          type: string
+          nullable: true
+          description: Null while media hosting is not configured, even if an avatar is stored.
+        homeArea:
+          nullable: true
+          allOf: [{ $ref: '#/components/schemas/HomeArea' }]
+        interests: { $ref: '#/components/schemas/ProfileInterests' }
+        usualBudget:
+          nullable: true
+          allOf: [{ $ref: '#/components/schemas/UsualBudget' }]
+        capabilities:
+          type: object
+          required: [avatarUpload]
+          properties:
+            avatarUpload:
+              type: string
+              enum: [available, unavailable]
+              description: Known before a picker opens; the server still enforces it.
+    ProfilePatch:
+      type: object
+      description: Omitted keeps a field, null clears it. `displayName` and `locale` cannot be null.
+      additionalProperties: false
+      properties:
+        displayName: { type: string, minLength: 1, maxLength: 50 }
+        locale: { type: string, enum: [vi, en] }
+        homeAreaKey: { type: string, minLength: 1, maxLength: 64, nullable: true }
+        interests:
+          nullable: true
+          allOf: [{ $ref: '#/components/schemas/ProfileInterests' }]
+        usualBudget:
+          nullable: true
+          allOf: [{ $ref: '#/components/schemas/UsualBudget' }]
     RoomMember:
       type: object
+      description: >
+        What co-members see of each other, and nothing more: no email, no home
+        area, no interests, no budget (ADR-0022). `avatarUrl` is present for a
+        user who set one and media hosting is configured; guests never carry
+        one.
       required: [id, displayName, role, selectionStatus, isGuest]
       properties:
         id: { type: string, format: uuid }
@@ -9784,6 +10019,7 @@ components:
         selectionStatus: { type: string, enum: [pending, in_progress, completed] }
         isGuest: { type: boolean }
         joinedAt: { type: string, format: date-time }
+        avatarUrl: { type: string, nullable: true }
     RoomSummary:
       type: object
       description: Facts only — audience copy is composed client-side from type/participantCount/budgetMode.
@@ -13892,6 +14128,18 @@ components:
         imageKey:
           type: string
           description: Key from `POST /cms/uploads`, purpose `campaign_image`.
+        imageUrl:
+          type: [string, 'null']
+          description: >
+            Where the image is readable, as `CmsBanner.imageUrl` is. Null when
+            media hosting is not configured, and null for a key that predates
+            the public-bucket routing (ADR-0005) and therefore is not on the
+            public host — an honest absence rather than a URL that would 404.
+
+
+            This is also the URL the push provider fetches at delivery time, so
+            it is durable by construction: never the presigned upload URL,
+            which is signed for PUT and expires in fifteen minutes.
         ctaLabel: { type: string }
         audienceType: { $ref: '#/components/schemas/CampaignAudience' }
         audienceFilter:

@@ -1550,6 +1550,7 @@ export const en: Partial<Record<MessageKey, string>> = {
   'media.replace': 'Replace image',
   'media.noImage': 'No image',
   'media.noPreview': 'No preview yet',
+  'media.previewUnavailable': 'Image did not load',
   'media.error.contentType': 'Unsupported image format. Use JPEG, PNG, WebP or HEIC.',
 
   'mediaSource.editorial': 'Editorial',
@@ -1578,6 +1579,8 @@ export const en: Partial<Record<MessageKey, string>> = {
   'placeMedia.error.reasonTooShort': 'The reason needs at least {min} characters.',
   'placeMedia.photoUncaptioned': 'Place photo, no caption describing it',
   'placeMedia.noStorage': 'No media hosting',
+  /* Distinct from `noStorage`: a URL exists, but the image did not load. */
+  'placeMedia.thumbUnavailable': 'Image did not load',
   'placeMedia.noStorageReason':
     'Media hosting is not configured in this environment, so the photo cannot be shown — and deciding on a photo you cannot see is not moderation.',
   'placeMedia.cover': 'Cover',
