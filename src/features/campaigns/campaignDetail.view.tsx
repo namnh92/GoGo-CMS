@@ -109,6 +109,10 @@ export default function CampaignDetailScreen() {
     setErrors({})
   }, [campaign])
 
+  /* A new image is a new claim: a preview that failed before must retry. */
+  const [previewImageFailed, setPreviewImageFailed] = useState(false)
+  useEffect(() => setPreviewImageFailed(false), [image.readUrl])
+
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.all })
   }
@@ -428,6 +432,28 @@ export default function CampaignDetailScreen() {
                           <p className={styles.pushText}>{form.body || item!.body}</p>
                           {form.ctaLabel ? (
                             <span className={styles.pushCta}>{form.ctaLabel}</span>
+                          ) : null}
+                          {/*
+                            The picture belongs in the preview because it now
+                            reaches the device: the provider fetches this same
+                            URL and renders it under the text on both
+                            platforms. A preview that showed title and body
+                            only was describing the notification this campaign
+                            used to send, not the one it will.
+                          */}
+                          {image.readUrl && !previewImageFailed ? (
+                            <img
+                              src={image.readUrl}
+                              alt=""
+                              className={styles.pushImage}
+                              onError={() => setPreviewImageFailed(true)}
+                            />
+                          ) : image.key ? (
+                            <span className={styles.pushImageFallback}>
+                              {previewImageFailed
+                                ? t('media.previewUnavailable')
+                                : t('media.noPreview')}
+                            </span>
                           ) : null}
                         </div>
                       </div>
