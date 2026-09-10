@@ -122,6 +122,46 @@ function probeImageSize(url: string | null): Promise<{ width: number; height: nu
 
 type QueueStage = 'uploading' | 'attaching' | 'done' | 'error'
 
+/**
+ * A thumbnail that degrades to words when the bytes will not load.
+ *
+ * `url` being non-null only says the server composed one; it does not say the
+ * object is there. On an environment where catalogue media is written to one
+ * bucket and the public host serves another, every one of these URLs resolves
+ * and 404s — and a broken-image glyph tells an editor nothing about which of
+ * "no photo", "no hosting" or "hosting is misconfigured" they are looking at.
+ * `.claude/rules/core.md` #15: an absence is stated, never placeholdered.
+ */
+function Thumb({
+  src,
+  alt,
+  className,
+  fallbackClassName,
+}: {
+  src: string
+  alt: string
+  className: string
+  fallbackClassName: string
+}) {
+  const t = useT()
+  const [failed, setFailed] = useState(false)
+
+  // A new src is a new claim: a row that failed before must be allowed to load
+  // once the key, or the environment, changes.
+  useEffect(() => setFailed(false), [src])
+
+  if (failed) {
+    return (
+      <span className={fallbackClassName} title={src}>
+        {t('placeMedia.thumbUnavailable')}
+      </span>
+    )
+  }
+  return (
+    <img src={src} alt={alt} className={className} loading="lazy" onError={() => setFailed(true)} />
+  )
+}
+
 type QueueItem = {
   id: string
   file: File
@@ -303,7 +343,12 @@ function UploadRow({
       {item.previewUrl ? (
         // Decorative: the file name is announced from the row below, and a
         // second reading of it as an image label is noise, not information.
-        <img src={item.previewUrl} alt="" className={styles.queueThumb} />
+        <Thumb
+          src={item.previewUrl}
+          alt=""
+          className={styles.queueThumb}
+          fallbackClassName={styles.queueThumbFallback}
+        />
       ) : (
         <span className={styles.queueThumbFallback}>{t('media.noPreview')}</span>
       )}
@@ -410,7 +455,12 @@ function AttachablePicker({
                 >
                   {item.url ? (
                     // Decorative for the same reason: the key is the row label.
-                    <img src={item.url} alt="" className={styles.pickThumb} />
+                    <Thumb
+                      src={item.url}
+                      alt=""
+                      className={styles.pickThumb}
+                      fallbackClassName={styles.pickThumbFallback}
+                    />
                   ) : (
                     <span className={styles.pickThumbFallback}>{t('placeMedia.noStorage')}</span>
                   )}
@@ -911,11 +961,11 @@ export function PlaceMediaCard({
                        * who cannot see it still learns the caption is missing,
                        * which is a thing an editor can fix.
                        */
-                      <img
+                      <Thumb
                         src={item.url}
                         alt={item.caption ?? t('placeMedia.photoUncaptioned')}
                         className={styles.thumb}
-                        loading="lazy"
+                        fallbackClassName={styles.thumbFallback}
                       />
                     ) : (
                       <span className={styles.thumbFallback}>{t('placeMedia.noStorage')}</span>

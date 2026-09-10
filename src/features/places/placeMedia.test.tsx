@@ -234,6 +234,38 @@ describe('place media — the list (CMS-046)', () => {
     expect(row.getByText('Chờ duyệt')).toBeInTheDocument()
   })
 
+  /*
+   * A URL the server composed is not proof the object is there. On DEV,
+   * catalogue media is written to the private bucket while the public host
+   * serves another, so every one of these URLs resolves and 404s. A broken
+   * image glyph would leave an editor unable to tell that apart from "no
+   * photo" — so the row says which it is.
+   */
+  it('states an unloadable thumbnail instead of leaving a broken image', async () => {
+    open()
+    await ready()
+
+    const row = rowFor(COVER_KEY)
+    const image = row.getByRole('img')
+    expect(image).toBeInTheDocument()
+
+    fireEvent.error(image)
+
+    expect(await screen.findByText('Không tải được ảnh')).toBeInTheDocument()
+    expect(row.queryByRole('img')).not.toBeInTheDocument()
+    // A failed load is not the same fact as no hosting at all.
+    expect(row.queryByText('Chưa có kho ảnh')).not.toBeInTheDocument()
+  })
+
+  it('keeps a null URL reading as no hosting, not as a failed load', async () => {
+    open()
+    await ready()
+
+    const row = rowFor(NO_URL_KEY)
+    expect(row.getByText('Chưa có kho ảnh')).toBeInTheDocument()
+    expect(row.queryByText('Không tải được ảnh')).not.toBeInTheDocument()
+  })
+
   it('lets a role without place.write read the list and nothing else', async () => {
     open(false)
     await ready()

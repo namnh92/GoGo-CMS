@@ -1578,6 +1578,8 @@ export const en: Partial<Record<MessageKey, string>> = {
   'placeMedia.error.reasonTooShort': 'The reason needs at least {min} characters.',
   'placeMedia.photoUncaptioned': 'Place photo, no caption describing it',
   'placeMedia.noStorage': 'No media hosting',
+  /* Distinct from `noStorage`: a URL exists, but the image did not load. */
+  'placeMedia.thumbUnavailable': 'Image did not load',
   'placeMedia.noStorageReason':
     'Media hosting is not configured in this environment, so the photo cannot be shown — and deciding on a photo you cannot see is not moderation.',
   'placeMedia.cover': 'Cover',
