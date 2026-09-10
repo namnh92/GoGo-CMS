@@ -230,10 +230,27 @@ describe('campaign image (BE-CMS-M3)', () => {
     const { container } = renderWithProviders(<Routed />, { route: `/campaigns/${draft.id}` })
 
     await screen.findByTitle(draft.imageKey!)
-    fireEvent.error(preview(container)!)
+    // The field and the phone mock both show it, and both have to give up.
+    for (const img of [...container.querySelectorAll('img')]) fireEvent.error(img)
 
-    expect(await screen.findByText('Không tải được ảnh')).toBeInTheDocument()
+    expect(await screen.findAllByText('Không tải được ảnh')).toHaveLength(2)
     expect(preview(container)).toBeNull()
+  })
+
+  /*
+   * The preview claims to show what lands on a phone. Once the image actually
+   * reaches the device (`big_picture` / `ios_attachments`), a preview that
+   * showed only title and body was describing the notification this campaign
+   * used to send.
+   */
+  it('shows the image inside the notification preview, not only in the field', async () => {
+    signInAs('ops_admin')
+    const { container } = renderWithProviders(<Routed />, { route: `/campaigns/${draft.id}` })
+
+    await screen.findByTitle(draft.imageKey!)
+    const shown = [...container.querySelectorAll('img')].map((img) => img.getAttribute('src'))
+    // One in the upload field, one inside the phone mock.
+    expect(shown.filter((src) => src === draft.imageUrl)).toHaveLength(2)
   })
 
   it('shows a text-only campaign as having no image, not as a failed one', async () => {
