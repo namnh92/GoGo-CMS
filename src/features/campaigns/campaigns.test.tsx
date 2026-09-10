@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { screen, waitFor, within } from '@testing-library/react'
 import { Route, Routes } from 'react-router-dom'
@@ -200,5 +201,46 @@ describe('campaign delivery (CMS-029)', () => {
     expect(await screen.findByText(/Ước tính .* người nhận/)).toBeInTheDocument()
     // The estimate is a read; the campaign is still a draft afterwards.
     expect(screen.getByText('Nháp')).toBeInTheDocument()
+  })
+})
+
+/*
+ * BE-CMS-M3 — a saved campaign image shows itself.
+ *
+ * `CmsCampaign` carried only `imageKey`, so the detail screen had nothing to
+ * render and set `readUrl: null` unconditionally. The console was right not to
+ * fabricate a storage URL; the gap was the contract, which now returns the
+ * same `imageUrl` the push provider is given.
+ */
+describe('campaign image (BE-CMS-M3)', () => {
+  // The preview is decorative — the key beside it is the label — so it carries
+  // an empty alt and is queried as an element rather than by role.
+  const preview = (container: HTMLElement) => container.querySelector('img')
+
+  it('previews the saved image from the contract, not a guessed URL', async () => {
+    signInAs('ops_admin')
+    const { container } = renderWithProviders(<Routed />, { route: `/campaigns/${draft.id}` })
+
+    expect(await screen.findByTitle(draft.imageKey!)).toBeInTheDocument()
+    expect(preview(container)).toHaveAttribute('src', draft.imageUrl)
+  })
+
+  it('says so when the saved image will not load', async () => {
+    signInAs('ops_admin')
+    const { container } = renderWithProviders(<Routed />, { route: `/campaigns/${draft.id}` })
+
+    await screen.findByTitle(draft.imageKey!)
+    fireEvent.error(preview(container)!)
+
+    expect(await screen.findByText('Không tải được ảnh')).toBeInTheDocument()
+    expect(preview(container)).toBeNull()
+  })
+
+  it('shows a text-only campaign as having no image, not as a failed one', async () => {
+    signInAs('ops_admin')
+    renderWithProviders(<Routed />, { route: `/campaigns/${scheduled.id}` })
+
+    expect(await screen.findByText('Chưa có ảnh')).toBeInTheDocument()
+    expect(screen.queryByText('Không tải được ảnh')).not.toBeInTheDocument()
   })
 })

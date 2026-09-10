@@ -175,7 +175,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Current actor profile facts */
+        /**
+         * Current actor — the private profile for a user, session facts for a guest
+         * @description ADR-0022. A user receives the whole profile, including the fields nobody else ever sees (email, home area, interests, usual budget), and `capabilities.avatarUpload`, which says before a picker opens whether this environment can take an avatar at all. A guest receives its session facts: `roomId`, `displayName`, `expiresAt`.
+         */
         get: operations["getMe"];
         put?: never;
         post?: never;
@@ -183,8 +186,39 @@ export interface paths {
         delete: operations["deleteAccount"];
         options?: never;
         head?: never;
-        /** Update display name / locale */
+        /**
+         * Update the profile — null clears an optional field, omitted keeps it
+         * @description `displayName` and `locale` are never null. `homeAreaKey` must be an active service area. `interests` carries stable taxonomy keys by kind and only `mood` is accepted (ADR-0022); an unknown key or an unsupported kind is `INVALID_TAXONOMY_KEYS`. `usualBudget.perPerson` is integer minor units, a create-room default, never a room constraint. Users only: a guest gets 403.
+         */
         patch: operations["updateProfile"];
+        trace?: never;
+    };
+    "/me/avatar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Attach an uploaded original, process it, publish the avatar
+         * @description ADR-0022. `uploadKey` is what `POST /uploads { purpose: 'avatar' }` returned, after the bytes were PUT to its URL. The key must belong to this user, for this purpose, and be pending and unexpired — or already attached to this same user, so a retry is idempotent; every miss is `INVALID_UPLOAD_KEY` without saying which condition failed. The original is decoded under a 16-megapixel cap and a 3-second clock, oriented, centre-cropped to 512×512 WebP with all metadata dropped, and published under a random immutable key in the public bucket. The previous avatar and the original are scheduled for deletion in the same transaction that stores the new key.
+         *
+         *     A failed request is never left dangling: the original and any public object already written are scheduled away with a grace period, so a retry with the same `uploadKey` still works.
+         *
+         *     Users only; guests get 403. Five calls a minute per user.
+         */
+        put: operations["setAvatar"];
+        post?: never;
+        /**
+         * Remove the avatar — idempotent
+         * @description Clears the key and schedules the public object for deletion and an edge purge in the same transaction. A purge cannot revoke a copy a device already holds; what is guaranteed is that no new fetch of the old URL succeeds once the edge cache lifetime (one day) has passed.
+         */
+        delete: operations["removeAvatar"];
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/rooms": {
@@ -479,6 +513,8 @@ export interface paths {
          *     The returned key is bound to the actor that created it. Attaching a key belonging to another actor, an expired one, or one issued for a different purpose is rejected — the server does not distinguish those cases in its answer.
          *
          *     Content type and size are enforced server-side and the content type is part of what is signed, so storage refuses an upload that does not match what was authorized.
+         *
+         *     Purpose `avatar` (ADR-0022): users only, `image/jpeg`, `image/png` or `image/webp` — never HEIC, which the client converts first. The key lands in a private, one-day-lifetime prefix and is attached with `PUT /me/avatar`, which processes it and publishes the result. Answers 503 where `GET /me` reports `capabilities.avatarUpload: unavailable`.
          */
         post: operations["createUpload"];
         delete?: never;
@@ -1407,6 +1443,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/service-areas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The curated service areas — a profile's home area comes from here
+         * @description ADR-0022. The same table the areas autocomplete falls back to, whole, ordered for a picker and grouped by `city` on the client. Only active areas. No PII, no provider call, cached at the edge for an hour. A `homeAreaKey` sent to `PATCH /me` must be one of these keys.
+         */
+        get: operations["listServiceAreas"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/places/areas": {
         parameters: {
             query?: never;
@@ -1483,7 +1539,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Export all actor-owned data (privacy rule) */
+        /**
+         * Export all actor-owned data (privacy rule)
+         * @description Everything the account owns, as JSON, from an explicit allowlist: profile (display name, email, locale, avatar URL, home area, interests, usual budget — ADR-0022), memberships, preferences, votes, saved items, reviews. Never a credential, a session, or an upload key. Audit-logged and recorded in the privacy ledger.
+         */
         get: operations["exportMyData"];
         put?: never;
         post?: never;
@@ -5143,6 +5202,68 @@ export interface components {
             dietaryKeys?: string[];
             accessibilityKeys?: string[];
         };
+        /** @description A curated service area with its centre — a map fact, so a client can set a room origin from it. */
+        ServiceArea: {
+            key: string;
+            name: string;
+            city?: string | null;
+            lat: number;
+            lng: number;
+        };
+        ServiceAreaList: {
+            areas: components["schemas"]["ServiceArea"][];
+        };
+        /** @description A curated service area (`GET /service-areas`), never a provider prediction key. */
+        HomeArea: {
+            key: string;
+            name: string;
+            city?: string | null;
+        };
+        /** @description Stable taxonomy keys by kind. Only `mood` is accepted in this wave (ADR-0022). */
+        ProfileInterests: {
+            mood: string[];
+        };
+        /** @description Per-person upper bound in integer minor units. A create-room default, never a room constraint. */
+        UsualBudget: {
+            perPerson: number;
+            currency: string;
+        };
+        /** @description Shape depends on `actorType`. A user carries the private profile; a guest carries `roomId`, `displayName`, `expiresAt` and none of the profile fields. */
+        Me: {
+            /** @enum {string} */
+            actorType: "user" | "guest";
+            /** Format: uuid */
+            id: string;
+            displayName?: string;
+            email?: string;
+            locale?: string;
+            /** Format: uuid */
+            roomId?: string;
+            /** Format: date-time */
+            expiresAt?: string;
+            /** @description Null while media hosting is not configured, even if an avatar is stored. */
+            avatarUrl?: string | null;
+            homeArea?: components["schemas"]["HomeArea"] | null;
+            interests?: components["schemas"]["ProfileInterests"];
+            usualBudget?: components["schemas"]["UsualBudget"] | null;
+            capabilities?: {
+                /**
+                 * @description Known before a picker opens; the server still enforces it.
+                 * @enum {string}
+                 */
+                avatarUpload: "available" | "unavailable";
+            };
+        };
+        /** @description Omitted keeps a field, null clears it. `displayName` and `locale` cannot be null. */
+        ProfilePatch: {
+            displayName?: string;
+            /** @enum {string} */
+            locale?: "vi" | "en";
+            homeAreaKey?: string | null;
+            interests?: components["schemas"]["ProfileInterests"] | null;
+            usualBudget?: components["schemas"]["UsualBudget"] | null;
+        };
+        /** @description What co-members see of each other, and nothing more: no email, no home area, no interests, no budget (ADR-0022). `avatarUrl` is present for a user who set one and media hosting is configured; guests never carry one. */
         RoomMember: {
             /** Format: uuid */
             id: string;
@@ -5154,6 +5275,7 @@ export interface components {
             isGuest: boolean;
             /** Format: date-time */
             joinedAt?: string;
+            avatarUrl?: string | null;
         };
         /** @description Facts only — audience copy is composed client-side from type/participantCount/budgetMode. */
         RoomSummary: {
@@ -7732,6 +7854,12 @@ export interface components {
             body: string;
             /** @description Key from `POST /cms/uploads`, purpose `campaign_image`. */
             imageKey?: string;
+            /**
+             * @description Where the image is readable, as `CmsBanner.imageUrl` is. Null when media hosting is not configured, and null for a key that predates the public-bucket routing (ADR-0005) and therefore is not on the public host — an honest absence rather than a URL that would 404.
+             *
+             *     This is also the URL the push provider fetches at delivery time, so it is durable by construction: never the presigned upload URL, which is signed for PUT and expires in fifteen minutes.
+             */
+            imageUrl?: string | null;
             ctaLabel?: string;
             audienceType: components["schemas"]["CampaignAudience"];
             /** @description Closed per audience type. `platform` takes `{ platform }`; the rest take `{}`. */
@@ -8478,19 +8606,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        /** @enum {string} */
-                        actorType: "user" | "guest";
-                        /** Format: uuid */
-                        id: string;
-                        displayName?: string;
-                        email?: string;
-                        locale?: string;
-                        /** Format: uuid */
-                        roomId?: string;
-                        /** Format: date-time */
-                        expiresAt?: string;
-                    };
+                    "application/json": components["schemas"]["Me"];
                 };
             };
             401: components["responses"]["Unauthorized"];
@@ -8523,21 +8639,96 @@ export interface operations {
         };
         requestBody?: {
             content: {
+                "application/json": components["schemas"]["ProfilePatch"];
+            };
+        };
+        responses: {
+            /** @description The updated profile */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Me"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    setAvatar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
                 "application/json": {
-                    displayName?: string;
-                    /** @enum {string} */
-                    locale?: "vi" | "en";
+                    uploadKey: string;
                 };
             };
         };
         responses: {
-            /** @description Updated profile facts */
+            /** @description The profile with the new `avatarUrl` */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Me"];
+                };
+            };
+            /** @description `INVALID_UPLOAD_KEY` (not yours, wrong purpose, expired), `AVATAR_UPLOAD_MISSING` (nothing was PUT to the key), `FILE_TOO_LARGE`. */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description `AVATAR_UNPROCESSABLE` — undecodable, over the pixel cap, over the clock, or not the type it was declared as. Choose another image. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            429: components["responses"]["RateLimited"];
+            /** @description `AVATAR_BUSY` (retryable, too many concurrent processings) or `AVATAR_STORAGE_UNAVAILABLE` (retryable, storage not answering). */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    removeAvatar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The profile with `avatarUrl: null` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Me"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
         };
     };
     listRooms: {
@@ -9112,8 +9303,11 @@ export interface operations {
             content: {
                 "application/json": {
                     /** @enum {string} */
-                    purpose: "checkin_photo" | "bill_photo" | "place_photo";
-                    /** @enum {string} */
+                    purpose: "checkin_photo" | "bill_photo" | "place_photo" | "avatar";
+                    /**
+                     * @description HEIC is refused for purpose `avatar`.
+                     * @enum {string}
+                     */
                     contentType: "image/jpeg" | "image/png" | "image/webp" | "image/heic";
                     /** @description Declared up front, so an oversized file is refused before a URL exists. */
                     contentLength: number;
@@ -9138,7 +9332,8 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
-            /** @description Object storage is not configured in this environment */
+            403: components["responses"]["Forbidden"];
+            /** @description Object storage (or, for `avatar`, the public bucket) is not configured in this environment */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -10708,6 +10903,29 @@ export interface operations {
                 content?: never;
             };
             403: components["responses"]["Forbidden"];
+        };
+    };
+    listServiceAreas: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Active service areas in display order */
+            200: {
+                headers: {
+                    /** @description public, max-age=3600 */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceAreaList"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
         };
     };
     suggestAreas: {

@@ -2354,6 +2354,7 @@ export const vi = {
   'media.replace': 'Đổi ảnh',
   'media.noImage': 'Chưa có ảnh',
   'media.noPreview': 'Chưa xem trước được',
+  'media.previewUnavailable': 'Không tải được ảnh',
   'media.error.contentType': 'Định dạng ảnh không được hỗ trợ. Dùng JPEG, PNG, WebP hoặc HEIC.',
 
   'banners.title': 'Banner trang chủ',

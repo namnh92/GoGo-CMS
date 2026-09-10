@@ -101,7 +101,10 @@ export default function CampaignDetailScreen() {
       destinationType: campaign.destinationType,
       destinationValue: campaign.destinationValue ?? '',
     })
-    setImage({ key: campaign.imageKey ?? '', readUrl: null })
+    // The contract carries the read URL now, so a saved image shows itself.
+    // It stayed null here while `CmsCampaign` had no `imageUrl` — the console
+    // was right not to invent one, and the gap was in the contract.
+    setImage({ key: campaign.imageKey ?? '', readUrl: campaign.imageUrl ?? null })
     setSendAt(toLocalInput(campaign.scheduledAt))
     setErrors({})
   }, [campaign])

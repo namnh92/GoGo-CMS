@@ -1550,6 +1550,7 @@ export const en: Partial<Record<MessageKey, string>> = {
   'media.replace': 'Replace image',
   'media.noImage': 'No image',
   'media.noPreview': 'No preview yet',
+  'media.previewUnavailable': 'Image did not load',
   'media.error.contentType': 'Unsupported image format. Use JPEG, PNG, WebP or HEIC.',
 
   'mediaSource.editorial': 'Editorial',

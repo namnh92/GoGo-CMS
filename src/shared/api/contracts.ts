@@ -1510,6 +1510,13 @@ export const cmsCampaignSchema = z.object({
   title: z.string(),
   body: z.string(),
   imageKey: z.string().nullish(),
+  /**
+   * Where the image is readable, as a banner's is. Null when media hosting is
+   * not configured, and null for a key that predates the public-bucket routing
+   * — those objects are in the private bucket and no URL puts them on the
+   * public host. The console never composes one itself.
+   */
+  imageUrl: z.string().nullish(),
   ctaLabel: z.string().nullish(),
   audienceType: campaignAudienceSchema,
   audienceFilter: z.record(z.string(), z.unknown()).default({}),
