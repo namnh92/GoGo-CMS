@@ -165,6 +165,9 @@ export function SourceDriftPanel({ datasetId }: { datasetId: string }) {
   const rejected = decisions.REJECTED_DRAFT ?? 0
   const undecided = decisions.UNDECIDED ?? 0
   const effective = accepted + rejected
+  // Settled by an earlier round on this version: counted, never drafted again here.
+  const settledAccepted = decisions.MATERIALIZED_ACCEPT ?? 0
+  const settledRejected = decisions.MATERIALIZED_REJECT ?? 0
 
   const runMaterialize = useMutation({
     mutationFn: () =>
@@ -336,6 +339,14 @@ export function SourceDriftPanel({ datasetId }: { datasetId: string }) {
                   <Fact label={t('sourceDrift.set.updatedAt')}>
                     {data.draft ? formatDateTime(data.draft.updatedAt, locale) : '—'}
                   </Fact>
+                  {settledAccepted + settledRejected > 0 ? (
+                    <Fact label={t('sourceDrift.set.settled')}>
+                      {t('sourceDrift.set.settledValue', {
+                        accepted: formatNumber(settledAccepted, locale),
+                        rejected: formatNumber(settledRejected, locale),
+                      })}
+                    </Fact>
+                  ) : null}
                 </Facts>
 
                 {data.materialized.length > 0 ? (

@@ -124,7 +124,9 @@ describe('the queue keeps its three count groups apart', () => {
     // Said twice on purpose: the count card and the panel it belongs to.
     expect(screen.getAllByText(/Quyết định nháp/).length).toBeGreaterThan(0)
     expect(screen.getByText('9.432')).toBeInTheDocument()
-    expect(screen.getAllByText('1.033').length).toBeGreaterThan(0)
+    // 1,033 quarantined rows, one settled by an earlier round (GoGo-BE#619):
+    // the backlog is what is still open, not what was ever quarantined.
+    expect(screen.getAllByText('1.032').length).toBeGreaterThan(0)
   })
 
   it('says plainly that a draft decision changes nothing that is running', async () => {
@@ -523,6 +525,52 @@ describe('the override set', () => {
 
     expect(await screen.findByText(/Đã bỏ bộ nháp/)).toBeInTheDocument()
     await waitFor(() => expect(screen.getByRole('button', { name: /Bỏ bộ nháp/ })).toBeDisabled())
+  })
+})
+
+describe('a decision an earlier round materialised (GoGo-BE#619)', () => {
+  const SETTLED = quarantineRows[3]!
+
+  it('is out of the default queue, out of the backlog, and counted on its own', async () => {
+    await openQueue()
+    expect(screen.queryByText(SETTLED.oldName)).not.toBeInTheDocument()
+    // 1,033 quarantined rows, one of them settled by the previous round: the
+    // backlog is 1,032. Before #619 it read 1,033 after every round, so a
+    // published review looked like nobody had reviewed anything.
+    expect(await screen.findByText(/Đã vật chất hoá trên phiên bản này/)).toBeInTheDocument()
+    expect(screen.getByText(/1 chấp nhận · 0 từ chối/)).toBeInTheDocument()
+    expect(screen.getAllByText('1.032').length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Đã vật chất hoá: chấp nhận/).length).toBeGreaterThan(0)
+  })
+
+  it('appears under its own filter, badged as settled rather than undecided', async () => {
+    await openQueue()
+    const select = screen.getByLabelText(/Trạng thái quyết định/)
+    await userEvent.selectOptions(select, 'MATERIALIZED_ACCEPT')
+    await waitFor(() => expect(search()).toContain('state=MATERIALIZED_ACCEPT'))
+    const table = await screen.findByRole('table')
+    expect(await within(table).findByText(SETTLED.oldName)).toBeInTheDocument()
+    expect(within(table).getByText('Đã vật chất hoá: chấp nhận')).toBeInTheDocument()
+    expect(within(table).queryByText('Chưa quyết định')).not.toBeInTheDocument()
+  })
+
+  it('names the carried decision, its target and its reason, apart from the draft history', async () => {
+    await openQueue()
+    await userEvent.selectOptions(
+      screen.getByLabelText(/Trạng thái quyết định/),
+      'MATERIALIZED_ACCEPT',
+    )
+    await userEvent.click(await screen.findByRole('button', { name: /^Mở$/ }))
+    const drawer = await screen.findByRole('dialog')
+    await within(drawer).findByText(SETTLED.oldName)
+
+    const settled = within(drawer).getByRole('region', { name: /Quyết định đã vật chất hoá/ })
+    expect(within(settled).getByText('Chấp nhận')).toBeInTheDocument()
+    expect(within(settled).getByText(SETTLED.materialized!.targetCode!)).toBeInTheDocument()
+    expect(within(settled).getByText(SETTLED.materialized!.reason)).toBeInTheDocument()
+    expect(within(settled).getByText(/không sửa quyết định này/)).toBeInTheDocument()
+    // The draft history is a different thing and stays empty: nothing was drafted here.
+    expect(within(drawer).getByText(/Chưa ai quyết định dòng này/)).toBeInTheDocument()
   })
 })
 

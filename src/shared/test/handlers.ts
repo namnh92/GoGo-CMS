@@ -4230,6 +4230,13 @@ type QuarantineFixture = {
     status?: 'ACTIVE' | 'INACTIVE'
   }[]
   affectedPlaceCount: number
+  /** GoGo-BE#619 — the decision an earlier round carried into this version. */
+  materialized?: {
+    decision: 'ACCEPT' | 'REJECT'
+    targetCode: string | null
+    reason: string
+    decidedAt: string
+  }
 }
 
 export const quarantineRows: QuarantineFixture[] = [
@@ -4288,6 +4295,27 @@ export const quarantineRows: QuarantineFixture[] = [
       },
       { code: '00166', name: 'Phường Ngọc Hà', selectable: true, hierarchyValid: true },
     ],
+  },
+  {
+    // Settled by an earlier round (GoGo-BE#619): not a draft, not in the backlog.
+    id: 'q4444444-4444-4444-8444-444444444444',
+    classification: 'DIVIDED_REQUIRES_REVIEW',
+    validationReason: 'the source names several successors and offers a default',
+    oldCode: '00007',
+    oldName: 'Phường Nguyễn Trung Trực',
+    newCode: '00008',
+    newName: 'Phường Trúc Bạch',
+    candidates: [
+      { code: '00008', name: 'Phường Trúc Bạch', selectable: true, hierarchyValid: true },
+      { code: '00025', name: 'Phường Hoàn Kiếm', selectable: true, hierarchyValid: true },
+    ],
+    affectedPlaceCount: 3,
+    materialized: {
+      decision: 'ACCEPT',
+      targetCode: '00025',
+      reason: 'the ward office moved to Hoàn Kiếm under resolution 1656/NQ-UBTVQH15',
+      decidedAt: '2026-09-16T15:50:00.000Z',
+    },
   },
 ]
 
@@ -4393,9 +4421,19 @@ function decide(
   )
 }
 
-function stateOf(rowId: string): 'UNDECIDED' | 'ACCEPTED_DRAFT' | 'REJECTED_DRAFT' | 'SUPERSEDED' {
+function stateOf(
+  rowId: string,
+):
+  | 'UNDECIDED'
+  | 'ACCEPTED_DRAFT'
+  | 'REJECTED_DRAFT'
+  | 'SUPERSEDED'
+  | 'MATERIALIZED_ACCEPT'
+  | 'MATERIALIZED_REJECT' {
   const effective = decisions.get(rowId)
   if (effective) return effective.decision === 'ACCEPT' ? 'ACCEPTED_DRAFT' : 'REJECTED_DRAFT'
+  const settled = quarantineRows.find((r) => r.id === rowId)?.materialized
+  if (settled) return settled.decision === 'ACCEPT' ? 'MATERIALIZED_ACCEPT' : 'MATERIALIZED_REJECT'
   return decisionHistory.has(rowId) ? 'SUPERSEDED' : 'UNDECIDED'
 }
 
@@ -4410,7 +4448,7 @@ function quarantineListItem(row: QuarantineFixture) {
     candidateCount: row.candidates.length,
     affectedPlaceCount: row.affectedPlaceCount,
     decisionState: stateOf(row.id),
-    decidedAt: decisions.get(row.id)?.decidedAt ?? null,
+    decidedAt: decisions.get(row.id)?.decidedAt ?? row.materialized?.decidedAt ?? null,
     sourceProvenance: 'namnh92/vietnam-admin@7fac8c45:mapping.json',
   }
 }
@@ -4480,6 +4518,7 @@ function quarantineDetail(row: QuarantineFixture) {
       status: overrideSet.status,
     },
     decision: decisions.get(row.id) ?? null,
+    materialized: row.materialized ?? null,
     decisionState: stateOf(row.id),
     history,
   }
@@ -4488,15 +4527,21 @@ function quarantineDetail(row: QuarantineFixture) {
 function quarantineCounts() {
   const accepted = [...decisions.values()].filter((d) => d.decision === 'ACCEPT').length
   const rejected = [...decisions.values()].filter((d) => d.decision === 'REJECT').length
+  // Settled rows leave the backlog; one re-decided in the draft reports as the draft.
+  const settledRows = quarantineRows.filter((r) => r.materialized)
+  const settled = settledRows.filter((r) => !decisions.has(r.id))
+  const settledAccepted = settled.filter((r) => r.materialized!.decision === 'ACCEPT').length
   return {
     // Nine times the backlog, and the reason the two must never be summed.
     canonical: { MERGED: 9432, RENAMED: 132, REASSIGNED: 5 },
-    backlog: { DIVIDED_REQUIRES_REVIEW: 1033 },
+    backlog: { DIVIDED_REQUIRES_REVIEW: 1033 - settledRows.length },
     decisions: {
-      UNDECIDED: 1033 - accepted - rejected,
+      UNDECIDED: 1033 - accepted - rejected - settled.length,
       ACCEPTED_DRAFT: accepted,
       REJECTED_DRAFT: rejected,
       SUPERSEDED: 0,
+      MATERIALIZED_ACCEPT: settledAccepted,
+      MATERIALIZED_REJECT: settled.length - settledAccepted,
     },
   }
 }

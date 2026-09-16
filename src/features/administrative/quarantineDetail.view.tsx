@@ -201,6 +201,37 @@ export function QuarantineDetailDrawer({
               {t('sourceDrift.draftOnly')}
             </p>
 
+            {data.materialized ? (
+              /*
+               * GoGo-BE#619 — the decision an earlier round carried into this
+               * version. It is not a draft and it is not in the history below,
+               * which belongs to the draft set; it is shown first because it
+               * is the one thing about this row that has already happened.
+               */
+              <section className={styles.section} aria-label={t('sourceDrift.detail.materialized')}>
+                <p className={styles.factLabel}>{t('sourceDrift.detail.materialized')}</p>
+                <p className={styles.meta}>{t('sourceDrift.detail.materializedHint')}</p>
+                <div className={styles.historyHead}>
+                  <span>
+                    <Badge tone={data.materialized.decision === 'ACCEPT' ? 'mint' : 'neutral'}>
+                      {t(`sourceDrift.decision.${data.materialized.decision}` as const)}
+                    </Badge>{' '}
+                    {data.materialized.targetCode ? (
+                      <code className={styles.mono}>{data.materialized.targetCode}</code>
+                    ) : null}
+                  </span>
+                  {data.materialized.decidedAt ? (
+                    <time className={styles.meta} dateTime={data.materialized.decidedAt}>
+                      {formatDateTime(data.materialized.decidedAt, locale)}
+                    </time>
+                  ) : null}
+                </div>
+                {data.materialized.reason ? (
+                  <p className={styles.historyReason}>{data.materialized.reason}</p>
+                ) : null}
+              </section>
+            ) : null}
+
             <Facts>
               <Fact label={t('sourceDrift.col.classification')}>
                 <ClassificationBadge value={data.classification} />
