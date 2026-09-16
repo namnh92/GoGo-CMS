@@ -12,7 +12,12 @@ import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
 import { Checkbox, InlineSelect } from '@/shared/ui/Field'
 import { DataTable } from '@/shared/ui/DataTable'
-import { AsyncBoundary, EmptyState, PermissionDeniedState, useErrorMessage } from '@/shared/ui/State'
+import {
+  AsyncBoundary,
+  EmptyState,
+  PermissionDeniedState,
+  useErrorMessage,
+} from '@/shared/ui/State'
 import { ConfirmDialog } from '@/shared/ui/Overlay'
 import { useToast } from '@/shared/ui/Toast'
 import { newIdempotencyKey } from '@/shared/api/client'

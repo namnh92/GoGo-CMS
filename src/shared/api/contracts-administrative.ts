@@ -723,9 +723,7 @@ export const administrativeBatchVerifyResultSchema = z.object({
   code: z.string().nullable(),
   message: z.string().nullable(),
 })
-export type AdministrativeBatchVerifyResult = z.infer<
-  typeof administrativeBatchVerifyResultSchema
->
+export type AdministrativeBatchVerifyResult = z.infer<typeof administrativeBatchVerifyResultSchema>
 
 export const administrativeBatchVerifyReportSchema = z.object({
   requested: z.number(),
@@ -734,9 +732,7 @@ export const administrativeBatchVerifyReportSchema = z.object({
   refused: z.number(),
   results: z.array(administrativeBatchVerifyResultSchema),
 })
-export type AdministrativeBatchVerifyReport = z.infer<
-  typeof administrativeBatchVerifyReportSchema
->
+export type AdministrativeBatchVerifyReport = z.infer<typeof administrativeBatchVerifyReportSchema>
 
 /** The resolver ran. It may land on any of three states, and none is a verification. */
 export const administrativeRematchResultSchema = z.object({
