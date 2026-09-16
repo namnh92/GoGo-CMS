@@ -201,10 +201,10 @@ export const en: Partial<Record<MessageKey, string>> = {
   'mapping.queue.summary': 'Showing {shown} rows',
   'mapping.queue.empty': 'No rows',
   'mapping.queue.emptyActionable':
-    'Nothing is waiting on review. Change the filter for other states.',
+    'Nothing is blocking publication. Change the filter for other states.',
   'mapping.queue.emptyFiltered': 'No row matches the current filter.',
   'mapping.filter.status': 'Mapping status',
-  'mapping.filter.actionable': 'Actionable (needs review + stale)',
+  'mapping.filter.actionable': 'Actionable (blocking publication)',
   'mapping.filter.all': 'All statuses',
   'mapping.filter.blocked': 'Publication',
   'mapping.filter.anyApproval': 'No filter',

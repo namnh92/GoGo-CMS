@@ -46,8 +46,22 @@ const STATUSES: AdministrativeMappingStatus[] = [
   'REJECTED',
 ]
 
-/** What a person has something to decide about. The default view. */
-const ACTIONABLE = 'NEEDS_REVIEW,STALE'
+/**
+ * What a person has something to decide about. The default view.
+ *
+ * `AUTO_MATCHED` belongs here and used not to. It is the resolver's proposal,
+ * it blocks publication until somebody confirms it (ADR-0019 §7), and while it
+ * was a rare state leaving it out cost nothing. A boundary release changes that
+ * in one run: GoGo-BE#610 turned 270 unresolved places into 271 proposals, and
+ * a queue defined as "needs review + stale" answered that with an empty table
+ * while every one of them waited. A default view that hides the only work there
+ * is, is not a default — it is a bug with a filter in front of it.
+ *
+ * `UNMAPPED` still stays out, for the reason it always did: there is nothing
+ * for a person to decide about a place the resolver could not place. It is
+ * counted, and it is one filter away.
+ */
+const ACTIONABLE = 'NEEDS_REVIEW,STALE,AUTO_MATCHED'
 
 /**
  * CMS #156 — the per-place administrative mapping review queue.
@@ -59,11 +73,11 @@ const ACTIONABLE = 'NEEDS_REVIEW,STALE'
  * apart in the copy as carefully as in the permissions, because a moderator who
  * reads "verified" as "published" has certified something they did not intend.
  *
- * The default view is NEEDS_REVIEW and STALE — the rows where somebody has
- * something to do. UNMAPPED places are not buried by that: they are one filter
- * away, counted in the summary, and reachable through the blocked-approval view
- * that exists precisely so a place stuck on a mapping nobody can see does not
- * sit there forever.
+ * The default view is every row that blocks publication and has an answer to
+ * confirm — NEEDS_REVIEW, STALE and AUTO_MATCHED. UNMAPPED places are not
+ * buried by that: they are one filter away, counted in the summary, and
+ * reachable through the blocked-approval view that exists precisely so a place
+ * stuck on a mapping nobody can see does not sit there forever.
  */
 export default function AdministrativeMappingScreen() {
   const t = useT()
