@@ -454,6 +454,8 @@ export const vi = {
   'sourceDrift.materialize.confirmTitle': 'Vật chất hoá bộ quyết định',
   'sourceDrift.materialize.confirmBody':
     'Biến các quyết định đang có hiệu lực thành MỘT phiên bản bộ dữ liệu mới ở trạng thái Đã nhập.',
+  'sourceDrift.materialize.reasonHint':
+    'Bắt buộc, và được ghi vào nhật ký cùng phiên bản dẫn xuất — một phiên bản không ai giải thích thì sau này không ai xem lại được.',
   'sourceDrift.materialize.decisions': 'Quyết định sẽ được áp dụng',
   'sourceDrift.materialize.rejectedNote':
     'Quyết định từ chối không tạo cạnh nào — chúng đổi xuất xứ, không đổi nội dung.',

@@ -450,6 +450,8 @@ export const en: Partial<Record<MessageKey, string>> = {
   'sourceDrift.materialize.confirmTitle': 'Materialise the decision set',
   'sourceDrift.materialize.confirmBody':
     'Turns the effective decisions into ONE new dataset version, staged.',
+  'sourceDrift.materialize.reasonHint':
+    'Required, and recorded in the audit log with the derived version — a version nobody explained cannot be reviewed later.',
   'sourceDrift.materialize.decisions': 'Decisions to apply',
   'sourceDrift.materialize.rejectedNote':
     'A rejection writes no edge — it changes provenance, not content.',

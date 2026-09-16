@@ -432,6 +432,37 @@ describe('the override set', () => {
     expect(within(dialog).getByText(/không tạo cạnh nào/)).toBeInTheDocument()
   })
 
+  it('asks for a reason before it will materialise, because the server does (#207)', async () => {
+    const bodies: Record<string, unknown>[] = []
+    server.use(
+      http.post(
+        `${BASE}/cms/administrative-datasets/:id/override-set/materialize`,
+        async ({ request }) => {
+          bodies.push((await request.json()) as Record<string, unknown>)
+          return undefined
+        },
+      ),
+    )
+    const drawer = await openRow()
+    await userEvent.click(within(drawer).getAllByRole('radio')[0]!)
+    await userEvent.type(within(drawer).getByLabelText(/Lý do quyết định/), 'khảo sát thực địa')
+    await userEvent.click(within(drawer).getByRole('button', { name: /^Chấp nhận$/ }))
+    await screen.findByText(/Đã ghi quyết định chấp nhận/)
+    await closeDrawer()
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Vật chất hoá$/ }))
+    const dialog = await screen.findByRole('dialog')
+    const confirm = within(dialog).getByRole('button', { name: /^Vật chất hoá$/ })
+    // No reason, no request: the old dialog had no field and sent '' every time.
+    expect(confirm).toBeDisabled()
+    await userEvent.type(within(dialog).getByLabelText(/Lý do quyết định/), 'gộp quyết định đợt 1')
+    expect(confirm).toBeEnabled()
+    await userEvent.click(confirm)
+
+    await waitFor(() => expect(bodies).toHaveLength(1))
+    expect(bodies[0]).toMatchObject({ reason: 'gộp quyết định đợt 1', expectedRevision: 1 })
+  })
+
   it('links the derived version and names the sequence that is left', async () => {
     const drawer = await openRow()
     await userEvent.click(within(drawer).getAllByRole('radio')[0]!)
@@ -442,6 +473,7 @@ describe('the override set', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: /^Vật chất hoá$/ }))
     const confirm = await screen.findByRole('dialog')
+    await userEvent.type(within(confirm).getByLabelText(/Lý do quyết định/), 'gộp quyết định đợt 1')
     await userEvent.click(within(confirm).getByRole('button', { name: /^Vật chất hoá$/ }))
 
     const result = await screen.findByRole('dialog')
@@ -465,6 +497,7 @@ describe('the override set', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: /^Vật chất hoá$/ }))
     const confirm = await screen.findByRole('dialog')
+    await userEvent.type(within(confirm).getByLabelText(/Lý do quyết định/), 'gộp quyết định đợt 1')
     await userEvent.click(within(confirm).getByRole('button', { name: /^Vật chất hoá$/ }))
     await screen.findByText(/Đã tạo phiên bản dẫn xuất/)
     await userEvent.keyboard('{Escape}')

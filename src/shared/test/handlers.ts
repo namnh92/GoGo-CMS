@@ -779,7 +779,24 @@ export const handlers = [
   http.post(
     `${BASE}/cms/administrative-datasets/:id/override-set/materialize`,
     async ({ request }) => {
-      const body = (await request.json()) as { reason: string; expectedRevision: number }
+      const body = (await request.json()) as { reason?: string; expectedRevision: number }
+      // #207 — the server's zod body has `reason: min(1)`. The mock let an
+      // empty one through, which is how a dialog with no reason field shipped
+      // and every real materialisation came back 400.
+      if (!body.reason || body.reason.trim().length === 0) {
+        return HttpResponse.json(
+          {
+            code: 'VALIDATION_FAILED',
+            message: 'request body failed validation',
+            field_errors: [
+              { field: 'reason', message: 'String must contain at least 1 character(s)' },
+            ],
+            request_id: 'mock-validation_failed',
+            retryable: false,
+          },
+          { status: 400 },
+        )
+      }
       if (overrideSet.status !== 'DRAFT') {
         return envelope(409, 'OVERRIDE_SET_NOT_FOUND', 'no draft override set')
       }
