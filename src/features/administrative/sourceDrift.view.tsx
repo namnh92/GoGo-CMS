@@ -14,7 +14,7 @@ import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
 import { InlineSelect, TextArea } from '@/shared/ui/Field'
 import { DataTable } from '@/shared/ui/DataTable'
-import { ConfirmDialog, Modal } from '@/shared/ui/Overlay'
+import { Modal } from '@/shared/ui/Overlay'
 import { AsyncBoundary, EmptyState, useErrorMessage } from '@/shared/ui/State'
 import { useToast } from '@/shared/ui/Toast'
 import type {
@@ -501,33 +501,58 @@ export function SourceDriftPanel({ datasetId }: { datasetId: string }) {
         online={online}
       />
 
-      <ConfirmDialog
+      {/*
+        #207 — a Modal, not a ConfirmDialog, because the contract requires a
+        reason and a ConfirmDialog has nowhere to ask for one. The old dialog
+        sent `reason: ''` on every confirm, the server refused it with 400, and
+        the button had never once worked from this screen. A materialisation
+        mints a dataset version; a version nobody explained cannot be reviewed.
+      */}
+      <Modal
         open={materializeOpen}
         onClose={() => setMaterializeOpen(false)}
-        onConfirm={() => runMaterialize.mutate()}
         title={t('sourceDrift.materialize.confirmTitle')}
         description={t('sourceDrift.materialize.confirmBody')}
-        confirmLabel={t('sourceDrift.materialize.action')}
-        loading={runMaterialize.isPending}
-        tone="primary"
-        irreversible={false}
-        changes={[
-          { label: t('sourceDrift.set.revision'), to: formatNumber(revision, locale) },
-          {
-            label: t('sourceDrift.materialize.decisions'),
-            to: t('sourceDrift.set.effectiveValue', {
-              accepted: formatNumber(accepted, locale),
-              rejected: formatNumber(rejected, locale),
-              undecided: formatNumber(undecided, locale),
-            }),
-            note: t('sourceDrift.materialize.rejectedNote'),
-          },
-          {
-            label: t('sourceDrift.materialize.resultLabel'),
-            note: t('sourceDrift.materialize.stagedOnly'),
-          },
-        ]}
-      />
+        footer={
+          <div className={styles.actions}>
+            <Button variant="secondary" onClick={() => setMaterializeOpen(false)}>
+              {t('action.cancel')}
+            </Button>
+            <Button
+              variant="primary"
+              loading={runMaterialize.isPending}
+              disabled={reason.trim().length === 0}
+              onClick={() => runMaterialize.mutate()}
+            >
+              {t('sourceDrift.materialize.action')}
+            </Button>
+          </div>
+        }
+      >
+        <div className={styles.stack}>
+          <Facts>
+            <Fact label={t('sourceDrift.set.revision')}>{formatNumber(revision, locale)}</Fact>
+            <Fact label={t('sourceDrift.materialize.decisions')}>
+              {t('sourceDrift.set.effectiveValue', {
+                accepted: formatNumber(accepted, locale),
+                rejected: formatNumber(rejected, locale),
+                undecided: formatNumber(undecided, locale),
+              })}
+              <span className={styles.meta}> {t('sourceDrift.materialize.rejectedNote')}</span>
+            </Fact>
+            <Fact label={t('sourceDrift.materialize.resultLabel')}>
+              {t('sourceDrift.materialize.stagedOnly')}
+            </Fact>
+          </Facts>
+          <TextArea
+            label={t('sourceDrift.detail.reasonLabel')}
+            hint={t('sourceDrift.materialize.reasonHint')}
+            rows={3}
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+          />
+        </div>
+      </Modal>
 
       <Modal
         open={abandonOpen}
