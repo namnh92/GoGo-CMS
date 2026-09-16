@@ -24,7 +24,10 @@ const STALE = mappingRows[1]!.placeId
 /** Reachable through the filter, never through the default queue. */
 const UNMAPPED = mappingRows[2]!.placeId
 const VERIFIED = mappingRows[3]!.placeId
-/** The resolver's proposal, unconfirmed: the row the two-answer surface is for. */
+/**
+ * The resolver's proposal, unconfirmed: the row the two-answer surface is for,
+ * and — since #199 — a row the default queue shows rather than hides.
+ */
 const AUTO_MATCHED = mappingRows[4]!.placeId
 
 beforeEach(() => resetMappingModeration())
@@ -112,9 +115,12 @@ describe('the queue', () => {
     signInAs('moderator')
     renderQueue()
     await screen.findByText('Quán Cơm Ba Đình')
-    // NEEDS_REVIEW and STALE by default; the verified row is not in the way.
+    // Everything that blocks publication and has an answer to confirm; the
+    // verified row is not in the way.
     expect(screen.queryByText('Phở Ba Đình')).not.toBeInTheDocument()
-    expect(screen.getByLabelText(/Trạng thái ánh xạ/)).toHaveValue('NEEDS_REVIEW,STALE')
+    expect(screen.getByLabelText(/Trạng thái ánh xạ/)).toHaveValue(
+      'NEEDS_REVIEW,STALE,AUTO_MATCHED',
+    )
   })
 
   it('keeps UNMAPPED discoverable rather than buried', async () => {
@@ -160,7 +166,7 @@ describe('the queue', () => {
     )
     renderQueue()
     expect(await screen.findByText(/Không có dòng nào/)).toBeInTheDocument()
-    expect(screen.getByText(/Không còn dòng nào cần xem lại/)).toBeInTheDocument()
+    expect(screen.getByText(/Không còn dòng nào chặn duyệt đăng/)).toBeInTheDocument()
   })
 })
 

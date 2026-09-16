@@ -103,10 +103,10 @@ export const vi = {
   'mapping.queue.summary': 'Hiển thị {shown} dòng',
   'mapping.queue.empty': 'Không có dòng nào',
   'mapping.queue.emptyActionable':
-    'Không còn dòng nào cần xem lại. Đổi bộ lọc để xem trạng thái khác.',
+    'Không còn dòng nào chặn duyệt đăng. Đổi bộ lọc để xem trạng thái khác.',
   'mapping.queue.emptyFiltered': 'Không có dòng nào khớp bộ lọc hiện tại.',
   'mapping.filter.status': 'Trạng thái ánh xạ',
-  'mapping.filter.actionable': 'Cần xử lý (cần xem lại + đã cũ)',
+  'mapping.filter.actionable': 'Cần xử lý (đang chặn duyệt đăng)',
   'mapping.filter.all': 'Tất cả trạng thái',
   'mapping.filter.blocked': 'Duyệt đăng',
   'mapping.filter.anyApproval': 'Không lọc',
