@@ -260,6 +260,18 @@ export const en: Partial<Record<MessageKey, string>> = {
   'mapping.reselect.title': 'Choose the right unit',
   'mapping.reselect.hint':
     'The previous mapping was rejected. Choose the correct province and commune and confirm — this pair becomes yours.',
+  'mapping.bulk.selected': '{count} selected',
+  'mapping.bulk.selectAll': 'Select every visible row',
+  'mapping.bulk.action': 'Verify {count} rows',
+  'mapping.bulk.hint':
+    'Only rows that already carry a proposed province and commune can be selected. Each row stays its own decision, audited on its own.',
+  'mapping.bulk.confirmTitle': 'Verify the mapping for {count} places',
+  'mapping.bulk.confirmBody':
+    'You become answerable for each place being in the unit the resolver proposed. This publishes nothing — that is still the editor’s decision.',
+  'mapping.bulk.done': 'Verified {verified} of {requested}',
+  'mapping.bulk.doneClean': 'Every selected row was verified.',
+  'mapping.bulk.donePartial':
+    '{conflicts} rows moved under you and {refused} were refused. Reload the list and handle those separately.',
   'mapping.verify.action': 'Verify',
   'mapping.verify.confirmTitle': 'Verify the administrative mapping',
   'mapping.verify.confirmBody': 'You become answerable for this place being in the chosen unit.',

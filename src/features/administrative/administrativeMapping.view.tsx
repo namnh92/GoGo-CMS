@@ -1,6 +1,6 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
 import { useI18n, useT } from '@/shared/i18n/i18n'
 import { queryKeys } from '@/shared/api/queryKeys'
@@ -10,14 +10,26 @@ import { PageBody, PageHeader } from '@/app/PageHeader'
 import { Card, CardBody, CardHeader } from '@/shared/ui/Card'
 import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
-import { InlineSelect } from '@/shared/ui/Field'
+import { Checkbox, InlineSelect } from '@/shared/ui/Field'
 import { DataTable } from '@/shared/ui/DataTable'
-import { AsyncBoundary, EmptyState, PermissionDeniedState } from '@/shared/ui/State'
+import {
+  AsyncBoundary,
+  EmptyState,
+  PermissionDeniedState,
+  useErrorMessage,
+} from '@/shared/ui/State'
+import { ConfirmDialog } from '@/shared/ui/Overlay'
+import { useToast } from '@/shared/ui/Toast'
+import { newIdempotencyKey } from '@/shared/api/client'
 import type {
   AdministrativeMappingListItem,
   AdministrativeMappingStatus,
 } from '@/shared/api/contracts-administrative'
-import { fetchAdministrativeMappings, fetchAdministrativeRemediation } from './api'
+import {
+  fetchAdministrativeMappings,
+  fetchAdministrativeRemediation,
+  verifyMappingsBatch,
+} from './api'
 import { MappingDetailDrawer } from './mappingDetail.view'
 import { MappingStatusBadge, RemediationCounts } from './mappingParts'
 import { styles } from './mapping.style'
@@ -85,6 +97,19 @@ export default function AdministrativeMappingScreen() {
   const { can } = useSession()
 
   const allowed = can('administrativeMapping.read')
+  /** Deciding is the moderator's, and the batch is a pile of decisions. */
+  const canReview = can('administrativeMapping.review')
+
+  const toast = useToast()
+  const queryClient = useQueryClient()
+  const describeError = useErrorMessage()
+  const [selected, setSelected] = useState<string[]>([])
+  const [bulkOpen, setBulkOpen] = useState(false)
+  /**
+   * Minted when the dialog opens: retrying one decision replays it, while
+   * opening the dialog again is a new decision and gets a new key.
+   */
+  const [bulkKey, setBulkKey] = useState(newIdempotencyKey)
 
   const [params, setParams] = useSearchParams()
   const status = params.get('status') ?? ACTIONABLE
@@ -135,8 +160,101 @@ export default function AdministrativeMappingScreen() {
 
   const rows = useMemo(() => queue.data?.items ?? [], [queue.data])
 
+  /**
+   * A row is selectable only when it already carries a pair to confirm.
+   * UNMAPPED has none — "verify" would be asking the reviewer to agree with
+   * nothing — and the server refuses it, so offering the checkbox would be
+   * offering a button that cannot work.
+   */
+  const selectable = useMemo(
+    () => rows.filter((row) => row.provinceCode && row.communeCode),
+    [rows],
+  )
+  const selectableIds = useMemo(() => selectable.map((row) => row.placeId), [selectable])
+
+  // A filter or a page is a different set of rows; a selection that survived
+  // the change would confirm places the reviewer is no longer looking at.
+  useEffect(() => setSelected([]), [scope])
+
+  const chosen = useMemo(
+    () => selectable.filter((row) => selected.includes(row.placeId)),
+    [selectable, selected],
+  )
+
+  const runBulkVerify = useMutation({
+    mutationFn: () =>
+      verifyMappingsBatch(
+        chosen.map((row) => ({
+          placeId: row.placeId,
+          provinceCode: row.provinceCode!,
+          communeCode: row.communeCode!,
+          // Per row, from the row on screen. The list is the reviewer's
+          // photograph of a moment, and each row moves on its own afterwards.
+          expectedUpdatedAt: row.updatedAt,
+        })),
+        { idempotencyKey: bulkKey },
+      ),
+    onSuccess: (report) => {
+      setBulkOpen(false)
+      setBulkKey(newIdempotencyKey())
+      setSelected([])
+      void queryClient.invalidateQueries({ queryKey: queryKeys.administrativeAll })
+      // Never "done" when rows fell out: a batch that partly landed is the
+      // normal answer, and the reviewer has to know which part.
+      const clean = report.conflicts === 0 && report.refused === 0
+      toast.success(
+        t('mapping.bulk.done', {
+          verified: formatNumber(report.verified, locale),
+          requested: formatNumber(report.requested, locale),
+        }),
+        clean
+          ? t('mapping.bulk.doneClean')
+          : t('mapping.bulk.donePartial', {
+              conflicts: formatNumber(report.conflicts, locale),
+              refused: formatNumber(report.refused, locale),
+            }),
+      )
+    },
+    onError: (error) => {
+      setBulkKey(newIdempotencyKey())
+      toast.error(describeError(error))
+    },
+  })
+
   const columns = useMemo<ColumnDef<AdministrativeMappingListItem, unknown>[]>(
     () => [
+      ...(canReview
+        ? [
+            {
+              id: 'select',
+              header: () => (
+                <Checkbox
+                  label={t('mapping.bulk.selectAll')}
+                  checked={selectableIds.length > 0 && selected.length === selectableIds.length}
+                  indeterminate={selected.length > 0}
+                  onChange={(checked) => setSelected(checked ? selectableIds : [])}
+                />
+              ),
+              cell: ({ row }: { row: { original: AdministrativeMappingListItem } }) =>
+                row.original.provinceCode && row.original.communeCode ? (
+                  <span onClick={(event) => event.stopPropagation()}>
+                    <Checkbox
+                      label={row.original.name}
+                      checked={selected.includes(row.original.placeId)}
+                      onChange={(checked) =>
+                        setSelected((current) =>
+                          checked
+                            ? [...current, row.original.placeId]
+                            : current.filter((id) => id !== row.original.placeId),
+                        )
+                      }
+                    />
+                  </span>
+                ) : null,
+              enableSorting: false,
+            } as ColumnDef<AdministrativeMappingListItem, unknown>,
+          ]
+        : []),
       {
         id: 'place',
         header: () => t('mapping.col.place'),
@@ -216,7 +334,7 @@ export default function AdministrativeMappingScreen() {
         enableSorting: false,
       },
     ],
-    [locale, t],
+    [canReview, locale, selected, selectableIds, t],
   )
 
   if (!allowed) {
@@ -340,9 +458,31 @@ export default function AdministrativeMappingScreen() {
             >
               {(page) => (
                 <>
+                  {canReview && selectableIds.length > 0 && (
+                    <div className={styles.toolbar}>
+                      <p className={styles.meta}>{t('mapping.bulk.hint')}</p>
+                      <div className={styles.actions}>
+                        <span className={styles.meta}>
+                          {t('mapping.bulk.selected', {
+                            count: formatNumber(selected.length, locale),
+                          })}
+                        </span>
+                        <Button
+                          size="sm"
+                          disabled={selected.length === 0 || runBulkVerify.isPending}
+                          onClick={() => setBulkOpen(true)}
+                        >
+                          {t('mapping.bulk.action', {
+                            count: formatNumber(selected.length, locale),
+                          })}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                   <DataTable
                     data={rows}
                     columns={columns}
+                    selectedIds={selected}
                     getRowId={(row) => row.placeId}
                     caption={t('mapping.queue.title')}
                     onRowClick={(row) => setOpenPlace(row.placeId)}
@@ -378,6 +518,32 @@ export default function AdministrativeMappingScreen() {
         </div>
       </PageBody>
 
+      <ConfirmDialog
+        open={bulkOpen}
+        onClose={() => setBulkOpen(false)}
+        onConfirm={() => runBulkVerify.mutate()}
+        title={t('mapping.bulk.confirmTitle', { count: formatNumber(chosen.length, locale) })}
+        description={t('mapping.bulk.confirmBody')}
+        confirmLabel={t('mapping.bulk.action', { count: formatNumber(chosen.length, locale) })}
+        loading={runBulkVerify.isPending}
+        tone="primary"
+        irreversible={false}
+        changes={[
+          {
+            label: t('mapping.col.status'),
+            from: t('mapping.status.AUTO_MATCHED'),
+            to: t('mapping.status.VERIFIED'),
+          },
+          {
+            label: t('mapping.bulk.selected', { count: formatNumber(chosen.length, locale) }),
+            to: chosen
+              .slice(0, 3)
+              .map((row) => row.name)
+              .join(', '),
+            note: chosen.length > 3 ? '…' : undefined,
+          },
+        ]}
+      />
       <MappingDetailDrawer placeId={openPlace} onClose={() => setOpenPlace(null)} />
     </>
   )

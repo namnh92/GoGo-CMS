@@ -20,6 +20,7 @@ import {
   administrativeTransitionResultSchema,
   administrativeUnitPageSchema,
   administrativeValidateResultSchema,
+  administrativeBatchVerifyReportSchema,
   administrativeVerifyResultSchema,
   type AdministrativeCapability,
   type AdministrativeDatasetDetail,
@@ -502,6 +503,29 @@ export function verifyPlaceMapping(
     administrativeVerifyResultSchema,
     `/cms/places/${placeId}/administrative-mapping/verify`,
     { method: 'POST', body: input, idempotencyKey },
+  )
+}
+
+/**
+ * GoGo-BE#613 — confirm many proposals in one request.
+ *
+ * `expectedUpdatedAt` travels **per entry**, taken from the row the reviewer is
+ * looking at. A batch-wide token would be a claim nobody can make: the rows
+ * were read at one moment and move independently afterwards.
+ */
+export function verifyMappingsBatch(
+  entries: (MappingDecision & {
+    placeId: string
+    provinceCode: string
+    communeCode: string
+    legacyDistrictCode?: string | null
+  })[],
+  { idempotencyKey = newIdempotencyKey() }: Idempotent = {},
+) {
+  return apiFetchParsed(
+    administrativeBatchVerifyReportSchema,
+    '/cms/administrative-mappings/verify',
+    { method: 'POST', body: { entries }, idempotencyKey },
   )
 }
 
