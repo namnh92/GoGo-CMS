@@ -25,7 +25,7 @@ const drift = read('scripts/check-openapi-drift.mjs')
 const generated = read('src/shared/api/schema.d.ts')
 const administrativeContracts = read('src/shared/api/contracts-administrative.ts')
 
-const EXPECTED = '1.0.0-alpha.28'
+const EXPECTED = '1.0.0-alpha.41'
 
 /**
  * The vendored file byte for byte, as GoGo-BE published it.
@@ -35,10 +35,10 @@ const EXPECTED = '1.0.0-alpha.28'
  * hand-edited, and this is what makes that visible rather than invisible. A
  * legitimate re-vendor updates the version above and this digest together.
  */
-const SPEC_SHA256 = 'ec1e1b06a06ae5ea4a2e83601c7f533bbf2c4613b6d21d954164a979254b3ec2'
+const SPEC_SHA256 = '7ac82db4be08c40be55bb57e9b12fdf77885186f77f0dbd10a6250bdd8255b17'
 
 /** `pnpm api:routes` on GoGo-BE reports the same number against the real router. */
-const SERVED_OPERATIONS = 255
+const SERVED_OPERATIONS = 264
 
 describe('the vendored OpenAPI contract', () => {
   it(`declares ${EXPECTED}, and the drift gate expects the same`, () => {
@@ -75,6 +75,8 @@ describe('the vendored OpenAPI contract', () => {
       '/cms/administrative-datasets/{id}/rollback:',
       '/cms/administrative-mappings:',
       '/cms/administrative-mappings/remediation:',
+      // GoGo-BE#613: the batch the queue confirms proposals with.
+      '/cms/administrative-mappings/verify:',
       '/cms/places/{id}/administrative-mapping:',
     ]) {
       expect(spec).toContain(path)

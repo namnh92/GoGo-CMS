@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: GoGo API
-  version: 1.0.0-alpha.28
+  version: 1.0.0-alpha.41
   description: |
     Public contract for GoGo clients (Mobile, Web, Mini App). This page is the
     integration guide — every rule below is enforced by the API, not advisory.
@@ -79,6 +79,9 @@ info:
       250.000 ₫). Never send floats.
     - `budgetMode` is `total` or `per_person`; convert consistently — the API
       never mixes them.
+    - **Plan costs carry their scope.** `PlanTotals` and every `PlanStop` say
+      what `costMin`/`costMax` are per in `costScope` (`per_person` today).
+      Multiply by `participantCount` for a group figure; never divide.
     - Times are ISO-8601 UTC. Opening hours use minutes-of-day in **place-local
       time** (`closesAtMinute: 1380` = 23:00).
     - **DTOs return facts, not sentences.** Compose copy client-side from
@@ -371,7 +374,8 @@ paths:
       summary: Current actor — the private profile for a user, session facts for a guest
       description: >
         ADR-0022. A user receives the whole profile, including the fields
-        nobody else ever sees (email, home area, interests, usual budget), and
+        nobody else ever sees (email, home area, interests, usual budget, date
+        of birth), and
         `capabilities.avatarUpload`, which says before a picker opens whether
         this environment can take an avatar at all. A guest receives its
         session facts: `roomId`, `displayName`, `expiresAt`.
@@ -392,6 +396,12 @@ paths:
         and only `mood` is accepted (ADR-0022); an unknown key or an
         unsupported kind is `INVALID_TAXONOMY_KEYS`. `usualBudget.perPerson` is
         integer minor units, a create-room default, never a room constraint.
+        `dateOfBirth` (PROF-BE-013) is a calendar date `YYYY-MM-DD`: a date
+        that does not exist is `VALIDATION_FAILED` with field error code
+        `invalid_date`, and a date after today in `Asia/Ho_Chi_Minh` is
+        `VALIDATION_FAILED` with field error code `too_big`; today itself is
+        accepted. No minimum age applies. It is returned only on the owner's
+        `/me` and export, never in a member or public summary.
         Users only: a guest gets 403.
       requestBody:
         content:
@@ -419,7 +429,7 @@ paths:
         Removed: login (status `deleted`, email and password hash nulled, so no
         credential addresses the account again), every session, device tokens
         and push subscriptions, the profile (display name replaced, avatar,
-        home area, usual budget, interests), the processed avatar in the public
+        home area, usual budget, interests, date of birth), the processed avatar in the public
         bucket and its edge cache entry, saved items, notifications and
         notification preferences. The name on room membership rows is replaced.
 
@@ -645,6 +655,9 @@ paths:
               type: object
               required: [status]
               properties:
+                allowIncompletePreferences:
+                  type: boolean
+                  description: Explicit host acknowledgement when at least two members completed and other joined members have not.
                 status:
                   type: string
                   enum: [draft, collecting, matching, ready, active, completed, cancelled, expired]
@@ -654,6 +667,42 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/RoomSummary' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /rooms/{id}/title:
+    patch:
+      operationId: renameRoom
+      tags: [rooms]
+      summary: 'Host-only: rename the room or clear its name'
+      description: >
+        BE-BFF-022. Allowed while the room is `draft`, `collecting`, `matching`
+        or `ready` — the same window as constraint edits; any other state
+        answers `409 ROOM_NOT_EDITABLE`. The title is trimmed and limited to 80
+        characters like a name given at creation; an empty string or `null`
+        clears it, and clients show their own untitled fallback. A name is not a
+        constraint: suggestions and plans are not marked stale and
+        `constraintVersion` does not move. Last write wins — there is no
+        version to send.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title: { type: string, nullable: true, maxLength: 80 }
+      responses:
+        '200':
+          description: Renamed; the updated summary
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RoomSummary' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
 
   /rooms/{id}/events:
@@ -1218,6 +1267,41 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '503': { $ref: '#/components/responses/AdministrativeUnavailable' }
 
+  /administrative/locate:
+    get:
+      operationId: locateAdministrativeArea
+      tags: [administrative]
+      summary: The current commune or province containing a position
+      description: >
+        ADM-022 (#569). Point-in-polygon against the boundary release bound to
+        the published dataset. A single containing commune whose unit agrees
+        with its polygon's province is `commune`; a point claimed by one
+        province only (including a shared commune edge inside it) is
+        `province`; anything else is `unknown`, never a guess. The position is
+        not stored, and the answer is `Cache-Control: private, no-store`.
+      security: []
+      parameters:
+        - {
+            name: lat,
+            in: query,
+            required: true,
+            schema: { type: number, minimum: -90, maximum: 90 },
+          }
+        - {
+            name: lng,
+            in: query,
+            required: true,
+            schema: { type: number, minimum: -180, maximum: 180 },
+          }
+      responses:
+        '200':
+          description: The containing area, or unknown
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdministrativeLocation' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/AdministrativeUnavailable' }
   /administrative/units/{code}:
     get:
       operationId: getAdministrativeUnit
@@ -1966,6 +2050,63 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '429': { $ref: '#/components/responses/RateLimited' }
 
+  /cms/administrative-mappings/verify:
+    post:
+      operationId: verifyAdministrativeMappingsBatch
+      tags: [cms, administrative]
+      summary: 'Moderation: confirm many proposals, one decision each (ADM-024)'
+      description: >
+        A boundary release lets the resolver answer for the whole catalogue at
+        once, so a reviewer can agree with hundreds of proposals in a sitting.
+        This is the request that carries them.
+
+
+        It is not a bulk write. Every entry takes the same path as the
+        single-place route: its own transaction, its own row lock, its own
+        re-read of the active dataset, its own hierarchy check, its own
+        `expectedUpdatedAt`, and its own audit row. A batch is N decisions one
+        person took at one moment, and the audit log says exactly that.
+
+
+        **Partial success is normal.** A place another reviewer touched a second
+        ago fails alone, as `conflict`; an entry whose pair is not current in the
+        active dataset fails alone, as `refused` with the reason. The response is
+        `201` either way — the request succeeded, and the report says what
+        happened to each place.
+
+
+        Two conditions refuse the whole batch and write nothing: the same place
+        listed twice (`DUPLICATE_PLACE_IN_BATCH` — two `expectedUpdatedAt`
+        values for one row, the second wrong the moment the first commits), and
+        no published administrative dataset (`ADMINISTRATIVE_DATASET_UNAVAILABLE`).
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [entries]
+              properties:
+                entries:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items: { $ref: '#/components/schemas/AdministrativeMappingBatchEntry' }
+                note: { type: string, maxLength: 500 }
+      responses:
+        '201':
+          description: The batch ran; every entry carries its own outcome
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdministrativeMappingBatchReport' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/AdministrativeUnavailable' }
+
   /cms/administrative-mappings/remediation:
     get:
       operationId: getAdministrativeRemediation
@@ -2329,6 +2470,13 @@ paths:
         tolerance + synonym expansion; hard filters in SQL; weighted versioned
         ranking (meta.weightsVersion); stable keyset cursor. Lodging excluded
         unless requested. Zero-results emit telemetry without raw PII.
+        ADM-021: scope by a position (lat/lng, radiusM defaults to 10 km) or by a
+        canonical area (datasetVersion + provinceCode, optional communeCode for a
+        single commune). A position wins when both are sent; the two are never
+        intersected, and meta.location says which one scoped the results. An
+        area matches only places with a VERIFIED mapping from the same dataset.
+        A code that is not current or not under its province is 400; a dataset
+        that is not the published one is 409 ADMINISTRATIVE_VERSION_CHANGED.
       security: []
       parameters:
         - { name: q, in: query, schema: { type: string, maxLength: 200 } }
@@ -2350,6 +2498,18 @@ paths:
             ALL required,
           }
         - { name: includeLodging, in: query, schema: { type: boolean } }
+        - name: datasetVersion
+          in: query
+          description: Administrative dataset of provinceCode/communeCode. Required with provinceCode.
+          schema: { type: string, minLength: 1, maxLength: 200 }
+        - name: provinceCode
+          in: query
+          description: Canonical province code. Ignored when lat/lng are sent.
+          schema: { type: string, pattern: '^[0-9]{2,5}$' }
+        - name: communeCode
+          in: query
+          description: Canonical commune code under provinceCode; omit for the whole province.
+          schema: { type: string, pattern: '^[0-9]{2,5}$' }
         - name: sort
           in: query
           schema:
@@ -2378,7 +2538,9 @@ paths:
                     properties:
                       weightsVersion: { type: string }
                       sort: { type: string }
+                      location: { $ref: '#/components/schemas/SearchLocation' }
         '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
         '429': { $ref: '#/components/responses/RateLimited' }
 
   /places/{id}:
@@ -2397,11 +2559,48 @@ paths:
               schema: { $ref: '#/components/schemas/PlaceDetail' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /places/{id}/reviews:
+    get:
+      operationId: listPlaceReviews
+      tags: [places]
+      summary: Latest or most helpful published GoGo reviews of a place (at most three)
+      description: >
+        BE-BFF-018. GoGo community reviews only, never Google's: the provider
+        rating stays on `PlaceDetail.rating`/`ratingCount` with its attribution
+        and is never merged with these. Only reviews a moderator published are
+        listed; `pending`, `rejected`, `removed` and emergency-`hidden` reviews
+        never appear. Ordered newest first by `createdAt`, ties broken by `id`
+        descending, so repeated reads agree. Answers for the same places
+        `getPlaceDetail` does (404 otherwise) and is served
+        `Cache-Control: no-store`, so a takedown holds on the next read.
+
+
+        BE-BFF-019 (ADR-0026, proposal): `order=helpful` ranks by
+        `helpfulCount` descending, then the same newest-first order, so with no
+        reactions it answers exactly what `latest` does. Counts only; no
+        response names who reacted.
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - name: order
+          in: query
+          required: false
+          schema: { type: string, enum: [latest, helpful], default: latest }
+      responses:
+        '200':
+          description: Up to three reviews; an empty list when none is published
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PlaceReviewPreview' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
   /rooms/{roomId}/suggestions:
     post:
       operationId: generateSuggestions
       tags: [suggestions]
-      summary: Run the deterministic suggestion pipeline (SG-002..005)
+      summary: 'Host-only: run the deterministic suggestion pipeline (SG-002..005)'
+      description: Requires at least two completed responses. Incomplete rooms must first enter matching with explicit host acknowledgement (ADR-0024).
       parameters:
         - { name: roomId, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
@@ -2773,6 +2972,10 @@ paths:
       operationId: listSaved
       tags: [me]
       summary: Saved places/plans (FR-USER-001)
+      description: >
+        The whole list, newest first, each with ADM-022 area facts (see
+        SavedItemArea). Grouping and ordering are the client's, over the full
+        list rather than a page.
       responses:
         '200':
           description: Saved items
@@ -2834,8 +3037,10 @@ paths:
       description: >
         Everything the account owns, as JSON, from an explicit allowlist:
         profile (display name, email, locale, avatar URL, home area, interests,
-        usual budget — ADR-0022), memberships, preferences, votes, saved
-        items, reviews. Never a credential, a session, or an upload key.
+        usual budget — ADR-0022, date of birth — PROF-BE-013), memberships,
+        preferences, votes, saved items, reviews, review reactions given
+        (ADR-0026), and the push switch (`notificationSettings`, ADR-0025).
+        Never a credential, a session, or an upload key.
         Audit-logged and recorded in the privacy ledger.
       responses:
         '200': { description: JSON export; audit-logged }
@@ -3804,6 +4009,69 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /reviews/{id}/reactions/helpful:
+    put:
+      operationId: markReviewHelpful
+      tags: [me]
+      summary: Mark a published review helpful (idempotent; ADR-0026 proposal)
+      description: >
+        BE-BFF-019. One `helpful` per account per review: repeating the call
+        changes nothing and answers the same state. Signed-in accounts only
+        (guests get `403 USER_ONLY`), never on your own review
+        (`403 OWN_REVIEW`). A review that is not published on a place Place
+        Detail opens answers `404 REVIEW_NOT_FOUND`, exactly like a missing one.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: The state this request produced
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReviewReactionState' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+    delete:
+      operationId: unmarkReviewHelpful
+      tags: [me]
+      summary: Remove your helpful mark from a review (idempotent; ADR-0026 proposal)
+      description: >
+        BE-BFF-019. Removing a mark that is not there changes nothing and
+        answers the same state. Same permissions and not-found rule as marking.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: The state this request produced
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReviewReactionState' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /me/review-reactions:
+    get:
+      operationId: listMyReviewReactions
+      tags: [me]
+      summary: Which published reviews of a place the caller marked helpful
+      description: >
+        BE-BFF-019. The caller's own marks only — how a client shows its toggle
+        state while the public list stays free of reactor identities. Signed-in
+        accounts only (guests get `403 USER_ONLY`).
+      parameters:
+        - { name: placeId, in: query, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Review ids, most recent mark first
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MyReviewReactions' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
   /me/notifications/{id}/read:
     post:
       operationId: markNotificationRead
@@ -4007,10 +4275,15 @@ paths:
     get:
       operationId: getNotificationPreferences
       tags: [me]
-      summary: Per-channel, per-kind notification opt-ins
+      summary: Per-channel, per-kind notification opt-ins (legacy clients)
+      description: >
+        Kept for clients released before NTF-BE-014 (#572). Push is now one
+        switch per account (`GET /me/notification-settings`, ADR-0025), so every
+        push kind here reports that switch's value; email rows are returned as
+        stored. New clients read the settings resource instead.
       responses:
         '200':
-          description: Preferences (absent rows default to enabled)
+          description: Every push kind carrying the switch's value, then stored email rows
           content:
             application/json:
               schema:
@@ -4024,7 +4297,13 @@ paths:
     put:
       operationId: setNotificationPreference
       tags: [me]
-      summary: Opt in/out of one notification kind on one channel
+      summary: Opt in/out of one notification kind on one channel (legacy clients)
+      description: >
+        Kept for clients released before NTF-BE-014 (#572). The row is stored,
+        but only a push opt-out changes delivery: it turns the account's push
+        switch off (`source: legacy`), since a single kind can no longer be
+        stopped on its own. `enabled: true` never turns push back on — that is
+        `PUT /me/notification-settings`.
       requestBody:
         required: true
         content:
@@ -4039,6 +4318,55 @@ paths:
       responses:
         '200':
           description: '{ updated: true }'
+
+  /me/notification-settings:
+    get:
+      operationId: getNotificationSettings
+      tags: [me]
+      summary: The account's one push switch (NTF-BE-014)
+      description: >
+        ADR-0025. `pushEnabled` is what this account asked GoGo to do and
+        nothing more: it is not this device's OS notification permission, not a
+        registered push subscription (`PUT /me/push-subscriptions`), and never
+        evidence that anything was delivered. The in-app inbox is written
+        whatever it says.
+      responses:
+        '200':
+          description: The switch as the server applies it
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationSettings' }
+        '403':
+          description: USER_ONLY — guests have no account to hold a switch.
+    put:
+      operationId: setNotificationSettings
+      tags: [me]
+      summary: Turn every push notification kind on or off
+      description: >
+        Idempotent. `true` allows every push kind GoGo sends, CMS campaigns
+        included; `false` stops all of them. Once set, per-kind rows written by
+        older clients no longer affect delivery (ADR-0025). A client should keep
+        showing the previous value until this returns, and restore it on
+        failure.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [pushEnabled]
+              properties:
+                pushEnabled: { type: boolean }
+      responses:
+        '200':
+          description: The switch as stored
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationSettings' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403':
+          description: USER_ONLY — guests have no account to hold a switch.
 
   /docs:
     get:
@@ -9679,6 +10007,52 @@ components:
           description: >
             The place's `updatedAt` as the reviewer saw it. A mismatch is 409
             PLACE_MODIFIED rather than a lost update.
+    AdministrativeMappingBatchEntry:
+      type: object
+      additionalProperties: false
+      required: [placeId, provinceCode, communeCode, expectedUpdatedAt]
+      properties:
+        placeId: { type: string, format: uuid }
+        provinceCode: { type: string, pattern: '^[0-9]{2,5}$' }
+        communeCode: { type: string, pattern: '^[0-9]{2,5}$' }
+        legacyDistrictCode:
+          type: string
+          pattern: '^[0-9]{2,5}$'
+          nullable: true
+          description: Pre-2025-07-01 evidence. Checked against the historical set.
+        expectedUpdatedAt:
+          type: string
+          format: date-time
+          description: >
+            Per entry, never per batch: a reviewer decides about the row they
+            saw, and the rows in a batch were read at the same moment but move
+            independently afterwards.
+    AdministrativeMappingBatchResult:
+      type: object
+      required: [placeId, outcome, status, datasetVersion, code, message]
+      properties:
+        placeId: { type: string, format: uuid }
+        outcome: { type: string, enum: [verified, conflict, refused] }
+        status:
+          allOf: [{ $ref: '#/components/schemas/AdministrativeMappingStatus' }]
+          nullable: true
+        datasetVersion: { type: string, nullable: true }
+        code:
+          type: string
+          nullable: true
+          description: The refusal's error code, so the reviewer is told why rather than that it failed.
+        message: { type: string, nullable: true }
+    AdministrativeMappingBatchReport:
+      type: object
+      required: [requested, verified, conflicts, refused, results]
+      properties:
+        requested: { type: integer }
+        verified: { type: integer }
+        conflicts: { type: integer }
+        refused: { type: integer }
+        results:
+          type: array
+          items: { $ref: '#/components/schemas/AdministrativeMappingBatchResult' }
     AdministrativeMappingListItem:
       type: object
       required:
@@ -9899,11 +10273,84 @@ components:
         originText: { type: string, maxLength: 200 }
         originLat: { type: number, minimum: -90, maximum: 90 }
         originLng: { type: number, minimum: -180, maximum: 180 }
-        areaKey: { type: string }
+        administrativeArea:
+          oneOf:
+            - $ref: '#/components/schemas/AdministrativeAreaInput'
+            - type: 'null'
+          description: >
+            ADM-020 — the room's canonical area: a province with an optional
+            commune (a null commune means the whole province), validated against
+            the published administrative dataset. On create, omitted or null means
+            no area. On a constraint update, omitted keeps the stored area, null
+            clears it, and the same datasetVersion/provinceCode/communeCode as
+            stored keeps the stored snapshot unchanged even when that dataset is
+            no longer published; any other value is a new selection and must name
+            the published dataset (409 ADMINISTRATIVE_VERSION_CHANGED otherwise,
+            400 for a code that is not current or not under its province). The
+            server ignores provinceName/communeName/status echoed from
+            RoomSummary. Independent of originLat/originLng/radiusM: no position
+            is ever inferred from the area. Setting an area replaces areaKey.
+        areaKey:
+          type: string
+          description: Legacy service-area key. Cleared and ignored while administrativeArea is set.
         radiusM: { type: integer, minimum: 100, maximum: 50000 }
         startAt: { type: string, format: date-time }
         endAt: { type: string, format: date-time }
-        budgetMode: { type: string, enum: [total, per_person] }
+        budgetMode:
+          type: string
+          enum: [total, per_person]
+          description: >
+            A couple room must be `total`: its budget is a total for two people
+            and the client asks for it that way (GoGo-BE#559). `per_person`
+            there is refused with `INVALID_BUDGET_MODE`, on create and on an
+            explicit constraint edit alike. A group host picks either unit.
+            Rooms stored as `per_person` before this rule keep their value and
+            are never converted behind anyone's back.
+        budgetAmount:
+          type: integer
+          minimum: 0
+          description: Integer minor units, interpreted per budgetMode.
+        currency: { type: string, minLength: 3, maxLength: 3, default: VND }
+        dietaryKeys:
+          type: array
+          items: { type: string }
+        accessibilityKeys:
+          type: array
+          items: { type: string }
+    RoomConstraints:
+      type: object
+      description: A room's current constraint version as read back (RoomSummary.constraints).
+      required: [budgetMode, budgetAmount, administrativeArea]
+      properties:
+        originText: { type: string, maxLength: 200 }
+        originLat: { type: number, minimum: -90, maximum: 90 }
+        originLng: { type: number, minimum: -180, maximum: 180 }
+        administrativeArea:
+          oneOf:
+            - $ref: '#/components/schemas/AdministrativeArea'
+            - type: 'null'
+          description: >
+            ADM-020 — the stored canonical area with the labels saved when it was
+            chosen, or null. status is needs_reselection when its dataset is no
+            longer the published one; the room keeps its labels, and suggestions
+            are refused with 409 ADMINISTRATIVE_VERSION_CHANGED until the host
+            chooses again or clears it.
+        areaKey:
+          type: string
+          description: Legacy service-area key. Cleared and ignored while administrativeArea is set.
+        radiusM: { type: integer, minimum: 100, maximum: 50000 }
+        startAt: { type: string, format: date-time }
+        endAt: { type: string, format: date-time }
+        budgetMode:
+          type: string
+          enum: [total, per_person]
+          description: >
+            A couple room must be `total`: its budget is a total for two people
+            and the client asks for it that way (GoGo-BE#559). `per_person`
+            there is refused with `INVALID_BUDGET_MODE`, on create and on an
+            explicit constraint edit alike. A group host picks either unit.
+            Rooms stored as `per_person` before this rule keep their value and
+            are never converted behind anyone's back.
         budgetAmount:
           type: integer
           minimum: 0
@@ -9956,6 +10403,43 @@ components:
       properties:
         perPerson: { type: integer, minimum: 0 }
         currency: { type: string, minLength: 3, maxLength: 3 }
+    SearchLocation:
+      type: object
+      description: >
+        ADM-021 — the scope that produced the results. gps: the request's
+        position. administrative_area: the canonical area, with server labels.
+        none: neither was sent, so results are not location-scoped.
+      required: [source]
+      properties:
+        source: { type: string, enum: [gps, administrative_area, none] }
+        area:
+          type: object
+          description: Present only when source is administrative_area.
+          required: [datasetVersion, provinceCode, provinceName, communeCode, communeName]
+          properties:
+            datasetVersion: { type: string }
+            provinceCode: { type: string }
+            provinceName: { type: string }
+            communeCode: { type: [string, 'null'] }
+            communeName: { type: [string, 'null'] }
+    AdministrativeAreaInput:
+      type: object
+      additionalProperties: false
+      required: [datasetVersion, provinceCode]
+      properties:
+        datasetVersion: { type: string, minLength: 1, maxLength: 200 }
+        provinceCode: { type: string, pattern: '^[0-9]{2,5}$' }
+        communeCode: { type: string, nullable: true, pattern: '^[0-9]{2,5}$' }
+    AdministrativeArea:
+      type: object
+      required: [datasetVersion, provinceCode, communeCode, provinceName, communeName, status]
+      properties:
+        datasetVersion: { type: string }
+        provinceCode: { type: string }
+        communeCode: { type: string, nullable: true }
+        provinceName: { type: string }
+        communeName: { type: string, nullable: true }
+        status: { type: string, enum: [current, needs_reselection] }
     Me:
       type: object
       description: >
@@ -9975,6 +10459,9 @@ components:
           type: string
           nullable: true
           description: Null while media hosting is not configured, even if an avatar is stored.
+        homeAdministrativeArea:
+          nullable: true
+          allOf: [{ $ref: '#/components/schemas/AdministrativeArea' }]
         homeArea:
           nullable: true
           allOf: [{ $ref: '#/components/schemas/HomeArea' }]
@@ -9982,6 +10469,13 @@ components:
         usualBudget:
           nullable: true
           allOf: [{ $ref: '#/components/schemas/UsualBudget' }]
+        dateOfBirth:
+          type: string
+          format: date
+          nullable: true
+          description: >
+            PROF-BE-013. Calendar date `YYYY-MM-DD`, never shifted by a time
+            zone; null when unset. Owner-only; a guest carries no such field.
         capabilities:
           type: object
           required: [avatarUpload]
@@ -9997,7 +10491,19 @@ components:
       properties:
         displayName: { type: string, minLength: 1, maxLength: 50 }
         locale: { type: string, enum: [vi, en] }
+        homeAdministrativeArea:
+          nullable: true
+          description: Canonical area; null clears. Cannot be sent with legacy homeAreaKey. A successful write clears the legacy field.
+          allOf: [{ $ref: '#/components/schemas/AdministrativeAreaInput' }]
         homeAreaKey: { type: string, minLength: 1, maxLength: 64, nullable: true }
+        dateOfBirth:
+          type: string
+          format: date
+          nullable: true
+          description: >
+            PROF-BE-013. Calendar date `YYYY-MM-DD`; null clears, omitted keeps.
+            It must exist (`2027-02-29` is `invalid_date`) and must not be after
+            today in Asia/Ho_Chi_Minh (`too_big`). No minimum age.
         interests:
           nullable: true
           allOf: [{ $ref: '#/components/schemas/ProfileInterests' }]
@@ -10041,9 +10547,21 @@ components:
         expiresAt: { type: string, format: date-time }
         myMemberId: { type: string, format: uuid }
         myRole: { type: string, enum: [host, member] }
-        constraints:
-          allOf:
-            - $ref: '#/components/schemas/RoomConstraintInput'
+        matching:
+          type: object
+          required: [completedCount, pendingCount, canStart, canStartWithIncomplete, blockedReason]
+          properties:
+            completedCount: { type: integer }
+            pendingCount: { type: integer }
+            canStart: { type: boolean }
+            canStartWithIncomplete: { type: boolean }
+            blockedReason:
+              {
+                type: string,
+                nullable: true,
+                enum: [HOST_ONLY, ROOM_NOT_MATCHING, MATCHING_QUORUM_REQUIRED, null],
+              }
+        constraints: { $ref: '#/components/schemas/RoomConstraints' }
         members:
           type: array
           items: { $ref: '#/components/schemas/RoomMember' }
@@ -11794,6 +12312,31 @@ components:
       properties:
         decision: { type: string, enum: [published, rejected, approved, actioned, dismissed] }
         reason: { type: string, minLength: 3, maxLength: 500 }
+    NotificationSettings:
+      type: object
+      description: >
+        ADR-0025. One app-level push switch per account. Deliberately carries no
+        OS permission, subscription or delivery field: the device knows its own
+        permission, `PUT /me/push-subscriptions` records reachability, and only
+        the provider knows about delivery.
+      required: [pushEnabled, source, updatedAt]
+      properties:
+        pushEnabled:
+          type: boolean
+          description: Whether GoGo may ask the provider to push to this account, for every kind.
+        source:
+          type: string
+          enum: [default, explicit, migrated, legacy]
+          description: >
+            `default` — never chosen, so on. `explicit` — set through
+            `PUT /me/notification-settings`. `migrated` — derived once by
+            migration 0064 from per-kind choices: on only if every stored push
+            kind was on. `legacy` — an older client turned one kind off, which
+            turns push off.
+        updatedAt:
+          type: [string, 'null']
+          format: date-time
+          description: When the switch was last stored; null while it is the default.
     NotificationKind:
       type: string
       enum:
@@ -11814,10 +12357,44 @@ components:
         createdAt: { type: string, format: date-time }
     SavedItem:
       type: object
+      required: [targetType, targetId, savedAt, area]
       properties:
         targetType: { type: string, enum: [place, plan] }
         targetId: { type: string, format: uuid }
         savedAt: { type: string, format: date-time }
+        area: { $ref: '#/components/schemas/SavedItemArea' }
+    SavedItemArea:
+      type: object
+      description: >
+        ADM-022 (#569) — facts to group a saved item by, never a composed label.
+        A place is `commune` only through a VERIFIED mapping in the published
+        dataset. A plan is `commune` when every stop is in one commune,
+        `province` when every stop is in one province across communes,
+        `multiple_provinces` when stops span provinces, and `unknown` when any
+        stop has no such mapping (a plan is never placed by its first stop).
+        Labels come from the published dataset.
+      required: [scope, datasetVersion, provinceCode, provinceName, communeCode, communeName]
+      properties:
+        scope: { type: string, enum: [commune, province, multiple_provinces, unknown] }
+        datasetVersion: { type: [string, 'null'] }
+        provinceCode: { type: [string, 'null'] }
+        provinceName: { type: [string, 'null'] }
+        communeCode: { type: [string, 'null'] }
+        communeName: { type: [string, 'null'] }
+    AdministrativeLocation:
+      type: object
+      required: [datasetVersion, area]
+      properties:
+        datasetVersion: { type: string }
+        area:
+          type: object
+          required: [scope, provinceCode, provinceName, communeCode, communeName]
+          properties:
+            scope: { type: string, enum: [commune, province, unknown] }
+            provinceCode: { type: [string, 'null'] }
+            provinceName: { type: [string, 'null'] }
+            communeCode: { type: [string, 'null'] }
+            communeName: { type: [string, 'null'] }
     DeviceUnsubscribeConfirmation:
       type: object
       required: [confirmed]
@@ -12051,9 +12628,26 @@ components:
                   no: { type: integer }
     PlanTotals:
       type: object
+      description: >
+        GoGo-BE#593 — `costMin` and `costMax` are amounts per `costScope`, which
+        is `per_person` today: each stop's per-person price, summed. A group
+        figure is that amount times `participantCount`; nothing here is a group
+        total to divide.
+      required: [costScope]
       properties:
-        costMin: { type: integer }
-        costMax: { type: integer }
+        costMin:
+          type: integer
+          description: >
+            Sum of every stop's lower price bound, per `costScope`. A stop with
+            no price in that scope adds nothing and sets `uncertain`, so `0`
+            with `uncertain: true` means no price is known — never "free".
+        costMax:
+          type: integer
+          description: >
+            Sum of every stop's upper price bound, per `costScope`, under the
+            same rule as `costMin`. `overBudget` compares it with the
+            per-person budget.
+        costScope: { $ref: '#/components/schemas/BudgetScope' }
         currency: { type: string }
         durationMinutes: { type: integer }
         travelDistanceM: { type: integer }
@@ -12072,6 +12666,7 @@ components:
             core rule #8 forbids.
     PlanStop:
       type: object
+      required: [costScope]
       properties:
         id: { type: string, format: uuid }
         placeId: { type: string, format: uuid }
@@ -12081,8 +12676,15 @@ components:
         durationMinutes: { type: integer }
         travelMinutesFromPrev: { type: [integer, 'null'] }
         travelDistanceMFromPrev: { type: [integer, 'null'] }
-        costMin: { type: [integer, 'null'] }
-        costMax: { type: [integer, 'null'] }
+        costMin:
+          type: [integer, 'null']
+          description: >
+            Lower price bound per `costScope`. `null` means the place has no
+            price in that scope — unknown, not free; a free place is `0`.
+        costMax:
+          type: [integer, 'null']
+          description: Upper price bound per `costScope`, under the same rule as `costMin`.
+        costScope: { $ref: '#/components/schemas/BudgetScope' }
         isLocked:
           type: boolean
           description: Locked stops are invariant across regenerate.
@@ -13059,6 +13661,66 @@ components:
               actorName: { type: string }
               at: { type: string, format: date-time }
               detail: { type: object, additionalProperties: true }
+    ReviewReactionState:
+      type: object
+      required: [reviewId, helpfulCount, reactedByMe]
+      properties:
+        reviewId: { type: string, format: uuid }
+        helpfulCount: { type: integer, minimum: 0 }
+        reactedByMe: { type: boolean }
+    MyReviewReactions:
+      type: object
+      required: [placeId, helpful]
+      properties:
+        placeId: { type: string, format: uuid }
+        helpful:
+          type: array
+          description: Ids of the place's published reviews the caller marked helpful. Never anyone else's marks.
+          items: { type: string, format: uuid }
+    PlaceReviewPreview:
+      type: object
+      required: [source, order, reviews]
+      properties:
+        order:
+          type: string
+          enum: [latest, helpful]
+          description: The order the server applied, echoing the request (default `latest`).
+        source:
+          type: string
+          enum: [gogo]
+          description: >
+            Always `gogo`. These are GoGo community reviews; they never share a
+            number with a provider rating.
+        reviews:
+          type: array
+          maxItems: 3
+          items: { $ref: '#/components/schemas/PublicPlaceReview' }
+    PublicPlaceReview:
+      type: object
+      required: [id, rating, createdAt, author, helpfulCount]
+      description: A published review as anyone may read it. Carries no user id, email or avatar.
+      properties:
+        id: { type: string, format: uuid }
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        helpfulCount:
+          type: integer
+          minimum: 0
+          description: How many accounts marked this review helpful. A count only (ADR-0026).
+        text: { type: string, description: Omitted when the review has no text. }
+        createdAt:
+          type: string
+          format: date-time
+          description: When the review was written. An edit keeps it.
+        author:
+          type: object
+          required: [displayName]
+          properties:
+            displayName:
+              type: string
+              nullable: true
+              description: >
+                The name the author shows other people; `null` once the account
+                is deleted (ADR-0023). Clients render their own label for it.
     PlacePhoto:
       type: object
       required: [id, url, source]
