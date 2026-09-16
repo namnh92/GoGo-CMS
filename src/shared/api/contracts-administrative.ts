@@ -439,6 +439,13 @@ export const administrativeDecisionStateSchema = z.enum([
   'ACCEPTED_DRAFT',
   'REJECTED_DRAFT',
   'SUPERSEDED',
+  /*
+   * Settled on this dataset version by a materialisation (GoGo-BE#619). Not a
+   * draft: nothing in a later draft set un-settles it, and a new decision on
+   * such a row reports as the draft.
+   */
+  'MATERIALIZED_ACCEPT',
+  'MATERIALIZED_REJECT',
 ])
 export type AdministrativeDecisionState = z.infer<typeof administrativeDecisionStateSchema>
 
@@ -536,6 +543,20 @@ export const administrativeQuarantineDetailSchema = z.object({
     status: z.string(),
   }),
   decision: administrativeOverrideDecisionRecordSchema.nullable(),
+  /**
+   * The decision a materialisation carried into this version for this row.
+   * `targetCode` is the successor the accepted edge names; null for a
+   * rejection. Absent on a base nobody has materialised from.
+   */
+  materialized: z
+    .object({
+      decision: z.enum(['ACCEPT', 'REJECT']),
+      targetCode: z.string().nullable(),
+      reason: z.string().nullable(),
+      decidedAt: z.string().nullable(),
+    })
+    .nullable()
+    .optional(),
   decisionState: administrativeDecisionStateSchema,
   history: z.array(administrativeOverrideDecisionRecordSchema),
 })
