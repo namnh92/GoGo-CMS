@@ -4202,7 +4202,16 @@ type QuarantineFixture = {
   oldName: string
   newCode: string
   newName: string
-  candidates: { code: string; name: string; selectable: boolean; hierarchyValid: boolean }[]
+  candidates: {
+    code: string
+    name: string
+    selectable: boolean
+    hierarchyValid: boolean
+    /** Defaults to the current period. Set to model a code reused across periods (#205). */
+    effectiveFrom?: string
+    effectiveTo?: string | null
+    status?: 'ACTIVE' | 'INACTIVE'
+  }[]
   affectedPlaceCount: number
 }
 
@@ -4236,6 +4245,32 @@ export const quarantineRows: QuarantineFixture[] = [
       { code: '00169', name: 'Phường Kim Mã', selectable: true, hierarchyValid: true },
     ],
     affectedPlaceCount: 3,
+  },
+  // #205 — a target code reused across periods. The real dataset does this for
+  // 2,212 of 3,321 current codes; keyed by code, both entries lit up and the
+  // dead one's period was sent.
+  {
+    id: 'q3333333-3333-4333-8333-333333333333',
+    oldCode: '00162',
+    oldName: 'Phường Vĩnh Phúc',
+    newCode: '00166',
+    newName: 'Phường Ngọc Hà',
+    classification: 'DIVIDED_REQUIRES_REVIEW',
+    validationReason:
+      "commune 00162 was divided across 2 current units; the source's default target is a guess and is not recorded",
+    affectedPlaceCount: 0,
+    candidates: [
+      {
+        code: '00166',
+        name: 'Phường Liễu Giai',
+        selectable: false,
+        hierarchyValid: true,
+        effectiveFrom: '1900-01-01',
+        effectiveTo: '2025-06-30',
+        status: 'INACTIVE',
+      },
+      { code: '00166', name: 'Phường Ngọc Hà', selectable: true, hierarchyValid: true },
+    ],
   },
 ]
 
@@ -4363,14 +4398,20 @@ function quarantineListItem(row: QuarantineFixture) {
   }
 }
 
-function identity(code: string, name: string, level: string, status: string) {
+function identity(
+  code: string,
+  name: string,
+  level: string,
+  status: string,
+  period: { effectiveFrom?: string; effectiveTo?: string | null } = {},
+) {
   return {
     code,
     name,
     unitType: level === 'COMMUNE' ? 'WARD' : 'LEGACY_DISTRICT',
     level,
-    effectiveFrom: '2025-07-01',
-    effectiveTo: null,
+    effectiveFrom: period.effectiveFrom ?? '2025-07-01',
+    effectiveTo: period.effectiveTo ?? null,
     parentCode: '01',
     status,
   }
@@ -4392,7 +4433,13 @@ function quarantineDetail(row: QuarantineFixture) {
     },
     source: identity(row.oldCode, row.oldName, 'COMMUNE', 'INACTIVE'),
     candidates: row.candidates.map((c) => ({
-      ...identity(c.code, c.name, c.selectable ? 'COMMUNE' : 'LEGACY_DISTRICT', 'ACTIVE'),
+      ...identity(
+        c.code,
+        c.name,
+        c.selectable || c.status === 'INACTIVE' ? 'COMMUNE' : 'LEGACY_DISTRICT',
+        c.status ?? 'ACTIVE',
+        { effectiveFrom: c.effectiveFrom, effectiveTo: c.effectiveTo },
+      ),
       proposedByUpstream: c.code === row.newCode,
       hierarchyValid: c.hierarchyValid,
       selectable: c.selectable,

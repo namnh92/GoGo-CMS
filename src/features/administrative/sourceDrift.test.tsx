@@ -262,6 +262,37 @@ describe('deciding', () => {
     })
   })
 
+  it('keeps two candidates with one code apart, and sends the period of the one chosen (#205)', async () => {
+    const bodies: Record<string, unknown>[] = []
+    server.use(
+      http.post(
+        `${BASE}/cms/administrative-datasets/:id/quarantine/:rowId/accept`,
+        async ({ request }) => {
+          bodies.push((await request.json()) as Record<string, unknown>)
+          return undefined
+        },
+      ),
+    )
+    // Row 2 carries `00166` twice: Liễu Giai (1900, INACTIVE) and Ngọc Hà (2025, ACTIVE).
+    const drawer = await openRow(2)
+    const radios = within(drawer).getAllByRole('radio')
+    const current = radios.find((r) => r.textContent?.includes('Ngọc Hà'))!
+    const dead = radios.find((r) => r.textContent?.includes('Liễu Giai'))!
+    expect(dead).toBeDisabled()
+
+    await userEvent.click(current)
+
+    // One identity chosen — not "everything called 00166".
+    expect(current).toHaveAttribute('aria-checked', 'true')
+    expect(dead).toHaveAttribute('aria-checked', 'false')
+
+    await userEvent.type(within(drawer).getByLabelText(/Lý do quyết định/), 'khảo sát thực địa')
+    await userEvent.click(within(drawer).getByRole('button', { name: /^Chấp nhận$/ }))
+
+    await waitFor(() => expect(bodies).toHaveLength(1))
+    expect(bodies[0]).toMatchObject({ targetCode: '00166', targetEffectiveFrom: '2025-07-01' })
+  })
+
   it('carries an Idempotency-Key and sends once on a double click', async () => {
     const keys: (string | null)[] = []
     server.use(

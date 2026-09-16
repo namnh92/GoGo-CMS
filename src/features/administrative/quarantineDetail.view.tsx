@@ -11,10 +11,7 @@ import { TextArea } from '@/shared/ui/Field'
 import { Drawer } from '@/shared/ui/Overlay'
 import { AsyncBoundary, useErrorMessage } from '@/shared/ui/State'
 import { useToast } from '@/shared/ui/Toast'
-import type {
-  AdministrativeQuarantineDetail,
-  AdministrativeOverrideDecisionRecord,
-} from '@/shared/api/contracts-administrative'
+import type { AdministrativeOverrideDecisionRecord } from '@/shared/api/contracts-administrative'
 import { acceptQuarantineRow, fetchQuarantineRow, rejectQuarantineRow } from './api'
 import { ClassificationBadge, DecisionStateBadge, Fact, Facts, Identity } from './sourceDriftParts'
 import { styles } from './sourceDrift.style'
@@ -49,7 +46,15 @@ export function QuarantineDetailDrawer({
   const queryClient = useQueryClient()
   const describeError = useErrorMessage()
 
-  const [target, setTarget] = useState<string | null>(null)
+  /**
+   * The chosen candidate, by identity. A code alone is not one (ADR-0019 §2):
+   * in the pinned dataset 2,212 of 3,321 current codes also name a *different*
+   * unit in the historical set, so a divided commune's candidates routinely
+   * come as `00025 Ngọc Khánh (1900, INACTIVE)` and `00025 Giảng Võ (2025,
+   * ACTIVE)`. Keyed by code, both lit up and the period sent was whichever
+   * came first — the dead one — and the server rightly refused it (#205).
+   */
+  const [target, setTarget] = useState<{ code: string; effectiveFrom: string } | null>(null)
   const [reason, setReason] = useState('')
   /**
    * One key per decision, minted when the drawer opens on a row. A domain
@@ -114,8 +119,8 @@ export function QuarantineDetailDrawer({
         datasetId,
         rowId!,
         {
-          targetCode: target!,
-          targetEffectiveFrom: targetPeriod(detail, target) ?? '',
+          targetCode: target!.code,
+          targetEffectiveFrom: target!.effectiveFrom,
           reason: reason.trim(),
           expectedRevision: revision,
         },
@@ -252,7 +257,9 @@ export function QuarantineDetailDrawer({
               >
                 {data.candidates.map((candidate) => {
                   const selectable = candidate.selectable === true
-                  const chosen = target === candidate.code
+                  const chosen =
+                    target?.code === candidate.code &&
+                    target?.effectiveFrom === candidate.effectiveFrom
                   return (
                     <li key={`${candidate.code}-${candidate.effectiveFrom}`}>
                       <button
@@ -260,7 +267,13 @@ export function QuarantineDetailDrawer({
                         role="radio"
                         aria-checked={chosen}
                         disabled={!selectable || !writable}
-                        onClick={() => setTarget(candidate.code)}
+                        onClick={() => {
+                          // No effective date, no identity to send — the server
+                          // would refuse it, so the click does nothing here too.
+                          const { code, effectiveFrom } = candidate
+                          if (!code || !effectiveFrom) return
+                          setTarget({ code, effectiveFrom })
+                        }}
                         className={`${styles.candidate} ${
                           chosen ? styles.candidateOn : selectable ? '' : styles.candidateOff
                         }`}
@@ -298,7 +311,7 @@ export function QuarantineDetailDrawer({
             <p className={styles.warn}>
               <span aria-hidden="true">⚠</span>
               {target
-                ? t('sourceDrift.accept.consequence', { code: target })
+                ? t('sourceDrift.accept.consequence', { code: target.code })
                 : t('sourceDrift.reject.consequence')}
             </p>
 
@@ -377,10 +390,3 @@ function HistoryEntry({ entry }: { entry: AdministrativeOverrideDecisionRecord }
  * rather than reconstructed, because reconstructing it is how a code ends up
  * meaning the wrong unit.
  */
-function targetPeriod(
-  detail: AdministrativeQuarantineDetail | undefined,
-  code: string | null,
-): string | null {
-  if (!detail || !code) return null
-  return detail.candidates.find((c) => c.code === code)?.effectiveFrom ?? null
-}
