@@ -3,10 +3,12 @@ import { useI18n, useT } from '@/shared/i18n/i18n'
 import type { MessageKey } from '@/shared/i18n/vi'
 import { formatDate, formatNumber } from '@/shared/format'
 import { Badge, StatusBadge, type Tone } from '@/shared/ui/Badge'
-import type {
-  AdministrativeDecisionState,
-  AdministrativeQuarantineCounts,
-  AdministrativeUnitIdentity,
+import {
+  isKnownDecisionState,
+  type AdministrativeDecisionState,
+  type AdministrativeQuarantineCounts,
+  type AdministrativeUnitIdentity,
+  type KnownAdministrativeDecisionState,
 } from '@/shared/api/contracts-administrative'
 import { styles } from './sourceDrift.style'
 
@@ -25,11 +27,18 @@ import { styles } from './sourceDrift.style'
  * exactly where it matters.
  */
 
-const DECISION_TONE: Record<AdministrativeDecisionState, Tone> = {
+const DECISION_TONE: Record<KnownAdministrativeDecisionState, Tone> = {
   UNDECIDED: 'neutral',
   ACCEPTED_DRAFT: 'lavender',
   REJECTED_DRAFT: 'amber',
   SUPERSEDED: 'neutral',
+  /*
+   * Mint here and only here: a materialised decision is the one that actually
+   * changed the dataset version. A rejection carried forward changed nothing
+   * but provenance, so it stays neutral.
+   */
+  MATERIALIZED_ACCEPT: 'mint',
+  MATERIALIZED_REJECT: 'neutral',
 }
 
 /**
@@ -38,10 +47,21 @@ const DECISION_TONE: Record<AdministrativeDecisionState, Tone> = {
  */
 export function DecisionStateBadge({ state }: { state: AdministrativeDecisionState }) {
   const t = useT()
+  // The set is extensible: a state this build does not know is shown as itself,
+  // plainly, rather than crashing the row or pretending it is undecided.
+  if (!isKnownDecisionState(state)) return <StatusBadge tone="neutral" shape="dot" label={state} />
   return (
     <StatusBadge
       tone={DECISION_TONE[state]}
-      shape={state === 'UNDECIDED' ? 'dot' : state === 'SUPERSEDED' ? 'clock' : 'info'}
+      shape={
+        state === 'UNDECIDED'
+          ? 'dot'
+          : state === 'SUPERSEDED'
+            ? 'clock'
+            : state === 'MATERIALIZED_ACCEPT' || state === 'MATERIALIZED_REJECT'
+              ? 'check'
+              : 'info'
+      }
       label={t(`sourceDrift.decisionState.${state}` as const)}
     />
   )

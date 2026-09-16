@@ -360,6 +360,8 @@ export const en: Partial<Record<MessageKey, string>> = {
   'sourceDrift.decisionState.ACCEPTED_DRAFT': 'Draft: accepted',
   'sourceDrift.decisionState.REJECTED_DRAFT': 'Draft: rejected',
   'sourceDrift.decisionState.SUPERSEDED': 'Superseded',
+  'sourceDrift.decisionState.MATERIALIZED_ACCEPT': 'Materialised: accepted',
+  'sourceDrift.decisionState.MATERIALIZED_REJECT': 'Materialised: rejected',
   'sourceDrift.decision.ACCEPT': 'Accept',
   'sourceDrift.decision.REJECT': 'Reject',
 

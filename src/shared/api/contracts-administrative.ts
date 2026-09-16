@@ -434,20 +434,31 @@ export type AdministrativeTransitionResult = z.infer<typeof administrativeTransi
  * stops compiling rather than shipping.
  */
 
-export const administrativeDecisionStateSchema = z.enum([
+/**
+ * The states the contract names today. The set is declared extensible
+ * (`x-extensible-enum`, GoGo-BE#619): a value outside it is data the server
+ * may legitimately send, so the schema accepts any string and the screens
+ * treat an unknown one as "not actionable here" — never as a broken response.
+ *
+ * `MATERIALIZED_*` is settled on this dataset version by a materialisation.
+ * Not a draft: nothing in a later draft set un-settles it, and a new decision
+ * on such a row reports as the draft.
+ */
+export const ADMINISTRATIVE_DECISION_STATES = [
   'UNDECIDED',
   'ACCEPTED_DRAFT',
   'REJECTED_DRAFT',
   'SUPERSEDED',
-  /*
-   * Settled on this dataset version by a materialisation (GoGo-BE#619). Not a
-   * draft: nothing in a later draft set un-settles it, and a new decision on
-   * such a row reports as the draft.
-   */
   'MATERIALIZED_ACCEPT',
   'MATERIALIZED_REJECT',
-])
+] as const
+export type KnownAdministrativeDecisionState = (typeof ADMINISTRATIVE_DECISION_STATES)[number]
+export const administrativeDecisionStateSchema = z.string()
 export type AdministrativeDecisionState = z.infer<typeof administrativeDecisionStateSchema>
+
+export function isKnownDecisionState(value: string): value is KnownAdministrativeDecisionState {
+  return (ADMINISTRATIVE_DECISION_STATES as readonly string[]).includes(value)
+}
 
 /**
  * A code and the effective date that makes it mean something. 2,212 of the
