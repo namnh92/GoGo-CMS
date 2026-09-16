@@ -391,11 +391,11 @@ export const vi = {
     'Mọi ánh xạ bộ dữ liệu này khẳng định, theo loại thay đổi. Đây KHÔNG phải hàng đợi.',
   'sourceDrift.counts.backlog': 'Tồn đọng cần phân xử',
   'sourceDrift.counts.backlogHint':
-    'Chỉ các dòng bị cách ly, theo phân loại của nguồn. Đây mới là hàng đợi.',
+    'Chỉ các dòng bị cách ly còn mở, theo phân loại của nguồn. Đây mới là hàng đợi; dòng đã vật chất hoá không còn ở đây.',
   'sourceDrift.counts.backlogEmpty': 'Không còn dòng nào bị cách ly.',
   'sourceDrift.counts.decisions': 'Quyết định nháp',
   'sourceDrift.counts.decisionsHint':
-    'Các dòng cách ly theo quyết định đang có hiệu lực trong bộ nháp hiện tại.',
+    'Các dòng cách ly theo quyết định đang có hiệu lực trong bộ nháp hiện tại. Dòng đã vật chất hoá ở vòng trước được tính riêng.',
 
   'sourceDrift.set.title': 'Bộ quyết định nháp',
   'sourceDrift.set.status': 'Trạng thái bộ',
@@ -404,6 +404,9 @@ export const vi = {
   'sourceDrift.set.effectiveValue':
     '{accepted} chấp nhận · {rejected} từ chối · {undecided} chưa quyết',
   'sourceDrift.set.updatedAt': 'Cập nhật lúc',
+  'sourceDrift.set.settled': 'Đã vật chất hoá trên phiên bản này',
+  'sourceDrift.set.settledValue':
+    '{accepted} chấp nhận · {rejected} từ chối — không còn trong tồn đọng',
   'sourceDrift.set.materialized': 'Đã vật chất hoá thành',
   'sourceDrift.set.openDerived': 'Mở bộ dữ liệu dẫn xuất',
   'sourceDrift.set.none':
@@ -435,6 +438,9 @@ export const vi = {
   'sourceDrift.detail.reasonLabel': 'Lý do quyết định',
   'sourceDrift.detail.reasonHint':
     'Bắt buộc. Một quyết định không ai giải thích thì sau này không ai xem lại được.',
+  'sourceDrift.detail.materialized': 'Quyết định đã vật chất hoá',
+  'sourceDrift.detail.materializedHint':
+    'Quyết định này đã đi vào phiên bản dữ liệu hiện tại và không còn là nháp. Quyết định thêm ở đây là quyết định lại trong bộ nháp; nó không sửa quyết định này.',
   'sourceDrift.detail.history': 'Lịch sử quyết định',
   'sourceDrift.detail.historyEmpty': 'Chưa ai quyết định dòng này.',
   'sourceDrift.detail.superseded': 'Đã bị thay thế',

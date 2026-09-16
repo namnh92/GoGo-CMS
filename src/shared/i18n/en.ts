@@ -388,11 +388,11 @@ export const en: Partial<Record<MessageKey, string>> = {
     'Every mapping this dataset asserts, by change type. This is not the queue.',
   'sourceDrift.counts.backlog': 'Review backlog',
   'sourceDrift.counts.backlogHint':
-    'Quarantined rows only, by the upstream’s classification. This is the queue.',
+    'Quarantined rows still open, by the source’s classification. This is the queue; a materialised row is no longer here.',
   'sourceDrift.counts.backlogEmpty': 'Nothing is quarantined.',
   'sourceDrift.counts.decisions': 'Draft decisions',
   'sourceDrift.counts.decisionsHint':
-    'Quarantined rows by the effective decision in the current draft set.',
+    'Quarantined rows by the decision in effect in the current draft set. Rows materialised by an earlier round are counted on their own.',
 
   'sourceDrift.set.title': 'Draft decision set',
   'sourceDrift.set.status': 'Set status',
@@ -401,6 +401,9 @@ export const en: Partial<Record<MessageKey, string>> = {
   'sourceDrift.set.effectiveValue':
     '{accepted} accepted · {rejected} rejected · {undecided} undecided',
   'sourceDrift.set.updatedAt': 'Updated at',
+  'sourceDrift.set.settled': 'Materialised on this version',
+  'sourceDrift.set.settledValue':
+    '{accepted} accepted · {rejected} rejected — no longer in the backlog',
   'sourceDrift.set.materialized': 'Materialised into',
   'sourceDrift.set.openDerived': 'Open derived dataset',
   'sourceDrift.set.none': 'No draft set yet. The first decision opens one on this version.',
@@ -431,6 +434,9 @@ export const en: Partial<Record<MessageKey, string>> = {
   'sourceDrift.detail.reasonLabel': 'Reason for the decision',
   'sourceDrift.detail.reasonHint':
     'Required. A decision nobody explained cannot be reviewed later.',
+  'sourceDrift.detail.materialized': 'Materialised decision',
+  'sourceDrift.detail.materializedHint':
+    'This decision is part of the current dataset version and is no longer a draft. Deciding again here re-decides it in the draft set; it does not edit this one.',
   'sourceDrift.detail.history': 'Decision history',
   'sourceDrift.detail.historyEmpty': 'Nobody has decided this row.',
   'sourceDrift.detail.superseded': 'Superseded',
