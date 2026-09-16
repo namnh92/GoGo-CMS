@@ -900,6 +900,87 @@ export const handlers = [
     if (!row) return envelope(404, 'PLACE_NOT_FOUND', 'no such place')
     return HttpResponse.json(mappingDetail(row))
   }),
+  // GoGo-BE#613 — the batch. Every entry is evaluated on its own, because that
+  // is what the server does: partial success is the normal answer.
+  http.post(`${BASE}/cms/administrative-mappings/verify`, async ({ request }) => {
+    const refused = refuseUnpermitted('verify')
+    if (refused) return refused
+    const body = (await request.json()) as {
+      entries: {
+        placeId: string
+        provinceCode: string
+        communeCode: string
+        expectedUpdatedAt: string
+      }[]
+    }
+    const seen = new Set<string>()
+    for (const entry of body.entries) {
+      if (seen.has(entry.placeId)) {
+        return envelope(400, 'DUPLICATE_PLACE_IN_BATCH', 'one decision per place')
+      }
+      seen.add(entry.placeId)
+    }
+    const results = body.entries.map((entry) => {
+      const row = mappingRows.find((r) => r.placeId === entry.placeId)
+      if (!row) {
+        return {
+          placeId: entry.placeId,
+          outcome: 'refused',
+          status: null,
+          datasetVersion: null,
+          code: 'PLACE_NOT_FOUND',
+          message: 'no such place',
+        }
+      }
+      if (entry.expectedUpdatedAt !== row.updatedAt) {
+        return {
+          placeId: entry.placeId,
+          outcome: 'conflict',
+          status: null,
+          datasetVersion: null,
+          code: 'PLACE_MODIFIED',
+          message: 'the place changed since it was read',
+        }
+      }
+      const commune = COMMUNES[entry.provinceCode]?.find((c) => c.code === entry.communeCode)
+      if (!commune) {
+        return {
+          placeId: entry.placeId,
+          outcome: 'refused',
+          status: null,
+          datasetVersion: null,
+          code: 'HIERARCHY_INVALID',
+          message: 'commune is not in that province',
+        }
+      }
+      row.status = 'VERIFIED'
+      row.provinceCode = entry.provinceCode
+      row.communeCode = entry.communeCode
+      row.confidence = null
+      row.method = 'editor'
+      row.reviewer = { id: 'ad-2', displayName: 'moderator' }
+      row.updatedAt = new Date(Date.parse(row.updatedAt) + 1000).toISOString()
+      return {
+        placeId: entry.placeId,
+        outcome: 'verified',
+        status: 'VERIFIED',
+        datasetVersion: ACTIVE_DATASET_VERSION,
+        code: null,
+        message: null,
+      }
+    })
+    const count = (outcome: string) => results.filter((r) => r.outcome === outcome).length
+    return HttpResponse.json(
+      {
+        requested: body.entries.length,
+        verified: count('verified'),
+        conflicts: count('conflict'),
+        refused: count('refused'),
+        results,
+      },
+      { status: 201 },
+    )
+  }),
   http.post(`${BASE}/cms/places/:id/administrative-mapping/verify`, async ({ params, request }) => {
     const refused = refuseUnpermitted('verify')
     if (refused) return refused

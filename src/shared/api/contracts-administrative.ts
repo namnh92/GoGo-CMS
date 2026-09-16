@@ -707,6 +707,37 @@ export const administrativeVerifyResultSchema = z.object({
   datasetVersion: z.string(),
 })
 
+/**
+ * GoGo-BE#613 — one request, N decisions, one outcome each.
+ *
+ * `outcome` is the whole point of the shape: a batch where one place moved
+ * under the reviewer is a batch that partly succeeded, and the screen has to
+ * say which part. `code` carries the refusal so the reviewer is told why rather
+ * than that it failed.
+ */
+export const administrativeBatchVerifyResultSchema = z.object({
+  placeId: z.string(),
+  outcome: z.enum(['verified', 'conflict', 'refused']),
+  status: administrativeMappingStatusSchema.nullable(),
+  datasetVersion: z.string().nullable(),
+  code: z.string().nullable(),
+  message: z.string().nullable(),
+})
+export type AdministrativeBatchVerifyResult = z.infer<
+  typeof administrativeBatchVerifyResultSchema
+>
+
+export const administrativeBatchVerifyReportSchema = z.object({
+  requested: z.number(),
+  verified: z.number(),
+  conflicts: z.number(),
+  refused: z.number(),
+  results: z.array(administrativeBatchVerifyResultSchema),
+})
+export type AdministrativeBatchVerifyReport = z.infer<
+  typeof administrativeBatchVerifyReportSchema
+>
+
 /** The resolver ran. It may land on any of three states, and none is a verification. */
 export const administrativeRematchResultSchema = z.object({
   placeId: z.string(),

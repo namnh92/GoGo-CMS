@@ -610,3 +610,91 @@ describe('the rest of the console is untouched', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   })
 })
+
+/**
+ * ADM-110 (#201) — confirming many proposals at once.
+ *
+ * The screen must not make the batch look atomic. It is N decisions sent
+ * together, and the two things these tests hold it to are: only rows that
+ * carry a pair can be chosen, and a partly-landed batch says so.
+ */
+describe('bulk confirmation', () => {
+  const selectAll = () => screen.getByLabelText(/Chọn tất cả dòng đang hiển thị/)
+
+  it('verifies every selected row in one request', async () => {
+    const calls: string[] = []
+    server.use(
+      http.post(`${BASE}/cms/administrative-mappings/verify`, ({ request }) => {
+        calls.push(request.url)
+        return undefined
+      }),
+    )
+    signInAs('moderator')
+    renderQueue()
+    await screen.findByText('Quán Cơm Ba Đình')
+
+    await userEvent.click(selectAll())
+    await userEvent.click(screen.getByRole('button', { name: /Xác nhận \d+ dòng/ }))
+    const dialog = await screen.findByRole('dialog')
+    await userEvent.click(within(dialog).getByRole('button', { name: /Xác nhận \d+ dòng/ }))
+
+    // One request for the lot, and the toast counts what actually landed.
+    await waitFor(() => expect(calls).toHaveLength(1))
+    expect(await screen.findByText(/Đã xác nhận \d+\/\d+/)).toBeInTheDocument()
+    expect(screen.getByText(/Tất cả dòng đã chọn đều được xác nhận/)).toBeInTheDocument()
+  })
+
+  it('says which rows fell out when only part of the batch landed', async () => {
+    server.use(
+      http.post(`${BASE}/cms/administrative-mappings/verify`, () =>
+        HttpResponse.json(
+          {
+            requested: 2,
+            verified: 1,
+            conflicts: 1,
+            refused: 0,
+            results: [
+              {
+                placeId: NEEDS_REVIEW,
+                outcome: 'verified',
+                status: 'VERIFIED',
+                datasetVersion: 'v5.1.0+v2.4.1+7fac8c45+v5.1.0+r0',
+                code: null,
+                message: null,
+              },
+              {
+                placeId: STALE,
+                outcome: 'conflict',
+                status: null,
+                datasetVersion: null,
+                code: 'PLACE_MODIFIED',
+                message: 'the place changed since it was read',
+              },
+            ],
+          },
+          { status: 201 },
+        ),
+      ),
+    )
+    signInAs('moderator')
+    renderQueue()
+    await screen.findByText('Quán Cơm Ba Đình')
+
+    await userEvent.click(selectAll())
+    await userEvent.click(screen.getByRole('button', { name: /Xác nhận \d+ dòng/ }))
+    const dialog = await screen.findByRole('dialog')
+    await userEvent.click(within(dialog).getByRole('button', { name: /Xác nhận \d+ dòng/ }))
+
+    // Not "done": one row moved under the reviewer and has to be handled alone.
+    expect(await screen.findByText(/1 dòng vừa bị người khác sửa/)).toBeInTheDocument()
+  })
+
+  it('offers no selection to an editor, who does not decide mappings', async () => {
+    signInAs('editor')
+    renderQueue()
+    await screen.findByText('Quán Cơm Ba Đình')
+
+    expect(screen.queryByLabelText(/Chọn tất cả dòng đang hiển thị/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Xác nhận \d+ dòng/ })).not.toBeInTheDocument()
+  })
+})

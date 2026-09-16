@@ -163,6 +163,18 @@ export const vi = {
   'mapping.reselect.title': 'Chọn đơn vị đúng',
   'mapping.reselect.hint':
     'Ánh xạ cũ đã bị từ chối. Chọn Tỉnh/Thành và Phường/Xã đúng rồi xác nhận — bạn là người chịu trách nhiệm cho cặp này.',
+  'mapping.bulk.selected': 'Đã chọn {count}',
+  'mapping.bulk.selectAll': 'Chọn tất cả dòng đang hiển thị',
+  'mapping.bulk.action': 'Xác nhận {count} dòng',
+  'mapping.bulk.hint':
+    'Chỉ chọn được dòng đã có đề xuất tỉnh và phường/xã. Mỗi dòng vẫn là một quyết định riêng và được ghi nhật ký riêng.',
+  'mapping.bulk.confirmTitle': 'Xác nhận ánh xạ cho {count} địa điểm',
+  'mapping.bulk.confirmBody':
+    'Bạn nhận trách nhiệm rằng từng địa điểm nằm ở đơn vị máy đã đề xuất. Việc này không đăng địa điểm nào — duyệt đăng vẫn là quyết định của editor.',
+  'mapping.bulk.done': 'Đã xác nhận {verified}/{requested}',
+  'mapping.bulk.doneClean': 'Tất cả dòng đã chọn đều được xác nhận.',
+  'mapping.bulk.donePartial':
+    '{conflicts} dòng vừa bị người khác sửa, {refused} dòng bị từ chối. Tải lại danh sách rồi xử lý những dòng đó riêng.',
   'mapping.verify.action': 'Xác nhận',
   'mapping.verify.confirmTitle': 'Xác nhận ánh xạ hành chính',
   'mapping.verify.confirmBody': 'Bạn nhận trách nhiệm rằng địa điểm này nằm ở đơn vị đã chọn.',
