@@ -17,10 +17,10 @@ import { DataTable } from '@/shared/ui/DataTable'
 import { Modal } from '@/shared/ui/Overlay'
 import { AsyncBoundary, EmptyState, useErrorMessage } from '@/shared/ui/State'
 import { useToast } from '@/shared/ui/Toast'
-import type {
-  AdministrativeDecisionState,
-  AdministrativeMaterializeResult,
-  AdministrativeQuarantineItem,
+import {
+  ADMINISTRATIVE_DECISION_STATES,
+  type AdministrativeMaterializeResult,
+  type AdministrativeQuarantineItem,
 } from '@/shared/api/contracts-administrative'
 import {
   abandonOverrideSet,
@@ -42,12 +42,8 @@ import { styles } from './sourceDrift.style'
 
 const PAGE_SIZE = 25
 
-const DECISION_STATES: AdministrativeDecisionState[] = [
-  'UNDECIDED',
-  'ACCEPTED_DRAFT',
-  'REJECTED_DRAFT',
-  'SUPERSEDED',
-]
+/** One source for the filter: the states the vendored contract names. */
+const DECISION_STATES = ADMINISTRATIVE_DECISION_STATES
 
 /** The quarantine classes the contract declares. Promoted classes never appear here. */
 const CLASSIFICATIONS = [
@@ -120,7 +116,7 @@ export function SourceDriftPanel({ datasetId }: { datasetId: string }) {
         datasetId,
         {
           classification: classification ? [classification] : undefined,
-          decisionState: decisionState ? [decisionState as AdministrativeDecisionState] : undefined,
+          decisionState: decisionState ? [decisionState] : undefined,
           limit: PAGE_SIZE,
           cursor,
         },

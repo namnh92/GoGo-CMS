@@ -503,7 +503,7 @@ describe('the override set', () => {
     await userEvent.keyboard('{Escape}')
 
     // The panel now reports a materialised set, and offers no more decisions.
-    await waitFor(() => expect(screen.getByText(/Đã vật chất hoá/)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/Đã vật chất hoá thành/)).toBeInTheDocument())
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /^Vật chất hoá$/ })).toBeDisabled(),
     )

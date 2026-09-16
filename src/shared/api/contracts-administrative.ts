@@ -434,13 +434,31 @@ export type AdministrativeTransitionResult = z.infer<typeof administrativeTransi
  * stops compiling rather than shipping.
  */
 
-export const administrativeDecisionStateSchema = z.enum([
+/**
+ * The states the contract names today. The set is declared extensible
+ * (`x-extensible-enum`, GoGo-BE#619): a value outside it is data the server
+ * may legitimately send, so the schema accepts any string and the screens
+ * treat an unknown one as "not actionable here" — never as a broken response.
+ *
+ * `MATERIALIZED_*` is settled on this dataset version by a materialisation.
+ * Not a draft: nothing in a later draft set un-settles it, and a new decision
+ * on such a row reports as the draft.
+ */
+export const ADMINISTRATIVE_DECISION_STATES = [
   'UNDECIDED',
   'ACCEPTED_DRAFT',
   'REJECTED_DRAFT',
   'SUPERSEDED',
-])
+  'MATERIALIZED_ACCEPT',
+  'MATERIALIZED_REJECT',
+] as const
+export type KnownAdministrativeDecisionState = (typeof ADMINISTRATIVE_DECISION_STATES)[number]
+export const administrativeDecisionStateSchema = z.string()
 export type AdministrativeDecisionState = z.infer<typeof administrativeDecisionStateSchema>
+
+export function isKnownDecisionState(value: string): value is KnownAdministrativeDecisionState {
+  return (ADMINISTRATIVE_DECISION_STATES as readonly string[]).includes(value)
+}
 
 /**
  * A code and the effective date that makes it mean something. 2,212 of the
@@ -536,6 +554,20 @@ export const administrativeQuarantineDetailSchema = z.object({
     status: z.string(),
   }),
   decision: administrativeOverrideDecisionRecordSchema.nullable(),
+  /**
+   * The decision a materialisation carried into this version for this row.
+   * `targetCode` is the successor the accepted edge names; null for a
+   * rejection. Absent on a base nobody has materialised from.
+   */
+  materialized: z
+    .object({
+      decision: z.enum(['ACCEPT', 'REJECT']),
+      targetCode: z.string().nullable(),
+      reason: z.string().nullable(),
+      decidedAt: z.string().nullable(),
+    })
+    .nullable()
+    .optional(),
   decisionState: administrativeDecisionStateSchema,
   history: z.array(administrativeOverrideDecisionRecordSchema),
 })
