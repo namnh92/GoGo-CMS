@@ -124,9 +124,10 @@ describe('the queue keeps its three count groups apart', () => {
     // Said twice on purpose: the count card and the panel it belongs to.
     expect(screen.getAllByText(/Quyết định nháp/).length).toBeGreaterThan(0)
     expect(screen.getByText('9.432')).toBeInTheDocument()
-    // 1,033 quarantined rows, one settled by an earlier round (GoGo-BE#619):
-    // the backlog is what is still open, not what was ever quarantined.
-    expect(screen.getAllByText('1.032').length).toBeGreaterThan(0)
+    // 1,033 quarantined rows: one settled by an earlier round (GoGo-BE#619)
+    // and its sibling settled by that decision (GoGo-BE#622) — the backlog is
+    // what is still open, not what was ever quarantined.
+    expect(screen.getAllByText('1.031').length).toBeGreaterThan(0)
   })
 
   it('says plainly that a draft decision changes nothing that is running', async () => {
@@ -140,8 +141,9 @@ describe('the queue keeps its three count groups apart', () => {
 describe('the queue list', () => {
   it('shows the source as an identity, not a bare code', async () => {
     await openQueue()
-    expect(await screen.findByText(ROW_A.oldCode)).toBeInTheDocument()
-    expect(screen.getByText(ROW_A.oldName)).toBeInTheDocument()
+    expect((await screen.findAllByText(ROW_A.oldCode)).length).toBeGreaterThan(0)
+    // Once: the second proposal of the same source does not repeat the identity.
+    expect(screen.getAllByText(ROW_A.oldName)).toHaveLength(1)
   })
 
   it('defaults to the actionable rows and keeps the filter in the URL', async () => {
@@ -539,8 +541,9 @@ describe('a decision an earlier round materialised (GoGo-BE#619)', () => {
     // published review looked like nobody had reviewed anything.
     expect(await screen.findByText(/Đã vật chất hoá trên phiên bản này/)).toBeInTheDocument()
     expect(screen.getByText(/1 chấp nhận · 0 từ chối/)).toBeInTheDocument()
-    expect(screen.getAllByText('1.032').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('1.031').length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Đã vật chất hoá: chấp nhận/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Nguồn đã chốt/).length).toBeGreaterThan(0)
   })
 
   it('appears under its own filter, badged as settled rather than undecided', async () => {
@@ -571,6 +574,110 @@ describe('a decision an earlier round materialised (GoGo-BE#619)', () => {
     expect(within(settled).getByText(/không sửa quyết định này/)).toBeInTheDocument()
     // The draft history is a different thing and stays empty: nothing was drafted here.
     expect(within(drawer).getByText(/Chưa ai quyết định dòng này/)).toBeInTheDocument()
+  })
+})
+
+describe('one source, one decision (GoGo-CMS#213)', () => {
+  const SETTLED = quarantineRows[3]!
+  const SIBLING = quarantineRows[4]!
+  const SECOND_PROPOSAL = quarantineRows[5]!
+
+  it('groups the proposals of one source instead of listing them as separate questions', async () => {
+    await openQueue()
+    const table = await screen.findByRole('table')
+    // The first row of the source carries the identity and the count.
+    expect(within(table).getByText(/2 đề xuất · một quyết định cho nguồn/)).toBeInTheDocument()
+    // The second says it is the same source, and which proposal it is.
+    expect(within(table).getByText(/cùng nguồn · đề xuất 2\/2/)).toBeInTheDocument()
+    expect(within(table).getAllByText(new RegExp(SECOND_PROPOSAL.newName)).length).toBeGreaterThan(
+      0,
+    )
+    expect(within(table).getAllByText(ROW_A.oldName)).toHaveLength(1)
+  })
+
+  it('refuses a second successor for the same source in the draft, and says why', async () => {
+    const drawer = await openRow()
+    await userEvent.click(within(drawer).getAllByRole('radio')[0]!)
+    await userEvent.type(within(drawer).getByLabelText(/Lý do quyết định/), 'khảo sát')
+    await userEvent.click(within(drawer).getByRole('button', { name: /^Chấp nhận$/ }))
+    await screen.findByText(/Đã ghi quyết định chấp nhận/)
+    await closeDrawer()
+
+    // The sibling row, onto the other candidate: the draft already decided the
+    // source. Found by its proposal — the accepted row has left the default view.
+    // With the accepted row gone from the default view, the second proposal is
+    // the only row of the source left, so it carries the identity again.
+    const sourceCell = (await screen.findAllByText(ROW_A.oldName))[0]!
+    await userEvent.click(within(sourceCell.closest('tr')!).getByRole('button', { name: /^Mở$/ }))
+    const sibling = await screen.findByRole('dialog')
+    await within(sibling).findByText(SECOND_PROPOSAL.oldName)
+    await userEvent.click(within(sibling).getAllByRole('radio')[1]!)
+    await userEvent.type(within(sibling).getByLabelText(/Lý do quyết định/), 'nửa còn lại')
+    await userEvent.click(within(sibling).getByRole('button', { name: /^Chấp nhận$/ }))
+    expect(
+      await screen.findByText(/đã chấp nhận nguồn này sang một đích khác trên dòng anh em/),
+    ).toBeInTheDocument()
+  })
+
+  it('locks a row its sibling settled, and points at the decision that settled it', async () => {
+    await openQueue()
+    await userEvent.selectOptions(screen.getByLabelText(/Trạng thái quyết định/), 'SOURCE_SETTLED')
+    const table = await screen.findByRole('table')
+    expect((await within(table).findAllByText(new RegExp(SIBLING.newName))).length).toBeGreaterThan(
+      0,
+    )
+    expect(within(table).getByText('Nguồn đã chốt')).toBeInTheDocument()
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Mở$/ }))
+    const drawer = await screen.findByRole('dialog')
+    const settled = within(drawer).getByRole('region', { name: /Nguồn đã chốt/ })
+    expect(within(settled).getByText(/00007 đã có đích 00025 \(override:r1\)/)).toBeInTheDocument()
+
+    // Even with a target and a reason, accepting stays unavailable — and says so.
+    await userEvent.click(within(drawer).getAllByRole('radio')[0]!)
+    await userEvent.type(within(drawer).getByLabelText(/Lý do quyết định/), 'đổi ý')
+    expect(within(drawer).getByRole('button', { name: /^Chấp nhận$/ })).toBeDisabled()
+    expect(within(drawer).getByText(/Không chấp nhận được: nguồn đã có đích/)).toBeInTheDocument()
+    expect(within(drawer).getByRole('button', { name: /^Từ chối$/ })).toBeEnabled()
+  })
+
+  it('offers a retraction on the decided row, and reports it as one', async () => {
+    await openQueue()
+    await userEvent.selectOptions(
+      screen.getByLabelText(/Trạng thái quyết định/),
+      'MATERIALIZED_ACCEPT',
+    )
+    await userEvent.click(await screen.findByRole('button', { name: /^Mở$/ }))
+    const drawer = await screen.findByRole('dialog')
+    await within(drawer).findByText(SETTLED.oldName)
+
+    const retract = within(drawer).getByRole('button', { name: /^Rút lại quyết định$/ })
+    expect(within(drawer).getByText(/sẽ rút lại đích 00025 khi vật chất hoá/)).toBeInTheDocument()
+    await userEvent.type(within(drawer).getByLabelText(/Lý do quyết định/), 'khảo sát sai')
+    await userEvent.click(retract)
+    expect(await screen.findByText(/Đã ghi rút lại quyết định/)).toBeInTheDocument()
+    expect(screen.getByText(/Đích 00025 sẽ bị rút khi vật chất hoá/)).toBeInTheDocument()
+  })
+
+  it('explains a source already resolved in an earlier round when the server refuses', async () => {
+    server.use(
+      http.post(`${BASE}/cms/administrative-datasets/:id/quarantine/:rowId/accept`, () =>
+        HttpResponse.json(
+          {
+            code: 'OVERRIDE_SOURCE_ALREADY_RESOLVED',
+            message: '00160 already resolves to 00163 through a reviewer override (override:r1)',
+          },
+          { status: 409 },
+        ),
+      ),
+    )
+    const drawer = await openRow()
+    await userEvent.click(within(drawer).getAllByRole('radio')[1]!)
+    await userEvent.type(within(drawer).getByLabelText(/Lý do quyết định/), 'thử lại')
+    await userEvent.click(within(drawer).getByRole('button', { name: /^Chấp nhận$/ }))
+    expect(
+      await screen.findByText(/đã có đích qua quyết định của người duyệt ở vòng trước/),
+    ).toBeInTheDocument()
   })
 })
 
