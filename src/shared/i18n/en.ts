@@ -362,6 +362,7 @@ export const en: Partial<Record<MessageKey, string>> = {
   'sourceDrift.decisionState.SUPERSEDED': 'Superseded',
   'sourceDrift.decisionState.MATERIALIZED_ACCEPT': 'Materialised: accepted',
   'sourceDrift.decisionState.MATERIALIZED_REJECT': 'Materialised: rejected',
+  'sourceDrift.decisionState.SOURCE_SETTLED': 'Source settled',
   'sourceDrift.decision.ACCEPT': 'Accept',
   'sourceDrift.decision.REJECT': 'Reject',
 

@@ -451,6 +451,8 @@ export const ADMINISTRATIVE_DECISION_STATES = [
   'SUPERSEDED',
   'MATERIALIZED_ACCEPT',
   'MATERIALIZED_REJECT',
+  /* Another row of the same source carried the decision (GoGo-BE#622). */
+  'SOURCE_SETTLED',
 ] as const
 export type KnownAdministrativeDecisionState = (typeof ADMINISTRATIVE_DECISION_STATES)[number]
 export const administrativeDecisionStateSchema = z.string()
@@ -565,6 +567,21 @@ export const administrativeQuarantineDetailSchema = z.object({
       targetCode: z.string().nullable(),
       reason: z.string().nullable(),
       decidedAt: z.string().nullable(),
+      /** A carried REJECT that withdrew an earlier round's override (GoGo-BE#623). */
+      retracted: z.object({ targetCode: z.string(), decisionId: z.string().nullable() }).nullable(),
+    })
+    .nullable()
+    .optional(),
+  /**
+   * Another row of this source carried the override this version holds: the
+   * source has its one successor, and this row cannot be accepted elsewhere
+   * (GoGo-BE#622).
+   */
+  sourceSettled: z
+    .object({
+      targetCode: z.string(),
+      sourceVersion: z.string(),
+      decisionId: z.string().nullable(),
     })
     .nullable()
     .optional(),
@@ -605,6 +622,14 @@ export const administrativeOverrideDecisionResultSchema = z.object({
   quarantineRowId: z.string(),
   supersededDecisionId: z.string().nullable(),
   decidedAt: z.string(),
+  /** Set on a REJECT that retracts a base override when materialised (GoGo-BE#623). */
+  retracts: z
+    .object({
+      decisionId: z.string().nullable(),
+      targetCode: z.string(),
+      sourceVersion: z.string(),
+    })
+    .nullable(),
 })
 export type AdministrativeOverrideDecisionResult = z.infer<
   typeof administrativeOverrideDecisionResultSchema
@@ -625,6 +650,7 @@ export const administrativeMaterializeResultSchema = z.object({
     rejected: z.number(),
     /** A rejection produces none: it changes provenance, not content. */
     edges: z.number(),
+    retracted: z.number(),
   }),
 })
 export type AdministrativeMaterializeResult = z.infer<typeof administrativeMaterializeResultSchema>

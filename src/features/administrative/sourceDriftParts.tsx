@@ -39,6 +39,8 @@ const DECISION_TONE: Record<KnownAdministrativeDecisionState, Tone> = {
    */
   MATERIALIZED_ACCEPT: 'mint',
   MATERIALIZED_REJECT: 'neutral',
+  /* Settled by a sibling row's decision: nothing to do here, nothing changed here. */
+  SOURCE_SETTLED: 'neutral',
 }
 
 /**
