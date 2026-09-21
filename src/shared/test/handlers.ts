@@ -4323,6 +4323,38 @@ export const quarantineRows: QuarantineFixture[] = [
       decidedAt: '2026-09-16T15:50:00.000Z',
     },
   },
+  {
+    // The other proposal of the settled source (GoGo-CMS#213): decided by its
+    // sibling, not itself — SOURCE_SETTLED, out of the backlog.
+    id: 'q5555555-5555-4555-8555-555555555555',
+    classification: 'DIVIDED_REQUIRES_REVIEW',
+    validationReason: 'the source names several successors and offers a default',
+    oldCode: '00007',
+    oldName: 'Phường Nguyễn Trung Trực',
+    newCode: '00025',
+    newName: 'Phường Hoàn Kiếm',
+    candidates: [
+      { code: '00008', name: 'Phường Trúc Bạch', selectable: true, hierarchyValid: true },
+      { code: '00025', name: 'Phường Hoàn Kiếm', selectable: true, hierarchyValid: true },
+    ],
+    affectedPlaceCount: 3,
+  },
+  {
+    // A second, undecided proposal of the first fixture's source: the queue
+    // groups it under 00160 rather than listing it as a separate question.
+    id: 'q6666666-6666-4666-8666-666666666666',
+    classification: 'DIVIDED_REQUIRES_REVIEW',
+    validationReason: 'the source names several successors and offers a default',
+    oldCode: '00160',
+    oldName: 'Phường Cống Vị',
+    newCode: '00166',
+    newName: 'Phường Ngọc Hà',
+    candidates: [
+      { code: '00163', name: 'Phường Ba Đình', selectable: true, hierarchyValid: true },
+      { code: '00166', name: 'Phường Ngọc Hà', selectable: true, hierarchyValid: true },
+    ],
+    affectedPlaceCount: 4,
+  },
 ]
 
 export const overrideSet = {
@@ -4394,6 +4426,33 @@ function decide(
     if (!candidate.selectable) {
       return envelope(409, 'OVERRIDE_TARGET_NOT_CURRENT', 'not an active commune')
     }
+    // GoGo-BE#622 — one source, one successor: in the base, and in this draft.
+    const by = settledBy(rowId)
+    if (by && by.materialized!.targetCode !== body.targetCode) {
+      return envelope(
+        409,
+        'OVERRIDE_SOURCE_ALREADY_RESOLVED',
+        `${row.oldCode} already resolves to ${by.materialized!.targetCode} through a reviewer override (override:r1)`,
+      )
+    }
+    const sibling = quarantineRows.find(
+      (r) =>
+        r.id !== rowId && r.oldCode === row.oldCode && decisions.get(r.id)?.decision === 'ACCEPT',
+    )
+    if (sibling) {
+      const siblingTarget = decisions.get(sibling.id)!.targetCode
+      return siblingTarget === body.targetCode
+        ? envelope(
+            409,
+            'OVERRIDE_SOURCE_ALREADY_DECIDED_IN_DRAFT',
+            'this draft already accepts the source onto that target on another row',
+          )
+        : envelope(
+            409,
+            'OVERRIDE_SOURCE_CONFLICT_IN_DRAFT',
+            `this draft already accepts ${row.oldCode} → ${siblingTarget} on another row`,
+          )
+    }
   }
 
   const previous = decisions.get(rowId) ?? null
@@ -4444,12 +4503,25 @@ function stateOf(
   | 'REJECTED_DRAFT'
   | 'SUPERSEDED'
   | 'MATERIALIZED_ACCEPT'
-  | 'MATERIALIZED_REJECT' {
+  | 'MATERIALIZED_REJECT'
+  | 'SOURCE_SETTLED' {
   const effective = decisions.get(rowId)
   if (effective) return effective.decision === 'ACCEPT' ? 'ACCEPTED_DRAFT' : 'REJECTED_DRAFT'
   const settled = quarantineRows.find((r) => r.id === rowId)?.materialized
   if (settled) return settled.decision === 'ACCEPT' ? 'MATERIALIZED_ACCEPT' : 'MATERIALIZED_REJECT'
+  if (settledBy(rowId)) return 'SOURCE_SETTLED'
   return decisionHistory.has(rowId) ? 'SUPERSEDED' : 'UNDECIDED'
+}
+
+/** The sibling row whose materialised ACCEPT settles this row's source (GoGo-BE#622). */
+function settledBy(rowId: string): QuarantineFixture | null {
+  const row = quarantineRows.find((r) => r.id === rowId)
+  if (!row) return null
+  return (
+    quarantineRows.find(
+      (r) => r.id !== rowId && r.oldCode === row.oldCode && r.materialized?.decision === 'ACCEPT',
+    ) ?? null
+  )
 }
 
 function quarantineListItem(row: QuarantineFixture) {
@@ -4534,6 +4606,16 @@ function quarantineDetail(row: QuarantineFixture) {
     },
     decision: decisions.get(row.id) ?? null,
     materialized: row.materialized ? { ...row.materialized, retracted: null } : null,
+    sourceSettled: (() => {
+      const by = settledBy(row.id)
+      return by
+        ? {
+            targetCode: by.materialized!.targetCode ?? '',
+            sourceVersion: 'override:r1',
+            decisionId: null,
+          }
+        : null
+    })(),
     decisionState: stateOf(row.id),
     history,
   }
@@ -4546,17 +4628,21 @@ function quarantineCounts() {
   const settledRows = quarantineRows.filter((r) => r.materialized)
   const settled = settledRows.filter((r) => !decisions.has(r.id))
   const settledAccepted = settled.filter((r) => r.materialized!.decision === 'ACCEPT').length
+  const bySibling = quarantineRows.filter(
+    (r) => !r.materialized && settledBy(r.id) && !decisions.has(r.id),
+  )
   return {
     // Nine times the backlog, and the reason the two must never be summed.
     canonical: { MERGED: 9432, RENAMED: 132, REASSIGNED: 5 },
-    backlog: { DIVIDED_REQUIRES_REVIEW: 1033 - settledRows.length },
+    backlog: { DIVIDED_REQUIRES_REVIEW: 1033 - settledRows.length - bySibling.length },
     decisions: {
-      UNDECIDED: 1033 - accepted - rejected - settled.length,
+      UNDECIDED: 1033 - accepted - rejected - settled.length - bySibling.length,
       ACCEPTED_DRAFT: accepted,
       REJECTED_DRAFT: rejected,
       SUPERSEDED: 0,
       MATERIALIZED_ACCEPT: settledAccepted,
       MATERIALIZED_REJECT: settled.length - settledAccepted,
+      SOURCE_SETTLED: bySibling.length,
     },
   }
 }

@@ -145,17 +145,35 @@ export function QuarantineDetailDrawer({
         { reason: reason.trim(), expectedRevision: revision },
         { idempotencyKey: key },
       ),
-    onSuccess: () => {
+    onSuccess: (result) => {
       setKey(newIdempotencyKey())
       setReason('')
       invalidate()
-      toast.success(t('sourceDrift.reject.done'), t('sourceDrift.reject.doneDetail'))
+      if (result.retracts) {
+        toast.success(
+          t('sourceDrift.retract.done'),
+          t('sourceDrift.retract.doneDetail', { code: result.retracts.targetCode }),
+        )
+      } else {
+        toast.success(t('sourceDrift.reject.done'), t('sourceDrift.reject.doneDetail'))
+      }
     },
     onError: onDecisionError,
   })
 
   const pending = accept.isPending || reject.isPending
   const writable = canManage && online && detail?.overrideSet.status !== 'MATERIALIZED'
+  /*
+   * GoGo-CMS#213 — the decision is about the source. A row another row of the
+   * same source settled cannot be accepted elsewhere (the API refuses it with
+   * OVERRIDE_SOURCE_ALREADY_RESOLVED); rejecting it stays possible and changes
+   * nothing. On the row that was decided, a rejection is a retraction.
+   */
+  const settledBySibling = detail?.sourceSettled ?? null
+  const retractable =
+    detail?.materialized?.decision === 'ACCEPT' && !detail.materialized.retracted
+      ? detail.materialized.targetCode
+      : null
 
   return (
     <Drawer
@@ -175,12 +193,18 @@ export function QuarantineDetailDrawer({
             disabled={!writable || reason.trim().length === 0 || pending}
             onClick={() => reject.mutate()}
           >
-            {t('sourceDrift.reject.action')}
+            {retractable ? t('sourceDrift.retract.action') : t('sourceDrift.reject.action')}
           </Button>
           <Button
             variant="primary"
             loading={accept.isPending}
-            disabled={!writable || !target || reason.trim().length === 0 || pending}
+            disabled={
+              !writable ||
+              Boolean(settledBySibling) ||
+              !target ||
+              reason.trim().length === 0 ||
+              pending
+            }
             onClick={() => accept.mutate()}
           >
             {t('sourceDrift.accept.action')}
@@ -201,6 +225,20 @@ export function QuarantineDetailDrawer({
               {t('sourceDrift.draftOnly')}
             </p>
 
+            {data.sourceSettled ? (
+              <section className={styles.section} aria-label={t('sourceDrift.settled.title')}>
+                <p className={styles.factLabel}>{t('sourceDrift.settled.title')}</p>
+                <p className={styles.warn}>
+                  <span aria-hidden="true">⚠</span>
+                  {t('sourceDrift.settled.hint', {
+                    source: data.source.code ?? '—',
+                    target: data.sourceSettled.targetCode,
+                    round: data.sourceSettled.sourceVersion,
+                  })}
+                </p>
+              </section>
+            ) : null}
+
             {data.materialized ? (
               /*
                * GoGo-BE#619 — the decision an earlier round carried into this
@@ -218,6 +256,13 @@ export function QuarantineDetailDrawer({
                     </Badge>{' '}
                     {data.materialized.targetCode ? (
                       <code className={styles.mono}>{data.materialized.targetCode}</code>
+                    ) : null}{' '}
+                    {data.materialized.retracted ? (
+                      <Badge tone="amber">
+                        {t('sourceDrift.detail.retracted', {
+                          code: data.materialized.retracted.targetCode,
+                        })}
+                      </Badge>
                     ) : null}
                   </span>
                   {data.materialized.decidedAt ? (
@@ -341,9 +386,13 @@ export function QuarantineDetailDrawer({
 
             <p className={styles.warn}>
               <span aria-hidden="true">⚠</span>
-              {target
+              {target && !settledBySibling
                 ? t('sourceDrift.accept.consequence', { code: target.code })
-                : t('sourceDrift.reject.consequence')}
+                : settledBySibling
+                  ? t('sourceDrift.settled.consequence')
+                  : retractable
+                    ? t('sourceDrift.retract.consequence', { code: retractable })
+                    : t('sourceDrift.reject.consequence')}
             </p>
 
             <section className={styles.section}>

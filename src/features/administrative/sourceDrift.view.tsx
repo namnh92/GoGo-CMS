@@ -204,26 +204,72 @@ export function SourceDriftPanel({ datasetId }: { datasetId: string }) {
   })
 
   const rows = useMemo(() => queue.data?.items ?? [], [queue.data])
+  /*
+   * GoGo-CMS#213 — one divided commune arrives as two or three advisory rows,
+   * and the decision is about the commune, not the row. The page is already
+   * ordered by source, so the rows of one source are adjacent: the first shows
+   * the identity and how many proposals share it, the rest say "same source".
+   */
+  const siblings = useMemo(() => {
+    const perSource = new Map<string, number>()
+    for (const row of rows) {
+      const key = row.source.code ?? row.id
+      perSource.set(key, (perSource.get(key) ?? 0) + 1)
+    }
+    const seen = new Map<string, number>()
+    return new Map(
+      rows.map((row) => {
+        const key = row.source.code ?? row.id
+        const ordinal = (seen.get(key) ?? 0) + 1
+        seen.set(key, ordinal)
+        return [row.id, { ordinal, total: perSource.get(key) ?? 1 }] as const
+      }),
+    )
+  }, [rows])
 
   const columns = useMemo<ColumnDef<AdministrativeQuarantineItem, unknown>[]>(
     () => [
       {
         id: 'source',
         header: () => t('sourceDrift.col.source'),
-        cell: ({ row }) => (
-          <Identity
-            unit={{
-              code: row.original.source.code ?? null,
-              name: row.original.source.name ?? null,
-              unitType: null,
-              level: null,
-              effectiveFrom: null,
-              effectiveTo: null,
-              parentCode: null,
-              status: null,
-            }}
-          />
-        ),
+        cell: ({ row }) => {
+          const group = siblings.get(row.original.id) ?? { ordinal: 1, total: 1 }
+          if (group.ordinal > 1) {
+            return (
+              <span className={styles.meta}>
+                <span aria-hidden="true">↳ </span>
+                <code className={styles.mono}>{row.original.source.code ?? '—'}</code>{' '}
+                {t('sourceDrift.group.sameSource', {
+                  ordinal: formatNumber(group.ordinal, locale),
+                  total: formatNumber(group.total, locale),
+                })}
+              </span>
+            )
+          }
+          return (
+            <span className={styles.stack}>
+              <Identity
+                unit={{
+                  code: row.original.source.code ?? null,
+                  name: row.original.source.name ?? null,
+                  unitType: null,
+                  level: null,
+                  effectiveFrom: null,
+                  effectiveTo: null,
+                  parentCode: null,
+                  status: null,
+                }}
+              />
+              {group.total > 1 ? (
+                <Badge tone="lavender">
+                  {t('sourceDrift.group.proposals', {
+                    count: formatNumber(group.total, locale),
+                  })}
+                </Badge>
+              ) : null}
+            </span>
+          )
+        },
         enableSorting: false,
       },
       {
@@ -298,7 +344,7 @@ export function SourceDriftPanel({ datasetId }: { datasetId: string }) {
         enableSorting: false,
       },
     ],
-    [locale, t],
+    [locale, siblings, t],
   )
 
   return (

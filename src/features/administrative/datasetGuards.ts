@@ -217,6 +217,10 @@ export const DIFF_CATEGORIES = [
   'EFFECTIVE_PERIOD_CHANGED',
   'UNRESOLVED',
   'SOURCE_DRIFT',
+  /* ADM-011 / ADM-028 — what a reviewer round changed, apart from the source. */
+  'OVERRIDE_ACCEPTED',
+  'OVERRIDE_TARGET_CHANGED',
+  'OVERRIDE_RETRACTED',
 ] as const
 export type DiffCategory = (typeof DIFF_CATEGORIES)[number]
 

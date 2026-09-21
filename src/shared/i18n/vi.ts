@@ -344,6 +344,20 @@ export const vi = {
   'sourceDrift.firstPage': 'Về đầu',
 
   'sourceDrift.col.source': 'Đơn vị nguồn (lịch sử)',
+  'sourceDrift.group.proposals': '{count} đề xuất · một quyết định cho nguồn',
+  'sourceDrift.group.sameSource': 'cùng nguồn · đề xuất {ordinal}/{total}',
+  'sourceDrift.settled.title': 'Nguồn đã chốt',
+  'sourceDrift.settled.hint':
+    'Nguồn {source} đã có đích {target} ({round}). Dòng này chỉ là một đề xuất khác của cùng nguồn và không thể chấp nhận sang đích khác. Muốn đổi, từ chối dòng đã quyết để rút lại, rồi quyết định lại ở vòng sau.',
+  'sourceDrift.settled.consequence':
+    'Không chấp nhận được: nguồn đã có đích. Từ chối dòng này chỉ ghi nhận đề xuất bị bỏ, KHÔNG đổi gì.',
+  'sourceDrift.retract.action': 'Rút lại quyết định',
+  'sourceDrift.retract.consequence':
+    'Từ chối dòng này sẽ rút lại đích {code} khi vật chất hoá: bản dẫn xuất không mang cạnh đó nữa và nguồn mở lại để quyết định ở vòng sau. KHÔNG đổi gì đang chạy cho tới khi publish.',
+  'sourceDrift.retract.done': 'Đã ghi rút lại quyết định (bản nháp)',
+  'sourceDrift.retract.doneDetail':
+    'Đích {code} sẽ bị rút khi vật chất hoá vòng này; nguồn mở lại để quyết định ở vòng sau.',
+  'sourceDrift.detail.retracted': 'Đã rút lại đích {code}',
   'sourceDrift.col.proposed': 'Đích nguồn đề xuất',
   'sourceDrift.col.classification': 'Phân loại của nguồn',
   'sourceDrift.col.decisionState': 'Quyết định nháp',
@@ -509,6 +523,12 @@ export const vi = {
     'Cấp trên của đích không phân giải được trong bộ dữ liệu này.',
   'error.OVERRIDE_TARGET_IS_SOURCE': 'Đích trùng với chính đơn vị nguồn.',
   'error.OVERRIDE_EDGE_ALREADY_CANONICAL': 'Cạnh này đã là cạnh chuẩn trong bộ dữ liệu.',
+  'error.OVERRIDE_SOURCE_ALREADY_RESOLVED':
+    'Nguồn này đã có đích qua quyết định của người duyệt ở vòng trước. Muốn đổi, rút lại quyết định đó (từ chối dòng đã quyết) rồi quyết định lại ở vòng sau.',
+  'error.OVERRIDE_SOURCE_CONFLICT_IN_DRAFT':
+    'Bộ nháp đã chấp nhận nguồn này sang một đích khác trên dòng anh em. Quyết định nguồn một lần: thay quyết định đó, hoặc từ chối dòng này.',
+  'error.OVERRIDE_SOURCE_ALREADY_DECIDED_IN_DRAFT':
+    'Bộ nháp đã chấp nhận nguồn này sang đúng đích đó trên dòng anh em; quyết định ấy đã bao trùm nguồn.',
   'error.QUARANTINE_ROW_NOT_FOUND': 'Không tìm thấy dòng cách ly này.',
   'error.QUARANTINE_ROW_NOT_IN_DATASET': 'Dòng cách ly này thuộc một phiên bản bộ dữ liệu khác.',
   'error.QUARANTINE_ROW_HAS_NO_SOURCE':
@@ -633,6 +653,9 @@ export const vi = {
   'administrative.diffCategory.EFFECTIVE_PERIOD_CHANGED': 'Đổi kỳ hiệu lực',
   'administrative.diffCategory.UNRESOLVED': 'Chưa phân giải',
   'administrative.diffCategory.SOURCE_DRIFT': 'Lệch nguồn',
+  'administrative.diffCategory.OVERRIDE_ACCEPTED': 'Người duyệt chấp nhận',
+  'administrative.diffCategory.OVERRIDE_TARGET_CHANGED': 'Người duyệt đổi đích',
+  'administrative.diffCategory.OVERRIDE_RETRACTED': 'Người duyệt rút lại',
 
   'administrative.mappingStatus.UNMAPPED': 'Chưa gán',
   'administrative.mappingStatus.AUTO_MATCHED': 'Máy khớp',

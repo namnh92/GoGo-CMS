@@ -341,6 +341,20 @@ export const en: Partial<Record<MessageKey, string>> = {
   'sourceDrift.firstPage': 'First page',
 
   'sourceDrift.col.source': 'Historical source unit',
+  'sourceDrift.group.proposals': '{count} proposals · one decision for the source',
+  'sourceDrift.group.sameSource': 'same source · proposal {ordinal}/{total}',
+  'sourceDrift.settled.title': 'Source settled',
+  'sourceDrift.settled.hint':
+    'Source {source} already goes to {target} ({round}). This row is another proposal for the same source and cannot be accepted onto anything else. To change it, reject the decided row to retract, then decide again in a later round.',
+  'sourceDrift.settled.consequence':
+    'Cannot accept: the source already has a successor. Rejecting this row only records the dropped proposal; it changes NOTHING.',
+  'sourceDrift.retract.action': 'Retract decision',
+  'sourceDrift.retract.consequence':
+    'Rejecting this row retracts successor {code} when materialised: the derived version no longer carries that edge and the source is open for a later round. NOTHING that is running changes until publication.',
+  'sourceDrift.retract.done': 'Retraction recorded as a draft decision',
+  'sourceDrift.retract.doneDetail':
+    'Successor {code} is withdrawn when this round is materialised; the source is open for a later round.',
+  'sourceDrift.detail.retracted': 'Retracted successor {code}',
   'sourceDrift.col.proposed': 'Upstream’s proposed target',
   'sourceDrift.col.classification': 'Upstream classification',
   'sourceDrift.col.decisionState': 'Draft decision',
@@ -505,6 +519,12 @@ export const en: Partial<Record<MessageKey, string>> = {
     'The target’s parent does not resolve in this dataset.',
   'error.OVERRIDE_TARGET_IS_SOURCE': 'The target is the source unit itself.',
   'error.OVERRIDE_EDGE_ALREADY_CANONICAL': 'This edge is already canonical in the dataset.',
+  'error.OVERRIDE_SOURCE_ALREADY_RESOLVED':
+    'A reviewer already sent this source somewhere in an earlier round. To change it, retract that decision (reject the decided row) and decide again in a later round.',
+  'error.OVERRIDE_SOURCE_CONFLICT_IN_DRAFT':
+    'This draft already accepts this source onto another target on a sibling row. Decide the source once: supersede that decision, or reject this row.',
+  'error.OVERRIDE_SOURCE_ALREADY_DECIDED_IN_DRAFT':
+    'This draft already accepts this source onto that very target on a sibling row; that decision covers the source.',
   'error.QUARANTINE_ROW_NOT_FOUND': 'No such quarantined row.',
   'error.QUARANTINE_ROW_NOT_IN_DATASET': 'That row belongs to a different dataset version.',
   'error.QUARANTINE_ROW_HAS_NO_SOURCE':
@@ -627,6 +647,9 @@ export const en: Partial<Record<MessageKey, string>> = {
   'administrative.diffCategory.EFFECTIVE_PERIOD_CHANGED': 'Effective period changed',
   'administrative.diffCategory.UNRESOLVED': 'Unresolved',
   'administrative.diffCategory.SOURCE_DRIFT': 'Source drift',
+  'administrative.diffCategory.OVERRIDE_ACCEPTED': 'Reviewer accepted',
+  'administrative.diffCategory.OVERRIDE_TARGET_CHANGED': 'Reviewer changed target',
+  'administrative.diffCategory.OVERRIDE_RETRACTED': 'Reviewer retracted',
 
   'administrative.mappingStatus.UNMAPPED': 'Unmapped',
   'administrative.mappingStatus.AUTO_MATCHED': 'Auto-matched',
