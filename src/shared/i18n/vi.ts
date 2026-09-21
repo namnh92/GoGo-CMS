@@ -365,6 +365,7 @@ export const vi = {
   'sourceDrift.decisionState.SUPERSEDED': 'Đã bị thay thế',
   'sourceDrift.decisionState.MATERIALIZED_ACCEPT': 'Đã vật chất hoá: chấp nhận',
   'sourceDrift.decisionState.MATERIALIZED_REJECT': 'Đã vật chất hoá: từ chối',
+  'sourceDrift.decisionState.SOURCE_SETTLED': 'Nguồn đã chốt',
   'sourceDrift.decision.ACCEPT': 'Chấp nhận',
   'sourceDrift.decision.REJECT': 'Từ chối',
 

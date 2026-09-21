@@ -824,7 +824,13 @@ export const handlers = [
           combinedChecksum: 'f1e2d3c4b5a6978869504132fedcba9876543210fedcba9876543210fedcba98',
           overrideRevision: 1,
           status: 'STAGED',
-          decisions: { effective: accepted + rejected, accepted, rejected, edges: accepted },
+          decisions: {
+            effective: accepted + rejected,
+            accepted,
+            rejected,
+            edges: accepted,
+            retracted: 0,
+          },
         },
         { status: 201 },
       )
@@ -4416,6 +4422,15 @@ function decide(
       quarantineRowId: rowId,
       supersededDecisionId: previous?.id ?? null,
       decidedAt: appended.decidedAt,
+      // GoGo-BE#623: a REJECT on the row a base override was decided on retracts it.
+      retracts:
+        decision === 'REJECT' && row.materialized?.decision === 'ACCEPT'
+          ? {
+              decisionId: null,
+              targetCode: row.materialized.targetCode ?? '',
+              sourceVersion: 'override:r1',
+            }
+          : null,
     },
     { status: 201 },
   )
@@ -4518,7 +4533,7 @@ function quarantineDetail(row: QuarantineFixture) {
       status: overrideSet.status,
     },
     decision: decisions.get(row.id) ?? null,
-    materialized: row.materialized ?? null,
+    materialized: row.materialized ? { ...row.materialized, retracted: null } : null,
     decisionState: stateOf(row.id),
     history,
   }
