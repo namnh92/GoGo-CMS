@@ -241,8 +241,24 @@ export default function LoginScreen() {
             </p>
           ) : null}
 
+          {/*
+            The two branches are keyed, and the keys are what makes them two
+            forms rather than one (#103).
+
+            Without a key React reconciles by position and type. Both branches
+            are a `<form>` holding a `div` of fields, so it keeps the DOM nodes
+            and diffs their props: the email box *becomes* the new-password box.
+            One input element then changes `type`, `autoComplete` and its
+            controlled/uncontrolled contract underneath the browser — the
+            situation password managers and autofill get wrong, and the cause of
+            the uncontrolled→controlled warning this screen used to print.
+
+            Distinct keys make React unmount the credentials subtree and mount a
+            fresh one, so no node ever carries a value typed on the other side of
+            a credentials boundary.
+          */}
           {step === 'change-password' ? (
-            <form onSubmit={submitChangePassword} noValidate>
+            <form key="change-password" onSubmit={submitChangePassword} noValidate>
               <div className={styles.fields}>
                 <TextInput
                   label={t('auth.change.newPassword')}
@@ -275,9 +291,12 @@ export default function LoginScreen() {
               </div>
             </form>
           ) : (
-            <form onSubmit={onSubmit} noValidate>
-              {/* Both steps live in one form: fields hide, values persist, and
-                the request always carries everything the server needs. */}
+            <form key="credentials" onSubmit={onSubmit} noValidate>
+              {/* Credentials and MFA deliberately share this one form and this
+                one key: hiding a field keeps its value, and the request has to
+                carry email, password and code together. The keyed boundary is
+                between *that* form and the change-password form, not between
+                these two steps. */}
               <div className={styles.fields} hidden={step !== 'credentials'}>
                 <TextInput
                   label={t('auth.email')}
