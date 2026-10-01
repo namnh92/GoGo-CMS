@@ -48,7 +48,8 @@ describe('staff session', () => {
     const stored = window.localStorage.getItem('gogo.cms.session-hint')
     expect(stored).not.toBeNull()
     const hint = JSON.parse(stored as string) as Record<string, unknown>
-    expect(Object.keys(hint).sort()).toEqual(['displayName', 'role'])
+    // `mustChangePassword` joined these in #101: an obligation, not a credential.
+    expect(Object.keys(hint).sort()).toEqual(['displayName', 'mustChangePassword', 'role'])
     // The mock returns an accessToken; it must live in memory, never on disk.
     expect(getAccessToken()).toBe('mock-access-token')
     expect(stored).not.toContain('mock-access-token')
@@ -251,6 +252,30 @@ describe('staff session', () => {
 
     expect(order).toEqual(['logout', 'login'])
     expect(result.current.session).not.toBeNull()
+  })
+
+  /*
+   * #101. The obligation has to be session state, not a return value only the
+   * login screen ever saw, or any navigation walks past it.
+   */
+  it('carries a temporary-password obligation in the session and clears it on change', async () => {
+    const { result } = renderHook(() => useSession(), { wrapper })
+
+    await act(async () => {
+      await result.current.login({ email: 'temp.admin@gogo.vn', password: 'pw', totp: '123456' })
+    })
+    expect(result.current.session?.mustChangePassword).toBe(true)
+    // A reload must land on the same obligation.
+    expect(window.localStorage.getItem('gogo.cms.session-hint')).toContain(
+      '"mustChangePassword":true',
+    )
+
+    act(() => result.current.passwordChanged())
+
+    expect(result.current.session?.mustChangePassword).toBe(false)
+    expect(window.localStorage.getItem('gogo.cms.session-hint')).toContain(
+      '"mustChangePassword":false',
+    )
   })
 
   /*

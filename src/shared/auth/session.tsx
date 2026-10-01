@@ -35,7 +35,21 @@ const loginResponseSchema = z.object({
  */
 const HINT_KEY = 'gogo.cms.session-hint'
 
-const hintSchema = z.object({ role: adminRoleSchema, displayName: z.string() })
+/*
+ * `mustChangePassword` lives here rather than in `login()`'s return value
+ * (#101). As a return value only the login screen knew the obligation existed,
+ * so any navigation walked past it into a console where GoGo-BE's AdminGuard
+ * answers 403 PASSWORD_CHANGE_REQUIRED on every route. Session state is read
+ * by the route guard and survives a reload.
+ *
+ * It defaults to false so a hint written before this field existed still
+ * parses instead of logging the operator out.
+ */
+const hintSchema = z.object({
+  role: adminRoleSchema,
+  displayName: z.string(),
+  mustChangePassword: z.boolean().default(false),
+})
 export type SessionHint = z.infer<typeof hintSchema>
 
 function readHint(): SessionHint | null {
@@ -141,7 +155,9 @@ type SessionValue = {
   keepAlive: () => void
   /** The last sign-out cleared this device but the server never confirmed. */
   signOutIncomplete: boolean
-  login: (input: LoginInput) => Promise<SessionHint & { mustChangePassword: boolean }>
+  login: (input: LoginInput) => Promise<SessionHint>
+  /** The temporary password was replaced; the obligation is discharged. */
+  passwordChanged: () => void
   logout: () => void
   can: (permission: Permission) => boolean
 }
@@ -259,13 +275,26 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     signedIn.current = true
     writeSignOutIncomplete(false)
     setSignOutIncomplete(false)
-    const hint: SessionHint = { role: parsed.role, displayName: parsed.displayName }
+    const hint: SessionHint = {
+      role: parsed.role,
+      displayName: parsed.displayName,
+      mustChangePassword: parsed.mustChangePassword,
+    }
     writeHint(hint)
     setSession(hint)
     setExpired(null)
     lastActivityAt.current = Date.now()
     setIdleSecondsLeft(null)
-    return { ...hint, mustChangePassword: parsed.mustChangePassword }
+    return hint
+  }, [])
+
+  const passwordChanged = useCallback(() => {
+    setSession((current) => {
+      if (!current || !current.mustChangePassword) return current
+      const cleared = { ...current, mustChangePassword: false }
+      writeHint(cleared)
+      return cleared
+    })
   }, [])
 
   const value = useMemo<SessionValue>(
@@ -277,10 +306,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       signOutIncomplete,
       keepAlive,
       login,
+      passwordChanged,
       logout,
       can: (permission) => roleCan(session?.role ?? null, permission),
     }),
-    [session, expired, idleSecondsLeft, signOutIncomplete, keepAlive, login, logout],
+    [
+      session,
+      expired,
+      idleSecondsLeft,
+      signOutIncomplete,
+      keepAlive,
+      login,
+      passwordChanged,
+      logout,
+    ],
   )
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>
