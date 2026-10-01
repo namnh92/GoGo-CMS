@@ -1066,6 +1066,8 @@ export const vi = {
     'Không có thao tác nào trong ít phút qua. Phiên sẽ tự đóng sau {seconds} giây.',
   'auth.idleExtend': 'Tiếp tục làm việc',
   'auth.idleTimeout': 'Phiên đã tự đóng vì không có thao tác. Đăng nhập lại để tiếp tục.',
+  'auth.signOutIncomplete':
+    'Lần đăng xuất trước đã xoá phiên trên máy này, nhưng máy chủ chưa xác nhận thu hồi. Hãy đăng nhập rồi đăng xuất lại một lần nữa.',
 
   'dashboard.title': 'Sức khoẻ hệ thống',
   'dashboard.breadcrumb': 'Tổng quan',
