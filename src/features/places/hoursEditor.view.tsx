@@ -85,7 +85,11 @@ function rowMessages(
   idBase: string,
   issues: ReadonlyArray<readonly [key: string, issue: HoursIssue | undefined]>,
   describe: (issue: HoursIssue) => string,
-): { messages: RowMessage[]; idFor: (key: string) => string | undefined } {
+): {
+  messages: RowMessage[]
+  idFor: (key: string) => string | undefined
+  idsFor: (...keys: string[]) => string | undefined
+} {
   const messages: RowMessage[] = []
   const byText = new Map<string, string>()
   const byKey = new Map<string, string>()
@@ -102,7 +106,15 @@ function rowMessages(
     byKey.set(key, id)
     messages.push({ id, text })
   }
-  return { messages, idFor: (key) => byKey.get(key) }
+  const idFor = (key: string) => byKey.get(key)
+  // A control can owe its description to more than one message: its own field
+  // error, and a row-level one (an overlap, too many intervals) that is about
+  // the interval as a whole. Same id twice would be read twice.
+  const idsFor = (...keys: string[]) => {
+    const ids = [...new Set(keys.map(idFor).filter((id): id is string => id !== undefined))]
+    return ids.length > 0 ? ids.join(' ') : undefined
+  }
+  return { messages, idFor, idsFor }
 }
 
 export type HoursEditorProps = {
@@ -388,7 +400,7 @@ export function HoursEditor({ week, onChange, disabled, serverIssues }: HoursEdi
                     const overnightIssue =
                       index === undefined ? undefined : issueFor(allIssues, index, 'isOvernight')
                     const rowIssue = index === undefined ? undefined : issueFor(allIssues, index)
-                    const { messages, idFor } = rowMessages(
+                    const { messages, idFor, idsFor } = rowMessages(
                       `${messageIdBase}-${day}-${interval.id}`,
                       [
                         ['open', openIssue],
@@ -408,8 +420,11 @@ export function HoursEditor({ week, onChange, disabled, serverIssues }: HoursEdi
                             aria-label={t('placeEditor.hours.openFor', {
                               day: dayNames.long(day),
                             })}
-                            aria-invalid={openIssue ? true : undefined}
-                            aria-describedby={idFor('open')}
+                            // A row-level rejection — overlap, too many
+                            // intervals — is about the interval both times
+                            // define, so both carry it (review F-01).
+                            aria-invalid={openIssue || rowIssue ? true : undefined}
+                            aria-describedby={idsFor('open', 'row')}
                             disabled={disabled}
                             value={interval.open}
                             onChange={(event) =>
@@ -430,8 +445,8 @@ export function HoursEditor({ week, onChange, disabled, serverIssues }: HoursEdi
                             aria-label={t('placeEditor.hours.closeFor', {
                               day: dayNames.long(day),
                             })}
-                            aria-invalid={closeIssue ? true : undefined}
-                            aria-describedby={idFor('close')}
+                            aria-invalid={closeIssue || rowIssue ? true : undefined}
+                            aria-describedby={idsFor('close', 'row')}
                             disabled={disabled}
                             value={interval.close}
                             onChange={(event) =>

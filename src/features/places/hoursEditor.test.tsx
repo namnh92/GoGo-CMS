@@ -334,6 +334,46 @@ function describedText(control: HTMLElement): string {
 }
 
 describe('a rejected hour row says why, to assistive technology too (GoGo-CMS#102)', () => {
+  /*
+   * Review F-01: an overlap or a too-many-intervals rejection names the row
+   * (`hours.<n>`), not one field, so it was rendered with an id that no
+   * control referenced. It is about the interval both times define — both
+   * must carry it.
+   */
+  it('points both times at a rejection of the whole row', async () => {
+    signInAs('editor')
+    server.use(
+      http.put('/v1/cms/places/:id/hours', () =>
+        HttpResponse.json(
+          {
+            code: 'VALIDATION_FAILED',
+            message: 'Request validation failed',
+            field_errors: [
+              { field: 'hours.0', code: 'overlap', message: 'Ca này trùng giờ với ca khác' },
+            ],
+            request_id: 'req-hours-row',
+            retryable: false,
+          },
+          { status: 400 },
+        ),
+      ),
+    )
+    const user = userEvent.setup()
+    open({ hours: [hour({ dayOfWeek: 1 })] })
+
+    await screen.findByText('Giờ mở cửa')
+    const monday = within(screen.getByRole('region', { name: 'Thứ Hai' }) as HTMLElement)
+    const openInput = monday.getByLabelText('Giờ mở ngày Thứ Hai')
+    const closeInput = monday.getByLabelText('Giờ đóng ngày Thứ Hai')
+    const card = await hoursCard()
+    await user.click(card.getByRole('button', { name: 'Lưu' }))
+
+    await waitFor(() => expect(openInput).toHaveAttribute('aria-invalid', 'true'))
+    expect(closeInput).toHaveAttribute('aria-invalid', 'true')
+    expect(describedText(openInput)).toContain('Ca này trùng giờ với ca khác')
+    expect(describedText(closeInput)).toContain('Ca này trùng giờ với ca khác')
+  })
+
   it('points the close input at the server’s message for that row', async () => {
     signInAs('editor')
     server.use(
