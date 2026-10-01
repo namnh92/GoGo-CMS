@@ -270,12 +270,38 @@ describe('staff session', () => {
       '"mustChangePassword":true',
     )
 
-    act(() => result.current.passwordChanged())
+    act(() => result.current.passwordChanged(result.current.currentEpoch()))
 
     expect(result.current.session?.mustChangePassword).toBe(false)
     expect(window.localStorage.getItem('gogo.cms.session-hint')).toContain(
       '"mustChangePassword":false',
     )
+  })
+
+  /*
+   * #101 review F-01. A password-change answer can outlive the session that
+   * asked for it; discharging the obligation then discharges someone else's.
+   */
+  it('ignores a password-change answer that outlived its session', async () => {
+    const { result } = renderHook(() => useSession(), { wrapper })
+
+    await act(async () => {
+      await result.current.login({ email: 'temp.one@gogo.vn', password: 'pw', totp: '123456' })
+    })
+    const staleEpoch = result.current.currentEpoch()
+
+    await act(async () => {
+      result.current.logout()
+    })
+    await act(async () => {
+      await result.current.login({ email: 'temp.two@gogo.vn', password: 'pw', totp: '123456' })
+    })
+    expect(result.current.session?.mustChangePassword).toBe(true)
+
+    // The first operator's answer finally lands.
+    act(() => result.current.passwordChanged(staleEpoch))
+
+    expect(result.current.session?.mustChangePassword).toBe(true)
   })
 
   /*

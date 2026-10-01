@@ -38,15 +38,18 @@ function ChangePasswordForm() {
     submit,
     reset,
   } = useChangeOwnPassword()
-  const { passwordChanged } = useSession()
+  const { passwordChanged, currentEpoch } = useSession()
 
   const onSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
     setDone(false)
+    // Captured before the await: a slow answer must not discharge the
+    // obligation of whoever signed in meanwhile (#101).
+    const epoch = currentEpoch()
     if (await submit(currentPassword)) {
       // An operator sent here by the forced-change guard (#101) is now free;
       // for everyone else this is a no-op.
-      passwordChanged()
+      passwordChanged(epoch)
       // The session that made the call survives, so there is nowhere to send
       // the operator: they stay here and the page says what happened.
       setCurrentPassword('')

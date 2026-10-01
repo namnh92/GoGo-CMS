@@ -98,6 +98,14 @@ export type ExpiryReason = 'unauthorized' | 'idle'
 let pendingRevoke: Promise<void> | null = null
 
 /**
+ * Bumped by every sign-in and every sign-out. A reply that outlived the
+ * session it belongs to carries the old number and is ignored — without it a
+ * slow password-change answer could discharge the obligation of whoever
+ * signed in after it (#101 review F-01).
+ */
+let sessionEpoch = 0
+
+/**
  * Survives the tab closing, because that is exactly when nobody saw the
  * warning. Holds no credential — only that one failed to be destroyed.
  */
@@ -156,8 +164,10 @@ type SessionValue = {
   /** The last sign-out cleared this device but the server never confirmed. */
   signOutIncomplete: boolean
   login: (input: LoginInput) => Promise<SessionHint>
+  /** Identifies the signed-in session, for a reply that may outlive it. */
+  currentEpoch: () => number
   /** The temporary password was replaced; the obligation is discharged. */
-  passwordChanged: () => void
+  passwordChanged: (epoch: number) => void
   logout: () => void
   can: (permission: Permission) => boolean
 }
@@ -178,6 +188,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const signedIn = useRef(session !== null)
 
   const clearClientSession = useCallback((reason: ExpiryReason | null) => {
+    sessionEpoch += 1
     signedIn.current = false
     setAccessToken(null)
     writeHint(null)
@@ -280,6 +291,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       displayName: parsed.displayName,
       mustChangePassword: parsed.mustChangePassword,
     }
+    sessionEpoch += 1
     writeHint(hint)
     setSession(hint)
     setExpired(null)
@@ -288,7 +300,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     return hint
   }, [])
 
-  const passwordChanged = useCallback(() => {
+  const currentEpoch = useCallback(() => sessionEpoch, [])
+
+  const passwordChanged = useCallback((epoch: number) => {
+    // The answer belongs to a session that has since ended; discharging the
+    // obligation now would be discharging somebody else's.
+    if (epoch !== sessionEpoch) return
     setSession((current) => {
       if (!current || !current.mustChangePassword) return current
       const cleared = { ...current, mustChangePassword: false }
@@ -306,6 +323,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       signOutIncomplete,
       keepAlive,
       login,
+      currentEpoch,
       passwordChanged,
       logout,
       can: (permission) => roleCan(session?.role ?? null, permission),
@@ -317,6 +335,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       signOutIncomplete,
       keepAlive,
       login,
+      currentEpoch,
       passwordChanged,
       logout,
     ],

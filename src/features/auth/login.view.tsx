@@ -56,7 +56,7 @@ export default function LoginScreen() {
   const { locale, setLocale } = useI18n()
   const navigate = useNavigate()
   const location = useLocation()
-  const { login, expired, signOutIncomplete, passwordChanged } = useSession()
+  const { login, expired, signOutIncomplete, passwordChanged, currentEpoch } = useSession()
   const environment = getAppEnvironment()
   // Set by RequireAuth when it bounced an authenticated route.
   const returnTo = (location.state as { from?: string } | null)?.from
@@ -145,12 +145,13 @@ export default function LoginScreen() {
   const submitChangePassword = async (event: React.FormEvent) => {
     event.preventDefault()
     setFormError(null)
+    const epoch = currentEpoch()
     // The temporary password the operator just signed in with proves the caller
     // is the person it was handed to.
     if (await changePassword.submit(getValues('password'))) {
       // Discharge the obligation before navigating, or the route guard bounces
       // straight back to the change screen (#101).
-      passwordChanged()
+      passwordChanged(epoch)
       navigate(pendingDestination.current, { replace: true })
     }
   }
