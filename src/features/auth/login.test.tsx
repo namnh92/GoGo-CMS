@@ -77,14 +77,13 @@ describe('CMS sign-in (CMS-034, stepped)', () => {
    *
    * Asserting the absence of React's warning alone would be a test of a log
    * line, and React only emits that one once per element. The node identity is
-   * the defect, so that is what is asserted; the warning is checked as well
+   * the defect, so that is what is asserted; a clean console is checked as well
    * because an operator reading the console is how this was found.
    */
   it('mounts fresh inputs for the change-password step instead of reusing the credential ones', async () => {
-    const warnings: string[] = []
-    const consoleError = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
-      warnings.push(args.map(String).join(' '))
-    })
+    // Not muted: any console.error fails this test and still prints, so an
+    // unrelated error cannot hide behind the one warning this guards (F-01).
+    const consoleError = vi.spyOn(console, 'error')
     try {
       const user = userEvent.setup()
       renderWithProviders(<LoginScreen />)
@@ -115,9 +114,7 @@ describe('CMS sign-in (CMS-034, stepped)', () => {
       expect(newPassword).toHaveValue('')
       expect(confirm).toHaveValue('')
 
-      expect(warnings.filter((line) => /uncontrolled input to be controlled/.test(line))).toEqual(
-        [],
-      )
+      expect(consoleError).not.toHaveBeenCalled()
     } finally {
       consoleError.mockRestore()
     }
