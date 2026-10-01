@@ -11,6 +11,15 @@ const BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? '/v1'
 export const SESSION_EXPIRED_EVENT = 'gogo:session-expired'
 
 /**
+ * GoGo-BE answers 403 PASSWORD_CHANGE_REQUIRED on every non-exempt CMS route
+ * while a temporary password stands. The console learns the obligation at
+ * login, but not every session starts there — a hint stored by an older build
+ * carries no obligation at all, and an admin can reset a password under a
+ * session already running. The server saying so is the authority (#101).
+ */
+export const PASSWORD_CHANGE_REQUIRED_EVENT = 'gogo:password-change-required'
+
+/**
  * Double-submit CSRF (GoGo-BE ADR-0003). Login sets `gogo_csrf` readable by
  * JS; every cookie-authenticated mutation must echo it in this header or the
  * guard answers `403 CSRF_FAILED`. `SameSite=Lax` alone does not cover every
@@ -202,7 +211,13 @@ export async function apiFetch<T = unknown>(
     emitSessionExpired()
     throw await readError(response)
   }
-  if (!response.ok) throw await readError(response)
+  if (!response.ok) {
+    const error = await readError(response)
+    if (response.status === 403 && error.code === 'PASSWORD_CHANGE_REQUIRED') {
+      window.dispatchEvent(new CustomEvent(PASSWORD_CHANGE_REQUIRED_EVENT))
+    }
+    throw error
+  }
   if (response.status === 204) return undefined as T
   if (raw) return (await response.blob()) as T
 

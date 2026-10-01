@@ -9,7 +9,11 @@ import {
   type ReactNode,
 } from 'react'
 import { z } from 'zod'
-import { apiFetch, SESSION_EXPIRED_EVENT } from '@/shared/api/client'
+import {
+  apiFetch,
+  PASSWORD_CHANGE_REQUIRED_EVENT,
+  SESSION_EXPIRED_EVENT,
+} from '@/shared/api/client'
 import { ApiError } from '@/shared/api/errors'
 import { adminRoleSchema, type AdminRole } from '@/shared/api/contracts'
 import { setAccessToken } from './token'
@@ -214,6 +218,25 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   )
 
   const logout = useCallback(() => endSession(null), [endSession])
+
+  /*
+   * The server is the authority on the obligation, not the login response the
+   * console happened to see. A hint written by a build older than this field
+   * says nothing, and a password can be reset under a session already
+   * running — either way the first 403 teaches the console the truth (#101).
+   */
+  useEffect(() => {
+    const onRequired = () => {
+      setSession((current) => {
+        if (!current || current.mustChangePassword) return current
+        const owed = { ...current, mustChangePassword: true }
+        writeHint(owed)
+        return owed
+      })
+    }
+    window.addEventListener(PASSWORD_CHANGE_REQUIRED_EVENT, onRequired)
+    return () => window.removeEventListener(PASSWORD_CHANGE_REQUIRED_EVENT, onRequired)
+  }, [])
 
   const keepAlive = useCallback(() => {
     lastActivityAt.current = Date.now()

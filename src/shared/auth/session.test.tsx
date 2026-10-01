@@ -6,7 +6,7 @@ import type { ReactNode } from 'react'
 import { SessionProvider, useSession, SESSION_IDLE_MS } from './session'
 import { getAccessToken } from './token'
 import { server } from '@/shared/test/server'
-import { SESSION_EXPIRED_EVENT } from '@/shared/api/client'
+import { apiFetch, SESSION_EXPIRED_EVENT } from '@/shared/api/client'
 
 function wrapper({ children }: { children: ReactNode }) {
   return <SessionProvider>{children}</SessionProvider>
@@ -275,6 +275,40 @@ describe('staff session', () => {
     expect(result.current.session?.mustChangePassword).toBe(false)
     expect(window.localStorage.getItem('gogo.cms.session-hint')).toContain(
       '"mustChangePassword":false',
+    )
+  })
+
+  /*
+   * #101 review F-02. A hint written before `mustChangePassword` existed says
+   * nothing about the obligation, and a reset can land under a running
+   * session. The server's 403 is the authority either way.
+   */
+  it('takes on the obligation when the server answers PASSWORD_CHANGE_REQUIRED', async () => {
+    server.use(
+      http.get('*/v1/cms/probe', () =>
+        HttpResponse.json(
+          {
+            code: 'PASSWORD_CHANGE_REQUIRED',
+            message: 'change it',
+            field_errors: [],
+            request_id: 't',
+            retryable: false,
+          },
+          { status: 403 },
+        ),
+      ),
+    )
+    const { result } = renderHook(() => useSession(), { wrapper })
+    await signIn(result)
+    expect(result.current.session?.mustChangePassword).toBe(false)
+
+    await act(async () => {
+      await apiFetch('/cms/probe').catch(() => undefined)
+    })
+
+    expect(result.current.session?.mustChangePassword).toBe(true)
+    expect(window.localStorage.getItem('gogo.cms.session-hint')).toContain(
+      '"mustChangePassword":true',
     )
   })
 
