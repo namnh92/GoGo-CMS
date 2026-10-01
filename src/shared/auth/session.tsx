@@ -74,15 +74,27 @@ export type ExpiryReason = 'unauthorized' | 'idle'
  * stay usable until they expire on their own unless the session id is
  * denylisted (#100). Clearing the client only hides the credential.
  *
- * `allowRefresh: false` matters — a 401 here would otherwise refresh and hand
- * back the very session this call exists to destroy.
+ * The refresh retry is deliberately left on. The idle timeout fires at 30
+ * minutes, long after the ~15-minute access cookie died, so the revoke almost
+ * always meets a 401 — refusing to refresh there would abandon the refresh
+ * family, which is the thing worth revoking. Refreshing first and revoking
+ * immediately after still ends the family.
  */
-function revokeServerSession(): void {
+let pendingRevoke: Promise<void> | null = null
+
+function revokeServerSession(): Promise<void> {
   // apiFetch reads the bearer and the CSRF cookie synchronously, so the
   // caller may clear local state on the next line without racing this.
-  void apiFetch('/cms/auth/logout', { method: 'POST' }, false).catch(() => {
+  const call: Promise<void> = apiFetch('/cms/auth/logout', { method: 'POST' }).then(
+    () => undefined,
     // The operator asked to leave; a failed revoke must not keep them here.
+    () => undefined,
+  )
+  pendingRevoke = call
+  void call.then(() => {
+    if (pendingRevoke === call) pendingRevoke = null
   })
+  return call
 }
 
 type SessionValue = {
@@ -128,9 +140,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   // A suspended or demoted admin loses access on the very next request. The
   // client's job is to land on the login screen, not on a blank page.
   useEffect(() => {
-    // The server already refused the credential, so there is nothing left to
-    // revoke — unlike the idle path below.
-    const onExpired = () => clearClientSession('unauthorized')
+    const onExpired = () => {
+      // A 401 raised by our own sign-out is not the server throwing anyone
+      // out; letting it through would tell an operator who chose to leave
+      // that their session had expired.
+      if (pendingRevoke) return
+      // Otherwise the server already refused the credential, so there is
+      // nothing left to revoke — unlike the idle path below.
+      clearClientSession('unauthorized')
+    }
     window.addEventListener(SESSION_EXPIRED_EVENT, onExpired)
     return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onExpired)
   }, [clearClientSession])
@@ -169,6 +187,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [session, clearClientSession])
 
   const login = useCallback(async (input: LoginInput) => {
+    // A sign-out still in flight answers with cookie-clearing headers. Landing
+    // after a fresh login, those would wipe the session just established, so
+    // the new credential waits for the old one to finish dying.
+    if (pendingRevoke) await pendingRevoke
     const raw = await apiFetch<unknown>('/cms/auth/login', {
       method: 'POST',
       body: {
