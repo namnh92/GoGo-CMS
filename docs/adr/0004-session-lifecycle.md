@@ -131,8 +131,8 @@ Review độc lập của chính bản ghi này (Astra, 2026-10-01) chỉ ra hai
 trên chưa nói đủ để dựng. Chúng **chưa** được chốt; người dựng không tự lấp.
 
 1. **Ranh giới thế hệ trong lúc login/logout đang chạy.** Phải nói rõ: thế hệ
-   tăng ở thời điểm nào khi login hoặc logout *thành công* và khi chúng *thất
-   bại*; request thường có được khởi chạy trong lúc chuyển trạng thái hay không;
+   tăng ở thời điểm nào khi login hoặc logout _thành công_ và khi chúng _thất
+   bại_; request thường có được khởi chạy trong lúc chuyển trạng thái hay không;
    và làm sao kết quả cùng các lần retry của request đó vẫn bị coi là vô hiệu
    sau khi phiên bị thay. Hỏng nếu để ngỏ: login tăng thế hệ ngay lúc vào, một
    request thường khởi chạy bằng cookie của A trong lúc login còn treo, login của
