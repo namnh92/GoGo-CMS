@@ -6,6 +6,7 @@ import type { ReactNode } from 'react'
 import { SessionProvider, useSession, SESSION_IDLE_MS } from './session'
 import { getAccessToken } from './token'
 import { server } from '@/shared/test/server'
+import { SESSION_EXPIRED_EVENT } from '@/shared/api/client'
 
 function wrapper({ children }: { children: ReactNode }) {
   return <SessionProvider>{children}</SessionProvider>
@@ -228,23 +229,115 @@ describe('staff session', () => {
       }),
     )
 
-    act(() => result.current.logout())
-    const signedInAgain = act(async () => {
-      await result.current.login({ email: 'ops@gogo.vn', password: 'pw', totp: '123456' })
-    })
-
+    let signedInAgain!: Promise<unknown>
     // The point of the fix: while the revoke is still in flight the login
     // request must not have reached the server at all. Asserting only the
     // final order would pass by luck on whichever microtask wins.
     await act(async () => {
+      result.current.logout()
+      signedInAgain = result.current.login({
+        email: 'ops@gogo.vn',
+        password: 'pw',
+        totp: '123456',
+      })
       await new Promise((resolve) => setTimeout(resolve, 50))
     })
     expect(order).toEqual([])
 
-    releaseLogout()
-    await signedInAgain
+    await act(async () => {
+      releaseLogout()
+      await signedInAgain
+    })
 
     expect(order).toEqual(['logout', 'login'])
     expect(result.current.session).not.toBeNull()
+  })
+
+  /*
+   * #100 review F-04. Swallowing a failed revoke recreates the client-only
+   * logout this issue is about: the cookie and the refresh family are still
+   * live and nobody knows.
+   */
+  it('says so when the server never confirmed the revoke', async () => {
+    server.use(
+      http.post('*/v1/cms/auth/logout', () =>
+        HttpResponse.json(
+          {
+            code: 'CSRF_FAILED',
+            message: 'no',
+            field_errors: [],
+            request_id: 't',
+            retryable: false,
+          },
+          { status: 403 },
+        ),
+      ),
+    )
+    const { result } = renderHook(() => useSession(), { wrapper })
+    await signIn(result)
+
+    await act(async () => {
+      result.current.logout()
+    })
+
+    await waitFor(() => expect(result.current.signOutIncomplete).toBe(true))
+    // It outlives the tab, because that is when nobody saw it.
+    expect(window.localStorage.getItem('gogo.cms.sign-out-incomplete')).toBe('1')
+    expect(result.current.session).toBeNull()
+  })
+
+  it('retries a transient revoke failure once, then clears the warning on success', async () => {
+    let calls = 0
+    server.use(
+      http.post('*/v1/cms/auth/logout', () => {
+        calls += 1
+        return calls === 1
+          ? HttpResponse.json(
+              {
+                code: 'UPSTREAM',
+                message: 'no',
+                field_errors: [],
+                request_id: 't',
+                retryable: true,
+              },
+              { status: 503 },
+            )
+          : new HttpResponse(null, { status: 204 })
+      }),
+    )
+    const { result } = renderHook(() => useSession(), { wrapper })
+    await signIn(result)
+
+    await act(async () => {
+      result.current.logout()
+    })
+
+    await waitFor(() => expect(calls).toBe(2))
+    expect(result.current.signOutIncomplete).toBe(false)
+    expect(window.localStorage.getItem('gogo.cms.sign-out-incomplete')).toBeNull()
+  })
+
+  /*
+   * #100 review F-03 round 2. A request that outlived the sign-out answers
+   * 401 after the revoke settled; the operator still chose to leave.
+   */
+  it('keeps a deliberate sign-out unlabelled when a later request 401s', async () => {
+    const logout = watchLogout()
+    const { result } = renderHook(() => useSession(), { wrapper })
+    await signIn(result)
+
+    await act(async () => {
+      result.current.logout()
+    })
+    await waitFor(() => expect(logout.calls).toBe(1))
+    expect(result.current.expired).toBeNull()
+
+    // The straggler lands well after the revoke finished.
+    await act(async () => {
+      window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT))
+      await Promise.resolve()
+    })
+
+    expect(result.current.expired).toBeNull()
   })
 })

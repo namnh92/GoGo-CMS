@@ -1087,6 +1087,8 @@ export const en: Partial<Record<MessageKey, string>> = {
   'auth.idleWarning': 'No activity for a few minutes. The session closes in {seconds} seconds.',
   'auth.idleExtend': 'Keep working',
   'auth.idleTimeout': 'The session closed after a period of inactivity. Sign in again to continue.',
+  'auth.signOutIncomplete':
+    'The last sign-out cleared this device, but the server never confirmed the session was revoked. Sign in and sign out again.',
 
   'dashboard.title': 'System health',
   'dashboard.breadcrumb': 'Dashboard',

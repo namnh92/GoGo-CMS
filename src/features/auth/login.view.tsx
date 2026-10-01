@@ -56,7 +56,7 @@ export default function LoginScreen() {
   const { locale, setLocale } = useI18n()
   const navigate = useNavigate()
   const location = useLocation()
-  const { login, expired } = useSession()
+  const { login, expired, signOutIncomplete } = useSession()
   const environment = getAppEnvironment()
   // Set by RequireAuth when it bounced an authenticated route.
   const returnTo = (location.state as { from?: string } | null)?.from
@@ -225,6 +225,15 @@ export default function LoginScreen() {
             <p role="status" className={`${styles.alert} mb-4`}>
               <span aria-hidden="true">⚠</span>
               {expired === 'idle' ? t('auth.idleTimeout') : t('auth.sessionExpired')}
+            </p>
+          ) : null}
+
+          {/* The credential may still be live on the server (#100). Saying so
+              is the only thing the console can do about it. */}
+          {signOutIncomplete ? (
+            <p role="status" className={`${styles.alert} mb-4`}>
+              <span aria-hidden="true">⚠</span>
+              {t('auth.signOutIncomplete')}
             </p>
           ) : null}
 
