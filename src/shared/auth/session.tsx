@@ -9,7 +9,11 @@ import {
   type ReactNode,
 } from 'react'
 import { z } from 'zod'
-import { apiFetch, SESSION_EXPIRED_EVENT } from '@/shared/api/client'
+import {
+  apiFetch,
+  PASSWORD_CHANGE_REQUIRED_EVENT,
+  SESSION_EXPIRED_EVENT,
+} from '@/shared/api/client'
 import { ApiError } from '@/shared/api/errors'
 import { adminRoleSchema, type AdminRole } from '@/shared/api/contracts'
 import { setAccessToken } from './token'
@@ -35,7 +39,21 @@ const loginResponseSchema = z.object({
  */
 const HINT_KEY = 'gogo.cms.session-hint'
 
-const hintSchema = z.object({ role: adminRoleSchema, displayName: z.string() })
+/*
+ * `mustChangePassword` lives here rather than in `login()`'s return value
+ * (#101). As a return value only the login screen knew the obligation existed,
+ * so any navigation walked past it into a console where GoGo-BE's AdminGuard
+ * answers 403 PASSWORD_CHANGE_REQUIRED on every route. Session state is read
+ * by the route guard and survives a reload.
+ *
+ * It defaults to false so a hint written before this field existed still
+ * parses instead of logging the operator out.
+ */
+const hintSchema = z.object({
+  role: adminRoleSchema,
+  displayName: z.string(),
+  mustChangePassword: z.boolean().default(false),
+})
 export type SessionHint = z.infer<typeof hintSchema>
 
 function readHint(): SessionHint | null {
@@ -82,6 +100,14 @@ export type ExpiryReason = 'unauthorized' | 'idle'
  * immediately after still ends the family.
  */
 let pendingRevoke: Promise<void> | null = null
+
+/**
+ * Bumped by every sign-in and every sign-out. A reply that outlived the
+ * session it belongs to carries the old number and is ignored — without it a
+ * slow password-change answer could discharge the obligation of whoever
+ * signed in after it (#101 review F-01).
+ */
+let sessionEpoch = 0
 
 /**
  * Survives the tab closing, because that is exactly when nobody saw the
@@ -141,7 +167,11 @@ type SessionValue = {
   keepAlive: () => void
   /** The last sign-out cleared this device but the server never confirmed. */
   signOutIncomplete: boolean
-  login: (input: LoginInput) => Promise<SessionHint & { mustChangePassword: boolean }>
+  login: (input: LoginInput) => Promise<SessionHint>
+  /** Identifies the signed-in session, for a reply that may outlive it. */
+  currentEpoch: () => number
+  /** The temporary password was replaced; the obligation is discharged. */
+  passwordChanged: (epoch: number) => void
   logout: () => void
   can: (permission: Permission) => boolean
 }
@@ -162,6 +192,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const signedIn = useRef(session !== null)
 
   const clearClientSession = useCallback((reason: ExpiryReason | null) => {
+    sessionEpoch += 1
     signedIn.current = false
     setAccessToken(null)
     writeHint(null)
@@ -187,6 +218,25 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   )
 
   const logout = useCallback(() => endSession(null), [endSession])
+
+  /*
+   * The server is the authority on the obligation, not the login response the
+   * console happened to see. A hint written by a build older than this field
+   * says nothing, and a password can be reset under a session already
+   * running — either way the first 403 teaches the console the truth (#101).
+   */
+  useEffect(() => {
+    const onRequired = () => {
+      setSession((current) => {
+        if (!current || current.mustChangePassword) return current
+        const owed = { ...current, mustChangePassword: true }
+        writeHint(owed)
+        return owed
+      })
+    }
+    window.addEventListener(PASSWORD_CHANGE_REQUIRED_EVENT, onRequired)
+    return () => window.removeEventListener(PASSWORD_CHANGE_REQUIRED_EVENT, onRequired)
+  }, [])
 
   const keepAlive = useCallback(() => {
     lastActivityAt.current = Date.now()
@@ -259,13 +309,32 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     signedIn.current = true
     writeSignOutIncomplete(false)
     setSignOutIncomplete(false)
-    const hint: SessionHint = { role: parsed.role, displayName: parsed.displayName }
+    const hint: SessionHint = {
+      role: parsed.role,
+      displayName: parsed.displayName,
+      mustChangePassword: parsed.mustChangePassword,
+    }
+    sessionEpoch += 1
     writeHint(hint)
     setSession(hint)
     setExpired(null)
     lastActivityAt.current = Date.now()
     setIdleSecondsLeft(null)
-    return { ...hint, mustChangePassword: parsed.mustChangePassword }
+    return hint
+  }, [])
+
+  const currentEpoch = useCallback(() => sessionEpoch, [])
+
+  const passwordChanged = useCallback((epoch: number) => {
+    // The answer belongs to a session that has since ended; discharging the
+    // obligation now would be discharging somebody else's.
+    if (epoch !== sessionEpoch) return
+    setSession((current) => {
+      if (!current || !current.mustChangePassword) return current
+      const cleared = { ...current, mustChangePassword: false }
+      writeHint(cleared)
+      return cleared
+    })
   }, [])
 
   const value = useMemo<SessionValue>(
@@ -277,10 +346,22 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       signOutIncomplete,
       keepAlive,
       login,
+      currentEpoch,
+      passwordChanged,
       logout,
       can: (permission) => roleCan(session?.role ?? null, permission),
     }),
-    [session, expired, idleSecondsLeft, signOutIncomplete, keepAlive, login, logout],
+    [
+      session,
+      expired,
+      idleSecondsLeft,
+      signOutIncomplete,
+      keepAlive,
+      login,
+      currentEpoch,
+      passwordChanged,
+      logout,
+    ],
   )
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>

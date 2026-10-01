@@ -6,7 +6,7 @@ import type { ReactNode } from 'react'
 import { SessionProvider, useSession, SESSION_IDLE_MS } from './session'
 import { getAccessToken } from './token'
 import { server } from '@/shared/test/server'
-import { SESSION_EXPIRED_EVENT } from '@/shared/api/client'
+import { apiFetch, SESSION_EXPIRED_EVENT } from '@/shared/api/client'
 
 function wrapper({ children }: { children: ReactNode }) {
   return <SessionProvider>{children}</SessionProvider>
@@ -48,7 +48,8 @@ describe('staff session', () => {
     const stored = window.localStorage.getItem('gogo.cms.session-hint')
     expect(stored).not.toBeNull()
     const hint = JSON.parse(stored as string) as Record<string, unknown>
-    expect(Object.keys(hint).sort()).toEqual(['displayName', 'role'])
+    // `mustChangePassword` joined these in #101: an obligation, not a credential.
+    expect(Object.keys(hint).sort()).toEqual(['displayName', 'mustChangePassword', 'role'])
     // The mock returns an accessToken; it must live in memory, never on disk.
     expect(getAccessToken()).toBe('mock-access-token')
     expect(stored).not.toContain('mock-access-token')
@@ -251,6 +252,90 @@ describe('staff session', () => {
 
     expect(order).toEqual(['logout', 'login'])
     expect(result.current.session).not.toBeNull()
+  })
+
+  /*
+   * #101. The obligation has to be session state, not a return value only the
+   * login screen ever saw, or any navigation walks past it.
+   */
+  it('carries a temporary-password obligation in the session and clears it on change', async () => {
+    const { result } = renderHook(() => useSession(), { wrapper })
+
+    await act(async () => {
+      await result.current.login({ email: 'temp.admin@gogo.vn', password: 'pw', totp: '123456' })
+    })
+    expect(result.current.session?.mustChangePassword).toBe(true)
+    // A reload must land on the same obligation.
+    expect(window.localStorage.getItem('gogo.cms.session-hint')).toContain(
+      '"mustChangePassword":true',
+    )
+
+    act(() => result.current.passwordChanged(result.current.currentEpoch()))
+
+    expect(result.current.session?.mustChangePassword).toBe(false)
+    expect(window.localStorage.getItem('gogo.cms.session-hint')).toContain(
+      '"mustChangePassword":false',
+    )
+  })
+
+  /*
+   * #101 review F-02. A hint written before `mustChangePassword` existed says
+   * nothing about the obligation, and a reset can land under a running
+   * session. The server's 403 is the authority either way.
+   */
+  it('takes on the obligation when the server answers PASSWORD_CHANGE_REQUIRED', async () => {
+    server.use(
+      http.get('*/v1/cms/probe', () =>
+        HttpResponse.json(
+          {
+            code: 'PASSWORD_CHANGE_REQUIRED',
+            message: 'change it',
+            field_errors: [],
+            request_id: 't',
+            retryable: false,
+          },
+          { status: 403 },
+        ),
+      ),
+    )
+    const { result } = renderHook(() => useSession(), { wrapper })
+    await signIn(result)
+    expect(result.current.session?.mustChangePassword).toBe(false)
+
+    await act(async () => {
+      await apiFetch('/cms/probe').catch(() => undefined)
+    })
+
+    expect(result.current.session?.mustChangePassword).toBe(true)
+    expect(window.localStorage.getItem('gogo.cms.session-hint')).toContain(
+      '"mustChangePassword":true',
+    )
+  })
+
+  /*
+   * #101 review F-01. A password-change answer can outlive the session that
+   * asked for it; discharging the obligation then discharges someone else's.
+   */
+  it('ignores a password-change answer that outlived its session', async () => {
+    const { result } = renderHook(() => useSession(), { wrapper })
+
+    await act(async () => {
+      await result.current.login({ email: 'temp.one@gogo.vn', password: 'pw', totp: '123456' })
+    })
+    const staleEpoch = result.current.currentEpoch()
+
+    await act(async () => {
+      result.current.logout()
+    })
+    await act(async () => {
+      await result.current.login({ email: 'temp.two@gogo.vn', password: 'pw', totp: '123456' })
+    })
+    expect(result.current.session?.mustChangePassword).toBe(true)
+
+    // The first operator's answer finally lands.
+    act(() => result.current.passwordChanged(staleEpoch))
+
+    expect(result.current.session?.mustChangePassword).toBe(true)
   })
 
   /*
