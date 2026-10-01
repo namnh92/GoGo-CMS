@@ -65,6 +65,58 @@ function issueFor(
   )
 }
 
+/** A rendered message and the controls that must point `aria-describedby` at it. */
+type RowMessage = { id: string; text: string }
+
+/**
+ * GoGo-CMS#102 — a control marked `aria-invalid` has to say *what* is wrong, and
+ * the only way to say it to assistive technology is an id the control points at.
+ *
+ * One paragraph per distinct message, not per issue: an unparseable open **and**
+ * an unparseable close produce the same sentence, and two identical paragraphs
+ * would be read twice. Both controls then point at the one paragraph, which is
+ * what the sighted editor sees too.
+ *
+ * Returns the paragraphs in render order plus, per control key, the id that
+ * control must reference — `undefined` where that control has no issue, so a
+ * valid field never carries a dangling reference.
+ */
+function rowMessages(
+  idBase: string,
+  issues: ReadonlyArray<readonly [key: string, issue: HoursIssue | undefined]>,
+  describe: (issue: HoursIssue) => string,
+): {
+  messages: RowMessage[]
+  idFor: (key: string) => string | undefined
+  idsFor: (...keys: string[]) => string | undefined
+} {
+  const messages: RowMessage[] = []
+  const byText = new Map<string, string>()
+  const byKey = new Map<string, string>()
+  for (const [key, issue] of issues) {
+    if (!issue) continue
+    const text = describe(issue)
+    const existing = byText.get(text)
+    if (existing !== undefined) {
+      byKey.set(key, existing)
+      continue
+    }
+    const id = `${idBase}-${key}-error`
+    byText.set(text, id)
+    byKey.set(key, id)
+    messages.push({ id, text })
+  }
+  const idFor = (key: string) => byKey.get(key)
+  // A control can owe its description to more than one message: its own field
+  // error, and a row-level one (an overlap, too many intervals) that is about
+  // the interval as a whole. Same id twice would be read twice.
+  const idsFor = (...keys: string[]) => {
+    const ids = [...new Set(keys.map(idFor).filter((id): id is string => id !== undefined))]
+    return ids.length > 0 ? ids.join(' ') : undefined
+  }
+  return { messages, idFor, idsFor }
+}
+
 export type HoursEditorProps = {
   week: WeekDraft
   onChange: (next: WeekDraft) => void
@@ -103,6 +155,9 @@ export function HoursEditor({ week, onChange, disabled, serverIssues }: HoursEdi
   const { locale } = useI18n()
   const dayNames = useDayNames()
   const groupLabelId = useId()
+  // Prefix for every message id this editor renders. `useId()` keeps two editors
+  // on one page from colliding; the rest of each id is the day and the row.
+  const messageIdBase = useId()
 
   const [selectedDays, setSelectedDays] = useState<DayIndex[]>([...DAY_GROUPS.all])
   const [quickOpen, setQuickOpen] = useState('')
@@ -282,6 +337,7 @@ export function HoursEditor({ week, onChange, disabled, serverIssues }: HoursEdi
           const stateRowIndex = rowIndexOf.get(`${day}:state`)
           const stateIssue =
             stateRowIndex === undefined ? undefined : issueFor(allIssues, stateRowIndex, 'kind')
+          const stateIssueId = stateIssue ? `${messageIdBase}-${day}-state-error` : undefined
           return (
             <section key={day} className={styles.day} aria-label={dayNames.long(day)}>
               <header className={styles.dayHeader}>
@@ -300,6 +356,8 @@ export function HoursEditor({ week, onChange, disabled, serverIssues }: HoursEdi
                 className={styles.stateRow}
                 role="radiogroup"
                 aria-label={t('placeEditor.hours.stateFor', { day: dayNames.long(day) })}
+                aria-invalid={stateIssue ? true : undefined}
+                aria-describedby={stateIssueId}
               >
                 {DAY_STATES.map((state) => {
                   const on = draft.state === state
@@ -321,7 +379,7 @@ export function HoursEditor({ week, onChange, disabled, serverIssues }: HoursEdi
               </div>
 
               {stateIssue ? (
-                <p role="alert" className={styles.rowError}>
+                <p id={stateIssueId} role="alert" className={styles.rowError}>
                   <span aria-hidden="true">⚠</span>
                   {describeIssue(stateIssue)}
                 </p>
@@ -342,7 +400,16 @@ export function HoursEditor({ week, onChange, disabled, serverIssues }: HoursEdi
                     const overnightIssue =
                       index === undefined ? undefined : issueFor(allIssues, index, 'isOvernight')
                     const rowIssue = index === undefined ? undefined : issueFor(allIssues, index)
-                    const issue = openIssue ?? closeIssue ?? overnightIssue ?? rowIssue
+                    const { messages, idFor, idsFor } = rowMessages(
+                      `${messageIdBase}-${day}-${interval.id}`,
+                      [
+                        ['open', openIssue],
+                        ['close', closeIssue],
+                        ['overnight', overnightIssue],
+                        ['row', rowIssue],
+                      ],
+                      describeIssue,
+                    )
                     return (
                       <div key={interval.id}>
                         <div className={styles.intervalRow}>
@@ -353,7 +420,11 @@ export function HoursEditor({ week, onChange, disabled, serverIssues }: HoursEdi
                             aria-label={t('placeEditor.hours.openFor', {
                               day: dayNames.long(day),
                             })}
-                            aria-invalid={openIssue ? true : undefined}
+                            // A row-level rejection — overlap, too many
+                            // intervals — is about the interval both times
+                            // define, so both carry it (review F-01).
+                            aria-invalid={openIssue || rowIssue ? true : undefined}
+                            aria-describedby={idsFor('open', 'row')}
                             disabled={disabled}
                             value={interval.open}
                             onChange={(event) =>
@@ -374,7 +445,8 @@ export function HoursEditor({ week, onChange, disabled, serverIssues }: HoursEdi
                             aria-label={t('placeEditor.hours.closeFor', {
                               day: dayNames.long(day),
                             })}
-                            aria-invalid={closeIssue ? true : undefined}
+                            aria-invalid={closeIssue || rowIssue ? true : undefined}
+                            aria-describedby={idsFor('close', 'row')}
                             disabled={disabled}
                             value={interval.close}
                             onChange={(event) =>
@@ -389,6 +461,7 @@ export function HoursEditor({ week, onChange, disabled, serverIssues }: HoursEdi
                             label={t('placeEditor.hours.overnight')}
                             checked={interval.isOvernight}
                             disabled={disabled}
+                            describedBy={idFor('overnight')}
                             onChange={(checked) =>
                               onChange(
                                 updateInterval(week, day, interval.id, { isOvernight: checked }),
@@ -410,12 +483,17 @@ export function HoursEditor({ week, onChange, disabled, serverIssues }: HoursEdi
                             <CloseIcon size={12} />
                           </button>
                         </div>
-                        {issue ? (
-                          <p role="alert" className={styles.rowError}>
+                        {messages.map((message) => (
+                          <p
+                            key={message.id}
+                            id={message.id}
+                            role="alert"
+                            className={styles.rowError}
+                          >
                             <span aria-hidden="true">⚠</span>
-                            {describeIssue(issue)}
+                            {message.text}
                           </p>
-                        ) : null}
+                        ))}
                         {interval.source ? (
                           <p className={styles.meta}>
                             {t('placeEditor.hoursSource', {

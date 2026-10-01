@@ -309,6 +309,183 @@ describe('typing, and what survives a rejection', () => {
   })
 })
 
+/**
+ * GoGo-CMS#102 — `aria-invalid` on its own tells a screen-reader user only that
+ * the field was rejected. The sentence saying *why* sits next to it visually and,
+ * without an `aria-describedby` pointing at it, nowhere in the accessibility
+ * tree. `Field`-based controls were wired in #131; these rows are hand-rolled
+ * inputs that were missed.
+ *
+ * Each assertion resolves the reference and reads the referenced node, so a
+ * dangling id — an attribute pointing at an element that is not in the document —
+ * fails exactly like a missing attribute. Asserting the attribute alone would
+ * pass on a reference that announces nothing.
+ */
+function describedText(control: HTMLElement): string {
+  const ids = (control.getAttribute('aria-describedby') ?? '').split(/\s+/).filter(Boolean)
+  expect(ids, `${control.getAttribute('aria-label')} has no aria-describedby`).not.toHaveLength(0)
+  return ids
+    .map((id) => {
+      const node = control.ownerDocument.getElementById(id)
+      expect(node, `aria-describedby points at missing id "${id}"`).not.toBeNull()
+      return node?.textContent ?? ''
+    })
+    .join(' ')
+}
+
+describe('a rejected hour row says why, to assistive technology too (GoGo-CMS#102)', () => {
+  /*
+   * Review F-01: an overlap or a too-many-intervals rejection names the row
+   * (`hours.<n>`), not one field, so it was rendered with an id that no
+   * control referenced. It is about the interval both times define — both
+   * must carry it.
+   */
+  it('points both times at a rejection of the whole row', async () => {
+    signInAs('editor')
+    server.use(
+      http.put('/v1/cms/places/:id/hours', () =>
+        HttpResponse.json(
+          {
+            code: 'VALIDATION_FAILED',
+            message: 'Request validation failed',
+            field_errors: [
+              { field: 'hours.0', code: 'overlap', message: 'Ca này trùng giờ với ca khác' },
+            ],
+            request_id: 'req-hours-row',
+            retryable: false,
+          },
+          { status: 400 },
+        ),
+      ),
+    )
+    const user = userEvent.setup()
+    open({ hours: [hour({ dayOfWeek: 1 })] })
+
+    await screen.findByText('Giờ mở cửa')
+    const monday = within(screen.getByRole('region', { name: 'Thứ Hai' }) as HTMLElement)
+    const openInput = monday.getByLabelText('Giờ mở ngày Thứ Hai')
+    const closeInput = monday.getByLabelText('Giờ đóng ngày Thứ Hai')
+    const card = await hoursCard()
+    await user.click(card.getByRole('button', { name: 'Lưu' }))
+
+    await waitFor(() => expect(openInput).toHaveAttribute('aria-invalid', 'true'))
+    expect(closeInput).toHaveAttribute('aria-invalid', 'true')
+    expect(describedText(openInput)).toContain('Ca này trùng giờ với ca khác')
+    expect(describedText(closeInput)).toContain('Ca này trùng giờ với ca khác')
+  })
+
+  it('points the close input at the server’s message for that row', async () => {
+    signInAs('editor')
+    server.use(
+      http.put('/v1/cms/places/:id/hours', () =>
+        HttpResponse.json(
+          {
+            code: 'VALIDATION_FAILED',
+            message: 'Request validation failed',
+            field_errors: [
+              {
+                field: 'hours.0.closeMinute',
+                code: 'not_after_open',
+                message: 'Giờ đóng phải sau giờ mở',
+              },
+            ],
+            request_id: 'req-hours-a11y',
+            retryable: false,
+          },
+          { status: 400 },
+        ),
+      ),
+    )
+    const user = userEvent.setup()
+    open({ hours: [hour({ dayOfWeek: 1 })] })
+
+    await screen.findByText('Giờ mở cửa')
+    const monday = within(screen.getByRole('region', { name: 'Thứ Hai' }) as HTMLElement)
+    const close = monday.getByLabelText('Giờ đóng ngày Thứ Hai')
+    const card = await hoursCard()
+    await user.click(card.getByRole('button', { name: 'Lưu' }))
+
+    await waitFor(() => expect(close).toHaveAttribute('aria-invalid', 'true'))
+    expect(describedText(close)).toContain('Giờ đóng phải sau giờ mở')
+
+    // The open time was not rejected, so it must not borrow the close time's
+    // message — a field that is fine announcing someone else's error is worse
+    // than silence.
+    const open_ = monday.getByLabelText('Giờ mở ngày Thứ Hai')
+    expect(open_).not.toHaveAttribute('aria-invalid')
+    expect(open_).not.toHaveAttribute('aria-describedby')
+  })
+
+  it('describes both times from one paragraph when both are unreadable', async () => {
+    signInAs('editor')
+    const user = userEvent.setup()
+    open({ hours: [hour({ dayOfWeek: 1 })] })
+
+    await screen.findByText('Giờ mở cửa')
+    const monday = within(screen.getByRole('region', { name: 'Thứ Hai' }) as HTMLElement)
+    const open_ = monday.getByLabelText('Giờ mở ngày Thứ Hai')
+    const close = monday.getByLabelText('Giờ đóng ngày Thứ Hai')
+    await user.clear(open_)
+    await user.type(open_, '99:99')
+    await user.clear(close)
+    await user.type(close, '88:88')
+
+    await waitFor(() => expect(open_).toHaveAttribute('aria-invalid', 'true'))
+    expect(close).toHaveAttribute('aria-invalid', 'true')
+
+    // Both fields carry the same sentence, so the row renders it once and both
+    // controls reference that one node. Two identical paragraphs would be read
+    // out twice for one mistake.
+    expect(describedText(open_)).toContain('Nhập theo dạng HH:MM')
+    expect(describedText(close)).toContain('Nhập theo dạng HH:MM')
+    expect(open_.getAttribute('aria-describedby')).toBe(close.getAttribute('aria-describedby'))
+    expect(monday.getAllByText(/Nhập theo dạng HH:MM/)).toHaveLength(1)
+  })
+
+  it('points the day-state group at a rejection of the day’s state', async () => {
+    signInAs('editor')
+    server.use(
+      http.put('/v1/cms/places/:id/hours', () =>
+        HttpResponse.json(
+          {
+            code: 'VALIDATION_FAILED',
+            message: 'Request validation failed',
+            field_errors: [
+              { field: 'hours.0.kind', code: 'invalid', message: 'Trạng thái ngày không hợp lệ' },
+            ],
+            request_id: 'req-hours-a11y-2',
+            retryable: false,
+          },
+          { status: 400 },
+        ),
+      ),
+    )
+    const user = userEvent.setup()
+    open({ hours: [] })
+
+    await screen.findByText('Giờ mở cửa')
+    await user.click(sundaySection().getByRole('radio', { name: /Đóng cửa/ }))
+    const card = await hoursCard()
+    await user.click(card.getByRole('button', { name: 'Lưu' }))
+
+    const group = await waitFor(() =>
+      sundaySection().getByRole('radiogroup', { name: 'Trạng thái ngày Chủ Nhật' }),
+    )
+    await waitFor(() => expect(group).toHaveAttribute('aria-invalid', 'true'))
+    expect(describedText(group)).toContain('Trạng thái ngày không hợp lệ')
+  })
+
+  it('leaves a valid row with no description to announce', async () => {
+    signInAs('editor')
+    open({ hours: [hour({ dayOfWeek: 1 })] })
+
+    await screen.findByText('Giờ mở cửa')
+    const monday = within(screen.getByRole('region', { name: 'Thứ Hai' }) as HTMLElement)
+    expect(monday.getByLabelText('Giờ mở ngày Thứ Hai')).not.toHaveAttribute('aria-describedby')
+    expect(monday.getByLabelText('Giờ đóng ngày Thứ Hai')).not.toHaveAttribute('aria-describedby')
+  })
+})
+
 describe('permissions', () => {
   it('a role without place.write sees the week read-only', async () => {
     signInAs('moderator')
