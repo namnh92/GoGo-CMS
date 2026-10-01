@@ -1136,6 +1136,17 @@ export const handlers = [
   }),
 
   /*
+   * `POST /cms/auth/logout` (#100). Idempotent server-side, and it is what
+   * clears the cookies — the console cannot do that itself, they are HttpOnly.
+   */
+  http.post(`${BASE}/cms/auth/logout`, () => {
+    const headers = new Headers()
+    headers.append('Set-Cookie', 'gogo_at=; Path=/; Max-Age=0; SameSite=Lax')
+    headers.append('Set-Cookie', 'gogo_csrf=; Path=/; Max-Age=0; SameSite=Lax')
+    return new HttpResponse(null, { status: 204, headers })
+  }),
+
+  /*
    * Staff lifecycle (GoGo-BE#248). The mock enforces exactly the refusals the
    * server declares, so the console's error copy is reachable in dev.
    */

@@ -69,6 +69,22 @@ export type LoginInput = { email: string; password: string; totp?: string }
 
 export type ExpiryReason = 'unauthorized' | 'idle'
 
+/**
+ * Ending a staff session is a server act: the cookie and the refresh family
+ * stay usable until they expire on their own unless the session id is
+ * denylisted (#100). Clearing the client only hides the credential.
+ *
+ * `allowRefresh: false` matters — a 401 here would otherwise refresh and hand
+ * back the very session this call exists to destroy.
+ */
+function revokeServerSession(): void {
+  // apiFetch reads the bearer and the CSRF cookie synchronously, so the
+  // caller may clear local state on the next line without racing this.
+  void apiFetch('/cms/auth/logout', { method: 'POST' }, false).catch(() => {
+    // The operator asked to leave; a failed revoke must not keep them here.
+  })
+}
+
 type SessionValue = {
   session: SessionHint | null
   role: AdminRole | null
@@ -91,12 +107,18 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [idleSecondsLeft, setIdleSecondsLeft] = useState<number | null>(null)
   const lastActivityAt = useRef(Date.now())
 
-  const logout = useCallback(() => {
+  const clearClientSession = useCallback((reason: ExpiryReason | null) => {
     setAccessToken(null)
     writeHint(null)
     setSession(null)
     setIdleSecondsLeft(null)
+    setExpired(reason)
   }, [])
+
+  const logout = useCallback(() => {
+    revokeServerSession()
+    clearClientSession(null)
+  }, [clearClientSession])
 
   const keepAlive = useCallback(() => {
     lastActivityAt.current = Date.now()
@@ -106,16 +128,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   // A suspended or demoted admin loses access on the very next request. The
   // client's job is to land on the login screen, not on a blank page.
   useEffect(() => {
-    const onExpired = () => {
-      setAccessToken(null)
-      writeHint(null)
-      setSession(null)
-      setIdleSecondsLeft(null)
-      setExpired('unauthorized')
-    }
+    // The server already refused the credential, so there is nothing left to
+    // revoke — unlike the idle path below.
+    const onExpired = () => clearClientSession('unauthorized')
     window.addEventListener(SESSION_EXPIRED_EVENT, onExpired)
     return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onExpired)
-  }, [])
+  }, [clearClientSession])
 
   // Idle countdown. Only runs while somebody is signed in, and only reads the
   // clock — no timestamp is persisted, so a reload cannot extend a session.
@@ -132,11 +150,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       const idleFor = Date.now() - lastActivityAt.current
       const remaining = SESSION_IDLE_MS - idleFor
       if (remaining <= 0) {
-        setAccessToken(null)
-        writeHint(null)
-        setSession(null)
-        setIdleSecondsLeft(null)
-        setExpired('idle')
+        // Stop the clock here rather than waiting for the effect to tear down
+        // on the next render, or a second tick revokes the same session twice.
+        window.clearInterval(tick)
+        // The shorter staff session is a server requirement, not a UI one:
+        // without the revoke the cookie outlives the timeout (#100).
+        revokeServerSession()
+        clearClientSession('idle')
         return
       }
       setIdleSecondsLeft(remaining <= SESSION_WARN_MS ? Math.ceil(remaining / 1000) : null)
@@ -146,7 +166,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       for (const event of events) window.removeEventListener(event, bump)
       window.clearInterval(tick)
     }
-  }, [session])
+  }, [session, clearClientSession])
 
   const login = useCallback(async (input: LoginInput) => {
     const raw = await apiFetch<unknown>('/cms/auth/login', {
