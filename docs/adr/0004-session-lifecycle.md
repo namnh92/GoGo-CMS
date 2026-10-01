@@ -125,6 +125,25 @@ minh, cũng không mặc định nghĩa vụ chưa biết là đã hoàn thành.
 - Hết hạn idle do server cưỡng chế khi mọi tab đã đóng vẫn nằm ngoài tầm với của
   timer phía client.
 
+## Điểm còn mở — vai SA phải chốt trước khi triển khai
+
+Review độc lập của chính bản ghi này (Astra, 2026-10-01) chỉ ra hai chỗ quyết định
+trên chưa nói đủ để dựng. Chúng **chưa** được chốt; người dựng không tự lấp.
+
+1. **Ranh giới thế hệ trong lúc login/logout đang chạy.** Phải nói rõ: thế hệ
+   tăng ở thời điểm nào khi login hoặc logout *thành công* và khi chúng *thất
+   bại*; request thường có được khởi chạy trong lúc chuyển trạng thái hay không;
+   và làm sao kết quả cùng các lần retry của request đó vẫn bị coi là vô hiệu
+   sau khi phiên bị thay. Hỏng nếu để ngỏ: login tăng thế hệ ngay lúc vào, một
+   request thường khởi chạy bằng cookie của A trong lúc login còn treo, login của
+   B thành công mà giữ nguyên thế hệ đó — response của A lọt qua phép so.
+2. **Ai cô lập query cache, và theo thứ tự nào so với việc công bố phiên mới.**
+   Phải chỉ ra ranh giới tích hợp giữa bộ điều phối và query cache, và bắt buộc
+   cô lập ở **mọi tab** trước khi phiên thay thế hiện ra — gồm cả việc chặn việc
+   cũ còn đang bay ghi ngược vào cache. Hỏng nếu để ngỏ: snapshot của B hiện ra
+   trước khi cache của A được xoá trong một tab, và một cache hit hiển thị dữ
+   liệu của A mà không request nào phải qua phép so thế hệ.
+
 ## Rủi ro chính
 
 Tin rằng thế hệ cục bộ **chứng minh** cookie đang đại diện phiên nào trên server.
