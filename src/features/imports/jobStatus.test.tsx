@@ -105,6 +105,10 @@ describe('unknown job status (x-extensible-enum)', () => {
     expect(screen.queryByRole('button', { name: 'Chạy tiếp' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Chạy' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Dừng' })).not.toBeInTheDocument()
+    // CMS#223 F-01: no retry and no publish either, even with ready rows.
+    expect(quotaJob.rowsByStatus.ready).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: 'Thử lại dòng lỗi' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Xuất bản vào catalog/ })).toBeDisabled()
   })
 
   it('keeps the job list on screen when one row carries an unknown status', async () => {
@@ -116,5 +120,9 @@ describe('unknown job status (x-extensible-enum)', () => {
     expect(
       within(table).getByText('Trạng thái chưa xác định (archived_by_retention)'),
     ).toBeInTheDocument()
+    // CMS#223 F-02: the row offers no action for a state it cannot reason about.
+    for (const name of ['Chạy', 'Chạy tiếp', 'Dừng', 'Thử lại dòng lỗi']) {
+      expect(within(table).queryByRole('button', { name })).not.toBeInTheDocument()
+    }
   })
 })

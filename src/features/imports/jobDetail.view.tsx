@@ -26,6 +26,7 @@ import { useToast } from '@/shared/ui/Toast'
 import { DownloadIcon, MergeIcon, PlayIcon, RetryIcon, StopIcon } from '@/shared/ui/icons'
 import {
   isJobLive,
+  isKnownJobStatus,
   isProviderPaused,
   isProviderUnavailablePaused,
   isQuotaPaused,
@@ -402,6 +403,14 @@ export default function ImportJobScreen() {
 
   const job = jobQuery.data
   const readyCount = job?.rowsByStatus.ready ?? 0
+  /*
+   * A status this console has never heard of (x-extensible-enum, GoGo-BE#658)
+   * gets no action: nothing here knows what retrying or publishing means in it.
+   * Retry follows the list row's rule — only a job with failed rows to retry.
+   */
+  const knownStatus = job ? isKnownJobStatus(job.status) : false
+  const canOfferRetry =
+    knownStatus && (job?.status === 'failed' || job?.status === 'partial_success')
 
   return (
     <>
@@ -442,16 +451,18 @@ export default function ImportJobScreen() {
                 {t('imports.cancel')}
               </Button>
             ) : null}
-            <Button
-              size="sm"
-              variant="secondary"
-              iconLeft={<RetryIcon size={14} />}
-              disabled={!canManage || !online}
-              loading={retry.isPending}
-              onClick={() => retry.mutate()}
-            >
-              {t('imports.retry')}
-            </Button>
+            {canOfferRetry ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                iconLeft={<RetryIcon size={14} />}
+                disabled={!canManage || !online}
+                loading={retry.isPending}
+                onClick={() => retry.mutate()}
+              >
+                {t('imports.retry')}
+              </Button>
+            ) : null}
             <Button
               size="sm"
               variant="secondary"
@@ -464,7 +475,7 @@ export default function ImportJobScreen() {
             <Button
               size="sm"
               variant="primary"
-              disabled={!canPublish || !online || readyCount === 0}
+              disabled={!canPublish || !online || !knownStatus || readyCount === 0}
               onClick={() => setPublishOpen(true)}
             >
               {t('imports.publish')}
