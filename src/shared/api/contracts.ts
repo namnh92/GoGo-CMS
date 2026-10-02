@@ -214,6 +214,13 @@ export const placeMediaSchema = z.object({
   sortOrder: z.number().int().default(0),
   moderation: z.string(),
   moderationReason: z.string().nullish(),
+  /**
+   * GoGo-BE#441 — who last changed `moderation`, and when. An admin id only,
+   * like `CmsAuditEntry.actorId`: the API sends no name. Null while nobody has
+   * decided, absent from an older API; neither is a reason to reject the row.
+   */
+  moderatedBy: z.string().nullish(),
+  moderatedAt: z.string().nullish(),
   caption: z.string().nullish(),
   /** Provider terms travel with a provider photo (FR-INGEST-014). */
   attribution: z.string().nullish(),

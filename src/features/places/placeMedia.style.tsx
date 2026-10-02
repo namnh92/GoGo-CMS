@@ -40,6 +40,15 @@ export const styles = {
   key: 'mt-1 block truncate font-mono text-[10px] text-text-subtle',
   reason: 'mt-1.5 rounded-compact bg-surface-sunken px-2 py-1.5 text-[11px] text-text-muted',
   reasonLabel: 'font-semibold text-text-muted',
+  /** GoGo-BE#441 — who last decided, and when. */
+  provenance: 'mt-1 text-[11px] text-text-muted',
+  provenanceModal: '-mt-1 mb-3 text-xs text-text-muted',
+  adminId: 'font-mono',
+  /** 44×44 target, dotted underline so it reads as a control, not as plain text. */
+  adminIdToggle:
+    'inline-flex min-h-11 min-w-11 items-center justify-center rounded-compact px-1 font-mono text-text underline decoration-dotted underline-offset-2 hover:bg-surface-sunken',
+  adminIdFull: 'ml-1 break-all font-mono text-text',
+  whoWhen: 'mt-1 text-[11px] text-text-subtle',
   actions: 'mt-2 flex flex-wrap items-center gap-1.5',
   orderGroup: 'flex shrink-0 items-center',
 

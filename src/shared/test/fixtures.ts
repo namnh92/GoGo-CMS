@@ -344,6 +344,9 @@ export const places: CmsPlaceDetail[] = [
         sortOrder: 0,
         moderation: 'approved',
         moderationReason: 'Ảnh mặt tiền rõ, không lộ mặt khách.',
+        // GoGo-BE#441: an admin id only, never a name.
+        moderatedBy: '7f3c9a12-4b6d-4e8f-9a01-23456789abcd',
+        moderatedAt: '2026-09-28T03:15:00.000Z',
         caption: 'Mặt tiền quán buổi tối',
         attribution: null,
         isCover: true,
@@ -359,6 +362,9 @@ export const places: CmsPlaceDetail[] = [
         sortOrder: 1,
         moderation: 'pending',
         moderationReason: null,
+        // Nobody has decided yet — the API says so with null, not absence.
+        moderatedBy: null,
+        moderatedAt: null,
         caption: null,
         attribution: null,
         isCover: false,

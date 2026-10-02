@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useI18n, useLabel, useT } from '@/shared/i18n/i18n'
 import { queryKeys } from '@/shared/api/queryKeys'
 import { useOnline } from '@/shared/ui/useOnline'
-import { formatBytes, formatDateTime } from '@/shared/format'
+import { formatBytes, formatDateTime, formatRelative } from '@/shared/format'
 import { Card, CardBody, CardHeader } from '@/shared/ui/Card'
 import { Button, IconButton } from '@/shared/ui/Button'
 import { Select, TextArea, TextInput } from '@/shared/ui/Field'
@@ -59,6 +59,120 @@ const MODERATION_SHAPE = {
   approved: 'check',
   rejected: 'alert',
 } as const
+
+const DECIDED_VERB = {
+  approved: 'placeMedia.decidedVerb.approved',
+  rejected: 'placeMedia.decidedVerb.rejected',
+} as const
+
+/** The audit id convention for a list row: `#` and the first eight characters. */
+function shortAdminId(id: string): string {
+  return `#${id.slice(0, 8)}`
+}
+
+/**
+ * The provenance the line can actually show: an empty id is no id, and a time
+ * that will not parse is no time. Callers decide on what is displayed, never
+ * on the raw fields' truthiness.
+ */
+function usableProvenance(media: Pick<PlaceMedia, 'moderatedBy' | 'moderatedAt'>) {
+  const by = media.moderatedBy || null
+  const at =
+    media.moderatedAt && !Number.isNaN(new Date(media.moderatedAt).getTime())
+      ? media.moderatedAt
+      : null
+  return { by, at }
+}
+
+/** Both who and when are on screen, so the pointer to the change log is redundant. */
+function hasFullProvenance(media: Pick<PlaceMedia, 'moderatedBy' | 'moderatedAt'>): boolean {
+  const { by, at } = usableProvenance(media)
+  return by !== null && at !== null
+}
+
+/**
+ * The "see the change log" pointer: for a photo someone has decided on (a
+ * decision, a reason or part of the provenance is there) whose row does not
+ * itself show both who and when. A photo nobody has decided on has nothing to
+ * point at, so it gets no pointer.
+ */
+function needsChangeLogPointer(
+  media: Pick<PlaceMedia, 'moderation' | 'moderationReason' | 'moderatedBy' | 'moderatedAt'>,
+): boolean {
+  if (hasFullProvenance(media)) return false
+  const { by, at } = usableProvenance(media)
+  return (
+    media.moderation !== 'pending' || Boolean(media.moderationReason) || by !== null || at !== null
+  )
+}
+
+/**
+ * GoGo-BE#441 — who last changed a photo's moderation, and when: "Duyệt bởi
+ * #7f3c9a12 · 28/9/2026, 10:15 (4 ngày trước)". The API sends an admin id and
+ * never a name, so the id is what shows: shortened in a list row (whole on
+ * hover), written out in full where `fullId` is set — the moderation dialog —
+ * so keyboard and screen-reader users can reach all of it. Whatever the API
+ * did not send is left out, and the separator only stands between two parts:
+ * a time alone reads "Duyệt 28/9/2026…", an admin alone "Duyệt bởi #7f3c9a12".
+ */
+export function ModerationProvenance({
+  media,
+  className,
+  fullId = false,
+}: {
+  media: Pick<PlaceMedia, 'moderation' | 'moderatedBy' | 'moderatedAt'>
+  className?: string
+  fullId?: boolean
+}) {
+  const t = useT()
+  const { locale } = useI18n()
+  const [showFullId, setShowFullId] = useState(false)
+  const { by, at } = usableProvenance(media)
+  if (!by && !at) return null
+  const verb =
+    DECIDED_VERB[media.moderation as keyof typeof DECIDED_VERB] ?? 'placeMedia.decidedVerb.other'
+  return (
+    <p className={className ?? styles.provenance}>
+      {t(verb)}
+      {by ? (
+        <>
+          {' '}
+          {t('placeMedia.decidedBy')}{' '}
+          {fullId ? (
+            <span className={styles.adminId}>{by}</span>
+          ) : (
+            <>
+              {/*
+               * A button, not a title: every role reaches the whole id from the
+               * keyboard, offline or not. Its name starts with the visible
+               * short id (label in name) and carries the full one.
+               */}
+              <button
+                type="button"
+                className={styles.adminIdToggle}
+                title={by}
+                aria-expanded={showFullId}
+                aria-label={t('placeMedia.adminIdToggle', { short: shortAdminId(by), id: by })}
+                onClick={() => setShowFullId((value) => !value)}
+              >
+                {shortAdminId(by)}
+              </button>
+              {showFullId ? <span className={styles.adminIdFull}>{by}</span> : null}
+            </>
+          )}
+        </>
+      ) : null}
+      {at ? (
+        <>
+          {by ? ' · ' : ' '}
+          <time dateTime={at}>
+            {formatDateTime(at, locale)} ({formatRelative(at, locale)})
+          </time>
+        </>
+      ) : null}
+    </p>
+  )
+}
 
 /**
  * A blob URL, or null where the browser will not make one.
@@ -565,6 +679,7 @@ function ModerationDialog({
           label={label(`mediaModeration.${media.moderation}`, media.moderation)}
         />
       </p>
+      <ModerationProvenance media={media} className={styles.provenanceModal} fullId />
       <Select
         label={t('placeMedia.moderationDecision')}
         value={decision}
@@ -1012,14 +1127,16 @@ export function PlaceMediaCard({
                         {item.storageKey}
                       </span>
 
+                      <ModerationProvenance media={item} />
+
                       {item.moderationReason ? (
                         <p className={styles.reason}>
                           <span className={styles.reasonLabel}>{t('placeMedia.reasonLabel')} </span>
                           {item.moderationReason}
-                          <span className="mt-0.5 block text-text-subtle">
-                            {t('placeMedia.whoWhen')}
-                          </span>
                         </p>
+                      ) : null}
+                      {needsChangeLogPointer(item) ? (
+                        <p className={styles.whoWhen}>{t('placeMedia.whoWhen')}</p>
                       ) : null}
 
                       {noStorage ? (

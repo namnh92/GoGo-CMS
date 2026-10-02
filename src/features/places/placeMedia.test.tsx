@@ -8,10 +8,12 @@ import { resetMockDb } from '@/shared/test/handlers'
 import { renderWithProviders, signInAs } from '@/shared/test/render'
 import { places } from '@/shared/test/fixtures'
 import { queryKeys } from '@/shared/api/queryKeys'
+import { placeMediaSchema } from '@/shared/api/contracts'
+import { formatDateTime } from '@/shared/format'
 import { authorizeUpload } from '@/features/media/api'
 import { updatePlaceMedia } from './api'
 import { fetchPlace } from './api'
-import { PlaceMediaCard } from './placeMedia.view'
+import { ModerationProvenance, PlaceMediaCard } from './placeMedia.view'
 
 const PLACE = places.find((place) => place.id === 'pl-chao-ban')!
 const COVER_KEY = PLACE.media[0]!.storageKey
@@ -449,11 +451,270 @@ describe('place media — the mock enforces what GoGo-BE enforces', () => {
     })
   })
 
+  // F-04 — GoGo-BE#441 stamps who/when only when `moderation` actually changes.
+  it('keeps who and when on a patch that repeats the current decision', async () => {
+    const media = PLACE.media[0]!
+    const saved = await updatePlaceMedia(PLACE.id, media.id, {
+      moderation: 'approved',
+      caption: 'Mặt tiền',
+    })
+    expect(saved.moderatedBy).toBe(media.moderatedBy)
+    expect(saved.moderatedAt).toBe(media.moderatedAt)
+  })
+
+  it('stamps who and when on a real change', async () => {
+    const media = PLACE.media[1]!
+    const saved = await updatePlaceMedia(PLACE.id, media.id, {
+      moderation: 'approved',
+      moderationReason: 'Ảnh rõ, đúng địa điểm',
+    })
+    expect(saved.moderatedBy).toBe('adm-mock')
+    expect(Number.isNaN(Date.parse(saved.moderatedAt ?? ''))).toBe(false)
+  })
+
   it('accepts a reorder that touches no decision', async () => {
     const media = PLACE.media[1]!
     await expect(updatePlaceMedia(PLACE.id, media.id, { sortOrder: 5 })).resolves.toMatchObject({
       sortOrder: 5,
       moderation: 'pending',
     })
+  })
+})
+
+/**
+ * GoGo-BE#441 — who last changed a photo's moderation, and when. The API sends
+ * an admin id (never a name) and an ISO time, both nullable and optional; the
+ * console shows what it was given and nothing in place of what it was not.
+ */
+describe('place media — who moderated and when (GoGo-BE#441)', () => {
+  const MODERATOR = PLACE.media[0]!.moderatedBy!
+  const MODERATED_AT = PLACE.media[0]!.moderatedAt!
+
+  it('mirrors the two fields, keeps null and absence, and never strict-rejects', () => {
+    const base = {
+      id: 'pm-x',
+      storageKey: 'k',
+      moderation: 'approved',
+      isCover: false,
+      sortOrder: 0,
+    }
+    const full = placeMediaSchema.parse({
+      ...base,
+      moderatedBy: MODERATOR,
+      moderatedAt: MODERATED_AT,
+    })
+    expect(full.moderatedBy).toBe(MODERATOR)
+    expect(full.moderatedAt).toBe(MODERATED_AT)
+
+    const nulls = placeMediaSchema.parse({ ...base, moderatedBy: null, moderatedAt: null })
+    expect(nulls.moderatedBy).toBeNull()
+    expect(nulls.moderatedAt).toBeNull()
+
+    expect(placeMediaSchema.safeParse(base).success).toBe(true)
+  })
+
+  it('shows the decision, a shortened admin id and the time on a decided photo', async () => {
+    open()
+    await ready()
+
+    const line = rowFor(COVER_KEY).getByText(/^Duyệt bởi/)
+    expect(line).toHaveTextContent(`Duyệt bởi #${MODERATOR.slice(0, 8)}`)
+    // The full id is one hover away, for matching against the audit log.
+    expect(within(line).getByTitle(MODERATOR)).toHaveTextContent(`#${MODERATOR.slice(0, 8)}`)
+    const time = line.querySelector('time')
+    expect(time).toHaveAttribute('dateTime', MODERATED_AT)
+    expect(time).toHaveTextContent(formatDateTime(MODERATED_AT, 'vi'))
+    // Once the who and when are on the row, the pointer to the change log goes.
+    expect(rowFor(COVER_KEY).queryByText(/Ai quyết định và lúc nào/)).not.toBeInTheDocument()
+  })
+
+  it('renders no line, and no placeholder, when the fields are null or absent', async () => {
+    open()
+    await ready()
+
+    // PENDING_KEY carries explicit nulls; NO_URL_KEY omits both keys.
+    for (const key of [PENDING_KEY, NO_URL_KEY]) {
+      const row = rowFor(key)
+      expect(row.queryByText(/bởi/)).not.toBeInTheDocument()
+      expect(row.queryByText('—')).not.toBeInTheDocument()
+      expect(screen.getByTitle(key).closest('li')!.querySelector('time')).toBeNull()
+    }
+  })
+
+  // F-05 — the component itself, so absence is proven on the element that
+  // would carry the line rather than inferred from a row.
+  describe('the provenance line on its own', () => {
+    const at = '2026-09-28T03:15:00.000Z'
+    const absolute = () => formatDateTime(at, 'vi')
+    // A host element of its own: the providers render a toast region beside it.
+    const show = (media: Parameters<typeof ModerationProvenance>[0]['media']) => {
+      renderWithProviders(
+        <div data-testid="provenance-host">
+          <ModerationProvenance media={media} />
+        </div>,
+      )
+      return screen.getByTestId('provenance-host')
+    }
+
+    it.each([
+      ['both null', { moderatedBy: null, moderatedAt: null }],
+      ['both absent', {}],
+      ['empty id, no time', { moderatedBy: '', moderatedAt: null }],
+      ['unparseable time, no id', { moderatedBy: null, moderatedAt: 'not-a-date' }],
+      ['empty id, unparseable time', { moderatedBy: '', moderatedAt: 'not-a-date' }],
+    ])('renders nothing when %s', (_, fields) => {
+      expect(show({ moderation: 'approved', ...fields })).toBeEmptyDOMElement()
+    })
+
+    it('puts the separator between two parts and nowhere else', () => {
+      const line = show({ moderation: 'approved', moderatedBy: MODERATOR, moderatedAt: at })
+      expect(line).toHaveTextContent(`Duyệt bởi #${MODERATOR.slice(0, 8)} · ${absolute()}`)
+    })
+
+    // F-01 — a time with no admin is "Duyệt <time>", never "Duyệt · <time>".
+    it.each([
+      ['null', null],
+      ['absent', undefined],
+      ['empty', ''],
+    ])('shows a time with a %s admin and no dangling separator', (_, by) => {
+      const line = show({ moderation: 'approved', moderatedBy: by, moderatedAt: at })
+      expect(line).not.toHaveTextContent('·')
+      expect(line).not.toHaveTextContent('bởi')
+      expect(line.textContent).toMatch(
+        new RegExp(`^Duyệt ${absolute().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`),
+      )
+      expect(line.querySelector('time')).toHaveAttribute('dateTime', at)
+    })
+
+    it('shows the admin alone when the time will not parse', () => {
+      const line = show({ moderation: 'rejected', moderatedBy: MODERATOR, moderatedAt: 'nope' })
+      expect(line).toHaveTextContent(new RegExp(`^Từ chối bởi #${MODERATOR.slice(0, 8)}$`))
+      expect(line.querySelector('time')).toBeNull()
+    })
+  })
+
+  // F-02 — the change-log pointer goes only when both who and when are shown.
+  it.each([
+    ['no admin', { moderatedBy: null }],
+    ['an unparseable time', { moderatedAt: 'not-a-date' }],
+  ])('keeps the change-log pointer when the row shows %s', async (_, override) => {
+    server.use(
+      http.get('/v1/cms/places/:id', async () => {
+        const media = PLACE.media.map((item, index) =>
+          index === 0 ? { ...item, ...override } : item,
+        )
+        return HttpResponse.json({ ...PLACE, media })
+      }),
+    )
+    open()
+    await ready()
+
+    expect(rowFor(COVER_KEY).getByText(/Ai quyết định và lúc nào/)).toBeInTheDocument()
+  })
+
+  // F-02 (round 2) — the pointer does not depend on a reason being recorded.
+  it.each([
+    ['only an admin', { moderatedAt: null }],
+    ['only a time', { moderatedBy: null }],
+  ])('keeps the change-log pointer for %s and no reason', async (_, override) => {
+    server.use(
+      http.get('/v1/cms/places/:id', async () => {
+        const media = PLACE.media.map((item, index) =>
+          index === 0 ? { ...item, moderationReason: null, ...override } : item,
+        )
+        return HttpResponse.json({ ...PLACE, media })
+      }),
+    )
+    open()
+    await ready()
+
+    expect(rowFor(COVER_KEY).getByText(/Ai quyết định và lúc nào/)).toBeInTheDocument()
+  })
+
+  it('points nowhere for a photo nobody has decided on', async () => {
+    open()
+    await ready()
+
+    expect(rowFor(PENDING_KEY).queryByText(/Ai quyết định và lúc nào/)).not.toBeInTheDocument()
+  })
+
+  // F-03 (round 2) — every role, online or not, can reach the full id from the
+  // row with the keyboard; the visible label stays short.
+  it('lets a read-only role reach the full admin id from the keyboard', async () => {
+    const user = userEvent.setup()
+    open(false)
+    await ready()
+
+    const toggle = rowFor(COVER_KEY).getByRole('button', { name: new RegExp(MODERATOR) })
+    expect(toggle).toHaveTextContent(`#${MODERATOR.slice(0, 8)}`)
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    for (let step = 0; step < 40 && document.activeElement !== toggle; step += 1) {
+      await user.tab()
+    }
+    expect(toggle).toHaveFocus()
+    await user.keyboard('{Enter}')
+
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(rowFor(COVER_KEY).getByText(MODERATOR)).toBeVisible()
+  })
+
+  // F-03 — the full id is reachable without a mouse: written out in the dialog.
+  it('writes the full admin id out in the moderation dialog', async () => {
+    const user = userEvent.setup()
+    open()
+    await ready()
+
+    await user.click(rowFor(COVER_KEY).getByRole('button', { name: 'Kiểm duyệt' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText(/^Duyệt bởi/)).toHaveTextContent(`Duyệt bởi ${MODERATOR}`)
+  })
+
+  it('shows the time alone when the API has no admin for the change', async () => {
+    server.use(
+      http.get('/v1/cms/places/:id', async () => {
+        const media = PLACE.media.map((item, index) =>
+          index === 0 ? { ...item, moderatedBy: null } : item,
+        )
+        return HttpResponse.json({ ...PLACE, media })
+      }),
+    )
+    open()
+    await ready()
+
+    const time = screen.getByTitle(COVER_KEY).closest('li')!.querySelector('time')
+    expect(time).toHaveAttribute('dateTime', MODERATED_AT)
+    expect(rowFor(COVER_KEY).queryByText(/bởi/)).not.toBeInTheDocument()
+    expect(time!.parentElement).not.toHaveTextContent('·')
+  })
+
+  it('names the new moderator once a decision is recorded', async () => {
+    const user = userEvent.setup()
+    open()
+    await ready()
+
+    await user.click(rowFor(PENDING_KEY).getByRole('button', { name: 'Kiểm duyệt' }))
+    const dialog = await screen.findByRole('dialog')
+    await user.selectOptions(within(dialog).getByLabelText('Quyết định'), 'rejected')
+    await user.type(within(dialog).getByLabelText(/Lý do/), 'Ảnh mờ, lộ mặt khách')
+    await user.click(within(dialog).getByRole('button', { name: 'Ghi quyết định' }))
+
+    await waitFor(() =>
+      expect(rowFor(PENDING_KEY).getByText(/^Từ chối bởi/)).toHaveTextContent(
+        'Từ chối bởi #adm-mock',
+      ),
+    )
+  })
+
+  it('words the line in English too', async () => {
+    window.localStorage.setItem('gogo.cms.locale', 'en')
+    try {
+      open()
+      await ready()
+      expect(rowFor(COVER_KEY).getByText(/^Approved by/)).toHaveTextContent(
+        `Approved by #${MODERATOR.slice(0, 8)}`,
+      )
+    } finally {
+      window.localStorage.removeItem('gogo.cms.locale')
+    }
   })
 })

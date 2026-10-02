@@ -170,6 +170,16 @@ test.describe('photos', () => {
     // Uploading is not deciding it may be published (GoGo-BE#191).
     await expect(media.getByText('Chờ duyệt').first()).toBeVisible({ timeout: 15_000 })
   })
+
+  test('a decided photo says who decided and when (GoGo-BE#441)', async ({ page }) => {
+    await openEditor(page)
+
+    const media = card(page, 'Thư viện ảnh')
+    await media.scrollIntoViewIfNeeded()
+    const line = media.getByText(/^Duyệt bởi/)
+    await expect(line).toContainText('Duyệt bởi #7f3c9a12', { timeout: 15_000 })
+    await expect(line.locator('time')).toHaveAttribute('datetime', '2026-09-28T03:15:00.000Z')
+  })
 })
 
 test.describe('publish checklist', () => {
