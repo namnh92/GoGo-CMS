@@ -401,6 +401,18 @@ export const placeAdministrativeCountsSchema = z.object({
 })
 export type PlaceAdministrativeCounts = z.infer<typeof placeAdministrativeCountsSchema>
 
+/**
+ * `PlaceProviderStatus` (GoGo-BE#360) — what the place's provider last reported
+ * about the business, separate from `status` (GoGo's own moderation decision).
+ * `status` is an `x-extensible-enum`: kept as a plain string so a value the
+ * server adds later still parses, and the UI names it rather than guessing.
+ */
+export const placeProviderStatusSchema = z.object({
+  status: z.string(),
+  fetchedAt: z.string(),
+})
+export type PlaceProviderStatus = z.infer<typeof placeProviderStatusSchema>
+
 /** `CmsPlaceDetail` (GoGo-BE#157) — every field `cmsUpdatePlace` accepts, plus relations. */
 export const cmsPlaceDetailSchema = z.object({
   id: z.string(),
@@ -444,6 +456,8 @@ export const cmsPlaceDetailSchema = z.object({
   prices: z.array(placePriceSchema).default([]),
   sources: z.array(placeSourceSchema).default([]),
   media: z.array(placeMediaSchema).default([]),
+  /** Absent when no provider has reported on the place (GoGo-BE#360). */
+  providerStatus: placeProviderStatusSchema.nullish(),
   freshnessCheckedAt: z.string().nullish(),
   createdAt: z.string(),
   updatedAt: z.string(),

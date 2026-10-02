@@ -6951,16 +6951,17 @@ export interface components {
                 url?: string;
                 attribution?: string;
             }[];
-            /** @description GoGo-BE#360 — what the place's provider last reported about the business, a fact for core rule 8's "excluded or warned": search already excludes a closed or temporarily closed place, but a saved place, a plan stop or a share link still opens this detail, and the client must warn rather than present it as open (with more than colour). When several provider rows exist the most severe report wins (closed, temporarily_closed, moved, active, unknown). Absent when no provider has reported on the place. `places.status` (`status` above) is GoGo's own moderation decision and is separate. */
-            providerStatus?: {
-                /** @description Treat a value you do not know as `unknown`. */
-                status: string;
-                /**
-                 * Format: date-time
-                 * @description When the provider was last read for this report.
-                 */
-                fetchedAt: string;
-            };
+            providerStatus?: components["schemas"]["PlaceProviderStatus"];
+        };
+        /** @description GoGo-BE#360 — what the place's provider last reported about the business, a fact for core rule 8's "excluded or warned": search already excludes a closed or temporarily closed place, but a saved place, a plan stop or a share link still opens this detail, and the client must warn rather than present it as open (with more than colour). When several provider rows exist the most severe report wins (closed, temporarily_closed, moved, active, unknown). Absent when no provider has reported on the place. The place's own `status` is GoGo's moderation decision and is separate. */
+        PlaceProviderStatus: {
+            /** @description Treat a value you do not know as `unknown`. */
+            status: string;
+            /**
+             * Format: date-time
+             * @description When the provider was last read for this report.
+             */
+            fetchedAt: string;
         };
         SuggestionCandidate: {
             /** Format: uuid */
@@ -7130,6 +7131,8 @@ export interface components {
              *     Scoring: `EXACT_PROVIDER_ID`, `EXACT_NAME_CITY`, `MULTIPLE_BRANCHES`, `DISTRICT_MISMATCH`, `CITY_MISMATCH`, `TYPE_MISMATCH`, `LOW_CONFIDENCE`. Catalogue: `PLACE_ALREADY_LINKED`, `DB_FIRST`, `PLACE_IDENTITY_CONFLICT`, `NOT_FOUND`, `NO_QUERY`.
              *
              *     Identity, from the Google feature id a share link carries (GoGo-BE#505): `CID_EXACT_MATCH` — a candidate's own `googleMapsUri` names the same CID as the link, so the two are the same Google record and no name or distance score can say otherwise. `CID_OVERRODE_SCORE` accompanies it when that candidate was not the one the text score ranked first; the full `candidates` list is still returned, so the disagreement is visible rather than hidden. `LINK_IDENTITY_CONFLICT` (with `UNRESOLVED`) — the link names one place by `place_id` and a different one by `ftid`, which nobody can act on and nothing here guesses at. `CID_NOT_IN_CANDIDATES` — the link named a place by CID, the candidates published CIDs of their own, and none of them was it: the search did not return the place the link points at, so a person picks rather than GoGo auto-resolving onto an identity the link contradicts.
+             *
+             *     A `?cid=` link (GoGo-BE#470), the `googleMapsUri` form GoGo itself stores: a CID GoGo holds is answered from its own rows like a known `place_id` (`DB_FIRST`, `PLACE_ALREADY_LINKED`). `CID_NOT_RESOLVABLE` (with `UNRESOLVED`) — the link carries a CID and nothing else to search with, and GoGo holds no place with that CID; no provider endpoint looks a CID up. Not `NO_QUERY`: the link is not empty, it names a Google record GoGo cannot translate. `CID_IDENTITY_CONFLICT` (with `UNRESOLVED`) — GoGo's own rows store that CID against two different Google Place IDs, so nothing here picks one; unlike `PLACE_IDENTITY_CONFLICT`, which is one Place ID claimed by two GoGo places.
              */
             reasonCodes?: string[];
             /** Format: uuid */
@@ -7896,6 +7899,8 @@ export interface components {
             }[];
             /** @description Cover first, then the editor's order. */
             media: components["schemas"]["CmsPlaceMedia"][];
+            /** @description GoGo-BE#360 — the same fact, rows and severity rule as `PlaceDetail.providerStatus`, so an editor sees a place its provider reports shut as shut. Absent when no provider has reported on the place. Read from the database; no provider call is made. */
+            providerStatus?: components["schemas"]["PlaceProviderStatus"];
             /** Format: date-time */
             freshnessCheckedAt?: string | null;
             /** Format: date-time */
@@ -11584,6 +11589,24 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            /** @description `ROOM_NOT_ACTIVE` — check-in happens during or after the date, not before it. Or `UPLOAD_NOT_RECEIVED` (#560) — an upload key is valid but no file has reached storage for it; nothing was written and the key is still usable: PUT the file to the upload URL, then retry. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description `UPLOAD_STORAGE_UNAVAILABLE` (#560) — storage did not answer whether the file arrived. Nothing was written; retryable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
         };
     };
     submitPlaceImport: {
@@ -14658,7 +14681,24 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
+            /** @description The key is already on this place (`PLACE_MEDIA_EXISTS`), or `UPLOAD_NOT_RECEIVED` (#560): the key is valid but no file has reached storage for it. Nothing was written and the key stays usable: PUT the file, then retry. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description `UPLOAD_STORAGE_UNAVAILABLE` (#560) — storage did not answer whether the file arrived. Nothing was written; retryable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
         };
     };
     cmsListAttachableMedia: {
@@ -15717,12 +15757,23 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description A banner with that name exists (`BANNER_NAME_TAKEN`) */
+            /** @description A banner with that name exists (`BANNER_NAME_TAKEN`), or no file has reached storage for the image key yet (`UPLOAD_NOT_RECEIVED`, #560). */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description `UPLOAD_STORAGE_UNAVAILABLE` (#560) — storage did not answer whether the file arrived. Nothing was written; retryable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
             };
         };
     };
@@ -15775,6 +15826,24 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             404: components["responses"]["NotFound"];
+            /** @description A banner with that name exists (`BANNER_NAME_TAKEN`), or `UPLOAD_NOT_RECEIVED` (#560) — the image key is valid but no file has reached storage for it; nothing was written and the key is still usable: PUT the file to the upload URL, then retry. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description `UPLOAD_STORAGE_UNAVAILABLE` (#560) — storage did not answer whether the file arrived. Nothing was written; retryable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
         };
     };
     cmsSetBannerStatus: {
@@ -15880,15 +15949,26 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description A campaign with that name exists (`CAMPAIGN_NAME_TAKEN`) */
+            /** @description A campaign with that name exists (`CAMPAIGN_NAME_TAKEN`), or no file has reached storage for the image key yet (`UPLOAD_NOT_RECEIVED`, #560). */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
             };
             /** @description `INVALID_DESTINATION` with `field_errors[0].field = destinationType` — `recommendation`, `plan_template` and `external_url` are not accepted for new campaigns until the app can open them (GoGo-BE#604). They stay in `CampaignDestination` so campaigns that already hold one remain readable. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description `UPLOAD_STORAGE_UNAVAILABLE` (#560) — storage did not answer whether the file arrived. Nothing was written; retryable. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -15947,7 +16027,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             404: components["responses"]["NotFound"];
-            /** @description Not in an editable state (`CAMPAIGN_NOT_EDITABLE`), or already delivered to at least one recipient and the patch changes a field that reaches a phone (`CAMPAIGN_ALREADY_DELIVERED`). */
+            /** @description Not in an editable state (`CAMPAIGN_NOT_EDITABLE`), already delivered to at least one recipient and the patch changes a field that reaches a phone (`CAMPAIGN_ALREADY_DELIVERED`), a campaign with that name exists (`CAMPAIGN_NAME_TAKEN`), or no file has reached storage for the image key yet (`UPLOAD_NOT_RECEIVED`, #560). */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -15958,6 +16038,15 @@ export interface operations {
             };
             /** @description `INVALID_DESTINATION` with `field_errors[0].field = destinationType` — the patch changes the destination to `recommendation`, `plan_template` or `external_url`, which the app cannot open yet (GoGo-BE#604). A campaign that already holds one can still be edited in every other field, re-saved with the same destination, or moved to an openable one. Changing `destinationType` takes its `destinationValue` from the patch only; the previous value is not carried over. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description `UPLOAD_STORAGE_UNAVAILABLE` (#560) — storage did not answer whether the file arrived. Nothing was written; retryable. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
