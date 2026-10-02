@@ -95,6 +95,21 @@ export function formatDate(iso: string | null | undefined, locale: Locale): stri
   }).format(date)
 }
 
+/**
+ * The viewer-local calendar day of an instant, numeric (`28/9/2026` in vi).
+ * Unlike `formatDate`, the input is a moment, so the day is the viewer's.
+ */
+export function formatDay(iso: string | null | undefined, locale: Locale): string {
+  if (!iso) return '—'
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return '—'
+  return new Intl.DateTimeFormat(locale === 'en' ? 'en-US' : 'vi-VN', {
+    day: 'numeric',
+    month: 'numeric',
+    year: 'numeric',
+  }).format(date)
+}
+
 export function formatTimeOnly(iso: string | null | undefined, locale: Locale): string {
   if (!iso) return '—'
   const date = new Date(iso)

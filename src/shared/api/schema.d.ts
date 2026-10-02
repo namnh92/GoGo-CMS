@@ -6951,16 +6951,17 @@ export interface components {
                 url?: string;
                 attribution?: string;
             }[];
-            /** @description GoGo-BE#360 — what the place's provider last reported about the business, a fact for core rule 8's "excluded or warned": search already excludes a closed or temporarily closed place, but a saved place, a plan stop or a share link still opens this detail, and the client must warn rather than present it as open (with more than colour). When several provider rows exist the most severe report wins (closed, temporarily_closed, moved, active, unknown). Absent when no provider has reported on the place. `places.status` (`status` above) is GoGo's own moderation decision and is separate. */
-            providerStatus?: {
-                /** @description Treat a value you do not know as `unknown`. */
-                status: string;
-                /**
-                 * Format: date-time
-                 * @description When the provider was last read for this report.
-                 */
-                fetchedAt: string;
-            };
+            providerStatus?: components["schemas"]["PlaceProviderStatus"];
+        };
+        /** @description GoGo-BE#360 — what the place's provider last reported about the business, a fact for core rule 8's "excluded or warned": search already excludes a closed or temporarily closed place, but a saved place, a plan stop or a share link still opens this detail, and the client must warn rather than present it as open (with more than colour). When several provider rows exist the most severe report wins (closed, temporarily_closed, moved, active, unknown). Absent when no provider has reported on the place. The place's own `status` is GoGo's moderation decision and is separate. */
+        PlaceProviderStatus: {
+            /** @description Treat a value you do not know as `unknown`. */
+            status: string;
+            /**
+             * Format: date-time
+             * @description When the provider was last read for this report.
+             */
+            fetchedAt: string;
         };
         SuggestionCandidate: {
             /** Format: uuid */
@@ -7130,6 +7131,8 @@ export interface components {
              *     Scoring: `EXACT_PROVIDER_ID`, `EXACT_NAME_CITY`, `MULTIPLE_BRANCHES`, `DISTRICT_MISMATCH`, `CITY_MISMATCH`, `TYPE_MISMATCH`, `LOW_CONFIDENCE`. Catalogue: `PLACE_ALREADY_LINKED`, `DB_FIRST`, `PLACE_IDENTITY_CONFLICT`, `NOT_FOUND`, `NO_QUERY`.
              *
              *     Identity, from the Google feature id a share link carries (GoGo-BE#505): `CID_EXACT_MATCH` — a candidate's own `googleMapsUri` names the same CID as the link, so the two are the same Google record and no name or distance score can say otherwise. `CID_OVERRODE_SCORE` accompanies it when that candidate was not the one the text score ranked first; the full `candidates` list is still returned, so the disagreement is visible rather than hidden. `LINK_IDENTITY_CONFLICT` (with `UNRESOLVED`) — the link names one place by `place_id` and a different one by `ftid`, which nobody can act on and nothing here guesses at. `CID_NOT_IN_CANDIDATES` — the link named a place by CID, the candidates published CIDs of their own, and none of them was it: the search did not return the place the link points at, so a person picks rather than GoGo auto-resolving onto an identity the link contradicts.
+             *
+             *     A `?cid=` link (GoGo-BE#470), the `googleMapsUri` form GoGo itself stores: a CID GoGo holds is answered from its own rows like a known `place_id` (`DB_FIRST`, `PLACE_ALREADY_LINKED`). `CID_NOT_RESOLVABLE` (with `UNRESOLVED`) — the link carries a CID and nothing else to search with, and GoGo holds no place with that CID; no provider endpoint looks a CID up. Not `NO_QUERY`: the link is not empty, it names a Google record GoGo cannot translate. `CID_IDENTITY_CONFLICT` (with `UNRESOLVED`) — GoGo's own rows store that CID against two different Google Place IDs, so nothing here picks one; unlike `PLACE_IDENTITY_CONFLICT`, which is one Place ID claimed by two GoGo places.
              */
             reasonCodes?: string[];
             /** Format: uuid */
@@ -7896,6 +7899,8 @@ export interface components {
             }[];
             /** @description Cover first, then the editor's order. */
             media: components["schemas"]["CmsPlaceMedia"][];
+            /** @description GoGo-BE#360 — the same fact, rows and severity rule as `PlaceDetail.providerStatus`, so an editor sees a place its provider reports shut as shut. Absent when no provider has reported on the place. Read from the database; no provider call is made. */
+            providerStatus?: components["schemas"]["PlaceProviderStatus"];
             /** Format: date-time */
             freshnessCheckedAt?: string | null;
             /** Format: date-time */

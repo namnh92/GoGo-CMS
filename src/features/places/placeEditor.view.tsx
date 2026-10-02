@@ -46,6 +46,7 @@ import {
 } from './api'
 import { PlaceMediaCard } from './placeMedia.view'
 import { PLACE_STATUSES, PLACE_TRANSITIONS } from './status'
+import { PlaceProviderStatusBadge } from './providerStatus'
 import { AdministrativeUnitCombobox } from '@/features/administrative/unitCombobox'
 import { AdministrativeSummary } from './placeAdministrative.view'
 import { HoursEditor } from './hoursEditor.view'
@@ -617,6 +618,7 @@ export default function PlaceEditorScreen() {
                           }
                         />
                       ) : null}
+                      <PlaceProviderStatusBadge providerStatus={detail.providerStatus} />
                       <div className={styles.fieldRow}>
                         <TextInput
                           label={t('placeEditor.name')}
