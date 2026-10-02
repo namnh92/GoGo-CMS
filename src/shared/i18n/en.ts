@@ -1884,6 +1884,8 @@ export const en: Partial<Record<MessageKey, string>> = {
   'campaigns.error.destinationUrl':
     'The link must be https, carry no credentials and not point inside the network.',
   'campaigns.error.destinationId': 'The destination must be a UUID.',
+  'campaigns.error.destinationUnavailable':
+    'The app cannot open this destination yet. Choose Home, Place or Saved list.',
 
   'campaigns.status.draft': 'Draft',
   'campaigns.status.scheduled': 'Scheduled',
@@ -1907,6 +1909,11 @@ export const en: Partial<Record<MessageKey, string>> = {
   'campaigns.destination.plan_template': 'Plan template',
   'campaigns.destination.saved': 'Saved list',
   'campaigns.destination.external_url': 'External link',
+  'campaigns.destination.unavailableOption': '{label} — the app cannot open this yet',
+  'campaigns.destinationUnavailableNote':
+    'The saved destination is "{label}", which the app cannot open yet, so this campaign cannot be sent. Switch to Home, Place or Saved list and save.',
+  'campaigns.sendBlockedNote':
+    'Cannot be sent, test sends included: the saved destination is one the app cannot open yet.',
 
   'auth.brandHeadline': 'Content & Operations Center',
   'auth.brandLede':

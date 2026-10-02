@@ -37,6 +37,7 @@ import {
   updateCampaign,
 } from './api'
 import { campaignErrorMessage } from './campaignError'
+import { isInvalidDestinationError, isOpenableDestination } from './campaignDestination'
 import { CampaignStatusBadge } from './campaignStatus'
 import { styles } from './campaign.style'
 
@@ -85,7 +86,7 @@ export default function CampaignDetailScreen() {
     name?: boolean
     title?: boolean
     body?: boolean
-    destination?: 'required' | 'forbidden' | 'url' | 'id'
+    destination?: 'required' | 'forbidden' | 'url' | 'id' | 'unavailable'
   }>({})
   const [confirmSend, setConfirmSend] = useState(false)
 
@@ -119,6 +120,14 @@ export default function CampaignDetailScreen() {
 
   const editable = campaign ? EDITABLE.has(campaign.status) : false
 
+  /*
+   * GoGo-BE#604 (c). Judged on what is *saved*, not on the form: a send uses
+   * the stored destination, so an unsaved switch to an allowed one does not
+   * make the campaign sendable until it is saved.
+   */
+  const savedDestinationOpenable = campaign ? isOpenableDestination(campaign.destinationType) : true
+  const formDestinationOpenable = isOpenableDestination(form.destinationType)
+
   /**
    * The estimate is a read with no side effect, but it is not free and it is
    * only meaningful for a campaign that has not gone out — so it is fetched
@@ -137,7 +146,16 @@ export default function CampaignDetailScreen() {
       toast.success(t('campaigns.saved'))
       invalidate()
     },
-    onError: (error) => toast.error(describeError(error)),
+    onError: (error) => {
+      // A server that refuses a destination this console still offers (BE and
+      // CMS deployed out of order) is a field problem, said on the field.
+      if (isInvalidDestinationError(error)) {
+        setErrors((current) => ({ ...current, destination: 'unavailable' }))
+        toast.error(t('campaigns.error.destinationUnavailable'))
+        return
+      }
+      toast.error(describeError(error))
+    },
   })
 
   const schedule = useMutation({
@@ -146,7 +164,14 @@ export default function CampaignDetailScreen() {
       toast.success(t('campaigns.scheduled'))
       invalidate()
     },
-    onError: (error) => toast.error(describeError(error)),
+    onError: (error) => {
+      if (isInvalidDestinationError(error)) {
+        setErrors((current) => ({ ...current, destination: 'unavailable' }))
+        toast.error(t('campaigns.error.destinationUnavailable'))
+        return
+      }
+      toast.error(describeError(error))
+    },
   })
 
   const cancel = useMutation({
@@ -183,6 +208,9 @@ export default function CampaignDetailScreen() {
     if (form.name.trim().length < 3) next.name = true
     if (form.title.trim() === '') next.title = true
     if (form.body.trim() === '') next.body = true
+    // GoGo-BE#604 (c): the server refuses these with 422 INVALID_DESTINATION;
+    // refusing here first saves the round-trip and says why on the field.
+    if (!isOpenableDestination(form.destinationType)) next.destination = 'unavailable'
     // The server checks the id's shape before it asks the database, so a typo
     // is refused as a typo rather than as "that content does not exist".
     const destination = checkDestination(
@@ -191,7 +219,7 @@ export default function CampaignDetailScreen() {
       TAKES_NO_VALUE,
       true,
     )
-    if (!destination.ok) next.destination = destination.code
+    if (!destination.ok && !next.destination) next.destination = destination.code
     setErrors(next)
     if (Object.keys(next).length > 0) return
 
@@ -219,7 +247,9 @@ export default function CampaignDetailScreen() {
           ? t('campaigns.error.destinationUrl')
           : errors.destination === 'id'
             ? t('campaigns.error.destinationId')
-            : undefined
+            : errors.destination === 'unavailable'
+              ? t('campaigns.error.destinationUnavailable')
+              : undefined
 
   return (
     <>
@@ -371,11 +401,24 @@ export default function CampaignDetailScreen() {
                           }))
                         }
                       >
-                        {campaignDestinationSchema.options.map((value) => (
-                          <option key={value} value={value}>
-                            {t(`campaigns.destination.${value}` as const)}
-                          </option>
-                        ))}
+                        {/*
+                          GoGo-BE#604 (c): the three the app cannot open stay
+                          listed but disabled, with the reason in the label —
+                          hidden, an operator would not know why; greyed alone,
+                          colour would be the only signal.
+                        */}
+                        {campaignDestinationSchema.options.map((value) => {
+                          const openable = isOpenableDestination(value)
+                          return (
+                            <option key={value} value={value} disabled={!openable}>
+                              {openable
+                                ? t(`campaigns.destination.${value}` as const)
+                                : t('campaigns.destination.unavailableOption', {
+                                    label: t(`campaigns.destination.${value}` as const),
+                                  })}
+                            </option>
+                          )
+                        })}
                       </Select>
                       <TextInput
                         label={t('campaigns.field.destinationValue')}
@@ -398,6 +441,14 @@ export default function CampaignDetailScreen() {
                           }))
                         }
                       />
+                      {!formDestinationOpenable ? (
+                        <p role="alert" className={`${styles.formNote} ${styles.formFull}`}>
+                          <span aria-hidden="true">⚠</span>
+                          {t('campaigns.destinationUnavailableNote', {
+                            label: t(`campaigns.destination.${form.destinationType}` as const),
+                          })}
+                        </p>
+                      ) : null}
                       <p className={`${styles.deliveryNote} ${styles.formFull}`}>
                         {t('campaigns.audienceOmittedNote')}
                       </p>
@@ -498,7 +549,7 @@ export default function CampaignDetailScreen() {
                         variant="primary"
                         size="sm"
                         loading={schedule.isPending}
-                        disabled={!canManage || !online}
+                        disabled={!canManage || !online || !savedDestinationOpenable}
                         onClick={() => setConfirmSend(true)}
                       >
                         {sendAt ? t('campaigns.schedule') : t('campaigns.sendNow')}
@@ -519,12 +570,18 @@ export default function CampaignDetailScreen() {
                       variant="secondary"
                       size="sm"
                       loading={testSend.isPending}
-                      disabled={!canManage || !online}
+                      disabled={!canManage || !online || !savedDestinationOpenable}
                       onClick={() => testSend.mutate()}
                     >
                       {t('campaigns.testSend')}
                     </Button>
                   </div>
+                  {!savedDestinationOpenable ? (
+                    <p className={styles.note}>
+                      <span aria-hidden="true">⚠</span>
+                      {t('campaigns.sendBlockedNote')}
+                    </p>
+                  ) : null}
                   {item!.status === 'sending' ? (
                     <p className={styles.note}>
                       <span aria-hidden="true">⚠</span>
