@@ -21,7 +21,13 @@ import {
 } from '@/shared/ui/State'
 import { useToast } from '@/shared/ui/Toast'
 import { DownloadIcon, PlayIcon, PlusIcon, RetryIcon, StopIcon } from '@/shared/ui/icons'
-import { isJobLive, isQuotaPaused, type ImportJobSummary } from '@/shared/api/contracts-import'
+import {
+  isJobLive,
+  isProviderPaused,
+  isProviderUnavailablePaused,
+  isQuotaPaused,
+  type ImportJobSummary,
+} from '@/shared/api/contracts-import'
 import { cancelImport, downloadErrorReport, fetchImportJobs, retryImport, startImport } from './api'
 import { JobStatusBadge } from './status'
 import { styles } from './importList.style'
@@ -199,12 +205,13 @@ export default function ImportListScreen() {
         header: () => <span className="sr-only">{t('imports.col.actions')}</span>,
         cell: ({ row }) => {
           const job = row.original
-          const quotaPaused = isQuotaPaused(job.status)
+          // Both provider pauses resume through `start` (GoGo-BE#658).
+          const providerPaused = isProviderPaused(job.status)
           return (
             <div className={styles.actions} onClick={(event) => event.stopPropagation()}>
-              {quotaPaused || job.status === 'uploaded' || job.status === 'review_required' ? (
+              {providerPaused || job.status === 'uploaded' || job.status === 'review_required' ? (
                 <IconButton
-                  label={quotaPaused ? t('imports.resume') : t('imports.start')}
+                  label={providerPaused ? t('imports.resume') : t('imports.start')}
                   disabled={!canManage || !online || job.mode === 'dry_run'}
                   onClick={() => start.mutate(job.id)}
                 >
@@ -256,6 +263,7 @@ export default function ImportListScreen() {
   }
 
   const quotaPausedJobs = jobs.filter((job) => isQuotaPaused(job.status))
+  const unavailablePausedJobs = jobs.filter((job) => isProviderUnavailablePaused(job.status))
 
   return (
     <>
@@ -281,6 +289,15 @@ export default function ImportListScreen() {
             <span>
               <strong className="font-semibold">{t('imports.quotaTitle')}</strong> —{' '}
               {t('imports.quotaHint')}
+            </span>
+          </p>
+        ) : null}
+        {unavailablePausedJobs.length > 0 ? (
+          <p role="status" className={styles.quotaNote}>
+            <span aria-hidden="true">ℹ</span>
+            <span>
+              <strong className="font-semibold">{t('imports.providerUnavailableTitle')}</strong> —{' '}
+              {t('imports.providerUnavailableHint')}
             </span>
           </p>
         ) : null}
@@ -329,7 +346,7 @@ export default function ImportListScreen() {
                   rowTone={(job) =>
                     job.status === 'failed'
                       ? 'danger'
-                      : isQuotaPaused(job.status)
+                      : isProviderPaused(job.status)
                         ? 'warning'
                         : 'default'
                   }

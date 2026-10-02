@@ -1,10 +1,15 @@
-import type { ImportJobStatus, ImportRowStatus } from '@/shared/api/contracts-import'
+import {
+  isKnownJobStatus,
+  type ImportJobStatus,
+  type ImportRowStatus,
+  type KnownImportJobStatus,
+} from '@/shared/api/contracts-import'
 import { StatusBadge, type Tone } from '@/shared/ui/Badge'
 import { useT } from '@/shared/i18n/i18n'
 
 type Shape = 'dot' | 'check' | 'alert' | 'clock' | 'info'
 
-const JOB_TONE: Record<ImportJobStatus, Tone> = {
+const JOB_TONE: Record<KnownImportJobStatus, Tone> = {
   uploaded: 'neutral',
   validating: 'lavender',
   processing: 'lavender',
@@ -15,9 +20,12 @@ const JOB_TONE: Record<ImportJobStatus, Tone> = {
   cancelled: 'neutral',
   // Quota exhaustion is an interruption, never a data error.
   paused_provider_quota: 'amber',
+  // Neither is a provider that cannot be used (GoGo-BE#284); the label, not
+  // the colour, tells the two pauses apart.
+  paused_provider_unavailable: 'amber',
 }
 
-const JOB_SHAPE: Record<ImportJobStatus, Shape> = {
+const JOB_SHAPE: Record<KnownImportJobStatus, Shape> = {
   uploaded: 'dot',
   validating: 'clock',
   processing: 'clock',
@@ -27,10 +35,19 @@ const JOB_SHAPE: Record<ImportJobStatus, Shape> = {
   failed: 'alert',
   cancelled: 'dot',
   paused_provider_quota: 'info',
+  paused_provider_unavailable: 'info',
 }
 
+/**
+ * The status set is extensible (GoGo-BE#658): a value this console has not
+ * heard of renders as "unknown" with the raw value beside it, so an operator
+ * can still quote it — never as a blank badge or a broken screen.
+ */
 export function JobStatusBadge({ status }: { status: ImportJobStatus }) {
   const t = useT()
+  if (!isKnownJobStatus(status)) {
+    return <StatusBadge tone="neutral" shape="info" label={t('importStatus.unknown', { status })} />
+  }
   return (
     <StatusBadge
       tone={JOB_TONE[status]}

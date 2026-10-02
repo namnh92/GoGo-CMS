@@ -26,6 +26,8 @@ import { useToast } from '@/shared/ui/Toast'
 import { DownloadIcon, MergeIcon, PlayIcon, RetryIcon, StopIcon } from '@/shared/ui/icons'
 import {
   isJobLive,
+  isProviderPaused,
+  isProviderUnavailablePaused,
   isQuotaPaused,
   type ImportRow,
   type ImportRowStatus,
@@ -414,7 +416,7 @@ export default function ImportJobScreen() {
         actions={
           <div className={styles.headerActions}>
             {job &&
-            (isQuotaPaused(job.status) ||
+            (isProviderPaused(job.status) ||
               job.status === 'uploaded' ||
               job.status === 'review_required') ? (
               <Button
@@ -425,7 +427,7 @@ export default function ImportJobScreen() {
                 loading={start.isPending}
                 onClick={() => start.mutate()}
               >
-                {isQuotaPaused(job.status) ? t('imports.resume') : t('imports.start')}
+                {isProviderPaused(job.status) ? t('imports.resume') : t('imports.start')}
               </Button>
             ) : null}
             {job && isJobLive(job.status) ? (
@@ -485,6 +487,17 @@ export default function ImportJobScreen() {
                   <span>
                     <strong className="font-semibold">{t('imports.quotaTitle')}</strong> —{' '}
                     {t('imports.quotaHint')}
+                  </span>
+                </p>
+              ) : null}
+              {isProviderUnavailablePaused(detail.status) ? (
+                <p role="status" className={styles.quota}>
+                  <span aria-hidden="true">ℹ</span>
+                  <span>
+                    <strong className="font-semibold">
+                      {t('imports.providerUnavailableTitle')}
+                    </strong>{' '}
+                    — {t('imports.providerUnavailableHint')}
                   </span>
                 </p>
               ) : null}

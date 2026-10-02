@@ -1401,6 +1401,16 @@ export const en: Partial<Record<MessageKey, string>> = {
   'error.PLACE_MODIFIED': 'Somebody else saved this place while you were editing.',
 
   'imports.title': 'Bulk import management',
+  'imports.resume': 'Resume',
+  'imports.quotaTitle': 'Provider quota exhausted',
+  'imports.quotaHint':
+    'Your rows are intact. The job is paused and can resume once quota is granted again.',
+  'importStatus.paused_provider_quota': 'Paused — quota exhausted',
+  'imports.providerUnavailableTitle': 'Provider unavailable',
+  'imports.providerUnavailableHint':
+    'Your rows are intact. The job paused because the provider could not be used (misconfiguration or an outage on their side), not because quota ran out — waiting will not fix it. Resume once the provider works again.',
+  'importStatus.paused_provider_unavailable': 'Paused — provider unavailable',
+  'importStatus.unknown': 'Unknown status ({status})',
   'imports.new': 'New import',
   'moderation.title': 'Content moderation console',
   'moderation.tab.reviews': 'Reviews',
