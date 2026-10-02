@@ -612,6 +612,52 @@ describe('place media — who moderated and when (GoGo-BE#441)', () => {
     expect(rowFor(COVER_KEY).getByText(/Ai quyết định và lúc nào/)).toBeInTheDocument()
   })
 
+  // F-02 (round 2) — the pointer does not depend on a reason being recorded.
+  it.each([
+    ['only an admin', { moderatedAt: null }],
+    ['only a time', { moderatedBy: null }],
+  ])('keeps the change-log pointer for %s and no reason', async (_, override) => {
+    server.use(
+      http.get('/v1/cms/places/:id', async () => {
+        const media = PLACE.media.map((item, index) =>
+          index === 0 ? { ...item, moderationReason: null, ...override } : item,
+        )
+        return HttpResponse.json({ ...PLACE, media })
+      }),
+    )
+    open()
+    await ready()
+
+    expect(rowFor(COVER_KEY).getByText(/Ai quyết định và lúc nào/)).toBeInTheDocument()
+  })
+
+  it('points nowhere for a photo nobody has decided on', async () => {
+    open()
+    await ready()
+
+    expect(rowFor(PENDING_KEY).queryByText(/Ai quyết định và lúc nào/)).not.toBeInTheDocument()
+  })
+
+  // F-03 (round 2) — every role, online or not, can reach the full id from the
+  // row with the keyboard; the visible label stays short.
+  it('lets a read-only role reach the full admin id from the keyboard', async () => {
+    const user = userEvent.setup()
+    open(false)
+    await ready()
+
+    const toggle = rowFor(COVER_KEY).getByRole('button', { name: new RegExp(MODERATOR) })
+    expect(toggle).toHaveTextContent(`#${MODERATOR.slice(0, 8)}`)
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    for (let step = 0; step < 40 && document.activeElement !== toggle; step += 1) {
+      await user.tab()
+    }
+    expect(toggle).toHaveFocus()
+    await user.keyboard('{Enter}')
+
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(rowFor(COVER_KEY).getByText(MODERATOR)).toBeVisible()
+  })
+
   // F-03 — the full id is reachable without a mouse: written out in the dialog.
   it('writes the full admin id out in the moderation dialog', async () => {
     const user = userEvent.setup()

@@ -1664,6 +1664,7 @@ export const en: Partial<Record<MessageKey, string>> = {
   'placeMedia.decidedVerb.rejected': 'Rejected',
   'placeMedia.decidedVerb.other': 'Moderated',
   'placeMedia.decidedBy': 'by',
+  'placeMedia.adminIdToggle': '{short}, full admin id: {id}',
   'placeMedia.details': 'Caption & attribution',
   'placeMedia.detailsHint':
     'The caption is shown to consumers; attribution travels with the photo everywhere.',

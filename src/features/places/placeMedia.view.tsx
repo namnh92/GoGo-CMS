@@ -91,6 +91,22 @@ function hasFullProvenance(media: Pick<PlaceMedia, 'moderatedBy' | 'moderatedAt'
 }
 
 /**
+ * The "see the change log" pointer: for a photo someone has decided on (a
+ * decision, a reason or part of the provenance is there) whose row does not
+ * itself show both who and when. A photo nobody has decided on has nothing to
+ * point at, so it gets no pointer.
+ */
+function needsChangeLogPointer(
+  media: Pick<PlaceMedia, 'moderation' | 'moderationReason' | 'moderatedBy' | 'moderatedAt'>,
+): boolean {
+  if (hasFullProvenance(media)) return false
+  const { by, at } = usableProvenance(media)
+  return (
+    media.moderation !== 'pending' || Boolean(media.moderationReason) || by !== null || at !== null
+  )
+}
+
+/**
  * GoGo-BE#441 — who last changed a photo's moderation, and when: "Duyệt bởi
  * #7f3c9a12 · 28/9/2026, 10:15 (4 ngày trước)". The API sends an admin id and
  * never a name, so the id is what shows: shortened in a list row (whole on
@@ -110,6 +126,7 @@ export function ModerationProvenance({
 }) {
   const t = useT()
   const { locale } = useI18n()
+  const [showFullId, setShowFullId] = useState(false)
   const { by, at } = usableProvenance(media)
   if (!by && !at) return null
   const verb =
@@ -121,9 +138,28 @@ export function ModerationProvenance({
         <>
           {' '}
           {t('placeMedia.decidedBy')}{' '}
-          <span className={styles.adminId} title={fullId ? undefined : by}>
-            {fullId ? by : shortAdminId(by)}
-          </span>
+          {fullId ? (
+            <span className={styles.adminId}>{by}</span>
+          ) : (
+            <>
+              {/*
+               * A button, not a title: every role reaches the whole id from the
+               * keyboard, offline or not. Its name starts with the visible
+               * short id (label in name) and carries the full one.
+               */}
+              <button
+                type="button"
+                className={styles.adminIdToggle}
+                title={by}
+                aria-expanded={showFullId}
+                aria-label={t('placeMedia.adminIdToggle', { short: shortAdminId(by), id: by })}
+                onClick={() => setShowFullId((value) => !value)}
+              >
+                {shortAdminId(by)}
+              </button>
+              {showFullId ? <span className={styles.adminIdFull}>{by}</span> : null}
+            </>
+          )}
         </>
       ) : null}
       {at ? (
@@ -1097,13 +1133,10 @@ export function PlaceMediaCard({
                         <p className={styles.reason}>
                           <span className={styles.reasonLabel}>{t('placeMedia.reasonLabel')} </span>
                           {item.moderationReason}
-                          {/* Gone only once the row itself shows both who and when. */}
-                          {hasFullProvenance(item) ? null : (
-                            <span className="mt-0.5 block text-text-subtle">
-                              {t('placeMedia.whoWhen')}
-                            </span>
-                          )}
                         </p>
+                      ) : null}
+                      {needsChangeLogPointer(item) ? (
+                        <p className={styles.whoWhen}>{t('placeMedia.whoWhen')}</p>
                       ) : null}
 
                       {noStorage ? (

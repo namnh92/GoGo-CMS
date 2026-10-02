@@ -1558,6 +1558,7 @@ export const vi = {
   'placeMedia.decidedVerb.rejected': 'Từ chối',
   'placeMedia.decidedVerb.other': 'Kiểm duyệt',
   'placeMedia.decidedBy': 'bởi',
+  'placeMedia.adminIdToggle': '{short}, mã quản trị viên đầy đủ: {id}',
   'placeMedia.details': 'Chú thích & nguồn',
   'placeMedia.detailsHint': 'Chú thích hiển thị cho người dùng; nguồn ảnh đi kèm ảnh ở mọi nơi.',
   'placeMedia.caption': 'Chú thích',
