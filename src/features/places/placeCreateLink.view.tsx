@@ -114,7 +114,7 @@ export function PlaceCreateLinkPanel({
   const describeError = useErrorMessage()
   const [url, setUrl] = useState('')
   const [answer, setAnswer] = useState<{
-    /** The URL this answer is about, or null when a branch id was resolved. */
+    /** The URL this answer is about — for a picked branch, the link that listed it. */
     answersFor: string | null
     data: ResolveLinkResult
   } | null>(null)
@@ -150,7 +150,14 @@ export function PlaceCreateLinkPanel({
      * pay for it again — it simply stops being applicable until the box agrees
      * with it.
      */
-    onSuccess: (data, ask) => setAnswer({ answersFor: 'url' in ask ? ask.url : null, data }),
+    onSuccess: (data, ask) =>
+      // Review F-05 — a branch picked from a list belongs to the link that
+      // produced the list. Inheriting that URL is what lets a later link change
+      // mark the pick stale; `null` would leave it applicable forever.
+      setAnswer((previous) => ({
+        answersFor: 'url' in ask ? ask.url : (previous?.answersFor ?? null),
+        data,
+      })),
     // The link the editor pasted stays in the box: a provider that is down is
     // a reason to press the button again, not to retype the URL.
     onError: (error) => setFailure(toApiError(error)),

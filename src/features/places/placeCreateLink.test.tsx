@@ -333,6 +333,50 @@ describe('add a place by Google Maps link', () => {
     expect(screen.getByLabelText(/Tên hiển thị/)).toHaveValue('')
   })
 
+  it('a picked branch goes stale when the link changes (F-05)', async () => {
+    signInAs('editor')
+    const asked: unknown[] = []
+    server.use(
+      http.post('*/cms/places/resolve-link', async ({ request }) => {
+        const body = (await request.json()) as { googlePlaceId?: string }
+        asked.push(body)
+        if (body.googlePlaceId === 'ChIJb') {
+          return HttpResponse.json(
+            {
+              ...RESOLVED,
+              candidate: {
+                ...RESOLVED.candidate,
+                googlePlaceId: 'ChIJb',
+                name: 'Highlands Hai Bà Trưng',
+              },
+            },
+            { status: 201 },
+          )
+        }
+        return HttpResponse.json(AMBIGUOUS, { status: 201 })
+      }),
+    )
+    const user = userEvent.setup()
+    renderWithProviders(<PlaceCreateScreen />)
+
+    await pasteAndResolve(user, 'https://www.google.com/maps/place/Highlands+Coffee')
+    expect(await screen.findByText('Link khớp với nhiều chi nhánh')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /88 Hai Bà Trưng/ }))
+
+    expect(await screen.findByText('Highlands Hai Bà Trưng')).toBeInTheDocument()
+
+    // The editor pastes a different link without resolving it. The pick
+    // belongs to the old link: it may be read, not attached.
+    const box = screen.getByLabelText('Link Google Maps')
+    await user.clear(box)
+    await user.type(box, 'https://www.google.com/maps?place_id=ChIJother')
+
+    expect(screen.getByText(/Kết quả này thuộc về link trước đó/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: ATTACH })).toBeDisabled()
+    expect(screen.queryByText(/Đang gắn với bản ghi Google/)).not.toBeInTheDocument()
+  })
+
   it('keeps the other branches on screen when a pick cannot be resolved', async () => {
     signInAs('editor')
     let calls = 0
