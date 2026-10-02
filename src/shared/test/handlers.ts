@@ -1970,11 +1970,14 @@ export const handlers = [
     if (patch.attribution !== undefined) row.attribution = patch.attribution ?? null
     if (isCover !== undefined) row.isCover = isCover
     if (patch.moderation !== undefined) {
+      // GoGo-BE#441: who and when are stamped only when the decision changes;
+      // repeating the current one leaves the last real change on record.
+      if (patch.moderation !== row.moderation) {
+        row.moderatedBy = 'adm-mock'
+        row.moderatedAt = new Date().toISOString()
+      }
       row.moderation = patch.moderation
       row.moderationReason = patch.moderationReason ?? null
-      // GoGo-BE#441: the API stamps who changed it and when.
-      row.moderatedBy = 'adm-mock'
-      row.moderatedAt = new Date().toISOString()
     }
     place.updatedAt = new Date().toISOString()
     return HttpResponse.json(row)

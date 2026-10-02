@@ -71,27 +71,46 @@ function shortAdminId(id: string): string {
 }
 
 /**
- * GoGo-BE#441 — who last changed a photo's moderation, and when: "Duyệt bởi
- * #7f3c9a12 · 28/9/2026, 10:15 (4 ngày trước)". The API sends an admin id and
- * never a name, so the id is what shows, shortened, with the whole of it on
- * hover to match against the change log. Whatever the API did not send is left
- * out — the line disappears when neither field is there, and an unparseable
- * time counts as not sent rather than rendering a dash.
+ * The provenance the line can actually show: an empty id is no id, and a time
+ * that will not parse is no time. Callers decide on what is displayed, never
+ * on the raw fields' truthiness.
  */
-export function ModerationProvenance({
-  media,
-  className,
-}: {
-  media: Pick<PlaceMedia, 'moderation' | 'moderatedBy' | 'moderatedAt'>
-  className?: string
-}) {
-  const t = useT()
-  const { locale } = useI18n()
+function usableProvenance(media: Pick<PlaceMedia, 'moderatedBy' | 'moderatedAt'>) {
   const by = media.moderatedBy || null
   const at =
     media.moderatedAt && !Number.isNaN(new Date(media.moderatedAt).getTime())
       ? media.moderatedAt
       : null
+  return { by, at }
+}
+
+/** Both who and when are on screen, so the pointer to the change log is redundant. */
+function hasFullProvenance(media: Pick<PlaceMedia, 'moderatedBy' | 'moderatedAt'>): boolean {
+  const { by, at } = usableProvenance(media)
+  return by !== null && at !== null
+}
+
+/**
+ * GoGo-BE#441 — who last changed a photo's moderation, and when: "Duyệt bởi
+ * #7f3c9a12 · 28/9/2026, 10:15 (4 ngày trước)". The API sends an admin id and
+ * never a name, so the id is what shows: shortened in a list row (whole on
+ * hover), written out in full where `fullId` is set — the moderation dialog —
+ * so keyboard and screen-reader users can reach all of it. Whatever the API
+ * did not send is left out, and the separator only stands between two parts:
+ * a time alone reads "Duyệt 28/9/2026…", an admin alone "Duyệt bởi #7f3c9a12".
+ */
+export function ModerationProvenance({
+  media,
+  className,
+  fullId = false,
+}: {
+  media: Pick<PlaceMedia, 'moderation' | 'moderatedBy' | 'moderatedAt'>
+  className?: string
+  fullId?: boolean
+}) {
+  const t = useT()
+  const { locale } = useI18n()
+  const { by, at } = usableProvenance(media)
   if (!by && !at) return null
   const verb =
     DECIDED_VERB[media.moderation as keyof typeof DECIDED_VERB] ?? 'placeMedia.decidedVerb.other'
@@ -102,14 +121,14 @@ export function ModerationProvenance({
         <>
           {' '}
           {t('placeMedia.decidedBy')}{' '}
-          <span className={styles.adminId} title={by}>
-            {shortAdminId(by)}
+          <span className={styles.adminId} title={fullId ? undefined : by}>
+            {fullId ? by : shortAdminId(by)}
           </span>
         </>
       ) : null}
       {at ? (
         <>
-          {' · '}
+          {by ? ' · ' : ' '}
           <time dateTime={at}>
             {formatDateTime(at, locale)} ({formatRelative(at, locale)})
           </time>
@@ -624,7 +643,7 @@ function ModerationDialog({
           label={label(`mediaModeration.${media.moderation}`, media.moderation)}
         />
       </p>
-      <ModerationProvenance media={media} className={styles.provenanceModal} />
+      <ModerationProvenance media={media} className={styles.provenanceModal} fullId />
       <Select
         label={t('placeMedia.moderationDecision')}
         value={decision}
@@ -1078,8 +1097,8 @@ export function PlaceMediaCard({
                         <p className={styles.reason}>
                           <span className={styles.reasonLabel}>{t('placeMedia.reasonLabel')} </span>
                           {item.moderationReason}
-                          {/* An API that predates GoGo-BE#441 sends neither field. */}
-                          {item.moderatedBy || item.moderatedAt ? null : (
+                          {/* Gone only once the row itself shows both who and when. */}
+                          {hasFullProvenance(item) ? null : (
                             <span className="mt-0.5 block text-text-subtle">
                               {t('placeMedia.whoWhen')}
                             </span>
