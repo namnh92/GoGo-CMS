@@ -1157,9 +1157,25 @@ export const en: Partial<Record<MessageKey, string>> = {
   'placeCreate.link.priceLevel': 'Google price level',
   'placeCreate.link.category': 'Derived category',
   'placeCreate.link.providerNote':
-    'The rating, review count, opening hours and canonical Google link are fetched by the server itself when the place is created. Shown here to check, not to edit.',
+    'Google’s rating, hours and price level are shown here only to compare against. On create GoGo stores just the Google place ID, for identity — none of Google’s content.',
   'placeCreate.link.stale':
     'This answer belongs to the previous link — the box now holds a different one. Resolve again to use the current link.',
+  'placeCreate.source.intro':
+    'Every fact you send needs a source: how you know it (a visit, the menu on site, a phone call, the venue’s own website…). Values filled from Google are for reference only — Google does not count as a source.',
+  'placeCreate.source.hint': 'E.g. visited on 2 Oct, phoned the venue, menu on site.',
+  'placeCreate.source.name': 'Source for the name',
+  'placeCreate.source.geom': 'Source for the coordinates',
+  'placeCreate.source.addressText': 'Source for the address',
+  'placeCreate.source.phone': 'Source for the phone number',
+  'placeCreate.source.website': 'Source for the website',
+  'placeCreate.source.description': 'Source for the description',
+  'placeCreate.source.required': 'Name a source for this fact',
+  'placeCreate.source.invalid':
+    'The server refused this source — check it (1–500 characters, for a fact you entered).',
+  'placeCreate.duplicateMeta': '{distance} m away · name {similarity}% similar',
+  'placeCreate.duplicateOpen': 'Open “{name}” in a new tab',
+  'placeCreate.rateLimited':
+    'Too many places created in one minute (20 at most). Wait a moment, then press “Create place” again — the form keeps what you typed.',
   'places.bulkImport': 'Bulk import',
   'places.hierarchy.title': 'Province → Ward/Commune',
   'places.hierarchy.reviewCount': '{count} to review',
@@ -1407,6 +1423,20 @@ export const en: Partial<Record<MessageKey, string>> = {
 
   'error.VALIDATION_FAILED': 'The server rejected this data. Details are under each field.',
   'error.INVALID_PLACE_TRANSITION': 'That status cannot follow the current one.',
+  'error.SOURCE_REFERENCE_INVALID':
+    'A fact has no source, or a source names a fact you did not enter.',
+  'error.GOOGLE_CONTENT_NOT_PERSISTABLE':
+    'Values taken from Google cannot be stored as GoGo data. Check each fact and give an independent source.',
+  'error.IDEMPOTENCY_KEY_REQUIRED':
+    'The request was missing its duplicate-protection key. Press again to resend.',
+  'error.INVALID_IDEMPOTENCY_KEY':
+    'The duplicate-protection key was invalid. Press again to resend.',
+  'error.IDEMPOTENCY_KEY_REUSED':
+    'The earlier attempt sent different data. Press again to send the current form as a new create.',
+  'error.IDEMPOTENT_REQUEST_IN_FLIGHT':
+    'The earlier attempt is still being processed. Wait a few seconds and retry.',
+  'error.PLACE_IDENTITY_CONFLICT':
+    'Two places already claim this Google record. Merge them before adding another.',
   'error.PLACE_MODIFIED': 'Somebody else saved this place while you were editing.',
 
   'imports.title': 'Bulk import management',

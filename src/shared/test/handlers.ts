@@ -1564,11 +1564,51 @@ export const handlers = [
   }),
 
   /**
-   * `cmsCreatePlace` (GoGo-BE#452/#465). The row lands in `db.places` so the
+   * `cmsCreatePlace` (GoGo-BE#452/#465/#440). The row lands in `db.places` so the
    * editor the console navigates to afterwards actually loads.
    */
   http.post(`${BASE}/cms/places`, async ({ request }) => {
     const body = (await request.json()) as Record<string, unknown>
+    /*
+     * GoGo-BE#440 — the request rules the real route enforces, so a console
+     * that drifts from them fails here (dev, unit, e2e) and not on cms-dev.
+     */
+    const refuse = (
+      code: string,
+      fieldErrors: { field: string; code: string; message: string }[] = [],
+    ) =>
+      HttpResponse.json(
+        {
+          code,
+          message: code,
+          field_errors: fieldErrors,
+          request_id: 'req-mock',
+          retryable: false,
+        },
+        { status: 400 },
+      )
+    if (!request.headers.get('Idempotency-Key')) return refuse('IDEMPOTENCY_KEY_REQUIRED')
+    const derived = body.googleDerivedFields
+    if (Array.isArray(derived) && derived.length > 0)
+      return refuse('GOOGLE_CONTENT_NOT_PERSISTABLE')
+    const refs = (body.sourceReferences ?? {}) as Record<string, unknown>
+    const supplied = [
+      'name',
+      'description',
+      'addressText',
+      'areaKey',
+      'city',
+      'district',
+      'phone',
+      'website',
+    ]
+      .filter((key) => body[key] !== undefined && body[key] !== null)
+      .concat(body.lat !== undefined && body.lng !== undefined ? ['geom'] : [])
+    const sourceIssues = [
+      ...supplied.filter((key) => typeof refs[key] !== 'string' || !String(refs[key]).trim()),
+      ...Object.keys(refs).filter((key) => !supplied.includes(key)),
+    ].map((key) => ({ field: `sourceReferences.${key}`, code: 'invalid', message: key }))
+    if (sourceIssues.length > 0) return refuse('SOURCE_REFERENCE_INVALID', sourceIssues)
     const created = {
       ...db.places[0]!,
       id: `created-${db.places.length + 1}`,

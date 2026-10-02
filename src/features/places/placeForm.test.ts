@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { cmsPlaceEditSchema } from '@/shared/api/cmsPlaceContract'
+import { errorEnvelopeSchema } from '@/shared/api/errors'
 import {
   diffAgainstServer,
+  placeCreateSchema,
   placeIdentitySchema,
+  suppliedFacts,
+  toPlaceCreateBody,
   splitFieldErrors,
   toPlaceEditBody,
   type PlaceEditBaseline,
@@ -174,5 +178,95 @@ describe('place edit body against a baseline (GoGo-CMS#123)', () => {
     ])
     // An untouched form against an unchanged row has nothing to report.
     expect(diffAgainstServer(loaded, loaded)).toEqual([])
+  })
+})
+
+/**
+ * GoGo-BE#440 — the create body. One rule decides which facts are sent and
+ * which references go with them, so the two can never disagree: the server
+ * refuses a missing reference and a stray one alike.
+ */
+describe('toPlaceCreateBody', () => {
+  const base = placeCreateSchema.parse({
+    name: '  Quán Mới ',
+    lat: '10.7769',
+    lng: '106.7009',
+    categoryId: '',
+    sourceReferences: { name: ' Đến tận nơi ', geom: 'Đo tại chỗ' },
+  })
+
+  it('sends name and geom with their trimmed references, nothing else', () => {
+    expect(toPlaceCreateBody(base)).toEqual({
+      name: 'Quán Mới',
+      lat: 10.7769,
+      lng: 106.7009,
+      sourceReferences: { name: 'Đến tận nơi', geom: 'Đo tại chỗ' },
+    })
+  })
+
+  it('never declares googleDerivedFields, even for a linked place', () => {
+    const body = toPlaceCreateBody(base, { googlePlaceId: 'ChIJcafe' })
+    expect(body.googlePlaceId).toBe('ChIJcafe')
+    expect(body).not.toHaveProperty('googleDerivedFields')
+  })
+
+  it('drops the reference of a fact left blank, so no key is stray', () => {
+    const body = toPlaceCreateBody({
+      ...base,
+      phone: '   ',
+      sourceReferences: { ...base.sourceReferences, phone: 'Gọi điện' },
+    })
+    expect(body).not.toHaveProperty('phone')
+    expect(body.sourceReferences).not.toHaveProperty('phone')
+  })
+
+  it('lists exactly the facts the body carries', () => {
+    expect(
+      suppliedFacts({ name: 'x', addressText: ' 1 Lê Lợi ', description: 'Yên tĩnh' }),
+    ).toEqual(['name', 'geom', 'addressText', 'description'])
+  })
+
+  it('refuses a filled fact with no reference, on that reference', () => {
+    const result = placeCreateSchema.safeParse({
+      name: 'Quán Mới',
+      lat: 10.7,
+      lng: 106.7,
+      website: 'https://quanmoi.vn',
+      sourceReferences: { name: 'a', geom: 'b' },
+    })
+    expect(result.success).toBe(false)
+    expect(result.error?.issues.map((issue) => issue.path.join('.'))).toEqual([
+      'sourceReferences.website',
+    ])
+  })
+})
+
+describe('error envelope candidate (GoGo-BE#440)', () => {
+  const entry = { field: 'name', code: 'duplicate_candidate', message: 'Quán Cũ (12m)' }
+  const envelope = (fieldErrors: object[]) => ({
+    code: 'PLACE_DUPLICATE_SUSPECTED',
+    message: 'm',
+    field_errors: fieldErrors,
+    request_id: 'r',
+    retryable: false,
+  })
+
+  it('keeps the candidate a duplicate entry carries', () => {
+    const candidate = {
+      placeId: '0b7e7a52-1111-4c3f-9c0e-2f2b0f0a2222',
+      name: 'Quán Cũ',
+      status: 'draft',
+      distanceM: 12,
+      nameSimilarity: 0.7,
+    }
+    const parsed = errorEnvelopeSchema.parse(envelope([{ ...entry, candidate }]))
+    expect(parsed.field_errors[0]!.candidate).toEqual(candidate)
+  })
+
+  it('a malformed candidate costs the link, not the envelope', () => {
+    const parsed = errorEnvelopeSchema.parse(envelope([{ ...entry, candidate: { placeId: 1 } }]))
+    expect(parsed.code).toBe('PLACE_DUPLICATE_SUSPECTED')
+    expect(parsed.field_errors[0]!.message).toBe('Quán Cũ (12m)')
+    expect(parsed.field_errors[0]!.candidate).toBeUndefined()
   })
 })

@@ -283,6 +283,15 @@ test.describe('roles', () => {
     await expect(page.getByLabel(/Vĩ độ/)).toHaveValue('10.7951153')
     await expect(page.getByLabel(/Kinh độ/)).toHaveValue('106.7221002')
 
+    // GoGo-BE#440 — the preview fills facts, never their evidence. Without a
+    // source of the editor's own the create does not leave the browser.
+    await page.getByRole('button', { name: 'Tạo địa điểm' }).click()
+    await expect(page.getByText('Ghi nguồn cho thông tin này').first()).toBeVisible()
+    await expect(page).toHaveURL(/\/places\/new$/)
+
+    for (const label of [/^Nguồn của tên/, /^Nguồn của toạ độ/, /^Nguồn của địa chỉ/]) {
+      await page.getByLabel(label).fill('Đến tận nơi 02/10/2026')
+    }
     await page.getByRole('button', { name: 'Tạo địa điểm' }).click()
     await expect(page).toHaveURL(/\/places\/created-/)
   })

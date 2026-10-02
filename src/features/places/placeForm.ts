@@ -3,7 +3,12 @@ import { z } from 'zod'
 import { useLabel, useT } from '@/shared/i18n/i18n'
 import { PLACE_FIELD_LIMITS, placeFieldLimit } from '@/shared/api/cmsPlaceContract'
 import type { FieldError } from '@/shared/api/errors'
-import type { UpdatePlaceInput } from './api'
+import {
+  SOURCE_REFERENCE_MAX,
+  type CreatePlaceInput,
+  type SourceReferences,
+  type UpdatePlaceInput,
+} from './api'
 
 const L = PLACE_FIELD_LIMITS
 
@@ -125,7 +130,7 @@ export const placeIdentitySchema = placeIdentityFields.superRefine((values, ctx)
  * there, which is why the edit schema leaves them optional. Sharing the field
  * definitions keeps the two forms from drifting into different limits.
  */
-export const placeCreateSchema = placeIdentityFields.extend({
+const placeCreateFields = placeIdentityFields.extend({
   /**
    * GoGo-CMS#179 — one category, chosen at creation.
    *
@@ -144,9 +149,119 @@ export const placeCreateSchema = placeIdentityFields.extend({
     (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
     z.coerce.number({ message: 'placeEditor.error.required' }).min(L.lng.min).max(L.lng.max),
   ),
+  /**
+   * GoGo-BE#440 — the evidence behind each fact this form offers, by the key
+   * the contract uses (`geom` is the pin: latitude and longitude together).
+   * Kept for every box, filled or not; only the ones whose fact is actually
+   * sent leave the browser (`toPlaceCreateBody`), because a reference for a
+   * fact the body does not carry is refused.
+   */
+  sourceReferences: z
+    .object({
+      name: z.string().max(SOURCE_REFERENCE_MAX).optional(),
+      geom: z.string().max(SOURCE_REFERENCE_MAX).optional(),
+      addressText: z.string().max(SOURCE_REFERENCE_MAX).optional(),
+      phone: z.string().max(SOURCE_REFERENCE_MAX).optional(),
+      website: z.string().max(SOURCE_REFERENCE_MAX).optional(),
+      description: z.string().max(SOURCE_REFERENCE_MAX).optional(),
+    })
+    .default({}),
+})
+
+export const placeCreateSchema = placeCreateFields.superRefine((values, ctx) => {
+  // The same rule GoGo-BE applies (`400 SOURCE_REFERENCE_INVALID`), said next
+  // to the empty box instead of after a round trip.
+  for (const key of suppliedFacts(values)) {
+    if ((values.sourceReferences[key] ?? '').trim() !== '') continue
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['sourceReferences', key],
+      message: 'placeCreate.source.required',
+    })
+  }
 })
 
 export type PlaceCreateForm = z.infer<typeof placeCreateSchema>
+
+/** The `sourceReferences` keys this form offers an input for. */
+export const CREATE_SOURCE_KEYS = [
+  'name',
+  'geom',
+  'addressText',
+  'phone',
+  'website',
+  'description',
+] as const
+export type CreateSourceKey = (typeof CREATE_SOURCE_KEYS)[number]
+
+export function isCreateSourceKey(key: string): key is CreateSourceKey {
+  return (CREATE_SOURCE_KEYS as readonly string[]).includes(key)
+}
+
+type CreateFacts = Pick<
+  z.input<typeof placeCreateFields>,
+  'name' | 'addressText' | 'phone' | 'website' | 'description'
+>
+
+/**
+ * Which facts the create body will carry, by `sourceReferences` key. One
+ * function decides it for both the form rule and the body builder, so the
+ * references sent always match the facts sent — no missing key, no stray one.
+ * `name` and `geom` are always supplied (the schema requires them).
+ */
+export function suppliedFacts(values: CreateFacts): CreateSourceKey[] {
+  const out: CreateSourceKey[] = ['name', 'geom']
+  if (textOf(values.addressText)) out.push('addressText')
+  if (textOf(values.phone)) out.push('phone')
+  if (textOf(values.website)) out.push('website')
+  if (textOf(values.description)) out.push('description')
+  return out
+}
+
+/**
+ * The `POST /cms/places` body (GoGo-BE#440).
+ *
+ * An empty box sends no key at all — never `''`, never `0` (#122). Every fact
+ * that is sent carries its trimmed reference; nothing else does. There is no
+ * `googleDerivedFields`: a value applied from a Google preview is not a GoGo
+ * fact however it arrives, so the console no longer declares any.
+ */
+export function toPlaceCreateBody(
+  values: PlaceCreateForm,
+  options: { googlePlaceId?: string; allowDuplicate?: boolean } = {},
+): CreatePlaceInput {
+  const sourceReferences: SourceReferences = {}
+  for (const key of suppliedFacts(values)) {
+    sourceReferences[key] = (values.sourceReferences[key] ?? '').trim()
+  }
+  const addressText = textOf(values.addressText)
+  const phone = textOf(values.phone)
+  const website = textOf(values.website)
+  const provinceCode = textOf(values.provinceCode)
+  const communeCode = textOf(values.communeCode)
+  // `description` keeps its whitespace — a paragraph break is content there.
+  const description = textOf(values.description) ? values.description : undefined
+
+  return {
+    name: values.name.trim(),
+    lat: values.lat,
+    lng: values.lng,
+    ...(options.googlePlaceId ? { googlePlaceId: options.googlePlaceId } : {}),
+    ...(addressText ? { addressText } : {}),
+    // ADM-106 — the canonical pair. `city`/`district` are legacy free text and
+    // no longer have inputs, so a new place carries neither.
+    ...(provinceCode ? { provinceCode } : {}),
+    ...(communeCode ? { communeCode } : {}),
+    ...(phone ? { phone } : {}),
+    ...(website ? { website } : {}),
+    ...(description ? { description } : {}),
+    ...(values.avgVisitMinutes !== undefined ? { avgVisitMinutes: values.avgVisitMinutes } : {}),
+    // One category or none. The editor screen owns the rest of the taxonomy.
+    ...(values.categoryId ? { taxonomyIds: [values.categoryId] } : {}),
+    ...(options.allowDuplicate ? { allowDuplicate: true } : {}),
+    sourceReferences,
+  }
+}
 
 /**
  * Register options for the three optional number boxes.

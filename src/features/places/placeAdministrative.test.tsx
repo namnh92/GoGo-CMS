@@ -8,6 +8,7 @@ import { renderWithProviders, signInAs } from '@/shared/test/render'
 import { places } from '@/shared/test/fixtures'
 import PlaceEditorScreen from './placeEditor.view'
 import PlaceCreateScreen from './placeCreate.view'
+import { fillSources } from './placeCreate.testkit'
 
 /**
  * ADM-106 — the place forms speak the two administrative levels that exist.
@@ -204,6 +205,7 @@ describe('the create form', () => {
     await userEvent.type(screen.getByLabelText(/^Kinh độ/), '105.8500')
     await pick(/Tỉnh \/ thành phố/, /Hà Nội/)
     await pick(/Phường \/ xã/, /Ba Đình/)
+    await fillSources(userEvent)
     await userEvent.click(screen.getByRole('button', { name: /Tạo địa điểm/ }))
 
     await waitFor(() => expect(sent).toHaveLength(1))

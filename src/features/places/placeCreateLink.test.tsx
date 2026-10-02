@@ -5,6 +5,7 @@ import { http, HttpResponse } from 'msw'
 import { server } from '@/shared/test/server'
 import { renderWithProviders, signInAs } from '@/shared/test/render'
 import PlaceCreateScreen from './placeCreate.view'
+import { fillSources, SOURCE_LABEL, SOURCE_TEXT } from './placeCreate.testkit'
 import { roundCoordinate } from './placeCreateLink.view'
 
 /**
@@ -158,7 +159,14 @@ describe('add a place by Google Maps link', () => {
     expect(screen.getByLabelText(/Kinh độ/)).toHaveValue(106.7221002)
   })
 
-  it('sends the Google id and every field left as Google filled it', async () => {
+  /*
+   * GoGo-BE#440 — a value applied from a Google preview is not a GoGo fact
+   * however it arrives. The console sends the Google id as identity only and
+   * declares no `googleDerivedFields` (the server now refuses a non-empty one);
+   * what the preview filled in reaches the catalogue only with the editor's own
+   * evidence behind it.
+   */
+  it('sends the Google id as identity only — no googleDerivedFields', async () => {
     signInAs('editor')
     resolvesTo(RESOLVED)
     const bodies = createdWith()
@@ -167,16 +175,18 @@ describe('add a place by Google Maps link', () => {
 
     await pasteAndResolve(user)
     await user.click(await screen.findByRole('button', { name: 'Dùng dữ liệu này' }))
+    await fillSources(user, ['name', 'geom', 'addressText'])
     await user.click(screen.getByRole('button', { name: 'Tạo địa điểm' }))
 
     await waitFor(() => expect(bodies).toHaveLength(1))
     expect(bodies[0]).toMatchObject({
       googlePlaceId: 'ChIJcafe',
-      googleDerivedFields: ['name', 'addressText', 'lat', 'lng'],
+      sourceReferences: { name: SOURCE_TEXT, geom: SOURCE_TEXT, addressText: SOURCE_TEXT },
     })
+    expect(bodies[0]).not.toHaveProperty('googleDerivedFields')
   })
 
-  it('drops a field the editor rewrote — copying does not transfer ownership', async () => {
+  it('a value Google filled in still needs a source of its own', async () => {
     signInAs('editor')
     resolvesTo(RESOLVED)
     const bodies = createdWith()
@@ -186,14 +196,19 @@ describe('add a place by Google Maps link', () => {
     await pasteAndResolve(user)
     await user.click(await screen.findByRole('button', { name: 'Dùng dữ liệu này' }))
 
-    const name = screen.getByLabelText(/Tên hiển thị/)
-    await user.clear(name)
-    await user.type(name, 'Cà Phê Bên Đường (cơ sở 2)')
+    // The preview fills facts, never their evidence: Google is not a source.
+    expect(screen.getByLabelText(SOURCE_LABEL.name)).toHaveValue('')
+    expect(screen.getByLabelText(SOURCE_LABEL.geom)).toHaveValue('')
+    expect(screen.getByLabelText(SOURCE_LABEL.addressText)).toHaveValue('')
+
     await user.click(screen.getByRole('button', { name: 'Tạo địa điểm' }))
 
-    await waitFor(() => expect(bodies).toHaveLength(1))
-    // The position is still Google's; the name is now the editor's own claim.
-    expect(bodies[0]!.googleDerivedFields).toEqual(['addressText', 'lat', 'lng'])
+    await waitFor(() =>
+      expect(screen.getByLabelText(SOURCE_LABEL.name)).toHaveAttribute('aria-invalid', 'true'),
+    )
+    expect(screen.getByLabelText(SOURCE_LABEL.geom)).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByLabelText(SOURCE_LABEL.addressText)).toHaveAttribute('aria-invalid', 'true')
+    expect(bodies).toHaveLength(0)
   })
 
   it('opens the place that already holds the link rather than duplicating it', async () => {
@@ -395,6 +410,7 @@ describe('add a place by Google Maps link', () => {
     await user.type(screen.getByLabelText(/Tên hiển thị/), 'Quán Không Có Trên Google')
     await user.type(screen.getByLabelText(/Vĩ độ/), '10.7769')
     await user.type(screen.getByLabelText(/Kinh độ/), '106.7009')
+    await fillSources(user)
     await user.click(screen.getByRole('button', { name: 'Tạo địa điểm' }))
 
     await waitFor(() => expect(bodies).toHaveLength(1))
@@ -403,6 +419,7 @@ describe('add a place by Google Maps link', () => {
       name: 'Quán Không Có Trên Google',
       lat: 10.7769,
       lng: 106.7009,
+      sourceReferences: { name: SOURCE_TEXT, geom: SOURCE_TEXT },
     })
   })
 })
@@ -500,6 +517,7 @@ describe('a link fills everything it can', () => {
     // The selectors opened on the units the geometry names, and the category
     // box on the taxonomy the provider's types imply — both still editable.
     await waitFor(() => expect(screen.getByLabelText(/Nhóm địa điểm/)).toHaveValue('tx-cat-cafe'))
+    await fillSources(user, ['name', 'geom', 'addressText'])
     await user.click(screen.getByRole('button', { name: 'Tạo địa điểm' }))
 
     await waitFor(() => expect(bodies).toHaveLength(1))
