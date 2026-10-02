@@ -4,6 +4,7 @@ import { Route, Routes } from 'react-router-dom'
 import { screen, waitFor, within } from '@testing-library/react'
 import { renderWithProviders, signInAs } from '@/shared/test/render'
 import { mockDb, resetMockDb } from '@/shared/test/handlers'
+import { giveEvidence } from '@/features/places/contactEvidence.testkit'
 import SubmissionQueueScreen from './submissionQueue.view'
 
 /**
@@ -168,7 +169,8 @@ describe('supplementing is not deciding', () => {
     await waitFor(() =>
       expect(within(dialog).getByLabelText(/Tên hiển thị/)).toHaveValue('Cà phê Ngọc Hà'),
     )
-    await user.type(within(dialog).getByLabelText(/Điện thoại/), '024 3456 7890')
+    await user.type(within(dialog).getByLabelText(/^Điện thoại/), '024 3456 7890')
+    await giveEvidence(user, 'Điện thoại', {}, dialog)
     await user.click(within(dialog).getByRole('button', { name: 'Lưu bổ sung' }))
 
     // The mock enforces the server's rule; a save that omitted or invented the

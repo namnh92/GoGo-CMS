@@ -341,9 +341,14 @@ export interface paths {
          *
          *     SSE rather than a WebSocket because every event here is server → client; nothing needs a bidirectional channel, and this keeps the same bearer auth as the rest of the API.
          *
-         *     Event types: `room.status_changed`, `participant.joined`, `participant.left`, `participant.selection_changed`, `matching.started`, `matching.completed`, `matching.failed`, `suggestions.generated`, `suggestions.updated`, `vote.changed`, `plan.updated`, plus two stream-level types — `heartbeat`, which keeps idle connections alive through proxies, and `resync`, which says the client's resume point is older than the replay buffer and it must refetch. `resync` exists so a gap is reported rather than silently skipped: a client that is wrong without knowing it is the failure this endpoint is meant to prevent.
+         *     Event types: `room.status_changed`, `participant.joined`, `participant.left`, `participant.selection_changed`, `matching.started`, `matching.completed`, `matching.failed`, `suggestions.generated`, `suggestions.updated`, `vote.changed`, `plan.updated`, plus one stream-level type — `resync`, which says the client's resume point cannot be honoured exactly and it must refetch. `resync` exists so a gap is reported rather than silently skipped: a client that is wrong without knowing it is the failure this endpoint is meant to prevent.
          *
-         *     Each message's `id` is a per-room sequence number. Send it back as `Last-Event-ID` (or the `lastEventId` query parameter, which browsers need because `EventSource` cannot set headers) to resume.
+         *     Keep-alive is an SSE **comment frame** (`: ping`) sent while the stream is idle so proxies do not close it. It has no `event:` name, no `id:` and no `data:`; `EventSource` and conforming parsers never surface it as an event and it never changes the resume point. There is no `heartbeat` event any more (ADR-0027) — a client must not rely on receiving one.
+         *
+         *     Each domain event's SSE `id` is an **opaque resume cursor** (ADR-0027, GoGo-BE#638). Its current form is `v2:<generation>:<seq>`, but clients must treat it as an uninterpreted string: store the `id` of the last domain event received, send it back verbatim as `Last-Event-ID` (or the `lastEventId` query parameter, which browsers need because `EventSource` cannot set headers) to resume, and never parse, compare or construct one. The event's own UUID stays in the payload as `event_id`; dedupe on `event_id`, order by arrival. Only domain events move the resume point — a `resync` frame carries no `id`, and the keep-alive comment carries nothing at all.
+         *
+         *     Resume outcomes. A fresh connection (no cursor) replays nothing and delivers only events published after it attached; the client fetches state itself. A resumable cursor replays every retained event after it, in order and once each, then continues live. A cursor the server cannot honour exactly yields one `resync` frame (schema `RoomEventResync`) **before** any later domain event, and no partial replay: the replay window was exceeded or the requested events are no longer retained (`replay_unavailable`), the room's event sequence was reset since the cursor was issued (`generation_changed`), or the cursor is malformed, ahead of the server, or a legacy bare sequence number from before ADR-0027 (`invalid_or_legacy_cursor`). On `resync` the client refetches authoritative room/plan state, queues domain events that arrive meanwhile and reconciles them by resource version, and keeps treating its snapshot as required — across reconnects — until a refetch succeeds. `checkpoint.cursor` is the resume point that is valid once that refetch has completed; send it back verbatim. Replay is exact only while history is retained (bounded buffer, 15-minute window); `resync` restores state, not evicted event history.
+         *     `resync` is not only an attach outcome. It can arrive at any point of a live connection, after domain events and more than once: when the server sees a gap in live delivery its buffer can no longer cover (`replay_unavailable`), when the room's sequence is reset while the stream is open (`generation_changed`), or when the connection's delivery queue overflows. Each time, the client handles it exactly as at attach — refetch, then resume from that frame's `checkpoint.cursor`.
          *
          *     Payloads carry facts, never composed copy, and never another member's preference selections — `participant.selection_changed` reports progress only (FR-PREF-005).
          *
@@ -1332,6 +1337,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/places/{id}/provider-photos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Transient Google photos for one Place Detail view (never stored)
+         * @description GoGo-BE#509 (owner decision 2026-10-02, ADR-0030). Fetched from Google when Place Detail is opened and returned once: photo names, image URLs and bytes are not stored anywhere (database, object storage, cache, jobs, snapshots), and the response is `Cache-Control: private, no-store` — clients must not persist it in a disk/offline image cache or persisted query state either. Images arrive inline as base64 so the client never calls Google directly. At most three photos, each with its author credit (`authorAttributions`) to render beside it, plus the `attribution` text (Google Maps) whenever any photo is shown. Never call this per list card.
+         *
+         *     Always 200 for a place Place Detail opens (404 otherwise). `status` says why `photos` is empty: `disabled` (kill switch off), `not_linked` (no Google Place ID), `budget_exhausted` (daily provider budget reached or not configured), `unavailable` (provider error, timeout or moved place). Treat an unknown `status` like `unavailable`. GoGo imagery stays on `PlaceDetail.photos`; Google price ranges are never returned (core rule 13: a price without its unit).
+         */
+        get: operations["getPlaceProviderPhotos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/places/{id}/reports": {
         parameters: {
             query?: never;
@@ -1461,7 +1488,14 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Host-only: replace stop list; times/travel/costs recalculated server-side */
+        /**
+         * Host-only: replace stop list; times/travel/costs recalculated server-side
+         * @description Full-list replacement: reorder, add, remove, lock and mark stops optional in one versioned write. Each `placeId` may appear once (`400 DUPLICATE_STOP_PLACE`), so a retained stop is never ambiguous.
+         *
+         *     `isOptional` (GoGo-BE#228, ADR-0029): omitted keeps the value the retained place already had, a newly added place starts required, and explicit `false` clears it. Optional stops still count towards duration, distance and schedule; their cost is reported apart in `totals` and never makes the plan `overBudget`. `isOptional` and `isLocked` are independent.
+         *
+         *     Refused with `409` when the plan is not current (`PLAN_NOT_CURRENT`), `expectedVersion` is behind (`PLAN_VERSION_CONFLICT`), the plan is stale — regenerate first (`PLAN_STALE`) — the date has started (`ROOM_ACTIVE`) or the room is cancelled/expired (`ROOM_NOT_EDITABLE`). The write rechecks plan identity, version, stop flags and the room's constraint version atomically, so a lock, edit, regenerate or constraint change that lands meanwhile also yields `409`.
+         */
         patch: operations["editPlanStops"];
         trace?: never;
     };
@@ -1483,6 +1517,8 @@ export interface paths {
          *     The response reports what was understood and what was ignored, because feedback that silently changes nothing is indistinguishable from feedback that was never read.
          *
          *     When AI parsing is disabled, times out, runs out of quota, or returns output that fails validation, a deterministic parser produces the result instead. There is no failure path that surfaces a model error to the user.
+         *
+         *     Locked stops keep their stored schedule (ADR-0029); when one can no longer be reached in time the answer is `409 PLAN_TIME_CONFLICT` and nothing is written. A lock, edit or constraint change that lands while the plan is being rebuilt yields `409 PLAN_VERSION_CONFLICT` or `PLAN_STALE` instead of a plan built from older state.
          */
         post: operations["regeneratePlan"];
         delete?: never;
@@ -1504,7 +1540,10 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Host-only: lock/unlock a stop */
+        /**
+         * Host-only: lock/unlock a stop
+         * @description Never changes `isOptional`. A superseded plan answers `409 PLAN_NOT_CURRENT` — lock the stop on the current plan (ADR-0029).
+         */
         patch: operations["lockPlanStop"];
         trace?: never;
     };
@@ -1893,6 +1932,8 @@ export interface paths {
          * Moderator/editor: approve, reject or merge a submission (PI-CMS-007)
          * @description `approved` creates the catalogue place and applies whatever a reviewer supplemented through `PUT /cms/place-submissions/{id}/review` over the provider's answer (GoGo-BE#528). Fields the reviewer typed are recorded `editorial` in `place_field_provenance` and carry their id; fields left as Google answered them are `google_derived` and carry the Place ID — so a later provider refresh can tell what it may overwrite.
          *
+         *     **Address, phone and website (GoGo-BE#280)** are GoGo-owned and come only from the review draft, each with the evidence in its `provenance`. The provider's formatted address is no longer a fallback: a place approved with no reviewer address has none. A draft saved before #280 that carries one of these values without evidence is refused `409 REVIEW_EVIDENCE_REQUIRED`, naming the fields in `field_errors`; re-save the draft with its sources and approve again.
+         *
          *     `rejected` creates no place. `merged` points the proposal at an existing one and writes nothing to it.
          *
          *     Approval is not verification and not publication: the administrative mapping is resolved from the new place's own coordinate and is never `VERIFIED`, and the publication blocker stays until somebody confirms it (ADM-017, GoGo-BE#525).
@@ -1946,11 +1987,13 @@ export interface paths {
          *
          *     The canonical `googleMapsUri` is whatever Google returns; the submitted URL is never stored or treated as canonical.
          *
-         *     **GoGo-owned columns (PI-BE-025).** `phone`, `website`, `avg_visit_minutes`, `is_lodging` and `curated_rank` are accepted and persisted, validated by the same rules the console uses: phone normalises to E.164, website to `http(s)`, `avg_visit_minutes` is 10–720. Every one of them fails the row explicitly rather than being dropped on commit. Values from the file are recorded `editorial` in `place_field_provenance`.
+         *     **GoGo-owned columns (PI-BE-025).** `phone`, `website`, `avg_visit_minutes`, `is_lodging` and `curated_rank` are accepted and persisted, validated by the same rules the console uses: phone normalises to E.164, website to `http(s)`, `avg_visit_minutes` is 10–720. Every one of them fails the row explicitly rather than being dropped on commit.
+         *
+         *     **Address, phone and website need evidence (GoGo-BE#280).** They are GoGo-owned place data, written to `address_text` / `phone` / `website`. A non-blank `address`, `phone` or `website` cell is written only together with its three evidence columns — `<field>_source_type` (`editorial`, `community` or `provider`; never Google), `<field>_source_reference` (≤ 500 characters, naming the non-Google origin: a merchant statement, the official website, a field visit or a permitted dataset — not a sheet or job id) and `<field>_collected_at` (ISO-8601 with a zone, not in the future). A missing or invalid one fails the row with `<FIELD>_EVIDENCE_REQUIRED` / `<FIELD>_EVIDENCE_INVALID` against that column, in dry-run and commit alike. A blank value cell leaves the stored value alone (clearing belongs to the console). In `update_existing` a non-blank value replaces the stored one together with its evidence; the provider's address is never written, in any mode.
          *
          *     `places.suitability` is deliberately **not** an import column. `audiences` is the operator-facing vocabulary for the same product concept — who a place suits — and `suitability` is the weighted score GoGo derives from it and from editorial curation. Asking a spreadsheet to author both would be asking one person to write the same fact at two levels of abstraction and keep them consistent. The column and every other API path that writes it are unchanged.
          *
-         *     `phone` and `website` are no longer retired mapping values; `address` still is, because `address_text` is written from the provider's formatted address and a sheet's own address string has no writer.
+         *     No mapping value is retired any more: `phone` and `website` left the list in PI-BE-025 and `address` in GoGo-BE#280.
          *
          *     **Price units (PI-BE-026).** `place_prices.unit` is `per_person`, `per_item`, `per_hour` or `per_night`. A row that states a price must state a unit this table can hold: `per_group` fails with `PRICE_UNIT_UNSUPPORTED` and `unknown` — which is also the default when the column is absent — fails with `PRICE_UNIT_REQUIRED`. Both used to be accepted and then dropped the price on commit without a word. `free` is stored as `per_person` with a zero amount. A row with no price at all is unaffected.
          */
@@ -3013,6 +3056,8 @@ export interface paths {
          *
          *     **Provenance (GoGo-BE#440).** Every supplied non-null canonical fact names its independent evidence in `sourceReferences` and is recorded `editorial` with that reference and the acting editor. A reference is an accountable assertion, never fetched or verified by the server. A value copied from a Google preview is not GoGo-owned however it arrives (GOGO_PRODUCT_DATA_ARCHITECTURE.md, provenance rule), so a non-empty `googleDerivedFields` is refused with `400 GOOGLE_CONTENT_NOT_PERSISTABLE`.
          *
+         *     **Contact evidence (1.0.0-alpha.66, GoGo-BE#280).** `addressText`, `phone` and `website` are the exception to `sourceReferences`: each non-null value carries its structured evidence in `provenance.<field>` (`sourceType` `editorial | community | provider`, `sourceReference`, `collectedAt`) and is recorded with that evidence, the acting editor and `verifiedAt` = now — never `google_derived`. A non-null value without its entry is `400 VALIDATION_FAILED` (`provenance.<field>`, `required`); an entry without a value is `value_missing`; an entry beside `null` is `not_allowed`; `null` alone writes nothing. A `sourceReferences` key for any of the three is refused `400 SOURCE_REFERENCE_INVALID` with `code: unknown` and a message naming `provenance.<field>` — there is no fallback or alias, even when both carry the same text. **Breaking versus alpha.65** (as introduced in alpha.62), which accepted `sourceReferences.<contact>` and required it for a contact value.
+         *
          *     **No provider content.** This route calls no Google provider and persists no provider fact — no rating, review count, price level, hours or canonical link. A `googlePlaceId` is stored as identity only. The PI-BE-021 enrichment that did so on this route is withdrawn (`docs/adr/0020-provider-facts-on-editor-created-places.md`, #440 amendment).
          *
          *     **Identity beats similarity.** Given a `googlePlaceId`, the catalogue is asked first whether that Google record already belongs to a place — it does, and the answer is `409 PLACE_ALREADY_LINKED` naming it; two places already claim it, and the answer is `409 PLACE_IDENTITY_CONFLICT` naming both. Checked again inside the creating transaction, and a concurrent create that loses the race gets the same 409, never a 500. `allowDuplicate` does not open this gate.
@@ -3025,7 +3070,7 @@ export interface paths {
          *
          *     **Rate limit.** 20 requests/minute per actor, independent of `cmsResolvePlaceLink`.
          *
-         *     Field limits follow `cmsUpdatePlace` exactly and are stated there.
+         *     Field limits follow `cmsUpdatePlace` exactly and are stated there, and so does the full **evidence rule for `addressText`, `phone` and `website`** (GoGo-BE#280).
          */
         post: operations["cmsCreatePlace"];
         delete?: never;
@@ -6903,18 +6948,63 @@ export interface components {
             currency?: string;
             confidence?: number;
         };
+        /** @description GoGo-BE#509 — transient provider photos. Display once, never persist. */
+        PlaceProviderPhotos: {
+            /** @description Why `photos` may be empty. Unknown values mean "no photos". */
+            status: string;
+            /** @description Display provider. Unknown values are allowed; render `attribution` as given. */
+            provider: string;
+            /** @description Provider attribution to render whenever a photo is shown ("Google Maps"). */
+            attribution: string;
+            photos: components["schemas"]["PlaceProviderPhoto"][];
+        };
+        PlaceProviderPhoto: {
+            contentType: string;
+            /**
+             * Format: byte
+             * @description Image bytes (at most 400 KiB before encoding, 800 px wide).
+             */
+            dataBase64: string;
+            /** @description Width of Google's original, not of these bytes. */
+            widthPx: number | null;
+            heightPx: number | null;
+            /** @description Credit to render with this photo — never a generic gallery footer. */
+            authorAttributions: components["schemas"]["ProviderPhotoAuthor"][];
+            /**
+             * Format: uri
+             * @description This photo on Google Maps. `https`, Google host; else null.
+             */
+            googleMapsUri: string | null;
+        };
+        ProviderPhotoAuthor: {
+            displayName: string;
+            /**
+             * Format: uri
+             * @description Author profile link (`https`, Google host); null when absent or unsafe.
+             */
+            uri: string | null;
+            /**
+             * Format: uri
+             * @description Author avatar (`https`, Google image host); null when absent or unsafe.
+             */
+            photoUri: string | null;
+        };
         PlaceDetail: {
             /** Format: uuid */
             id?: string;
             name?: string;
             description?: string;
             status?: string;
+            /** @description GoGo-owned postal address (GoGo-BE#280). Absent when unknown — never an empty string. Render as plain text. */
             addressText?: string;
             areaKey?: string;
             lat?: number;
             lng?: number;
+            /** @description E.164 business phone. Absent when unknown, or when a legacy stored value would not pass today's rules (GoGo-BE#280). */
             phone?: string;
+            /** @description `http(s)` URL on a public host. Absent when unknown, or when a legacy stored value would not pass today's rules — so a client may render it as an external link without re-validating. Never fetched or previewed by GoGo. */
             website?: string;
+            provenance?: components["schemas"]["PlaceContactProvenance"];
             /** @description A number, not the string Postgres returns for `numeric`. The endpoint used to pass the row through unmapped, so a client calling `.toFixed` on this crashed (#169). */
             rating?: number;
             ratingCount?: number;
@@ -6961,6 +7051,51 @@ export interface components {
                 attribution?: string;
             }[];
             providerStatus?: components["schemas"]["PlaceProviderStatus"];
+        };
+        /** @description GoGo-BE#280 — whose each contact value is, keyed by the field name. An entry appears exactly when its value does; the whole object is absent when the place has none of the three. Evidence references and actors are CMS-only and never appear here. */
+        PlaceContactProvenance: {
+            addressText?: components["schemas"]["PlaceContactFieldProvenance"];
+            phone?: components["schemas"]["PlaceContactFieldProvenance"];
+            website?: components["schemas"]["PlaceContactFieldProvenance"];
+        };
+        PlaceContactFieldProvenance: {
+            /** @description `gogo` — independently sourced and verified by GoGo; `google` — a value seeded from Google before #280, shown with the attribution of the `sources` entry named by `provider`; `unknown` — no adequate evidence was recorded (most values written before #280). Do not present `unknown` as GoGo-verified. Treat a value you do not know as `unknown`. */
+            sourceType: string;
+            /**
+             * Format: date-time
+             * @description `gogo` only — when the value was last independently verified. It moves only on verification, never on an unrelated save or a provider fetch. No freshness window is implied.
+             */
+            verifiedAt?: string;
+            /** @description `google` only — the `sources[].provider` entry, present in this same response, that attributes the value. A Google-seeded value whose place no longer has a Google source is reported `unknown` instead, never as `google` pointing at attribution that is not there. */
+            provider?: string;
+        };
+        /** @description GoGo-BE#280 — where one contact value came from. All three properties are required (missing ones are reported per property as `provenance.<field>.<property>` with code `required`); they are not marked `required` here so that the gate reports them, not the schema layer. Who submitted it and when it was verified are recorded by the server from the authenticated admin and are not accepted from clients. */
+        PlaceContactEvidence: {
+            /** @description `editorial` (a merchant statement, the official website, a field visit), `community` (a contributor's own report) or `provider` (a permitted, non-Google dataset). `google_derived` is refused with code `google_not_independent`: copying, retyping or confirming Google content does not make it GoGo's. */
+            sourceType?: string;
+            /**
+             * @description Enforced: trimmed, 1..500 characters, no control characters. Names the non-Google origin — a phone call with the owner, the official URL, a visit, a dataset release. CMS-only; never public. Checked in this order (ADR-0031 §Transport guard):
+             *
+             *     1. A Google Maps link, share link, Place ID or "Google" is refused `google_not_independent`.
+             *     2. A reference that is, as a whole, a website (`pho24.vn`, `https://chaoban.vn/lien-he#2`) is accepted as an origin — the shape only; GoGo does not fetch it.
+             *     3. A reference that **starts with** a transport keyword (`job`, `jobs`, `sheet`, `sheets`, `tab`, `row`, `rows`, `dòng`, `dong`, `cột`, `cot`, `col`, `column`, `cell`, `import`, `batch`, `file`, `upload`, `csv`, `xlsx`, `spreadsheet`, `id`, `r`; case-insensitive) followed by nothing or a non-letter is refused `transport_only`, whatever follows: `job 123`, `Sheet1!B7`, `Tab Quận 1`, `R12`.
+             *     4. A reference that is only an identifier is refused `transport_only`: a decimal number, a UUID, an A1 cell or range with an optional `label!` (`'HCM'!A2:C9`), or `label#digits` (`HCM#12`).
+             *
+             *     This is a bounded lexical guard, not a classifier. Put the origin first — `job 123; gọi chủ quán` is refused. Passing it (`Bảng Quận 1`, `123, row 4`) does not make a reference adequate evidence; that remains an editorial assertion.
+             * @example Gọi điện chủ quán ngày 2026-09-30
+             */
+            sourceReference?: string;
+            /**
+             * Format: date-time
+             * @description Enforced: ISO-8601 with a zone, not more than 5 minutes in the future. When the evidence was gathered, not when it was typed in.
+             */
+            collectedAt?: string;
+        };
+        /** @description GoGo-BE#280 — evidence for the GoGo-owned contact fields written in the same request. A non-null `addressText` / `phone` / `website` needs its entry (`provenance.<field>` code `required`); an entry for a field the request does not write is `value_missing`, and one beside a `null` clear is `not_allowed`. Re-sending a field's stored value unchanged and without evidence is not a write and needs nothing. */
+        PlaceContactProvenanceInput: {
+            addressText?: components["schemas"]["PlaceContactEvidence"];
+            phone?: components["schemas"]["PlaceContactEvidence"];
+            website?: components["schemas"]["PlaceContactEvidence"];
         };
         /** @description GoGo-BE#360 — what the place's provider last reported about the business, a fact for core rule 8's "excluded or warned": search already excludes a closed or temporarily closed place, but a saved place, a plan stop or a share link still opens this detail, and the client must warn rather than present it as open (with more than colour). When several provider rows exist the most severe report wins (closed, temporarily_closed, moved, active, unknown). Absent when no provider has reported on the place. The place's own `status` is GoGo's moderation decision and is separate. */
         PlaceProviderStatus: {
@@ -7017,17 +7152,29 @@ export interface components {
                 }[];
             };
         };
-        /** @description GoGo-BE#593 — `costMin` and `costMax` are amounts per `costScope`, which is `per_person` today: each stop's per-person price, summed. A group figure is that amount times `participantCount`; nothing here is a group total to divide. */
+        /**
+         * @description GoGo-BE#593 — `costMin` and `costMax` are amounts per `costScope`, which is `per_person` today: each stop's per-person price, summed. A group figure is that amount times `participantCount`; nothing here is a group total to divide.
+         *
+         *     GoGo-BE#228 (ADR-0029) — `costMin`/`costMax` stay the sums over **all** stops. `required*` and `optional*` split them by `PlanStop.isOptional`: `costMin = requiredCostMin + optionalCostMin`, likewise for max. Plans stored before the split report required = the totals, optional = 0.
+         */
         PlanTotals: {
             /** @description Sum of every stop's lower price bound, per `costScope`. A stop with no price in that scope adds nothing and sets `uncertain`, so `0` with `uncertain: true` means no price is known — never "free". */
             costMin?: number;
-            /** @description Sum of every stop's upper price bound, per `costScope`, under the same rule as `costMin`. `overBudget` compares it with the per-person budget. */
+            /** @description Sum of every stop's upper price bound, per `costScope`, under the same rule as `costMin`. Includes optional stops; `overBudget` does not compare this but `requiredCostMax`. */
             costMax?: number;
+            /** @description Lower bound summed over required stops, per `costScope`. */
+            requiredCostMin: number;
+            /** @description Upper bound summed over required stops, per `costScope`. This is what `overBudget` compares with the per-person budget. */
+            requiredCostMax: number;
+            /** @description Lower bound summed over optional stops, per `costScope`. */
+            optionalCostMin: number;
+            /** @description Upper bound summed over optional stops, per `costScope`. Visible extra spend, never counted towards `overBudget`; `0` with `uncertain: true` may mean an optional stop has no known price. */
+            optionalCostMax: number;
             costScope: components["schemas"]["BudgetScope"];
             currency?: string;
             durationMinutes?: number;
             travelDistanceM?: number;
-            /** @description Computed from the UPPER bound — never show "trong ngân sách" when true. */
+            /** @description Computed from the UPPER bound of the **required** stops (`requiredCostMax`) — never show "trong ngân sách" when true. False does not cover optional stops: compare `costMax` before claiming the whole plan fits (ADR-0029). */
             overBudget?: boolean;
             /** @description Some stop has unknown/low-confidence price — surface the uncertainty. */
             uncertain?: boolean;
@@ -7052,8 +7199,10 @@ export interface components {
             /** @description Upper price bound per `costScope`, under the same rule as `costMin`. */
             costMax?: number | null;
             costScope: components["schemas"]["BudgetScope"];
-            /** @description Locked stops are invariant across regenerate. */
+            /** @description Locked stops are invariant across regenerate: place, order, duration, cost, `isOptional` and stored schedule. If a locked stop can no longer be reached at its stored time, regenerate answers `409 PLAN_TIME_CONFLICT` and leaves the plan as it was. */
             isLocked?: boolean;
+            /** @description GoGo-BE#228 — set only by the host. Independent of `isLocked`. Generated and replacement stops are required (`false`). Its cost is reported in `totals.optional*` and never makes the plan over budget; its time still counts in the schedule. */
+            isOptional: boolean;
             /**
              * @description Progress of the stop itself, not of the place behind it.
              * @enum {string}
@@ -7296,7 +7445,7 @@ export interface components {
          *     Request schemas keep `mapping` as a plain string map: narrowing an existing `/v1` request property to an enum is a breaking change (ADR-0005), so the vocabulary is published here rather than enforced in the wire type. `/v1` rejects no value — one outside this list leaves its column unmapped and is reported. Strict rejection belongs in `/v2`.
          * @enum {string}
          */
-        ImportCanonicalField: "source_row_id" | "name" | "city" | "district" | "google_maps_url" | "google_maps_query" | "google_place_id" | "category" | "category_raw" | "price_min" | "price_max" | "price_unit" | "price_raw" | "audiences" | "audiences_raw" | "vibes" | "vibes_raw" | "highlight" | "note" | "phone" | "website" | "avg_visit_minutes" | "is_lodging" | "curated_rank";
+        ImportCanonicalField: "source_row_id" | "name" | "city" | "district" | "google_maps_url" | "google_maps_query" | "google_place_id" | "category" | "category_raw" | "price_min" | "price_max" | "price_unit" | "price_raw" | "audiences" | "audiences_raw" | "vibes" | "vibes_raw" | "highlight" | "note" | "phone" | "website" | "address" | "address_source_type" | "address_source_reference" | "address_collected_at" | "phone_source_type" | "phone_source_reference" | "phone_collected_at" | "website_source_type" | "website_source_reference" | "website_collected_at" | "avg_visit_minutes" | "is_lodging" | "curated_rank";
         ImportJob: components["schemas"]["ImportJobSummary"] & {
             defaultCity?: string | null;
             rowsByStatus?: {
@@ -7333,6 +7482,10 @@ export interface components {
         ImportCandidate: {
             googlePlaceId?: string;
             name?: string;
+            /**
+             * @deprecated
+             * @description No longer written (GoGo-BE#280): Google's formatted address is not persisted, candidate JSON included. Present only on rows stored before #280. Do not depend on it.
+             */
             address?: string;
             /** Format: float */
             confidence?: number;
@@ -7579,6 +7732,8 @@ export interface components {
             priceMax?: number | null;
             /** @enum {string|null} */
             priceUnit?: "per_person" | "per_item" | "per_hour" | "per_night" | null;
+            /** @description GoGo-BE#280 — evidence for `addressText`, `phone` and `website`, under the same rule as `cmsUpdatePlace`: a non-null value needs its entry, `null` needs none. Values and evidence are stored normalized (E.164, `https://`, `collectedAt` in UTC) and returned that way. */
+            provenance?: components["schemas"]["PlaceContactProvenanceInput"];
         };
         /** @description PI-BE-031 (GoGo-BE#528) — everything a decision needs that GoGo already holds. No provider request: this endpoint costs nothing to open, and `POST /cms/place-submissions/{id}/provider-preview` is the explicit, separately-counted way to ask Google. */
         PlaceSubmissionDetail: {
@@ -7877,6 +8032,13 @@ export interface components {
                     sourceReference?: string | null;
                     /** Format: date-time */
                     verifiedAt?: string | null;
+                    /**
+                     * Format: date-time
+                     * @description GoGo-BE#280 — when the evidence named by `sourceReference` was gathered. Null on every row that is not independently sourced, including all rows written before #280.
+                     */
+                    collectedAt?: string | null;
+                    /** @description GoGo-BE#280, on `addressText` / `phone` / `website` only — the same verdict the public `PlaceDetail.provenance` gives. `gogo` requires an independent source, a non-Google reference and a collection time; a legacy `editorial` row without them is `unknown`. Treat a value you do not know as `unknown`. */
+                    ownership?: string;
                 };
             };
             /** @description A day with no row here is *unknown*, not closed — the two are different facts and the UI must not render one as the other. */
@@ -8660,12 +8822,12 @@ export interface components {
         CmsCommunityPlacePage: components["schemas"]["CmsModerationPageMeta"] & {
             items: components["schemas"]["CmsCommunityPlace"][];
         };
-        /** @description The domain-event envelope from the api-contract rules, unchanged. Field names are snake_case here because that is the event convention, not the REST DTO convention. */
+        /** @description The domain-event envelope from the api-contract rules, unchanged. Field names are snake_case here because that is the event convention, not the REST DTO convention. This is the `data` of every domain-event frame; the frame's SSE `id` is the opaque resume cursor (ADR-0027), not `event_id`. Only domain events use this envelope: the stream-level `resync` frame carries `RoomEventResync`, and the keep-alive is a comment frame with no data. */
         RoomEvent: {
             /** Format: uuid */
             event_id: string;
             /** @enum {string} */
-            event_type: "room.status_changed" | "participant.joined" | "participant.left" | "participant.selection_changed" | "matching.started" | "matching.completed" | "matching.failed" | "suggestions.generated" | "suggestions.updated" | "vote.changed" | "plan.updated" | "resync" | "heartbeat";
+            event_type: "room.status_changed" | "participant.joined" | "participant.left" | "participant.selection_changed" | "matching.started" | "matching.completed" | "matching.failed" | "suggestions.generated" | "suggestions.updated" | "vote.changed" | "plan.updated";
             event_version: number;
             /** Format: date-time */
             occurred_at: string;
@@ -8677,6 +8839,24 @@ export interface components {
             payload_schema_version?: number;
             /** @description Facts, never composed copy. Carries the version a client should compare against — `constraintVersion` for suggestions, `version` for a plan — so a stale event is distinguishable from a fresh one. */
             payload: Record<string, never>;
+        };
+        /** @description `data` of an SSE `event: resync` frame on `/rooms/{id}/events` (ADR-0027). Stream-level, not a domain event: it has no envelope and its frame carries no resume cursor. Sent whenever the server cannot guarantee exact delivery from the client's resume point — at attach or later on a live connection, possibly more than once — and always before any domain event that follows it. The client must refetch authoritative state; see the operation description for the recovery rules. */
+        RoomEventResync: {
+            /** Format: uuid */
+            roomId: string;
+            reason: components["schemas"]["RoomEventResyncReason"];
+            checkpoint: components["schemas"]["RoomEventCheckpoint"];
+        };
+        /** @description Why the resume point could not be honoured. Declared extensible: a client treats a value it does not know exactly like a known one — refetch — never as a malformed frame. `replay_unavailable` — some event after the cursor is no longer retained (window exceeded, buffer trimmed or expired). `generation_changed` — the room's event sequence was reset after the cursor was issued, so its sequence numbers no longer identify the same events. `invalid_or_legacy_cursor` — the cursor is malformed, ahead of the server's high-water mark, or a pre-ADR-0027 bare sequence number. */
+        RoomEventResyncReason: string;
+        /** @description The room's current position, read atomically with the decision to resync: the generation and the highest sequence published in it. A client resumes from `cursor` only after its refetch has succeeded; it must not build a cursor from `generation` and `seq`, which are informational. */
+        RoomEventCheckpoint: {
+            /** @description Opaque resume cursor for this checkpoint, same format as an SSE `id`. */
+            cursor: string;
+            /** Format: uuid */
+            generation: string;
+            /** @description Highest sequence in `generation`; 0 when nothing has been published in it yet. */
+            seq: number;
         };
         CmsSearchAnalytics: {
             days: number;
@@ -9498,11 +9678,11 @@ export interface operations {
     streamRoomEvents: {
         parameters: {
             query?: {
-                /** @description Same as the header, for browser EventSource which cannot set one. */
+                /** @description Same as the header, for browser EventSource which cannot set one. Same opaque-cursor semantics; the header wins when both are sent. */
                 lastEventId?: string;
             };
             header?: {
-                /** @description The last sequence number received, to resume after a reconnect. */
+                /** @description The opaque cursor (SSE `id`) of the last domain event received, sent back verbatim to resume after a reconnect. Any value is accepted; one the server cannot honour exactly — including a legacy bare sequence number — answers with a `resync` frame rather than an error or a silently fresh stream. */
                 "Last-Event-ID"?: string;
             };
             path: {
@@ -9512,13 +9692,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description An event stream */
+            /** @description An event stream. Each frame's `data` is one of the schemas below, selected by the frame's SSE `event:` name: a domain event type (`room.status_changed` … `plan.updated`) carries `RoomEvent` and an opaque `id`; `resync` carries `RoomEventResync` and no `id`. The keep-alive `: ping` comment frame carries no data and is not listed. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/event-stream": components["schemas"]["RoomEvent"];
+                    "text/event-stream": components["schemas"]["RoomEvent"] | components["schemas"]["RoomEventResync"];
                 };
             };
             403: components["responses"]["Forbidden"];
@@ -11247,6 +11427,32 @@ export interface operations {
             429: components["responses"]["RateLimited"];
         };
     };
+    getPlaceProviderPhotos: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Zero to three provider photos with attribution, for this view only */
+            200: {
+                headers: {
+                    /** @description Always `private, no-store`. */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaceProviderPhotos"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
     reportPlace: {
         parameters: {
             query?: never;
@@ -11479,6 +11685,8 @@ export interface operations {
                         durationMinutes?: number;
                         /** @default false */
                         isLocked?: boolean;
+                        /** @description Omitted keeps the retained place's value; a new place starts required; `false` clears it (ADR-0029). */
+                        isOptional?: boolean;
                     }[];
                 };
             };
@@ -11556,6 +11764,7 @@ export interface operations {
                     "application/json": components["schemas"]["Plan"];
                 };
             };
+            409: components["responses"]["Conflict"];
         };
     };
     completePlanStop: {
@@ -12324,7 +12533,7 @@ export interface operations {
                     tabCityMapping?: {
                         [key: string]: string;
                     };
-                    /** @description Raw header → canonical field. Supported values are the ones listed by `ImportCanonicalField`; generate against that schema rather than sending free text. The property stays a plain string map because narrowing a `/v1` request to an enum is a breaking change (ADR-0005) — the constraint is enforced at runtime, not in the wire type. A header left out is auto-detected; a header mapped to `""` is ignored. No value here is rejected: three legacy spellings (`googleMapsUrl`, `priceMin`, `priceMax`) normalise, three retired values (`address`, `phone`, `website`) are accepted and skipped, and any other value leaves its column unmapped — reported in `unmappedHeaders` and counted as `place_import_unknown_mapping_total`, never auto-detected into some other field. A mapping that is not a JSON object of strings is a 400 `MAPPING_INVALID`. */
+                    /** @description Raw header → canonical field. Supported values are the ones listed by `ImportCanonicalField`; generate against that schema rather than sending free text. The property stays a plain string map because narrowing a `/v1` request to an enum is a breaking change (ADR-0005) — the constraint is enforced at runtime, not in the wire type. A header left out is auto-detected; a header mapped to `""` is ignored. No value here is rejected: three legacy spellings (`googleMapsUrl`, `priceMin`, `priceMax`) normalise, and any other value leaves its column unmapped — reported in `unmappedHeaders` and counted as `place_import_unknown_mapping_total`, never auto-detected into some other field. A mapping that is not a JSON object of strings is a 400 `MAPPING_INVALID`. */
                     mapping?: {
                         [key: string]: string;
                     };
@@ -14252,7 +14461,9 @@ export interface operations {
                     /** @description Enforced: -180..180. */
                     lng: number;
                     description?: string | null;
+                    /** @description GoGo-owned postal address (GoGo-BE#280). Rules and evidence: see `cmsUpdatePlace`. */
                     addressText?: string | null;
+                    provenance?: components["schemas"]["PlaceContactProvenanceInput"];
                     areaKey?: string | null;
                     /** @description ADR-0016 legacy free text, kept for rows that carry it and read by the resolver as one piece of evidence. It is **not** the administrative identity and selects no code — send `provinceCode`/`communeCode` for that. */
                     city?: string | null;
@@ -14283,7 +14494,9 @@ export interface operations {
                      */
                     googleDerivedFields?: ("name" | "addressText" | "lat" | "lng")[];
                     /**
-                     * @description GoGo-BE#440 — the independent evidence behind each canonical fact, keyed by API field name. Required for every supplied non-null fact: `name` and `geom` (covers `lat` + `lng`) always; `description`, `addressText`, `areaKey`, `city`, `district`, `phone`, `website`, `provinceCode`, `communeCode` when sent non-null; `taxonomyIds` when the list is non-empty (one reference for the whole set). Omitting the object is the same as `{}`.
+                     * @description GoGo-BE#440 — the independent evidence behind each canonical fact, keyed by API field name. Required for every supplied non-null fact: `name` and `geom` (covers `lat` + `lng`) always; `description`, `areaKey`, `city`, `district`, `provinceCode`, `communeCode` when sent non-null; `taxonomyIds` when the list is non-empty (one reference for the whole set). Omitting the object is the same as `{}`.
+                     *
+                     *     **Not `addressText`, `phone` or `website`** (alpha.66, GoGo-BE#280): their evidence is `provenance.<field>`, and a `sourceReferences` key for one of them is refused with `code: unknown`, the message naming `provenance.<field>`.
                      *
                      *     Every problem is `400 SOURCE_REFERENCE_INVALID` with one `field_errors` entry per key, `field = sourceReferences.<key>` and `code` one of `required` (supplied fact without a reference, or a blank one), `unused` (reference for a fact the body does not supply), `unknown` (not a key listed here), `too_long` (over 500 characters after trimming).
                      *
@@ -14561,7 +14774,7 @@ export interface operations {
                     name?: string;
                     /** @description Enforced: at most 4000 characters. */
                     description?: string | null;
-                    /** @description Enforced: at most 400 characters. */
+                    /** @description GoGo-owned postal address (GoGo-BE#280). Enforced: trimmed, non-blank, at most 400 characters, plain text — control characters and angle brackets are refused; Unicode is kept as written. An address edit never moves the pin or changes the administrative codes. A non-null value needs `provenance.addressText`. */
                     addressText?: string | null;
                     /** @description Enforced: at most 64 characters. A key from `cmsListAreas` — the discovery area, not the postal address. Not validated against the catalog: rows predating it carry keys it does not list. */
                     areaKey?: string | null;
@@ -14585,10 +14798,11 @@ export interface operations {
                      *     A code is not an identity: 2,212 of the 3,321 current commune codes named a different unit before 2025-07-01, which is why every check here names the dataset version it was made against.
                      */
                     communeCode?: string | null;
-                    /** @description Normalized to E.164 on write (`0283 822 9999` → `+842838229999`). A bare subscriber number with neither a trunk `0` nor a country code is refused rather than assumed Vietnamese. */
+                    /** @description Normalized to E.164 on write (`0283 822 9999` → `+842838229999`). A bare subscriber number with neither a trunk `0` nor a country code is refused rather than assumed Vietnamese. Since GoGo-BE#280 the result must match `^\+[1-9][0-9]{7,14}$` (a country code never starts with 0), extensions and letters are refused, and a non-null value needs `provenance.phone`. A valid shape says nothing about whether the number answers. */
                     phone?: string | null;
-                    /** @description `http`/`https` only, host required. A bare host is upgraded to `https://`. Other schemes are refused — the value is rendered as an href in three clients. */
+                    /** @description `http`/`https` only, host required. A bare host is upgraded to `https://`. Other schemes are refused — the value is rendered as an href in three clients. Since GoGo-BE#280 the host must be a public DNS name — no credentials (`code: credentials`), IP literals, `localhost` or private suffixes — path, query and fragment are kept, and a non-null value needs `provenance.website`. GoGo never fetches the URL to check it. */
                     website?: string | null;
+                    provenance?: components["schemas"]["PlaceContactProvenanceInput"];
                     /** @description Enforced: -90..90. Moves the pin only together with `lng`. */
                     lat?: number;
                     /** @description Enforced: -180..180. Moves the pin only together with `lat`. */
@@ -14603,11 +14817,11 @@ export interface operations {
                     taxonomyIds?: string[];
                     /**
                      * Format: date-time
-                     * @description Optimistic concurrency: the `updatedAt` the form was loaded from. A mismatch is refused `409 PLACE_MODIFIED`, with the current value in `field_errors[0].message` so the client can show what it would have overwritten. Omitting it skips the check.
+                     * @description Optimistic concurrency: the `updatedAt` the form was loaded from. A mismatch is refused `409 PLACE_MODIFIED`, with the current value in `field_errors[0].message` so the client can show what it would have overwritten. The comparison is made under the row lock, so of two saves loaded from the same version exactly one commits. Omitting it skips the check — except for a request that writes or clears `addressText`, `phone` or `website` (GoGo-BE#280), which is refused `400 VALIDATION_FAILED` with `field: expectedUpdatedAt`, `code: required`.
                      */
                     expectedUpdatedAt?: string;
                     /**
-                     * @description GoGo-BE#440 F-07 — independent evidence for each explicitly supplied **non-null** `provinceCode` / `communeCode` in this edit; omit references for codes that are absent, unchanged or `null`. Same rules as `cmsCreatePlace`: trimmed, 1..500 characters; problems are `400 SOURCE_REFERENCE_INVALID`, one `field_errors` entry per key (`sourceReferences.<key>`, `code` `required | unused | unknown | too_long`). Only these two keys are accepted on an edit.
+                     * @description GoGo-BE#440 F-07 — independent evidence for each explicitly supplied **non-null** `provinceCode` / `communeCode` in this edit; omit references for codes that are absent, unchanged or `null`. Same rules as `cmsCreatePlace`: trimmed, 1..500 characters; problems are `400 SOURCE_REFERENCE_INVALID`, one `field_errors` entry per key (`sourceReferences.<key>`, `code` `required | unused | unknown | too_long`). Only these two keys are accepted on an edit; `sourceReferences.addressText`, `.phone` or `.website` is `unknown` — contact evidence goes in `provenance` (GoGo-BE#280).
                      *
                      *     A submitted code is an **assertion to the resolver**. It becomes the field's current editorial claim (this editor, this reference) only when the resolver adopts it as `trusted_code` — including a re-assertion of the same pair, which refreshes the evidence. A code the resolver rejects, a mapping it may not change (VERIFIED → stays or goes STALE, REJECTED), or a NEEDS_REVIEW that keeps the old codes leaves the stored codes' provenance as it was. Every assertion and its disposition is kept in the audit history.
                      */

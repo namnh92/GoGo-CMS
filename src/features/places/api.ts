@@ -1,5 +1,6 @@
 import { apiFetch, apiFetchParsed, newIdempotencyKey } from '@/shared/api/client'
 import type { CmsCreatePlaceBody } from '@/shared/api/generated'
+import type { ContactProvenanceWire } from './contactEvidence'
 import {
   attachableMediaListSchema,
   auditPageSchema,
@@ -197,6 +198,13 @@ export type UpdatePlaceInput = {
   phone?: string | null
   /** Sent as typed; GoGo-BE enforces http(s) and answers on `website`. */
   website?: string | null
+  /**
+   * GoGo-BE#280 — evidence for each of `addressText` / `phone` / `website` this
+   * body writes a value to. A written value without its entry is `400
+   * provenance.<field> required`; a `null` clear takes none. Writing or
+   * clearing any of the three also makes `expectedUpdatedAt` mandatory.
+   */
+  provenance?: ContactProvenanceWire
   lat?: number
   lng?: number
   avgVisitMinutes?: number | null

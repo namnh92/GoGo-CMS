@@ -58,12 +58,13 @@ describe('csv preview', () => {
     expect(guessMapping(['cot_la'])).toEqual({})
   })
 
-  it('never guesses a field the server has no column for', () => {
+  it('guesses only fields the server has a column for', () => {
     // `address` was offered by the old wizard and silently discarded by the
-    // server. `phone` and `website` were too, until PI-BE-025 gave them columns.
+    // server. Since GoGo-BE#280 it is a GoGo-owned column again (with its
+    // evidence), like `phone` and `website` since PI-BE-025.
     const guessed = Object.values(guessMapping(['dia chi', 'so dien thoai', 'website', 'ten quan']))
     for (const field of guessed) expect(isCanonicalField(field)).toBe(true)
-    expect(guessed).not.toContain('address')
+    expect(guessed).toContain('address')
     // Now stored rather than dropped, so guessing them is the right answer.
     expect(guessed).toContain('phone')
     expect(guessed).toContain('website')
@@ -122,11 +123,12 @@ describe('canonical mapping vocabulary', () => {
     }
   })
 
-  it('drops the one field the server still never accepts', () => {
-    // `address_text` comes from the provider's formatted address; a sheet's own
-    // address string has no writer beside it. `phone` and `website` left this
-    // list in PI-BE-025, when they got columns.
-    expect(isCanonicalField('address')).toBe(false)
+  it('accepts address again, with its evidence columns (GoGo-BE#280)', () => {
+    // `address` was retired while `address_text` came from the provider's
+    // formatted address. GoGo-BE#280 made it GoGo-owned; `phone` and `website`
+    // left the retired list earlier, in PI-BE-025.
+    expect(isCanonicalField('address')).toBe(true)
+    expect(isCanonicalField('address_source_reference')).toBe(true)
     expect(isCanonicalField('phone')).toBe(true)
     expect(isCanonicalField('website')).toBe(true)
   })
@@ -135,7 +137,7 @@ describe('canonical mapping vocabulary', () => {
     // The server still normalises these for older `/v1` callers, but this
     // client must never be one of them — compatibility is for clients that
     // cannot be updated, and this one just was.
-    const legacy = ['googleMapsUrl', 'priceMin', 'priceMax', 'address']
+    const legacy = ['googleMapsUrl', 'priceMin', 'priceMax']
     for (const value of legacy) {
       expect(IMPORT_CANONICAL_FIELDS as readonly string[]).not.toContain(value)
       expect(MAPPABLE_FIELDS as readonly string[]).not.toContain(value)

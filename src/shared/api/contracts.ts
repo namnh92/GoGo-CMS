@@ -322,6 +322,14 @@ export const placeProvenanceSchema = z.object({
   sourceType: z.string(),
   sourceReference: z.string().nullish(),
   verifiedAt: z.string().nullish(),
+  /** GoGo-BE#280 — when the evidence was gathered; null on legacy rows. */
+  collectedAt: z.string().nullish(),
+  /**
+   * GoGo-BE#280, contact fields only — `gogo | google | unknown`, read as a
+   * plain string for the same reason as `sourceType`. Anything unrecognised is
+   * shown as unknown, never as GoGo-verified.
+   */
+  ownership: z.string().nullish(),
 })
 export type PlaceProvenance = z.infer<typeof placeProvenanceSchema>
 
@@ -1210,6 +1218,12 @@ export type PlaceSubmission = z.infer<typeof placeSubmissionSchema>
  * box. What matters here is that `null` and absent are kept apart — `null`
  * clears a field at approval, absent leaves Google's answer standing.
  */
+const contactEvidenceReadSchema = z.object({
+  sourceType: z.string().nullish(),
+  sourceReference: z.string().nullish(),
+  collectedAt: z.string().nullish(),
+})
+
 export const submissionReviewDraftSchema = z.object({
   name: z.string().nullish(),
   description: z.string().nullish(),
@@ -1224,6 +1238,14 @@ export const submissionReviewDraftSchema = z.object({
   priceMin: z.number().nullish(),
   priceMax: z.number().nullish(),
   priceUnit: z.string().nullish(),
+  /** GoGo-BE#280 — evidence for the contact values, stored normalized. */
+  provenance: z
+    .object({
+      addressText: contactEvidenceReadSchema.nullish(),
+      phone: contactEvidenceReadSchema.nullish(),
+      website: contactEvidenceReadSchema.nullish(),
+    })
+    .nullish(),
 })
 export type SubmissionReviewDraft = z.infer<typeof submissionReviewDraftSchema>
 

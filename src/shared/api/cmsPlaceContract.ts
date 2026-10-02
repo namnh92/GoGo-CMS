@@ -182,6 +182,159 @@ const ADMINISTRATIVE_CODE = z
   .trim()
   .regex(/^[0-9]{2,5}$/, 'an administrative code is 2 to 5 digits')
 
+/**
+ * GoGo-BE#280 — `PlaceContactEvidence`. Every property is optional at the
+ * schema layer on purpose, exactly as in the spec: a missing one is reported by
+ * `mockContactWriteIssues` per property (`provenance.phone.collectedAt
+ * required`), not as a schema failure. Unknown keys are refused.
+ */
+const contactEvidenceSchema = z
+  .object({
+    sourceType: z.string().optional(),
+    sourceReference: z.string().optional(),
+    collectedAt: z.string().optional(),
+  })
+  .strict()
+
+export const contactProvenanceSchema = z
+  .object({
+    addressText: contactEvidenceSchema.nullable().optional(),
+    phone: contactEvidenceSchema.nullable().optional(),
+    website: contactEvidenceSchema.nullable().optional(),
+  })
+  .strict()
+
+type ContactEvidenceBody = z.infer<typeof contactEvidenceSchema>
+type ContactWriteBody = {
+  addressText?: string | null | undefined
+  phone?: string | null | undefined
+  website?: string | null | undefined
+  provenance?: z.infer<typeof contactProvenanceSchema> | undefined
+}
+
+const CONTACT_WIRE_FIELDS = ['addressText', 'phone', 'website'] as const
+const INDEPENDENT_SOURCE_TYPES = ['editorial', 'community', 'provider']
+/** GoGo-BE `GOOGLE_REFERENCE` in `place-contact.ts`, verbatim. */
+const GOOGLE_REFERENCE =
+  /google\.|goo\.gl|g\.page|g\.co\/|\bChIJ[\w-]{8,}|\bGhIJ[\w-]{8,}|\bgoogle\b/i
+
+function mockEvidenceIssues(
+  evidence: ContactEvidenceBody,
+  path: string,
+  now: Date,
+): { field: string; code: string; message: string }[] {
+  const issues: { field: string; code: string; message: string }[] = []
+  const type = (evidence.sourceType ?? '').trim()
+  const reference = (evidence.sourceReference ?? '').trim()
+  const collected = (evidence.collectedAt ?? '').trim()
+  if (type === '')
+    issues.push({ field: `${path}.sourceType`, code: 'required', message: 'Thiếu nguồn dữ liệu' })
+  else if (type === 'google_derived' || type === 'google')
+    issues.push({
+      field: `${path}.sourceType`,
+      code: 'google_not_independent',
+      message: 'Dữ liệu từ Google không phải nguồn độc lập',
+    })
+  else if (!INDEPENDENT_SOURCE_TYPES.includes(type))
+    issues.push({
+      field: `${path}.sourceType`,
+      code: 'invalid',
+      message: 'Nguồn dữ liệu không hợp lệ',
+    })
+  if (reference === '')
+    issues.push({
+      field: `${path}.sourceReference`,
+      code: 'required',
+      message: 'Thiếu tham chiếu nguồn',
+    })
+  else if (reference.length > 500)
+    issues.push({
+      field: `${path}.sourceReference`,
+      code: 'too_long',
+      message: 'Tham chiếu nguồn quá dài',
+    })
+  else if (GOOGLE_REFERENCE.test(reference))
+    issues.push({
+      field: `${path}.sourceReference`,
+      code: 'google_not_independent',
+      message: 'Tham chiếu Google không phải nguồn độc lập',
+    })
+  if (collected === '')
+    issues.push({
+      field: `${path}.collectedAt`,
+      code: 'required',
+      message: 'Thiếu thời điểm thu thập',
+    })
+  else if (!/(Z|[+-]\d{2}:?\d{2})$/.test(collected) || Number.isNaN(Date.parse(collected)))
+    issues.push({
+      field: `${path}.collectedAt`,
+      code: 'invalid_datetime',
+      message: 'Không phải thời điểm ISO',
+    })
+  else if (Date.parse(collected) > now.getTime() + 5 * 60_000)
+    issues.push({
+      field: `${path}.collectedAt`,
+      code: 'in_future',
+      message: 'Thời điểm thu thập ở tương lai',
+    })
+  return issues
+}
+
+/**
+ * GoGo-BE#280 `planContactWrite`, mirrored for the mock: which contact
+ * fields a body writes, and what is wrong with their evidence.
+ *
+ * `current` is the stored row for an edit and `null` for a review draft (which
+ * is always checked whole). With a stored row, re-sending the stored value
+ * without evidence is not a write and needs nothing — so a whole-form save
+ * still works. `normalize` is the mock's phone/website normaliser, so the
+ * "unchanged" comparison is made on the stored shape, as the server makes it.
+ */
+export function mockContactWriteIssues(
+  body: ContactWriteBody,
+  current: { addressText?: string | null; phone?: string | null; website?: string | null } | null,
+  normalize: (field: 'addressText' | 'phone' | 'website', value: string) => string = (_f, v) =>
+    v.trim(),
+  now: Date = new Date(),
+): { issues: { field: string; code: string; message: string }[]; writes: boolean } {
+  const issues: { field: string; code: string; message: string }[] = []
+  let writes = false
+  for (const field of CONTACT_WIRE_FIELDS) {
+    const value = body[field]
+    const evidence = body.provenance?.[field]
+    const path = `provenance.${field}`
+    const hasEvidence = evidence !== undefined && evidence !== null
+    if (value === undefined) {
+      if (hasEvidence)
+        issues.push({
+          field: path,
+          code: 'value_missing',
+          message: 'Có nguồn nhưng không có giá trị đi kèm',
+        })
+      continue
+    }
+    if (value === null) {
+      if (hasEvidence)
+        issues.push({ field: path, code: 'not_allowed', message: 'Xoá giá trị không kèm nguồn' })
+      else if (current !== null && (current[field] ?? null) !== null) writes = true
+      continue
+    }
+    if (!hasEvidence && current !== null && (current[field] ?? null) === normalize(field, value))
+      continue
+    if (!hasEvidence) {
+      issues.push({
+        field: path,
+        code: 'required',
+        message: 'Giá trị này cần nguồn độc lập: loại nguồn, tham chiếu và thời điểm thu thập',
+      })
+      continue
+    }
+    issues.push(...mockEvidenceIssues(evidence, path, now))
+    writes = true
+  }
+  return { issues, writes }
+}
+
 function buildPlaceEditSchema(taxonomyId: z.ZodType<string>) {
   return z.object({
     name: z.string().trim().min(L.name.min).max(L.name.max).optional(),
@@ -213,6 +366,8 @@ function buildPlaceEditSchema(taxonomyId: z.ZodType<string>) {
     isLodging: z.boolean().optional(),
     curatedRank: z.number().int().min(L.curatedRank.min).nullable().optional(),
     taxonomyIds: z.array(taxonomyId).max(L.taxonomyIds.max).optional(),
+    /** GoGo-BE#280 — evidence for the contact values the body writes. */
+    provenance: contactProvenanceSchema.optional(),
     /** Optimistic concurrency — the `updatedAt` the form was loaded from. */
     expectedUpdatedAt: z.string().datetime({ offset: true }).optional(),
   })
