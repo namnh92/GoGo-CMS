@@ -256,6 +256,9 @@ export const SOURCE_REFERENCE_KEYS = [
   'phone',
   'website',
   'geom',
+  'provinceCode',
+  'communeCode',
+  'taxonomyIds',
 ] as const
 export type SourceReferenceKey = (typeof SOURCE_REFERENCE_KEYS)[number]
 export type SourceReferences = Partial<Record<SourceReferenceKey, string>>

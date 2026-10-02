@@ -339,6 +339,26 @@ describe('create a place', () => {
     ).toBeInTheDocument()
   })
 
+  it('reads the per-key SOURCE_REFERENCE_INVALID codes (alpha.62)', async () => {
+    signInAs('editor')
+    createAnswers(() =>
+      envelope('SOURCE_REFERENCE_INVALID', 400, [
+        { field: 'sourceReferences.name', code: 'too_long', message: 'too_long' },
+        { field: 'sourceReferences.geom', code: 'required', message: 'required' },
+      ]),
+    )
+    const user = userEvent.setup()
+    renderWithProviders(<PlaceCreateScreen />)
+
+    await fillRequired(user)
+    await submit(user)
+
+    expect(await screen.findByText('Nguồn tối đa 500 ký tự.')).toBeInTheDocument()
+    expect(screen.getByText('Ghi nguồn cho thông tin này')).toBeInTheDocument()
+    expect(screen.getByLabelText(SOURCE_LABEL.name)).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByLabelText(SOURCE_LABEL.geom)).toHaveAttribute('aria-invalid', 'true')
+  })
+
   it.each([
     [
       'GOOGLE_CONTENT_NOT_PERSISTABLE',

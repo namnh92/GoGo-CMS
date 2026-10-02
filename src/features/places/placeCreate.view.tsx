@@ -149,9 +149,9 @@ export default function PlaceCreateScreen() {
    */
   const provinceCode = useWatch({ control: form.control, name: 'provinceCode' }) ?? ''
   // The optional facts whose source box is shown — only once there is a fact.
-  const [addressText, phone, website, description] = useWatch({
+  const [addressText, phone, website, description, communeCode, categoryId] = useWatch({
     control: form.control,
-    name: ['addressText', 'phone', 'website', 'description'],
+    name: ['addressText', 'phone', 'website', 'description', 'communeCode', 'categoryId'],
   })
 
   const create = useMutation({
@@ -219,7 +219,15 @@ export default function PlaceCreateScreen() {
           ? issue.field.slice('sourceReferences.'.length)
           : null
         if (key !== null && isCreateSourceKey(key)) {
-          form.setError(`sourceReferences.${key}`, { message: t('placeCreate.source.invalid') })
+          // alpha.62 names what is wrong per key; `unused` / `unknown` are a
+          // console bug, not the editor's, and keep the generic sentence.
+          const message =
+            issue.code === 'required'
+              ? t('placeCreate.source.required')
+              : issue.code === 'too_long'
+                ? t('placeCreate.source.tooLong')
+                : t('placeCreate.source.invalid')
+          form.setError(`sourceReferences.${key}`, { message })
           sourceIssues.push(issue)
         } else rest.push(issue)
       }
@@ -448,6 +456,11 @@ export default function PlaceCreateScreen() {
                     </option>
                   ))}
                 </Select>
+                {/*
+                  GoGo-BE#440 (alpha.62) — a category suggested from Google is
+                  not evidence by itself: it is sent only with a source.
+                */}
+                {categoryId ? sourceInput('taxonomyIds') : null}
 
                 {/*
                   ADM-106 — two levels, because Vietnam has two. The district
@@ -494,6 +507,8 @@ export default function PlaceCreateScreen() {
                     )}
                   />
                 </div>
+                {provinceCode ? sourceInput('provinceCode') : null}
+                {communeCode ? sourceInput('communeCode') : null}
 
                 <div className={styles.fieldRow}>
                   <TextInput

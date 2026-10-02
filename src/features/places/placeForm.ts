@@ -174,6 +174,14 @@ const placeCreateFields = placeIdentityFields.extend({
       phone: sourceReference(),
       website: sourceReference(),
       description: sourceReference(),
+      /*
+       * GoGo-BE#440 (alpha.62) — a province, commune or category suggested
+       * from a Google attachment is not evidence by itself, so these are
+       * claims like any other: sent only with the editor's own reference.
+       */
+      provinceCode: sourceReference(),
+      communeCode: sourceReference(),
+      taxonomyIds: sourceReference(),
     })
     .default({}),
 })
@@ -201,6 +209,9 @@ export const CREATE_SOURCE_KEYS = [
   'phone',
   'website',
   'description',
+  'provinceCode',
+  'communeCode',
+  'taxonomyIds',
 ] as const
 export type CreateSourceKey = (typeof CREATE_SOURCE_KEYS)[number]
 
@@ -210,7 +221,14 @@ export function isCreateSourceKey(key: string): key is CreateSourceKey {
 
 type CreateFacts = Pick<
   z.input<typeof placeCreateFields>,
-  'name' | 'addressText' | 'phone' | 'website' | 'description'
+  | 'name'
+  | 'addressText'
+  | 'phone'
+  | 'website'
+  | 'description'
+  | 'provinceCode'
+  | 'communeCode'
+  | 'categoryId'
 >
 
 /**
@@ -225,6 +243,10 @@ export function suppliedFacts(values: CreateFacts): CreateSourceKey[] {
   if (textOf(values.phone)) out.push('phone')
   if (textOf(values.website)) out.push('website')
   if (textOf(values.description)) out.push('description')
+  if (textOf(values.provinceCode)) out.push('provinceCode')
+  if (textOf(values.communeCode)) out.push('communeCode')
+  // One reference for the whole set; the form sends at most one category.
+  if (textOf(values.categoryId)) out.push('taxonomyIds')
   return out
 }
 

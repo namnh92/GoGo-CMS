@@ -1174,6 +1174,9 @@ export const en: Partial<Record<MessageKey, string>> = {
   'placeCreate.link.attached':
     'Attached to Google record “{name}” ({id}). Changing the link detaches it.',
   'placeCreate.link.detach': 'Detach',
+  'placeCreate.source.provinceCode': 'Source for the province',
+  'placeCreate.source.communeCode': 'Source for the commune',
+  'placeCreate.source.taxonomyIds': 'Source for the category',
   'placeCreate.source.required': 'Name a source for this fact',
   'placeCreate.source.invalid':
     'The server refused this source — check it (1–500 characters, for a fact you entered).',

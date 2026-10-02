@@ -1167,6 +1167,9 @@ export const vi = {
   'placeCreate.source.tooLong': 'Nguồn tối đa 500 ký tự.',
   'placeCreate.link.attached': 'Đang gắn với bản ghi Google “{name}” ({id}). Đổi link là bỏ gắn.',
   'placeCreate.link.detach': 'Bỏ gắn',
+  'placeCreate.source.provinceCode': 'Nguồn của tỉnh / thành phố',
+  'placeCreate.source.communeCode': 'Nguồn của phường / xã',
+  'placeCreate.source.taxonomyIds': 'Nguồn của nhóm địa điểm',
   'placeCreate.source.required': 'Ghi nguồn cho thông tin này',
   'placeCreate.source.invalid':
     'Máy chủ không nhận nguồn này — kiểm tra lại (1–500 ký tự, đúng thông tin đã nhập).',

@@ -5,7 +5,7 @@ import { http, HttpResponse } from 'msw'
 import { server } from '@/shared/test/server'
 import { renderWithProviders, signInAs } from '@/shared/test/render'
 import PlaceCreateScreen from './placeCreate.view'
-import { fillSources, SOURCE_LABEL, SOURCE_TEXT } from './placeCreate.testkit'
+import { fillSources, SOURCE_LABEL, SOURCE_TEXT, SUGGESTION_SOURCES } from './placeCreate.testkit'
 import { roundCoordinate } from './placeCreateLink.view'
 
 /**
@@ -189,7 +189,7 @@ describe('add a place by Google Maps link', () => {
     await pasteAndResolve(user)
     await user.click(await screen.findByRole('button', { name: ATTACH }))
     await typeFacts(user)
-    await fillSources(user)
+    await fillSources(user, ['name', 'geom', ...SUGGESTION_SOURCES])
     await user.click(screen.getByRole('button', { name: 'Tạo địa điểm' }))
 
     await waitFor(() => expect(bodies).toHaveLength(1))
@@ -246,7 +246,7 @@ describe('add a place by Google Maps link', () => {
     expect(screen.queryByText(/Đang gắn với bản ghi Google/)).not.toBeInTheDocument()
 
     await typeFacts(user)
-    await fillSources(user)
+    await fillSources(user, ['name', 'geom', ...SUGGESTION_SOURCES])
     await user.click(screen.getByRole('button', { name: 'Tạo địa điểm' }))
 
     await waitFor(() => expect(bodies).toHaveLength(1))
@@ -266,7 +266,7 @@ describe('add a place by Google Maps link', () => {
     expect(screen.queryByText(/Đang gắn với bản ghi Google/)).not.toBeInTheDocument()
 
     await typeFacts(user)
-    await fillSources(user)
+    await fillSources(user, ['name', 'geom', ...SUGGESTION_SOURCES])
     await user.click(screen.getByRole('button', { name: 'Tạo địa điểm' }))
 
     await waitFor(() => expect(bodies).toHaveLength(1))
@@ -581,7 +581,7 @@ describe('a link fills everything it can', () => {
     // box on the taxonomy the provider's types imply — both still editable.
     await waitFor(() => expect(screen.getByLabelText(/Nhóm địa điểm/)).toHaveValue('tx-cat-cafe'))
     await typeFacts(user)
-    await fillSources(user)
+    await fillSources(user, ['name', 'geom', ...SUGGESTION_SOURCES])
     await user.click(screen.getByRole('button', { name: 'Tạo địa điểm' }))
 
     await waitFor(() => expect(bodies).toHaveLength(1))
@@ -590,7 +590,35 @@ describe('a link fills everything it can', () => {
       provinceCode: '79',
       communeCode: '26734',
       taxonomyIds: ['tx-cat-cafe'],
+      // alpha.62 — a suggestion travels only with the editor's own source.
+      sourceReferences: {
+        provinceCode: SOURCE_TEXT,
+        communeCode: SOURCE_TEXT,
+        taxonomyIds: SOURCE_TEXT,
+      },
     })
+  })
+
+  it('a suggested unit or category is not evidence: no source, no create', async () => {
+    signInAs('editor')
+    resolvesTo(RESOLVED)
+    const bodies = createdWith()
+    const user = userEvent.setup()
+    renderWithProviders(<PlaceCreateScreen />)
+
+    await pasteAndResolve(user)
+    await user.click(await screen.findByRole('button', { name: ATTACH }))
+    await waitFor(() => expect(screen.getByLabelText(/Nhóm địa điểm/)).toHaveValue('tx-cat-cafe'))
+    await typeFacts(user)
+    await fillSources(user)
+    await user.click(screen.getByRole('button', { name: 'Tạo địa điểm' }))
+
+    for (const box of SUGGESTION_SOURCES) {
+      await waitFor(() =>
+        expect(screen.getByLabelText(SOURCE_LABEL[box])).toHaveAttribute('aria-invalid', 'true'),
+      )
+    }
+    expect(bodies).toHaveLength(0)
   })
 })
 

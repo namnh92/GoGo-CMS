@@ -1601,13 +1601,39 @@ export const handlers = [
       'district',
       'phone',
       'website',
+      'provinceCode',
+      'communeCode',
     ]
       .filter((key) => body[key] !== undefined && body[key] !== null)
       .concat(body.lat !== undefined && body.lng !== undefined ? ['geom'] : [])
+      .concat(Array.isArray(body.taxonomyIds) && body.taxonomyIds.length > 0 ? ['taxonomyIds'] : [])
+    const known = [
+      ...supplied,
+      'name',
+      'description',
+      'addressText',
+      'areaKey',
+      'city',
+      'district',
+      'phone',
+      'website',
+      'geom',
+      'provinceCode',
+      'communeCode',
+      'taxonomyIds',
+    ]
+    // alpha.62 per-key codes: required | unused | unknown | too_long.
     const sourceIssues = [
-      ...supplied.filter((key) => typeof refs[key] !== 'string' || !String(refs[key]).trim()),
-      ...Object.keys(refs).filter((key) => !supplied.includes(key)),
-    ].map((key) => ({ field: `sourceReferences.${key}`, code: 'invalid', message: key }))
+      ...supplied
+        .filter((key) => typeof refs[key] !== 'string' || !String(refs[key]).trim())
+        .map((key) => ({ key, code: 'required' })),
+      ...Object.keys(refs)
+        .filter((key) => !supplied.includes(key))
+        .map((key) => ({ key, code: known.includes(key) ? 'unused' : 'unknown' })),
+      ...Object.entries(refs)
+        .filter(([, value]) => typeof value === 'string' && value.trim().length > 500)
+        .map(([key]) => ({ key, code: 'too_long' })),
+    ].map(({ key, code }) => ({ field: `sourceReferences.${key}`, code, message: code }))
     if (sourceIssues.length > 0) return refuse('SOURCE_REFERENCE_INVALID', sourceIssues)
     const created = {
       ...db.places[0]!,

@@ -205,11 +205,16 @@ describe('the create form', () => {
     await userEvent.type(screen.getByLabelText(/^Kinh độ/), '105.8500')
     await pick(/Tỉnh \/ thành phố/, /Hà Nội/)
     await pick(/Phường \/ xã/, /Ba Đình/)
-    await fillSources(userEvent)
+    await fillSources(userEvent, ['name', 'geom', 'provinceCode', 'communeCode'])
     await userEvent.click(screen.getByRole('button', { name: /Tạo địa điểm/ }))
 
     await waitFor(() => expect(sent).toHaveLength(1))
     expect(sent[0]).toMatchObject({ provinceCode: '01', communeCode: '00163' })
+    // alpha.62 — each code is a claim, so each carries its own source.
+    expect(sent[0]!.sourceReferences).toMatchObject({
+      provinceCode: expect.any(String),
+      communeCode: expect.any(String),
+    })
     // The legacy free-text pair is not sent at all — there is nothing to send.
     expect(sent[0]).not.toHaveProperty('city')
     expect(sent[0]).not.toHaveProperty('district')

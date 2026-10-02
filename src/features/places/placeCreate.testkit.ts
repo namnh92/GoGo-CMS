@@ -12,7 +12,13 @@ export const SOURCE_LABEL = {
   phone: /^Nguồn của số điện thoại/,
   website: /^Nguồn của website/,
   description: /^Nguồn của mô tả/,
+  provinceCode: /^Nguồn của tỉnh/,
+  communeCode: /^Nguồn của phường/,
+  taxonomyIds: /^Nguồn của nhóm địa điểm/,
 } as const
+
+/** The boxes a Google attachment's suggestions (units, category) open. */
+export const SUGGESTION_SOURCES: SourceBox[] = ['provinceCode', 'communeCode', 'taxonomyIds']
 
 export type SourceBox = keyof typeof SOURCE_LABEL
 

@@ -1297,7 +1297,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Place detail with sources, freshness, hours, verified prices */
+        /**
+         * Place detail with sources, freshness, hours, verified prices
+         * @description GoGo-BE#217 (ADR-0028): carries the GoGo community rating (`gogoRating`, `gogoRatingCount`) beside the provider's (`rating`, `ratingCount`, attributed through `sources`). The two are separate facts from separate populations and are never merged into one score. The GoGo rating is computed on every read from the place's moderator-published reviews, so the response is served `Cache-Control: no-store` and a publish, rejection, edit back to moderation or emergency hide shows on the next read.
+         */
         get: operations["getPlaceDetail"];
         put?: never;
         post?: never;
@@ -6915,6 +6918,10 @@ export interface components {
             /** @description A number, not the string Postgres returns for `numeric`. The endpoint used to pass the row through unmapped, so a client calling `.toFixed` on this crashed (#169). */
             rating?: number;
             ratingCount?: number;
+            /** @description GoGo-BE#217 (ADR-0028) — the GoGo community rating, on a fixed 1–5 scale: the arithmetic mean of every moderator-published GoGo review of this place, each weighted equally, rounded once to one decimal (half away from zero, so 4.25 → 4.3). **Omitted** — never `null`, never 0 — while `gogoRatingCount` is below 5, the sample threshold; present whenever it is 5 or more. Never merged with the provider `rating`, which measures a different population; render each with its own source and count. */
+            gogoRating?: number;
+            /** @description GoGo-BE#217 (ADR-0028) — how many moderator-published GoGo reviews of this place `gogoRating` is computed from; always present, including 0. Counts reviews, not people: one author may have several. Pending, rejected, removed and hidden reviews, plan reviews, check-ins and provider reviews are never counted. Below 5 the client says in words that there are not enough GoGo reviews yet, beside this count, and renders no score. */
+            gogoRatingCount: number;
             priceLevel?: number;
             avgVisitMinutes?: number;
             suitability?: {
@@ -11199,6 +11206,8 @@ export interface operations {
             /** @description Place aggregate with hours, verified prices, sources and freshness */
             200: {
                 headers: {
+                    /** @description Always `no-store` — the GoGo rating follows moderation on the next read. */
+                    "Cache-Control"?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -14269,7 +14278,13 @@ export interface operations {
                      * @description Withdrawn by GoGo-BE#440. A value applied from a Google preview is not persistable as a GoGo fact, so any non-empty list is refused with `400 GOOGLE_CONTENT_NOT_PERSISTABLE`. Omit it, or send `[]`.
                      */
                     googleDerivedFields?: ("name" | "addressText" | "lat" | "lng")[];
-                    /** @description GoGo-BE#440 — the independent evidence behind each canonical fact, keyed by API field name; `geom` covers `lat` and `lng` together. Required for every supplied non-null fact (`name` and `geom` always); a key for a fact the body does not supply is refused, as is a missing one — `400 SOURCE_REFERENCE_INVALID`, one `field_errors` entry per key (`sourceReferences.<key>`). Each value is trimmed, 1..500 characters, naming non-Google evidence such as a venue menu or a field visit. Recorded as provenance with source type `editorial`; never fetched by the server. */
+                    /**
+                     * @description GoGo-BE#440 — the independent evidence behind each canonical fact, keyed by API field name. Required for every supplied non-null fact: `name` and `geom` (covers `lat` + `lng`) always; `description`, `addressText`, `areaKey`, `city`, `district`, `phone`, `website`, `provinceCode`, `communeCode` when sent non-null; `taxonomyIds` when the list is non-empty (one reference for the whole set). Omitting the object is the same as `{}`.
+                     *
+                     *     Every problem is `400 SOURCE_REFERENCE_INVALID` with one `field_errors` entry per key, `field = sourceReferences.<key>` and `code` one of `required` (supplied fact without a reference, or a blank one), `unused` (reference for a fact the body does not supply), `unknown` (not a key listed here), `too_long` (over 500 characters after trimming).
+                     *
+                     *     Values name non-Google evidence — a venue menu, a phone call, a field visit, the signage. A province, commune or category suggested from a Google-attached place is not evidence by itself: the console sends it only with the editor's own reference, or leaves the field out. Recorded as provenance, source type `editorial`, with the reference and the editor; never fetched by the server.
+                     */
                     sourceReferences: {
                         [key: string]: string;
                     };
@@ -14305,7 +14320,7 @@ export interface operations {
              *
              *     `PLACE_IDENTITY_CONFLICT` — two places already claim that Google ID. Nothing may be added against it until an editor merges them; both ids are in `field_errors`.
              *
-             *     `IDEMPOTENT_REQUEST_IN_FLIGHT` — the first request with this key is still running; retry shortly.
+             *     `IDEMPOTENT_REQUEST_IN_FLIGHT` (`retryable: true`) — the first request with this key is still running, or this request lost its claim on the key while it ran and was rolled back; retry shortly. A key older than 24 hours is taken over as a new request, never answered as a reuse.
              */
             409: {
                 headers: {

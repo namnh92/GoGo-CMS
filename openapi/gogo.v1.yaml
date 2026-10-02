@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: GoGo API
-  version: 1.0.0-alpha.61
+  version: 1.0.0-alpha.62
   description: |
     Public contract for GoGo clients (Mobile, Web, Mini App). This page is the
     integration guide — every rule below is enforced by the API, not advisory.
@@ -2594,15 +2594,84 @@ paths:
       operationId: getPlaceDetail
       tags: [places]
       summary: Place detail with sources, freshness, hours, verified prices
+      description: >
+        GoGo-BE#217 (ADR-0028): carries the GoGo community rating
+        (`gogoRating`, `gogoRatingCount`) beside the provider's
+        (`rating`, `ratingCount`, attributed through `sources`). The two are
+        separate facts from separate populations and are never merged into one
+        score. The GoGo rating is computed on every read from the place's
+        moderator-published reviews, so the response is served
+        `Cache-Control: no-store` and a publish, rejection, edit back to
+        moderation or emergency hide shows on the next read.
       security: []
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
         '200':
           description: Place aggregate with hours, verified prices, sources and freshness
+          headers:
+            Cache-Control:
+              description: Always `no-store` — the GoGo rating follows moderation on the next read.
+              schema: { type: string }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/PlaceDetail' }
+              examples:
+                noGogoReviews:
+                  summary: No published GoGo review — count 0, score omitted
+                  value:
+                    id: 5b0f3c8e-6a52-4c1e-9a37-2f7d1e8b4c10
+                    name: Cà phê Ví dụ
+                    status: published
+                    lat: 10.7769
+                    lng: 106.7009
+                    rating: 4.6
+                    ratingCount: 980
+                    gogoRatingCount: 0
+                    isLodging: false
+                    taxonomies: []
+                    hours: []
+                    prices: []
+                    sources:
+                      - { provider: google, attribution: Google Maps }
+                    photos: []
+                belowThreshold:
+                  summary: Four published GoGo reviews — below the threshold, score omitted
+                  value:
+                    id: 5b0f3c8e-6a52-4c1e-9a37-2f7d1e8b4c10
+                    name: Cà phê Ví dụ
+                    status: published
+                    lat: 10.7769
+                    lng: 106.7009
+                    rating: 4.6
+                    ratingCount: 980
+                    gogoRatingCount: 4
+                    isLodging: false
+                    taxonomies: []
+                    hours: []
+                    prices: []
+                    sources:
+                      - { provider: google, attribution: Google Maps }
+                    photos: []
+                atThreshold:
+                  summary: Five published GoGo reviews — score and count both present
+                  value:
+                    id: 5b0f3c8e-6a52-4c1e-9a37-2f7d1e8b4c10
+                    name: Cà phê Ví dụ
+                    status: published
+                    lat: 10.7769
+                    lng: 106.7009
+                    rating: 4.6
+                    ratingCount: 980
+                    gogoRating: 4.2
+                    gogoRatingCount: 5
+                    isLodging: false
+                    taxonomies: []
+                    hours: []
+                    prices: []
+                    sources:
+                      - { provider: google, attribution: Google Maps }
+                    photos: []
         '404': { $ref: '#/components/responses/NotFound' }
 
   /places/{id}/reviews:
@@ -5851,15 +5920,31 @@ paths:
                   type: object
                   description: >
                     GoGo-BE#440 — the independent evidence behind each canonical
-                    fact, keyed by API field name; `geom` covers `lat` and `lng`
-                    together. Required for every supplied non-null fact (`name`
-                    and `geom` always); a key for a fact the body does not supply
-                    is refused, as is a missing one —
-                    `400 SOURCE_REFERENCE_INVALID`, one `field_errors` entry per
-                    key (`sourceReferences.<key>`). Each value is trimmed,
-                    1..500 characters, naming non-Google evidence such as a
-                    venue menu or a field visit. Recorded as provenance with
-                    source type `editorial`; never fetched by the server.
+                    fact, keyed by API field name. Required for every supplied
+                    non-null fact: `name` and `geom` (covers `lat` + `lng`)
+                    always; `description`, `addressText`, `areaKey`, `city`,
+                    `district`, `phone`, `website`, `provinceCode`, `communeCode`
+                    when sent non-null; `taxonomyIds` when the list is non-empty
+                    (one reference for the whole set). Omitting the object is the
+                    same as `{}`.
+
+
+                    Every problem is `400 SOURCE_REFERENCE_INVALID` with one
+                    `field_errors` entry per key, `field =
+                    sourceReferences.<key>` and `code` one of `required`
+                    (supplied fact without a reference, or a blank one),
+                    `unused` (reference for a fact the body does not supply),
+                    `unknown` (not a key listed here), `too_long` (over 500
+                    characters after trimming).
+
+
+                    Values name non-Google evidence — a venue menu, a phone
+                    call, a field visit, the signage. A province, commune or
+                    category suggested from a Google-attached place is not
+                    evidence by itself: the console sends it only with the
+                    editor's own reference, or leaves the field out. Recorded as
+                    provenance, source type `editorial`, with the reference and
+                    the editor; never fetched by the server.
                   propertyNames:
                     enum:
                       [
@@ -5872,6 +5957,9 @@ paths:
                         phone,
                         website,
                         geom,
+                        provinceCode,
+                        communeCode,
+                        taxonomyIds,
                       ]
                   additionalProperties:
                     type: string
@@ -5920,8 +6008,11 @@ paths:
             ids are in `field_errors`.
 
 
-            `IDEMPOTENT_REQUEST_IN_FLIGHT` — the first request with this key is
-            still running; retry shortly.
+            `IDEMPOTENT_REQUEST_IN_FLIGHT` (`retryable: true`) — the first
+            request with this key is still running, or this request lost its
+            claim on the key while it ran and was rolled back; retry shortly.
+            A key older than 24 hours is taken over as a new request, never
+            answered as a reuse.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
@@ -12963,6 +13054,7 @@ components:
         confidence: { type: number, minimum: 0, maximum: 1 }
     PlaceDetail:
       type: object
+      required: [gogoRatingCount]
       properties:
         id: { type: string, format: uuid }
         name: { type: string }
@@ -12981,6 +13073,30 @@ components:
             endpoint used to pass the row through unmapped, so a client calling
             `.toFixed` on this crashed (#169).
         ratingCount: { type: integer }
+        gogoRating:
+          type: number
+          minimum: 1
+          maximum: 5
+          description: >
+            GoGo-BE#217 (ADR-0028) — the GoGo community rating, on a fixed 1–5
+            scale: the arithmetic mean of every moderator-published GoGo review
+            of this place, each weighted equally, rounded once to one decimal
+            (half away from zero, so 4.25 → 4.3). **Omitted** — never `null`,
+            never 0 — while `gogoRatingCount` is below 5, the sample threshold;
+            present whenever it is 5 or more. Never merged with the provider
+            `rating`, which measures a different population; render each with
+            its own source and count.
+        gogoRatingCount:
+          type: integer
+          minimum: 0
+          description: >
+            GoGo-BE#217 (ADR-0028) — how many moderator-published GoGo reviews
+            of this place `gogoRating` is computed from; always present,
+            including 0. Counts reviews, not people: one author may have
+            several. Pending, rejected, removed and hidden reviews, plan
+            reviews, check-ins and provider reviews are never counted. Below 5
+            the client says in words that there are not enough GoGo reviews
+            yet, beside this count, and renders no score.
         priceLevel: { type: integer }
         avgVisitMinutes: { type: integer }
         suitability:
