@@ -8,7 +8,20 @@ import type { Schemas } from './generated'
  * spec one-for-one and must be regenerated whenever the spec moves.
  */
 
-export const importJobStatusSchema = z.enum([
+/**
+ * The job states the contract names today. GoGo-BE#284 (PR #658) adds
+ * `paused_provider_unavailable` and declares `ImportJobSummary.status` an
+ * `x-extensible-enum`, so a value outside this list is data the server may
+ * legitimately send. Same pattern as the administrative decision states
+ * (contracts-administrative.ts, GoGo-BE#619): the schema accepts any string,
+ * and the screens render an unknown one as "unknown status" with no action —
+ * never as a parse failure that blanks the whole import screen.
+ *
+ * Hand-kept rather than read from the generated types on purpose: the spec
+ * that names the new value is not merged yet, and once it is the generated
+ * `status` widens to `string`, which carries no list to read from.
+ */
+export const IMPORT_JOB_STATUSES = [
   'uploaded',
   'validating',
   'processing',
@@ -18,8 +31,15 @@ export const importJobStatusSchema = z.enum([
   'failed',
   'cancelled',
   'paused_provider_quota',
-])
+  'paused_provider_unavailable',
+] as const
+export type KnownImportJobStatus = (typeof IMPORT_JOB_STATUSES)[number]
+export const importJobStatusSchema = z.string()
 export type ImportJobStatus = z.infer<typeof importJobStatusSchema>
+
+export function isKnownJobStatus(value: string): value is KnownImportJobStatus {
+  return (IMPORT_JOB_STATUSES as readonly string[]).includes(value)
+}
 
 export const importModeSchema = z.enum(['dry_run', 'create_drafts', 'publish_approved'])
 export type ImportMode = z.infer<typeof importModeSchema>
@@ -328,4 +348,19 @@ export function isJobLive(status: ImportJobStatus): boolean {
 /** Quota exhaustion is an interruption, not corrupt data (spec §10.6). */
 export function isQuotaPaused(status: ImportJobStatus): boolean {
   return status === 'paused_provider_quota'
+}
+
+/**
+ * GoGo-BE#284: parked because the provider could not be used at all — a
+ * disabled API, a bad key, an upstream outage. Like quota, an interruption
+ * with the rows intact, not a data error; unlike quota, waiting for a reset
+ * does nothing until the provider is fixed.
+ */
+export function isProviderUnavailablePaused(status: ImportJobStatus): boolean {
+  return status === 'paused_provider_unavailable'
+}
+
+/** Either provider pause: both resume through `start` (GoGo-BE#658). */
+export function isProviderPaused(status: ImportJobStatus): boolean {
+  return isQuotaPaused(status) || isProviderUnavailablePaused(status)
 }

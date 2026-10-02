@@ -1666,6 +1666,9 @@ export const vi = {
   'imports.quotaTitle': 'Nhà cung cấp hết hạn mức',
   'imports.quotaHint':
     'Dữ liệu của bạn còn nguyên. Phiên tạm dừng và có thể chạy tiếp khi hạn mức được cấp lại.',
+  'imports.providerUnavailableTitle': 'Không gọi được nhà cung cấp',
+  'imports.providerUnavailableHint':
+    'Dữ liệu của bạn còn nguyên. Phiên tạm dừng vì nhà cung cấp không dùng được (cấu hình sai hoặc sự cố phía họ), không phải hết hạn mức — chờ không tự khắc phục. Chạy tiếp sau khi nhà cung cấp hoạt động lại.',
   'imports.cancelExplain':
     'Dừng chỉ chặn các phần chưa xử lý. Dòng đã nhập vào catalog không bị hoàn tác.',
 
@@ -1678,6 +1681,8 @@ export const vi = {
   'importStatus.failed': 'Thất bại',
   'importStatus.cancelled': 'Đã dừng',
   'importStatus.paused_provider_quota': 'Tạm dừng — hết hạn mức',
+  'importStatus.paused_provider_unavailable': 'Tạm dừng — nhà cung cấp không dùng được',
+  'importStatus.unknown': 'Trạng thái chưa xác định ({status})',
 
   'importMode.dry_run': 'Chạy thử',
   'importMode.create_drafts': 'Tạo bản nháp',
