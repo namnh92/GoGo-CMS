@@ -2595,6 +2595,8 @@ export const vi = {
   'campaigns.error.destinationUrl':
     'Link phải là https, không chứa thông tin đăng nhập và không trỏ vào mạng nội bộ.',
   'campaigns.error.destinationId': 'Điểm đến phải là ID dạng UUID.',
+  'campaigns.error.destinationUnavailable':
+    'App chưa mở được đích này. Chọn Trang chủ, Địa điểm hoặc Danh sách đã lưu.',
 
   'campaigns.status.draft': 'Nháp',
   'campaigns.status.scheduled': 'Đã lên lịch',
@@ -2618,6 +2620,14 @@ export const vi = {
   'campaigns.destination.plan_template': 'Mẫu lịch trình',
   'campaigns.destination.saved': 'Danh sách đã lưu',
   'campaigns.destination.external_url': 'Link ngoài',
+  'campaigns.destination.unavailableOption': '{label} — App chưa mở được đích này',
+  'campaigns.destinationUnavailableNote':
+    'App chưa mở được đích "{label}". Hãy đổi sang Trang chủ, Địa điểm hoặc Danh sách đã lưu rồi lưu lại.',
+  'campaigns.scheduledUnopenableNote':
+    'App chưa mở được điểm đến của chiến dịch đã lên lịch này. Muốn đổi điểm đến, hãy huỷ lịch gửi trước rồi đổi.',
+  'campaigns.pastUnopenableNote': 'App chưa mở được điểm đến của chiến dịch này.',
+  'campaigns.sendBlockedNote':
+    'Đang khoá gửi và gửi thử: app chưa mở được điểm đến đã lưu. Đổi điểm đến và lưu trước khi gửi.',
 
   'auth.brandHeadline': 'Trung tâm nội dung & vận hành',
   'auth.brandLede':
