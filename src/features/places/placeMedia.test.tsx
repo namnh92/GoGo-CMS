@@ -198,6 +198,48 @@ describe('place media — upload queue (CMS-046)', () => {
 
     expect(await screen.findByText('Ảnh này đã có trên địa điểm.')).toBeInTheDocument()
   })
+
+  /** GoGo-BE#560: attach answers before any row is written; the server text is English. */
+  function attachRefusing(status: number, code: string) {
+    return http.post('/v1/cms/places/:placeId/media', () =>
+      HttpResponse.json(
+        {
+          code,
+          message: `server says ${code}`,
+          field_errors: [],
+          request_id: 'req-560',
+          retryable: status === 503,
+        },
+        { status },
+      ),
+    )
+  }
+
+  it('says the photo has not finished uploading on 409 UPLOAD_NOT_RECEIVED', async () => {
+    server.use(attachRefusing(409, 'UPLOAD_NOT_RECEIVED'))
+    const user = userEvent.setup()
+    open()
+
+    await chooseFiles(user, [jpeg('half.jpg')])
+
+    expect(
+      await screen.findByText('Ảnh chưa tải lên xong, hãy tải lại rồi thử lại'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/server says/)).not.toBeInTheDocument()
+  })
+
+  it('says storage is not answering on 503 UPLOAD_STORAGE_UNAVAILABLE', async () => {
+    server.use(attachRefusing(503, 'UPLOAD_STORAGE_UNAVAILABLE'))
+    const user = userEvent.setup()
+    open()
+
+    await chooseFiles(user, [jpeg('later.jpg')])
+
+    expect(
+      await screen.findByText('Kho ảnh tạm thời không phản hồi, thử lại sau'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/server says/)).not.toBeInTheDocument()
+  })
 })
 
 describe('place media — the list (CMS-046)', () => {

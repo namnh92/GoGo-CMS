@@ -322,6 +322,8 @@ export const en: Partial<Record<MessageKey, string>> = {
   'error.PROVINCE_NOT_CURRENT': 'The chosen province is not a current unit in the active dataset.',
   'error.COMMUNE_NOT_CURRENT': 'The chosen commune is not a current unit in the active dataset.',
   'error.HIERARCHY_INVALID': 'The commune does not sit in the chosen province.',
+  'error.UPLOAD_NOT_RECEIVED': 'The photo has not finished uploading — upload it again, then retry',
+  'error.UPLOAD_STORAGE_UNAVAILABLE': 'Photo storage is not responding right now — try again later',
   'error.LEGACY_DISTRICT_UNKNOWN': 'That legacy district code is not recognised.',
   'error.VERIFIED_NOT_REMATCHABLE':
     'A verified mapping cannot be rematched. Use Correct if it is wrong.',

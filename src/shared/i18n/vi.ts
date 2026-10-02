@@ -228,6 +228,9 @@ export const vi = {
   'error.COMMUNE_NOT_CURRENT':
     'Phường/xã đã chọn không phải đơn vị hiện hành trong bộ dữ liệu đang hoạt động.',
   'error.HIERARCHY_INVALID': 'Phường/xã không thuộc tỉnh đã chọn.',
+  // GoGo-BE#560: attach, banner and campaign image checks before any row is written.
+  'error.UPLOAD_NOT_RECEIVED': 'Ảnh chưa tải lên xong, hãy tải lại rồi thử lại',
+  'error.UPLOAD_STORAGE_UNAVAILABLE': 'Kho ảnh tạm thời không phản hồi, thử lại sau',
   'error.LEGACY_DISTRICT_UNKNOWN': 'Không nhận ra mã quận/huyện lịch sử này.',
   'error.VERIFIED_NOT_REMATCHABLE':
     'Ánh xạ đã được xác nhận thì không gán lại được. Dùng Sửa ánh xạ nếu nó sai.',
