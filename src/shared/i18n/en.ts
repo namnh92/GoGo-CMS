@@ -1113,7 +1113,7 @@ export const en: Partial<Record<MessageKey, string>> = {
   'placeCreate.intro':
     'Check it over and add what you know for certain. The place is created as a draft — hours, prices and photos come next in the editor, and publishing is a separate step.',
   'placeCreate.coordinateHint':
-    'Paste a Google Maps link above to fill this in. Without coordinates a place cannot be searched or routed to.',
+    'Enter coordinates you established yourself (measured on site, a visit…). Without them the place cannot be searched or routed to.',
   'placeCreate.submit': 'Create place',
   'placeCreate.created': 'Place created as a draft.',
   'placeCreate.failed': 'Could not create the place',
@@ -1123,15 +1123,16 @@ export const en: Partial<Record<MessageKey, string>> = {
   'placeCreate.duplicateOpenQueue': 'Open duplicate queue',
   'placeCreate.duplicateCreateAnyway': 'Different place, create anyway',
   'placeCreate.link.intro':
-    'Paste a Google Maps link and the name, address and coordinates are filled in for you — and the place is linked to its Google record, so it can be refreshed later. No link? Type it in below as before.',
+    'Paste a Google Maps link here to compare against and to attach the place to its Google record — for identity and duplicate protection. GoGo copies nothing from Google: type the name, address and coordinates below, each with its source.',
   'placeCreate.link.label': 'Google Maps link',
   'placeCreate.link.hint':
     'Short links (maps.app.goo.gl) and full links both work. The link is read, never opened.',
   'placeCreate.link.resolve': 'Find place',
   'placeCreate.link.found': 'Google returned this place',
   'placeCreate.link.rating': '{rating}★ Google · {count} reviews',
-  'placeCreate.link.apply': 'Use this data',
-  'placeCreate.link.applyNote': 'Fills the form below; edit anything you like.',
+  'placeCreate.link.apply': 'Attach this Google record',
+  'placeCreate.link.applyNote':
+    'Attaches only the Google place ID, with a suggested category and administrative units. Name, address and coordinates are not copied.',
   'placeCreate.link.exists': 'GoGo already has this place',
   'placeCreate.link.existsBody':
     'This link points at a Google record already attached to a place in the catalogue. Open that one instead of creating a second.',
@@ -1161,7 +1162,7 @@ export const en: Partial<Record<MessageKey, string>> = {
   'placeCreate.link.stale':
     'This answer belongs to the previous link — the box now holds a different one. Resolve again to use the current link.',
   'placeCreate.source.intro':
-    'Every fact you send needs a source: how you know it (a visit, the menu on site, a phone call, the venue’s own website…). Values filled from Google are for reference only — Google does not count as a source.',
+    'Every fact you send needs a source: how you know it (a visit, the menu on site, a phone call, the venue’s own website…). The Google preview is for comparison only — Google does not count as a source.',
   'placeCreate.source.hint': 'E.g. visited on 2 Oct, phoned the venue, menu on site.',
   'placeCreate.source.name': 'Source for the name',
   'placeCreate.source.geom': 'Source for the coordinates',

@@ -259,12 +259,12 @@ test.describe('roles', () => {
   })
 
   /**
-   * GoGo-CMS#157. The screen used to open on a latitude box; the whole point of
-   * the link is that an editor never types one. This walks the path a person
-   * actually takes — paste, look, accept, create — and checks the boxes carry
-   * Google's answer rather than checking that a request was sent.
+   * GoGo-CMS#157, revised by GoGo-BE#440 (owner decision 2026-10-02). The link
+   * attaches the Google record for identity and shows a preview to compare
+   * against; it copies no name, address or coordinates. The editor types each
+   * fact with its own source, and only then does the draft get created.
    */
-  test('a Google Maps link fills the form and creates the draft', async ({ page }) => {
+  test('a Google Maps link attaches identity; the editor types the facts', async ({ page }) => {
     await signIn(page, 'editor@gogo.vn')
     await page.goto('/places/new')
 
@@ -277,19 +277,22 @@ test.describe('roles', () => {
     // Google requires its attribution to travel with anything it supplied.
     await expect(page.getByText('Dữ liệu bản đồ ©2026 Google')).toBeVisible()
 
-    await page.getByRole('button', { name: 'Dùng dữ liệu này' }).click()
+    await page.getByRole('button', { name: 'Gắn với bản ghi Google này' }).click()
 
-    await expect(page.getByLabel(/Tên hiển thị/)).toHaveValue('Cà Phê Bên Đường')
-    await expect(page.getByLabel(/Vĩ độ/)).toHaveValue('10.7951153')
-    await expect(page.getByLabel(/Kinh độ/)).toHaveValue('106.7221002')
+    // GoGo-BE#440, owner decision 2026-10-02: attached, never copied. The
+    // preview is for comparing; the editor types each fact and its source.
+    await expect(page.getByLabel(/Tên hiển thị/)).toHaveValue('')
+    await expect(page.getByLabel(/Vĩ độ/)).toHaveValue('')
+    await expect(page.getByLabel(/Kinh độ/)).toHaveValue('')
 
-    // GoGo-BE#440 — the preview fills facts, never their evidence. Without a
-    // source of the editor's own the create does not leave the browser.
     await page.getByRole('button', { name: 'Tạo địa điểm' }).click()
-    await expect(page.getByText('Ghi nguồn cho thông tin này').first()).toBeVisible()
+    await expect(page.getByText('Không được để trống').first()).toBeVisible()
     await expect(page).toHaveURL(/\/places\/new$/)
 
-    for (const label of [/^Nguồn của tên/, /^Nguồn của toạ độ/, /^Nguồn của địa chỉ/]) {
+    await page.getByLabel(/Tên hiển thị/).fill('Cà Phê Bên Đường')
+    await page.getByLabel(/Vĩ độ/).fill('10.79512')
+    await page.getByLabel(/Kinh độ/).fill('106.72211')
+    for (const label of [/^Nguồn của tên/, /^Nguồn của toạ độ/]) {
       await page.getByLabel(label).fill('Đến tận nơi 02/10/2026')
     }
     await page.getByRole('button', { name: 'Tạo địa điểm' }).click()
@@ -314,8 +317,11 @@ test.describe('roles', () => {
     await page.getByRole('button', { name: /88 Hai Bà Trưng/ }).click()
 
     await expect(page.getByText('Google trả về địa điểm này')).toBeVisible()
-    await page.getByRole('button', { name: 'Dùng dữ liệu này' }).click()
-    await expect(page.getByLabel(/Tên hiển thị/)).toHaveValue('Highlands Coffee Hai Bà Trưng')
+    await page.getByRole('button', { name: 'Gắn với bản ghi Google này' }).click()
+    // Attached, not copied (GoGo-BE#440): the picked branch is what the
+    // preview shows, and the name box stays the editor's.
+    await expect(page.getByText('Highlands Coffee Hai Bà Trưng').first()).toBeVisible()
+    await expect(page.getByLabel(/Tên hiển thị/)).toHaveValue('')
   })
 
   test('a link GoGo already holds opens that place instead of duplicating it', async ({ page }) => {

@@ -102,6 +102,9 @@ const AMBIGUOUS = {
   ],
 }
 
+/** Attaches identity only — GoGo-BE#440, owner decision 2026-10-02. */
+const ATTACH = 'Gắn với bản ghi Google này'
+
 const LINK = 'https://www.google.com/maps/place/?q=place_id:ChIJcafe&place_id=ChIJcafe'
 
 function resolvesTo(body: Record<string, unknown>, status = 201) {
@@ -126,6 +129,13 @@ function createdWith() {
   return bodies
 }
 
+/** What the editor types themselves now that the preview copies nothing. */
+async function typeFacts(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(screen.getByLabelText(/Tên hiển thị/), 'Cà Phê Bên Đường')
+  await user.type(screen.getByLabelText(/Vĩ độ/), '10.79512')
+  await user.type(screen.getByLabelText(/Kinh độ/), '106.72211')
+}
+
 async function pasteAndResolve(user: ReturnType<typeof userEvent.setup>, url = LINK) {
   await user.type(screen.getByLabelText('Link Google Maps'), url)
   await user.click(screen.getByRole('button', { name: 'Tìm địa điểm' }))
@@ -136,7 +146,7 @@ beforeEach(() => {
 })
 
 describe('add a place by Google Maps link', () => {
-  it('fills the form from the resolved place, attribution and all', async () => {
+  it('shows the resolved place to compare, and copies none of its facts', async () => {
     signInAs('editor')
     resolvesTo(RESOLVED)
     const user = userEvent.setup()
@@ -152,19 +162,22 @@ describe('add a place by Google Maps link', () => {
     expect(screen.getByText('4.4★ Google · 88 đánh giá')).toBeInTheDocument()
     expect(screen.getByText('Dữ liệu bản đồ ©2026 Google')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Dùng dữ liệu này' }))
+    await user.click(screen.getByRole('button', { name: ATTACH }))
 
-    expect(screen.getByLabelText(/Tên hiển thị/)).toHaveValue('Cà Phê Bên Đường')
-    expect(screen.getByLabelText(/Vĩ độ/)).toHaveValue(10.7951153)
-    expect(screen.getByLabelText(/Kinh độ/)).toHaveValue(106.7221002)
+    // GoGo-BE#440, owner decision 2026-10-02: the preview is view/compare-only.
+    // A value copied from Google is not a GoGo fact, so nothing of it lands in
+    // a box — the editor types each fact with its own source.
+    expect(screen.getByLabelText(/Tên hiển thị/)).toHaveValue('')
+    expect(screen.getByLabelText(/Địa chỉ/)).toHaveValue('')
+    expect(screen.getByLabelText(/Vĩ độ/)).toHaveValue(null)
+    expect(screen.getByLabelText(/Kinh độ/)).toHaveValue(null)
   })
 
   /*
    * GoGo-BE#440 — a value applied from a Google preview is not a GoGo fact
    * however it arrives. The console sends the Google id as identity only and
    * declares no `googleDerivedFields` (the server now refuses a non-empty one);
-   * what the preview filled in reaches the catalogue only with the editor's own
-   * evidence behind it.
+   * the facts are the ones the editor typed, each with its own evidence.
    */
   it('sends the Google id as identity only — no googleDerivedFields', async () => {
     signInAs('editor')
@@ -174,19 +187,25 @@ describe('add a place by Google Maps link', () => {
     renderWithProviders(<PlaceCreateScreen />)
 
     await pasteAndResolve(user)
-    await user.click(await screen.findByRole('button', { name: 'Dùng dữ liệu này' }))
-    await fillSources(user, ['name', 'geom', 'addressText'])
+    await user.click(await screen.findByRole('button', { name: ATTACH }))
+    await typeFacts(user)
+    await fillSources(user)
     await user.click(screen.getByRole('button', { name: 'Tạo địa điểm' }))
 
     await waitFor(() => expect(bodies).toHaveLength(1))
     expect(bodies[0]).toMatchObject({
       googlePlaceId: 'ChIJcafe',
-      sourceReferences: { name: SOURCE_TEXT, geom: SOURCE_TEXT, addressText: SOURCE_TEXT },
+      name: 'Cà Phê Bên Đường',
+      lat: 10.79512,
+      lng: 106.72211,
+      sourceReferences: { name: SOURCE_TEXT, geom: SOURCE_TEXT },
     })
     expect(bodies[0]).not.toHaveProperty('googleDerivedFields')
+    // Google's address was never copied, so none is sent.
+    expect(bodies[0]).not.toHaveProperty('addressText')
   })
 
-  it('a value Google filled in still needs a source of its own', async () => {
+  it('attaching a link is not a create: the facts are still the editor’s to type', async () => {
     signInAs('editor')
     resolvesTo(RESOLVED)
     const bodies = createdWith()
@@ -194,20 +213,15 @@ describe('add a place by Google Maps link', () => {
     renderWithProviders(<PlaceCreateScreen />)
 
     await pasteAndResolve(user)
-    await user.click(await screen.findByRole('button', { name: 'Dùng dữ liệu này' }))
-
-    // The preview fills facts, never their evidence: Google is not a source.
-    expect(screen.getByLabelText(SOURCE_LABEL.name)).toHaveValue('')
-    expect(screen.getByLabelText(SOURCE_LABEL.geom)).toHaveValue('')
-    expect(screen.getByLabelText(SOURCE_LABEL.addressText)).toHaveValue('')
-
+    await user.click(await screen.findByRole('button', { name: ATTACH }))
     await user.click(screen.getByRole('button', { name: 'Tạo địa điểm' }))
 
     await waitFor(() =>
-      expect(screen.getByLabelText(SOURCE_LABEL.name)).toHaveAttribute('aria-invalid', 'true'),
+      expect(screen.getByLabelText(/Tên hiển thị/)).toHaveAttribute('aria-invalid', 'true'),
     )
-    expect(screen.getByLabelText(SOURCE_LABEL.geom)).toHaveAttribute('aria-invalid', 'true')
-    expect(screen.getByLabelText(SOURCE_LABEL.addressText)).toHaveAttribute('aria-invalid', 'true')
+    // Evidence is never filled for the editor either: Google is not a source.
+    expect(screen.getByLabelText(SOURCE_LABEL.name)).toHaveValue('')
+    expect(screen.getByLabelText(SOURCE_LABEL.geom)).toHaveValue('')
     expect(bodies).toHaveLength(0)
   })
 
@@ -266,8 +280,9 @@ describe('add a place by Google Maps link', () => {
     expect(await screen.findByText('Highlands Hai Bà Trưng')).toBeInTheDocument()
     expect(asked[1]).toEqual({ googlePlaceId: 'ChIJb' })
 
-    await user.click(screen.getByRole('button', { name: 'Dùng dữ liệu này' }))
-    expect(screen.getByLabelText(/Tên hiển thị/)).toHaveValue('Highlands Hai Bà Trưng')
+    await user.click(screen.getByRole('button', { name: ATTACH }))
+    // Attached, not copied (GoGo-BE#440).
+    expect(screen.getByLabelText(/Tên hiển thị/)).toHaveValue('')
   })
 
   it('keeps the other branches on screen when a pick cannot be resolved', async () => {
@@ -326,7 +341,7 @@ describe('add a place by Google Maps link', () => {
     expect(screen.getByRole('button', { name: /1 Lê Lợi/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /88 Hai Bà Trưng/ })).toBeInTheDocument()
     // Nothing to apply yet: no branch has been chosen.
-    expect(screen.queryByRole('button', { name: 'Dùng dữ liệu này' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: ATTACH })).not.toBeInTheDocument()
   })
 
   it('does not call one candidate several branches', async () => {
@@ -512,12 +527,13 @@ describe('a link fills everything it can', () => {
     renderWithProviders(<PlaceCreateScreen />)
 
     await pasteAndResolve(user)
-    await user.click(await screen.findByRole('button', { name: 'Dùng dữ liệu này' }))
+    await user.click(await screen.findByRole('button', { name: ATTACH }))
 
     // The selectors opened on the units the geometry names, and the category
     // box on the taxonomy the provider's types imply — both still editable.
     await waitFor(() => expect(screen.getByLabelText(/Nhóm địa điểm/)).toHaveValue('tx-cat-cafe'))
-    await fillSources(user, ['name', 'geom', 'addressText'])
+    await typeFacts(user)
+    await fillSources(user)
     await user.click(screen.getByRole('button', { name: 'Tạo địa điểm' }))
 
     await waitFor(() => expect(bodies).toHaveLength(1))
@@ -566,7 +582,7 @@ describe('a late answer never wins', () => {
     expect(screen.getByText(/Kết quả này thuộc về link trước đó/)).toBeInTheDocument()
     // Rule 16: it says why rather than looking operable and filling the form
     // from a place the editor has moved on from.
-    expect(screen.getByRole('button', { name: 'Dùng dữ liệu này' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: ATTACH })).toBeDisabled()
     expect(screen.getByLabelText(/Tên hiển thị/)).toHaveValue('')
   })
 
@@ -591,10 +607,12 @@ describe('a late answer never wins', () => {
     await user.type(name, 'Tên tôi tự gõ')
     gate.release?.()
 
-    await user.click(await screen.findByRole('button', { name: 'Dùng dữ liệu này' }))
+    await user.click(await screen.findByRole('button', { name: ATTACH }))
 
-    // Their name survives; the boxes they never touched are filled.
+    // Their name survives, and nothing of Google's lands in the boxes they
+    // left empty either (GoGo-BE#440) — only GoGo's own suggestions apply.
     expect(name).toHaveValue('Tên tôi tự gõ')
-    expect(screen.getByLabelText(/Vĩ độ/)).toHaveValue(10.7951153)
+    expect(screen.getByLabelText(/Vĩ độ/)).toHaveValue(null)
+    await waitFor(() => expect(screen.getByLabelText(/Nhóm địa điểm/)).toHaveValue('tx-cat-cafe'))
   })
 })

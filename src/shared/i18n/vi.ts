@@ -1107,7 +1107,7 @@ export const vi = {
   'placeCreate.intro':
     'Kiểm lại và bổ sung những gì bạn biết chắc. Địa điểm được tạo ở trạng thái Nháp — giờ mở cửa, giá và ảnh nhập tiếp ở màn sửa, xuất bản là bước riêng.',
   'placeCreate.coordinateHint':
-    'Dán link Google Maps ở trên để điền sẵn. Không có toạ độ thì không tìm kiếm hay chỉ đường được.',
+    'Nhập toạ độ bạn tự xác định (đo tại chỗ, đến tận nơi…). Không có toạ độ thì không tìm kiếm hay chỉ đường được.',
   'placeCreate.submit': 'Tạo địa điểm',
   'placeCreate.created': 'Đã tạo địa điểm ở trạng thái Nháp.',
   'placeCreate.failed': 'Chưa tạo được địa điểm',
@@ -1117,15 +1117,16 @@ export const vi = {
   'placeCreate.duplicateOpenQueue': 'Xem danh sách trùng lặp',
   'placeCreate.duplicateCreateAnyway': 'Đây là chỗ khác, vẫn tạo',
   'placeCreate.link.intro':
-    'Có link Google Maps thì dán vào đây — tên, địa chỉ và toạ độ sẽ được điền sẵn, và địa điểm gắn được với bản ghi Google để về sau còn làm mới. Không có link vẫn nhập tay bình thường ở dưới.',
+    'Có link Google Maps thì dán vào đây để đối chiếu và gắn địa điểm với bản ghi Google — để nhận diện và chống tạo trùng. GoGo không chép dữ liệu từ Google: tên, địa chỉ và toạ độ bạn tự nhập ở dưới, kèm nguồn.',
   'placeCreate.link.label': 'Link Google Maps',
   'placeCreate.link.hint':
     'Nhận cả link rút gọn (maps.app.goo.gl) lẫn link đầy đủ. Chỉ đọc link, không mở trang.',
   'placeCreate.link.resolve': 'Tìm địa điểm',
   'placeCreate.link.found': 'Google trả về địa điểm này',
   'placeCreate.link.rating': '{rating}★ Google · {count} đánh giá',
-  'placeCreate.link.apply': 'Dùng dữ liệu này',
-  'placeCreate.link.applyNote': 'Điền vào form bên dưới, sửa lại thoải mái.',
+  'placeCreate.link.apply': 'Gắn với bản ghi Google này',
+  'placeCreate.link.applyNote':
+    'Chỉ gắn mã địa điểm Google, kèm gợi ý nhóm và đơn vị hành chính. Tên, địa chỉ, toạ độ không được chép sang.',
   'placeCreate.link.exists': 'GoGo đã có địa điểm này',
   'placeCreate.link.existsBody':
     'Link này trỏ tới một bản ghi Google đã gắn với địa điểm trong danh mục. Mở địa điểm đó thay vì tạo bản thứ hai.',
@@ -1155,7 +1156,7 @@ export const vi = {
   'placeCreate.link.stale':
     'Kết quả này thuộc về link trước đó — link trong ô đã đổi. Bấm “Tìm địa điểm” lần nữa để dùng dữ liệu của link hiện tại.',
   'placeCreate.source.intro':
-    'Mỗi thông tin bạn gửi cần ghi nguồn: bạn biết nó từ đâu (đến tận nơi, thực đơn tại quán, gọi điện xác nhận, website chính thức của quán…). Dữ liệu điền sẵn từ Google chỉ để tham khảo — Google không được tính là nguồn.',
+    'Mỗi thông tin bạn gửi cần ghi nguồn: bạn biết nó từ đâu (đến tận nơi, thực đơn tại quán, gọi điện xác nhận, website chính thức của quán…). Bản xem trước từ Google chỉ để đối chiếu — Google không được tính là nguồn.',
   'placeCreate.source.hint': 'Ví dụ: đến tận nơi ngày 02/10, gọi điện cho quán, thực đơn tại quán.',
   'placeCreate.source.name': 'Nguồn của tên',
   'placeCreate.source.geom': 'Nguồn của toạ độ',

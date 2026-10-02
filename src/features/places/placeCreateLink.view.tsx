@@ -30,25 +30,22 @@ export function roundCoordinate(value: number): number {
 }
 
 /**
- * What the editor gets to apply.
+ * What attaching a resolution hands the form (GoGo-BE#440, owner decision
+ * 2026-10-02).
  *
- * Two halves, and the split is the point. The top block is **theirs**: it lands
- * in form boxes, they may change any of it before submitting, and whatever they
- * leave alone is recorded `google_derived`. `lat`/`lng` travel together — one
- * position, one provenance row.
+ * Identity, and only suggestions GoGo itself vouches for: the Google place ID
+ * (a `place_sources` row, which puts the place inside provider dedup), the
+ * administrative units GoGo's own boundaries name for the point, and a category
+ * key the server checked against the live vocabulary. **No name, address or
+ * coordinates** — a value copied from a Google preview is not a GoGo fact
+ * however it arrives, so the preview is view/compare-only and the editor types
+ * each fact with its own source.
  *
- * `provider` is **not** theirs and is not editable. Rating, review count, the
- * week and the canonical link are facts GoGo-BE fetches for itself when the
- * place is created (PI-BE-021 / ADR-0020), so the panel renders them as what
- * the row will carry rather than as inputs. A box an editor could type a Google
- * rating into would be a box for authoring one.
+ * `provider` is display-only for the same reason: nothing in it is persisted
+ * on create.
  */
 export type AppliedResolution = {
   googlePlaceId: string
-  name: string
-  addressText: string
-  lat: number
-  lng: number
   /**
    * ADM-017 — from the coordinate, against GoGo's own boundaries. Empty string
    * where the resolve could not name a unit: the selector then opens empty
@@ -322,10 +319,6 @@ export function PlaceCreateLinkPanel({
               onClick={() =>
                 onApply({
                   googlePlaceId: candidate.googlePlaceId,
-                  name: candidate.name,
-                  addressText: candidate.address,
-                  lat: roundCoordinate(candidate.location.lat),
-                  lng: roundCoordinate(candidate.location.lng),
                   provinceCode: result.administrative?.provinceCode ?? '',
                   communeCode: result.administrative?.communeCode ?? '',
                   categoryKey: candidate.categoryKey ?? '',

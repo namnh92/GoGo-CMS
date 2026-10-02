@@ -330,16 +330,13 @@ export default function PlaceCreateScreen() {
                 onApply={(values) => {
                   setApplied(values)
                   /*
-                   * `shouldDirty` so the unsaved-changes guard treats an applied
-                   * resolution as work in progress, which it is. `applyField`
-                   * skips a box the editor has typed in since this resolve
-                   * began — a link may replace what a previous link filled, and
-                   * may not replace what a person wrote.
+                   * GoGo-BE#440 (owner decision 2026-10-02) — name, address and
+                   * coordinates are never copied from the preview: it is for
+                   * comparing, and the editor types each fact with its own
+                   * source. What is applied is identity plus GoGo's own
+                   * suggestions. `applyField` skips a box the editor has
+                   * touched since this resolve began.
                    */
-                  applyField('name', values.name)
-                  applyField('addressText', values.addressText)
-                  applyField('lat', values.lat)
-                  applyField('lng', values.lng)
                   // ADM-017 — from the coordinate, against GoGo's boundaries.
                   // Empty when the resolve could not name a unit: the selectors
                   // then open empty rather than on a guess.
@@ -349,14 +346,7 @@ export default function PlaceCreateScreen() {
                     ? (categoryIdByKey.get(values.categoryKey) ?? '')
                     : ''
                   if (categoryId) applyField('categoryId', categoryId)
-                  form.clearErrors([
-                    'name',
-                    'addressText',
-                    'lat',
-                    'lng',
-                    'provinceCode',
-                    'communeCode',
-                  ])
+                  form.clearErrors(['provinceCode', 'communeCode'])
                 }}
               />
             </CardBody>
