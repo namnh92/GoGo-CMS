@@ -13,7 +13,15 @@ import { AsyncBoundary } from '@/shared/ui/State'
 import { UnsavedChangesDialog } from '@/shared/ui/UnsavedChangesGuard'
 import { useToast } from '@/shared/ui/Toast'
 import { CloseIcon } from '@/shared/ui/icons'
-import { ApiError } from '@/shared/api/errors'
+import { ApiError, toApiError, type FieldError } from '@/shared/api/errors'
+import { ContactEvidenceFields } from '@/features/places/contactEvidence.view'
+import {
+  emptyEvidenceDrafts,
+  evidenceTarget,
+  useEvidenceError,
+  type ContactField,
+  type EvidenceDrafts,
+} from '@/features/places/contactEvidence'
 import { fetchTaxonomies } from '@/features/taxonomy/api'
 import { fetchPlaces } from '@/features/places/api'
 import type { SubmissionReviewDraft } from '@/shared/api/contracts'
@@ -28,6 +36,10 @@ import {
   EMPTY_REVIEW_FORM,
   PRICE_UNITS,
   changedReviewFields,
+  evidenceSignature,
+  reviewContactFieldsWithValue,
+  reviewEvidenceFrom,
+  reviewEvidenceIssues,
   reviewFormFrom,
   toReviewDraft,
   type ReviewForm,
@@ -86,6 +98,11 @@ export function SubmissionReviewDrawer({
 
   const [form, setForm] = useState<ReviewForm>(EMPTY_REVIEW_FORM)
   const [baseline, setBaseline] = useState<ReviewForm>(EMPTY_REVIEW_FORM)
+  /** GoGo-BE#280 — the source behind each contact value in the draft. */
+  const [evidence, setEvidence] = useState<EvidenceDrafts>(emptyEvidenceDrafts)
+  const [evidenceBaseline, setEvidenceBaseline] = useState('')
+  /** What the last save or approval refused, field by field. */
+  const [fieldErrors, setFieldErrors] = useState<FieldError[]>([])
   const [taxonomyIds, setTaxonomyIds] = useState<string[]>([])
   const [taxonomyBaseline, setTaxonomyBaseline] = useState<string>('')
   const [reason, setReason] = useState('')
@@ -122,6 +139,10 @@ export function SubmissionReviewDrawer({
     const next = reviewFormFrom(savedDraft)
     setForm(next)
     setBaseline(next)
+    const nextEvidence = reviewEvidenceFrom(savedDraft)
+    setEvidence(nextEvidence)
+    setEvidenceBaseline(evidenceSignature(nextEvidence))
+    setFieldErrors([])
     const ids = savedDraft?.taxonomyIds ?? []
     setTaxonomyIds(ids)
     setTaxonomyBaseline(ids.slice().sort().join(','))
@@ -130,7 +151,39 @@ export function SubmissionReviewDrawer({
 
   const dirtyFields = changedReviewFields(form, baseline)
   const taxonomyDirty = taxonomyIds.slice().sort().join(',') !== taxonomyBaseline
-  const dirty = dirtyFields.length > 0 || taxonomyDirty
+  const evidenceDirty = evidenceSignature(evidence) !== evidenceBaseline
+  const dirty = dirtyFields.length > 0 || taxonomyDirty || evidenceDirty
+
+  const describeEvidence = useEvidenceError()
+  const errorAt = (path: string) => {
+    const issue = fieldErrors.find((error) => error.field === path)
+    return issue ? describeEvidence(issue) : undefined
+  }
+  /** An evidence refusal lands on its box; `provenance.phone` on the first. */
+  const evidenceErrorAt = (field: ContactField, property: string) => {
+    const issue = fieldErrors.find((error) => {
+      const target = evidenceTarget(error.field)
+      return target?.field === field && target.property === property
+    })
+    return issue ? describeEvidence(issue) : undefined
+  }
+  const withValue = new Set(reviewContactFieldsWithValue(form))
+  const evidenceFor = (field: ContactField) =>
+    withValue.has(field) ? (
+      <ContactEvidenceFields
+        field={field}
+        idPrefix="review"
+        bind={(property) => ({
+          value: evidence[field][property],
+          onChange: (event: { target: { value: string } }) =>
+            setEvidence((current) => ({
+              ...current,
+              [field]: { ...current[field], [property]: event.target.value },
+            })),
+        })}
+        error={(property) => evidenceErrorAt(field, property)}
+      />
+    ) : null
 
   /**
    * One `quality` Place Details, on request. Cached under the submission id so
@@ -149,22 +202,39 @@ export function SubmissionReviewDrawer({
 
   const save = useMutation({
     mutationFn: () => {
+      // GoGo-BE#280 — a contact value without its source is refused here, on
+      // the empty box, rather than as a 400 after the round-trip.
+      const missing = reviewEvidenceIssues(form, evidence)
+      if (missing.length > 0) {
+        return Promise.reject(
+          new ApiError({
+            code: 'VALIDATION_FAILED',
+            message: t('submissions.review.invalid'),
+            status: 400,
+            fieldErrors: missing,
+          }),
+        )
+      }
       const draft: SubmissionReviewDraft = {
-        ...toReviewDraft(form, savedDraft),
+        ...toReviewDraft(form, savedDraft, evidence),
         taxonomyIds,
       }
       return saveSubmissionReview(submissionId!, draft, detail.data?.updatedAt)
     },
     onSuccess: () => {
+      setFieldErrors([])
       toast.success(t('submissions.review.saved'))
       void queryClient.invalidateQueries({ queryKey: queryKeys.submissions.all })
     },
     onError: (error) => {
-      const code = error instanceof ApiError ? error.code : undefined
+      const apiError = toApiError(error)
+      setFieldErrors(apiError.fieldErrors)
       toast.error(
-        code === 'SUBMISSION_MODIFIED'
+        apiError.code === 'SUBMISSION_MODIFIED'
           ? t('submissions.review.stale')
-          : t('submissions.review.saveFailed'),
+          : apiError.code === 'VALIDATION_FAILED' && apiError.fieldErrors.length > 0
+            ? t('submissions.review.invalid')
+            : t('submissions.review.saveFailed'),
       )
     },
   })
@@ -180,7 +250,20 @@ export function SubmissionReviewDrawer({
       // Approving creates a catalog place, so the catalog is stale too.
       void queryClient.invalidateQueries({ queryKey: queryKeys.places.all })
     },
-    onError: () => toast.error(t('submissions.decideFailed')),
+    onError: (error) => {
+      const apiError = toApiError(error)
+      /*
+       * GoGo-BE#280 — a draft saved before contact evidence existed (or by an
+       * older console) is refused at approval, naming the fields. The draft is
+       * what is wrong, so the boxes say so and the reviewer re-saves it.
+       */
+      if (apiError.code === 'REVIEW_EVIDENCE_REQUIRED') {
+        setFieldErrors(apiError.fieldErrors)
+        toast.error(t('submissions.review.evidenceRequired'), apiError.requestId || undefined)
+        return
+      }
+      toast.error(t('submissions.decideFailed'))
+    },
   })
 
   const mergeResults = useQuery({
@@ -376,19 +459,23 @@ export function SubmissionReviewDrawer({
                     label={t('submissions.review.address')}
                     value={form.addressText}
                     maxLength={400}
+                    error={errorAt('addressText')}
                     onChange={(event) => setForm({ ...form, addressText: event.target.value })}
                   />
+                  {evidenceFor('addressText')}
                   <div className={styles.grid}>
                     <TextInput
                       label={t('submissions.review.phone')}
                       value={form.phone}
                       maxLength={40}
+                      error={errorAt('phone')}
                       onChange={(event) => setForm({ ...form, phone: event.target.value })}
                     />
                     <TextInput
                       label={t('submissions.review.website')}
                       value={form.website}
                       maxLength={500}
+                      error={errorAt('website')}
                       onChange={(event) => setForm({ ...form, website: event.target.value })}
                     />
                     <TextInput
@@ -427,6 +514,8 @@ export function SubmissionReviewDrawer({
                       onChange={(event) => setForm({ ...form, priceMax: event.target.value })}
                     />
                   </div>
+                  {evidenceFor('phone')}
+                  {evidenceFor('website')}
 
                   <div className={styles.tagRow}>
                     {taxonomyIds.map((id) => {
@@ -581,7 +670,10 @@ export function SubmissionReviewDrawer({
 
       <UnsavedChangesDialog
         open={leaving}
-        pending={dirtyFields.map((field) => t(REVIEW_FIELD_LABEL[field]))}
+        pending={[
+          ...dirtyFields.map((field) => t(REVIEW_FIELD_LABEL[field])),
+          ...(evidenceDirty ? [t('placeEditor.provenance')] : []),
+        ]}
         onStay={() => setLeaving(false)}
         onLeave={() => {
           setLeaving(false)

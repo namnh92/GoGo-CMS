@@ -779,10 +779,10 @@ export const en: Partial<Record<MessageKey, string>> = {
     'Three sources that look identical in the table below. Fixing the wrong one means knowing which is which.',
   'jobDetail.sourceFile': 'Your file',
   'jobDetail.sourceFileFields':
-    'name, category, vibes, audiences, highlight, price, phone, website, avg_visit_minutes, is_lodging, curated_rank. Wrong here means fix the file and re-import.',
+    'name, category, vibes, audiences, highlight, price, address, phone, website (each with its three source columns), avg_visit_minutes, is_lodging, curated_rank. Wrong here means fix the file and re-import.',
   'jobDetail.sourceGoogle': 'Fetched from Google',
   'jobDetail.sourceGoogleFields':
-    'Display name, address, coordinates, canonical Google link, rating, review count, price level, opening hours, business status, types. Read-only — check the link or Place ID instead.',
+    'Display name, coordinates, canonical Google link, rating, review count, price level, opening hours, business status, types. Read-only — check the link or Place ID instead.',
   'jobDetail.sourceDerived': 'Derived by GoGo',
   'jobDetail.sourceDerivedFields':
     'Province and commune codes and names, mapping status, dataset version, publication blocker, category derived from the provider types. Computed from the coordinate; never typed.',
@@ -1216,6 +1216,36 @@ export const en: Partial<Record<MessageKey, string>> = {
   'placeEditor.providerStatus.other': 'Other status ({value})',
   'placeEditor.provenanceVerified': 'verified {time}',
   'placeEditor.provenanceUnverified': 'no verification timestamp',
+  'placeEditor.provenanceCollected': 'collected {time}',
+  'contactEvidence.legend': 'Source for {field}',
+  'contactEvidence.hint':
+    'A new value becomes GoGo data only with an independent source: who stated it, where, and when. Google (links, Place IDs, previews) is not a source.',
+  'contactEvidence.sourceType': 'Source type',
+  'contactEvidence.sourceTypePlaceholder': 'Choose a source type',
+  'contactEvidence.type.editorial': 'GoGo editorial (owner, official website, field visit)',
+  'contactEvidence.type.community': 'Community (contributor’s own report)',
+  'contactEvidence.type.provider': 'Permitted dataset (not Google)',
+  'contactEvidence.sourceReference': 'Source reference',
+  'contactEvidence.sourceReferenceHint':
+    'Name the origin, e.g. “Called the owner on 1 Oct”, the official website URL. A job or sheet id is not a source.',
+  'contactEvidence.collectedAt': 'Collected at',
+  'contactEvidence.error.required': 'Required to save this value',
+  'contactEvidence.error.too_long': 'At most 500 characters',
+  'contactEvidence.error.in_future': 'Cannot be in the future',
+  'contactEvidence.error.invalid_datetime': 'Not a valid time',
+  'contactEvidence.error.google_not_independent':
+    'Google is not an independent source — name the real origin',
+  'contactEvidence.error.transport_only':
+    'A job / sheet / row id only names transport — say who stated it',
+  'contactEvidence.error.invalid': 'Invalid value',
+  'contactEvidence.error.not_allowed': 'A cleared value takes no source',
+  'contactEvidence.error.value_missing': 'Source given without a value',
+  'contactOwnership.gogo': 'GoGo data (independent source)',
+  'contactOwnership.google': 'From Google (legacy)',
+  'contactOwnership.unknown': 'Source unknown — not GoGo-verified',
+  'submissions.review.evidenceRequired':
+    'The draft has an address / phone / website without a source. Add the sources, save the supplement, then approve again.',
+  'submissions.review.invalid': 'The supplement is not valid — see the marked boxes.',
   'placeEditor.conflictTitle': 'Somebody else saved this place',
   'placeEditor.conflictBody':
     'The server copy changed at {time}, after you opened the form. Nothing you typed was lost.',

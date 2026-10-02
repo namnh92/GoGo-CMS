@@ -1,6 +1,16 @@
 import { z } from 'zod'
 import { PLACE_FIELD_LIMITS } from '@/shared/api/cmsPlaceContract'
 import type { SubmissionReviewDraft } from '@/shared/api/contracts'
+import type { FieldError } from '@/shared/api/errors'
+import {
+  CONTACT_FIELDS,
+  emptyEvidenceDrafts,
+  evidenceFromWire,
+  evidenceIssues,
+  toWireEvidence,
+  type ContactField,
+  type EvidenceDrafts,
+} from '@/features/places/contactEvidence'
 
 const L = PLACE_FIELD_LIMITS
 
@@ -86,6 +96,7 @@ export function reviewFormFrom(draft: SubmissionReviewDraft | null | undefined):
 export function toReviewDraft(
   form: ReviewForm,
   saved: SubmissionReviewDraft | null | undefined,
+  evidence: EvidenceDrafts = emptyEvidenceDrafts(),
 ): SubmissionReviewDraft {
   const draft: SubmissionReviewDraft = {}
   const wasSaved = (key: keyof SubmissionReviewDraft) =>
@@ -103,6 +114,16 @@ export function toReviewDraft(
   text('addressText', form.addressText)
   text('phone', form.phone)
   text('website', form.website)
+
+  /*
+   * GoGo-BE#280 — every contact value the draft carries travels with its
+   * evidence, on every save. The draft is checked whole (there is no stored
+   * place to compare against yet), and approval re-checks it: a value saved
+   * without a source is refused `409 REVIEW_EVIDENCE_REQUIRED` at approve.
+   */
+  for (const field of draftContactValues(draft)) {
+    draft.provenance = { ...draft.provenance, [field]: toWireEvidence(evidence[field]) }
+  }
 
   const minutes = form.avgVisitMinutes.trim()
   if (minutes !== '') draft.avgVisitMinutes = Number(minutes)
@@ -128,4 +149,40 @@ export function toReviewDraft(
  */
 export function changedReviewFields(a: ReviewForm, b: ReviewForm): (keyof ReviewForm)[] {
   return (Object.keys(a) as (keyof ReviewForm)[]).filter((key) => a[key] !== b[key])
+}
+
+/** The contact fields a draft writes a value to — each needs evidence. */
+function draftContactValues(draft: SubmissionReviewDraft): ContactField[] {
+  return CONTACT_FIELDS.filter((field) => typeof draft[field] === 'string')
+}
+
+/** The stored evidence, back into its boxes. */
+export function reviewEvidenceFrom(
+  draft: SubmissionReviewDraft | null | undefined,
+): EvidenceDrafts {
+  return {
+    addressText: evidenceFromWire(draft?.provenance?.addressText ?? null),
+    phone: evidenceFromWire(draft?.provenance?.phone ?? null),
+    website: evidenceFromWire(draft?.provenance?.website ?? null),
+  }
+}
+
+/** The contact boxes holding a value, which are the ones asking for a source. */
+export function reviewContactFieldsWithValue(form: ReviewForm): ContactField[] {
+  return CONTACT_FIELDS.filter((field) => form[field].trim() !== '')
+}
+
+/** Local evidence check before a save, in the server's paths and codes. */
+export function reviewEvidenceIssues(
+  form: ReviewForm,
+  evidence: EvidenceDrafts,
+  now: Date = new Date(),
+): FieldError[] {
+  return reviewContactFieldsWithValue(form).flatMap((field) =>
+    evidenceIssues(field, evidence[field], now),
+  )
+}
+
+export function evidenceSignature(evidence: EvidenceDrafts): string {
+  return JSON.stringify(CONTACT_FIELDS.map((field) => evidence[field]))
 }

@@ -194,15 +194,19 @@ export const places: CmsPlaceDetail[] = [
      */
     provenance: {
       name: { sourceType: 'editorial', sourceReference: null, verifiedAt: iso(60 * 24 * 3) },
+      // GoGo-BE#280 — a Google reference is never independent evidence, so
+      // both contact rows read `google`, whatever their legacy source type.
       addressText: {
         sourceType: 'provider',
         sourceReference: 'google:ChIJ_chao_ban',
         verifiedAt: iso(60 * 24 * 30),
+        ownership: 'google',
       },
       phone: {
         sourceType: 'google_derived',
         sourceReference: 'google:ChIJ_chao_ban',
         verifiedAt: null,
+        ownership: 'google',
       },
       areaKey: { sourceType: 'editorial', sourceReference: null, verifiedAt: iso(60 * 24 * 9) },
     },
