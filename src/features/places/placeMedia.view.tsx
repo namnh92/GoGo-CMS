@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useI18n, useLabel, useT } from '@/shared/i18n/i18n'
 import { queryKeys } from '@/shared/api/queryKeys'
 import { useOnline } from '@/shared/ui/useOnline'
-import { formatBytes, formatDateTime } from '@/shared/format'
+import { formatBytes, formatDateTime, formatRelative } from '@/shared/format'
 import { Card, CardBody, CardHeader } from '@/shared/ui/Card'
 import { Button, IconButton } from '@/shared/ui/Button'
 import { Select, TextArea, TextInput } from '@/shared/ui/Field'
@@ -59,6 +59,65 @@ const MODERATION_SHAPE = {
   approved: 'check',
   rejected: 'alert',
 } as const
+
+const DECIDED_VERB = {
+  approved: 'placeMedia.decidedVerb.approved',
+  rejected: 'placeMedia.decidedVerb.rejected',
+} as const
+
+/** The audit id convention for a list row: `#` and the first eight characters. */
+function shortAdminId(id: string): string {
+  return `#${id.slice(0, 8)}`
+}
+
+/**
+ * GoGo-BE#441 — who last changed a photo's moderation, and when: "Duyệt bởi
+ * #7f3c9a12 · 28/9/2026, 10:15 (4 ngày trước)". The API sends an admin id and
+ * never a name, so the id is what shows, shortened, with the whole of it on
+ * hover to match against the change log. Whatever the API did not send is left
+ * out — the line disappears when neither field is there, and an unparseable
+ * time counts as not sent rather than rendering a dash.
+ */
+export function ModerationProvenance({
+  media,
+  className,
+}: {
+  media: Pick<PlaceMedia, 'moderation' | 'moderatedBy' | 'moderatedAt'>
+  className?: string
+}) {
+  const t = useT()
+  const { locale } = useI18n()
+  const by = media.moderatedBy || null
+  const at =
+    media.moderatedAt && !Number.isNaN(new Date(media.moderatedAt).getTime())
+      ? media.moderatedAt
+      : null
+  if (!by && !at) return null
+  const verb =
+    DECIDED_VERB[media.moderation as keyof typeof DECIDED_VERB] ?? 'placeMedia.decidedVerb.other'
+  return (
+    <p className={className ?? styles.provenance}>
+      {t(verb)}
+      {by ? (
+        <>
+          {' '}
+          {t('placeMedia.decidedBy')}{' '}
+          <span className={styles.adminId} title={by}>
+            {shortAdminId(by)}
+          </span>
+        </>
+      ) : null}
+      {at ? (
+        <>
+          {' · '}
+          <time dateTime={at}>
+            {formatDateTime(at, locale)} ({formatRelative(at, locale)})
+          </time>
+        </>
+      ) : null}
+    </p>
+  )
+}
 
 /**
  * A blob URL, or null where the browser will not make one.
@@ -565,6 +624,7 @@ function ModerationDialog({
           label={label(`mediaModeration.${media.moderation}`, media.moderation)}
         />
       </p>
+      <ModerationProvenance media={media} className={styles.provenanceModal} />
       <Select
         label={t('placeMedia.moderationDecision')}
         value={decision}
@@ -1012,13 +1072,18 @@ export function PlaceMediaCard({
                         {item.storageKey}
                       </span>
 
+                      <ModerationProvenance media={item} />
+
                       {item.moderationReason ? (
                         <p className={styles.reason}>
                           <span className={styles.reasonLabel}>{t('placeMedia.reasonLabel')} </span>
                           {item.moderationReason}
-                          <span className="mt-0.5 block text-text-subtle">
-                            {t('placeMedia.whoWhen')}
-                          </span>
+                          {/* An API that predates GoGo-BE#441 sends neither field. */}
+                          {item.moderatedBy || item.moderatedAt ? null : (
+                            <span className="mt-0.5 block text-text-subtle">
+                              {t('placeMedia.whoWhen')}
+                            </span>
+                          )}
                         </p>
                       ) : null}
 

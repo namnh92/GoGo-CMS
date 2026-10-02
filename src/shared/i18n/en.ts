@@ -1660,6 +1660,10 @@ export const en: Partial<Record<MessageKey, string>> = {
   'placeMedia.moderationSaved': 'Moderation decision recorded',
   'placeMedia.reasonLabel': 'Reason:',
   'placeMedia.whoWhen': 'Who decided and when: see the place change log.',
+  'placeMedia.decidedVerb.approved': 'Approved',
+  'placeMedia.decidedVerb.rejected': 'Rejected',
+  'placeMedia.decidedVerb.other': 'Moderated',
+  'placeMedia.decidedBy': 'by',
   'placeMedia.details': 'Caption & attribution',
   'placeMedia.detailsHint':
     'The caption is shown to consumers; attribution travels with the photo everywhere.',

@@ -8,6 +8,8 @@ import { resetMockDb } from '@/shared/test/handlers'
 import { renderWithProviders, signInAs } from '@/shared/test/render'
 import { places } from '@/shared/test/fixtures'
 import { queryKeys } from '@/shared/api/queryKeys'
+import { placeMediaSchema } from '@/shared/api/contracts'
+import { formatDateTime } from '@/shared/format'
 import { authorizeUpload } from '@/features/media/api'
 import { updatePlaceMedia } from './api'
 import { fetchPlace } from './api'
@@ -455,5 +457,114 @@ describe('place media — the mock enforces what GoGo-BE enforces', () => {
       sortOrder: 5,
       moderation: 'pending',
     })
+  })
+})
+
+/**
+ * GoGo-BE#441 — who last changed a photo's moderation, and when. The API sends
+ * an admin id (never a name) and an ISO time, both nullable and optional; the
+ * console shows what it was given and nothing in place of what it was not.
+ */
+describe('place media — who moderated and when (GoGo-BE#441)', () => {
+  const MODERATOR = PLACE.media[0]!.moderatedBy!
+  const MODERATED_AT = PLACE.media[0]!.moderatedAt!
+
+  it('mirrors the two fields, keeps null and absence, and never strict-rejects', () => {
+    const base = {
+      id: 'pm-x',
+      storageKey: 'k',
+      moderation: 'approved',
+      isCover: false,
+      sortOrder: 0,
+    }
+    const full = placeMediaSchema.parse({
+      ...base,
+      moderatedBy: MODERATOR,
+      moderatedAt: MODERATED_AT,
+    })
+    expect(full.moderatedBy).toBe(MODERATOR)
+    expect(full.moderatedAt).toBe(MODERATED_AT)
+
+    const nulls = placeMediaSchema.parse({ ...base, moderatedBy: null, moderatedAt: null })
+    expect(nulls.moderatedBy).toBeNull()
+    expect(nulls.moderatedAt).toBeNull()
+
+    expect(placeMediaSchema.safeParse(base).success).toBe(true)
+  })
+
+  it('shows the decision, a shortened admin id and the time on a decided photo', async () => {
+    open()
+    await ready()
+
+    const line = rowFor(COVER_KEY).getByText(/^Duyệt bởi/)
+    expect(line).toHaveTextContent(`Duyệt bởi #${MODERATOR.slice(0, 8)}`)
+    // The full id is one hover away, for matching against the audit log.
+    expect(within(line).getByTitle(MODERATOR)).toHaveTextContent(`#${MODERATOR.slice(0, 8)}`)
+    const time = line.querySelector('time')
+    expect(time).toHaveAttribute('dateTime', MODERATED_AT)
+    expect(time).toHaveTextContent(formatDateTime(MODERATED_AT, 'vi'))
+    // Once the who and when are on the row, the pointer to the change log goes.
+    expect(rowFor(COVER_KEY).queryByText(/Ai quyết định và lúc nào/)).not.toBeInTheDocument()
+  })
+
+  it('renders no line, and no placeholder, when the fields are null or absent', async () => {
+    open()
+    await ready()
+
+    // PENDING_KEY carries explicit nulls; NO_URL_KEY omits both keys.
+    for (const key of [PENDING_KEY, NO_URL_KEY]) {
+      const row = rowFor(key)
+      expect(row.queryByText(/bởi/)).not.toBeInTheDocument()
+      expect(row.queryByText('—')).not.toBeInTheDocument()
+      expect(screen.getByTitle(key).closest('li')!.querySelector('time')).toBeNull()
+    }
+  })
+
+  it('shows the time alone when the API has no admin for the change', async () => {
+    server.use(
+      http.get('/v1/cms/places/:id', async () => {
+        const media = PLACE.media.map((item, index) =>
+          index === 0 ? { ...item, moderatedBy: null } : item,
+        )
+        return HttpResponse.json({ ...PLACE, media })
+      }),
+    )
+    open()
+    await ready()
+
+    const time = screen.getByTitle(COVER_KEY).closest('li')!.querySelector('time')
+    expect(time).toHaveAttribute('dateTime', MODERATED_AT)
+    expect(rowFor(COVER_KEY).queryByText(/bởi/)).not.toBeInTheDocument()
+  })
+
+  it('names the new moderator once a decision is recorded', async () => {
+    const user = userEvent.setup()
+    open()
+    await ready()
+
+    await user.click(rowFor(PENDING_KEY).getByRole('button', { name: 'Kiểm duyệt' }))
+    const dialog = await screen.findByRole('dialog')
+    await user.selectOptions(within(dialog).getByLabelText('Quyết định'), 'rejected')
+    await user.type(within(dialog).getByLabelText(/Lý do/), 'Ảnh mờ, lộ mặt khách')
+    await user.click(within(dialog).getByRole('button', { name: 'Ghi quyết định' }))
+
+    await waitFor(() =>
+      expect(rowFor(PENDING_KEY).getByText(/^Từ chối bởi/)).toHaveTextContent(
+        'Từ chối bởi #adm-mock',
+      ),
+    )
+  })
+
+  it('words the line in English too', async () => {
+    window.localStorage.setItem('gogo.cms.locale', 'en')
+    try {
+      open()
+      await ready()
+      expect(rowFor(COVER_KEY).getByText(/^Approved by/)).toHaveTextContent(
+        `Approved by #${MODERATOR.slice(0, 8)}`,
+      )
+    } finally {
+      window.localStorage.removeItem('gogo.cms.locale')
+    }
   })
 })

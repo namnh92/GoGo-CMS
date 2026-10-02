@@ -1972,6 +1972,9 @@ export const handlers = [
     if (patch.moderation !== undefined) {
       row.moderation = patch.moderation
       row.moderationReason = patch.moderationReason ?? null
+      // GoGo-BE#441: the API stamps who changed it and when.
+      row.moderatedBy = 'adm-mock'
+      row.moderatedAt = new Date().toISOString()
     }
     place.updatedAt = new Date().toISOString()
     return HttpResponse.json(row)

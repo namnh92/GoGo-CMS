@@ -40,6 +40,10 @@ export const styles = {
   key: 'mt-1 block truncate font-mono text-[10px] text-text-subtle',
   reason: 'mt-1.5 rounded-compact bg-surface-sunken px-2 py-1.5 text-[11px] text-text-muted',
   reasonLabel: 'font-semibold text-text-muted',
+  /** GoGo-BE#441 — who last decided, and when. */
+  provenance: 'mt-1 text-[11px] text-text-muted',
+  provenanceModal: '-mt-1 mb-3 text-xs text-text-muted',
+  adminId: 'font-mono',
   actions: 'mt-2 flex flex-wrap items-center gap-1.5',
   orderGroup: 'flex shrink-0 items-center',
 
