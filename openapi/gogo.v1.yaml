@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: GoGo API
-  version: 1.0.0-alpha.44
+  version: 1.0.0-alpha.57
   description: |
     Public contract for GoGo clients (Mobile, Web, Mini App). This page is the
     integration guide — every rule below is enforced by the API, not advisory.
@@ -617,6 +617,14 @@ paths:
       operationId: updateRoomConstraints
       tags: [rooms]
       summary: 'Host-only: new constraint version; marks scores/plans stale'
+      description: >
+        Partial update (BE-BFF-021): a field left out keeps the value the room
+        already has, and an explicit null clears it. budgetMode and budgetAmount
+        are always required — an edit states the unit it means (GoGo-BE#559).
+        Before this, an omitted field was cleared, so a client editing the
+        budget by spreading RoomSummary.constraints wiped originLat/originLng,
+        coordinates the summary does not return and the client cannot send
+        back.
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
       requestBody:
@@ -625,7 +633,7 @@ paths:
           application/json:
             schema:
               allOf:
-                - $ref: '#/components/schemas/RoomConstraintInput'
+                - $ref: '#/components/schemas/RoomConstraintPatch'
                 - type: object
                   required: [expectedConstraintVersion]
                   properties:
@@ -637,6 +645,15 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/RoomSummary' }
+        '400':
+          description: >
+            INVALID_SCHEDULE when the merged window runs backwards — the
+            request's startAt or endAt against whichever half the room already
+            has — or INVALID_BUDGET_MODE when a couple room is edited as
+            per_person (GoGo-BE#559).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/Conflict' }
 
@@ -645,6 +662,11 @@ paths:
       operationId: transitionRoom
       tags: [rooms]
       summary: 'Host-only: validated room state transition (SRS §7.2)'
+      description: >
+        Host-only is enforced server-side before the state machine runs
+        (GoGo-BE#602), so this answers `403 HOST_ONLY` to a member who is not
+        the host, `403 NOT_A_MEMBER` to an actor with no active membership, and
+        `403 ROOM_SCOPE_VIOLATION` to a guest session bound to another room.
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
       requestBody:
@@ -667,6 +689,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/RoomSummary' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/Conflict' }
 
   /rooms/{id}/title:
@@ -863,17 +886,33 @@ paths:
                 inviteCode: { type: string }
       responses:
         '201':
-          description: Joined (idempotent — re-joining returns the existing membership)
+          description: |
+            Joined (idempotent — re-joining returns the existing membership).
+            `alreadyMember` tells the two apart (GoGo-BE#607): `false` for a
+            new membership created by this request, `true` when the caller
+            already held an active membership (host included): that membership
+            is returned and no `participant.joined` is announced. A re-entry
+            recognised up front spends no invite use; a concurrent first join
+            that loses the race may already have spent one. Clients count a join
+            only when it is `false`. A response without `alreadyMember` comes
+            from a server older than 1.0.0-alpha.49: treat it as unknown, not
+            `false`.
           content:
             application/json:
               schema:
                 type: object
+                required: [roomId, memberId, role, alreadyMember]
                 properties:
                   roomId: { type: string, format: uuid }
                   memberId: { type: string, format: uuid }
                   role: { type: string, enum: [host, member] }
+                  alreadyMember: { type: boolean }
         '410':
-          description: Invite expired/revoked/spent or room not joinable
+          description: |
+            Invite expired/revoked/spent (`INVITE_NOT_USABLE`), room no longer
+            taking members (`ROOM_NOT_JOINABLE`), or room past its expiry
+            (`ROOM_EXPIRED`, GoGo-BE#606 — same as the guest route). Someone
+            already an active member is answered with their membership instead.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
@@ -2602,6 +2641,59 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '429': { $ref: '#/components/responses/RateLimited' }
 
+  /places/{id}/reports:
+    post:
+      operationId: reportPlace
+      tags: [places]
+      summary: Report wrong information about a place ("Báo thông tin sai")
+      description: >
+        BE-BFF-P2 (#218). Files a report into the moderation queue the CMS
+        already reads (`GET /cms/moderation/reports`, `targetType=place`). An
+        app account or a room guest may report; a CMS admin token answers
+        `403 REPORTER_NOT_ALLOWED` and an anonymous call `401`. A place Place
+        Detail does not open answers `404 PLACE_NOT_FOUND`, exactly like a
+        missing one.
+
+
+        Deduplicated: while this actor already has an **open** report of the
+        same `reasonCode` on this place, the call files nothing and answers
+        that report with `200`; a new report answers `201`. Submissions for one
+        place are serialized, so simultaneous identical calls file one report.
+        Once a moderator decides it, a new report is a new report. An
+        `Idempotency-Key` replay answers the original status and body.
+
+
+        `reasonCode` is a stable key the client labels through i18n — never a
+        sentence. `note` is optional free text (CRLF normalised to LF, then
+        trimmed, then at most 500 characters; control characters other than tab
+        and line feed are refused with `400`; blank means none) delivered to moderators only: it is not
+        echoed in the response and not logged. Do not ask the user for contact
+        details in it. Rate-limited per actor: 5 a minute, 20 an hour.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PlaceReportRequest' }
+      responses:
+        '200':
+          description: This actor's open report of the same reason, unchanged
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PlaceReport' }
+        '201':
+          description: Report filed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PlaceReport' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
   /rooms/{roomId}/suggestions:
     post:
       operationId: generateSuggestions
@@ -3808,7 +3900,8 @@ paths:
       description: >
         Flips the job to `processing`; the worker advances it in chunks of 50
         rows. Also the resume path for a job parked at
-        `paused_provider_quota`. Rejected for `dry_run` jobs.
+        `paused_provider_quota` or `paused_provider_unavailable`. Rejected for
+        `dry_run` jobs.
       parameters:
         - { name: jobId, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
@@ -4736,9 +4829,10 @@ paths:
       description: >
         Every CMS account except the `super_admin` is created here. That one is
         bootstrapped once from SSM — an environment holds at most one before
-        bootstrap and exactly one after — so `role: super_admin` is refused with
-        409 `SUPER_ADMIN_SINGLETON` (ADR-0018). The enum still lists it: narrowing the request enum is a
-        breaking change and waits until no client sends the value.
+        bootstrap and exactly one after — so `role` takes only an
+        `AdminAssignableRole` and `super_admin` is a 400 on `role` (ADR-0018,
+        #447). The service keeps its own 409 `SUPER_ADMIN_SINGLETON` behind the
+        schema.
       requestBody:
         required: true
         content:
@@ -4750,7 +4844,7 @@ paths:
                 email: { type: string, format: email }
                 password: { type: string, minLength: 12 }
                 displayName: { type: string }
-                role: { $ref: '#/components/schemas/AdminRole' }
+                role: { $ref: '#/components/schemas/AdminAssignableRole' }
       responses:
         '201': { description: Created }
         '400': { $ref: '#/components/responses/BadRequest' }
@@ -4758,7 +4852,9 @@ paths:
         '409':
           description: >
             `SUPER_ADMIN_SINGLETON` — an environment has exactly one
-            `super_admin` and a second cannot be created.
+            `super_admin` and a second cannot be created. The request schema
+            already refuses the value with a 400; this is the service's own
+            refusal, kept for any caller that reaches it another way.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
@@ -7419,11 +7515,15 @@ paths:
         Created as a `draft`; nothing is sent until it is scheduled.
 
 
-        The destination is validated against real data: a `place`,
-        `recommendation` or `plan_template` id must resolve, and an
-        `external_url` must be https, carry no credentials and not point inside
-        the network. A deep link into content that does not exist is a dead
-        notification on every phone that receives it.
+        The destination is validated against real data: a `place` id must
+        resolve. `recommendation`, `plan_template` and `external_url` are
+        refused with 422 until the app can open them (GoGo-BE#604); a malformed
+        value is still a 400. A deep link into content that does not exist is a
+        dead notification on every phone that receives it.
+
+        A due campaign that already holds one of those destinations is not sent:
+        the dispatcher marks it `failed` with `lastError =
+        DESTINATION_NOT_OPENABLE`.
       requestBody:
         required: true
         content:
@@ -7441,6 +7541,16 @@ paths:
             destination is malformed or unsafe (`INVALID_DESTINATION`), or it
             points at something that does not exist (`DESTINATION_NOT_FOUND`).
         '409': { description: 'A campaign with that name exists (`CAMPAIGN_NAME_TAKEN`)' }
+        '422':
+          description: >
+            `INVALID_DESTINATION` with `field_errors[0].field = destinationType`
+            — `recommendation`, `plan_template` and `external_url` are not
+            accepted for new campaigns until the app can open them
+            (GoGo-BE#604). They stay in `CampaignDestination` so campaigns that
+            already hold one remain readable.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
 
   /cms/campaigns/{id}:
     get:
@@ -7493,6 +7603,19 @@ paths:
           description: >-
             Not in an editable state (`CAMPAIGN_NOT_EDITABLE`), or already delivered to at least one
             recipient and the patch changes a field that reaches a phone (`CAMPAIGN_ALREADY_DELIVERED`).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '422':
+          description: >
+            `INVALID_DESTINATION` with `field_errors[0].field = destinationType`
+            — the patch changes the destination to `recommendation`,
+            `plan_template` or `external_url`, which the app cannot open yet
+            (GoGo-BE#604). A campaign that already holds one can still be edited
+            in every other field, re-saved with the same destination, or moved
+            to an openable one. Changing `destinationType` takes its
+            `destinationValue` from the patch only; the previous value is not
+            carried over.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
@@ -7558,6 +7681,15 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '409':
           description: Not schedulable from its current state (`INVALID_STATUS_TRANSITION`)
+        '422':
+          description: >
+            `INVALID_DESTINATION` with `field_errors[0].field = destinationType`
+            — the campaign holds `recommendation`, `plan_template` or
+            `external_url`, which the app cannot open yet (GoGo-BE#604). Move it
+            to an openable destination, then schedule.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
 
   /cms/campaigns/{id}/cancel:
     post:
@@ -7617,6 +7749,14 @@ paths:
             The caller has no verified consumer account on the same address
             (`NO_TEST_RECIPIENT`).
         '404': { $ref: '#/components/responses/NotFound' }
+        '422':
+          description: >
+            `INVALID_DESTINATION` with `field_errors[0].field = destinationType`
+            — the campaign's destination cannot be opened by the app yet
+            (GoGo-BE#604), so neither a send nor a preview of it is made.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
         '429': { description: Too many test sends }
 
   /cms/uploads:
@@ -7712,7 +7852,7 @@ paths:
               type: object
               required: [reason]
               properties:
-                role: { $ref: '#/components/schemas/AdminRole' }
+                role: { $ref: '#/components/schemas/AdminAssignableRole' }
                 displayName: { type: string, minLength: 1, maxLength: 50 }
                 reason:
                   type: string
@@ -7743,7 +7883,8 @@ paths:
             `SUPER_ADMIN_SINGLETON` — nor can `role` be set to `super_admin`:
             an environment holds at most one before it is bootstrapped and
             exactly one after, and that account is bootstrapped rather than
-            promoted. The enum still offers the value; the refusal is here.
+            promoted. The request schema (`AdminAssignableRole`) refuses the
+            value with a 400 first; this is the service's own refusal behind it.
 
 
             Neither freezes the account's credentials. It rotates its password
@@ -10419,14 +10560,64 @@ components:
         accessibilityKeys:
           type: array
           items: { type: string }
+    RoomConstraintPatch:
+      type: object
+      required: [budgetMode, budgetAmount]
+      description: >
+        BE-BFF-021 — the body of a constraint PATCH. Same fields as
+        RoomConstraintInput, with the update semantics made explicit: absent
+        keeps the stored value, null clears it. Clearing endAt, an area or an
+        origin is therefore an explicit null rather than an omission.
+      properties:
+        originText: { type: [string, 'null'], maxLength: 200 }
+        originLat: { type: [number, 'null'], minimum: -90, maximum: 90 }
+        originLng: { type: [number, 'null'], minimum: -180, maximum: 180 }
+        administrativeArea:
+          oneOf:
+            - $ref: '#/components/schemas/AdministrativeAreaInput'
+            - type: 'null'
+          description: >
+            As on RoomConstraintInput: omitted keeps the stored area, null
+            clears it. Setting an area replaces areaKey.
+        areaKey:
+          type: [string, 'null']
+          description: Legacy service-area key. Cleared and ignored while administrativeArea is set.
+        radiusM: { type: [integer, 'null'], minimum: 100, maximum: 50000 }
+        startAt: { type: [string, 'null'], format: date-time }
+        endAt:
+          type: [string, 'null']
+          format: date-time
+          description: >
+            Null clears the end of the window. Omitting it keeps whatever the
+            room has — the one behaviour that changed with BE-BFF-021.
+        budgetMode:
+          type: string
+          enum: [total, per_person]
+          description: >
+            Required on every edit, and held to the same rule as create: a
+            couple room must be `total` (GoGo-BE#559).
+        budgetAmount:
+          type: integer
+          minimum: 0
+          description: Integer minor units, interpreted per budgetMode. Required on every edit.
+        currency: { type: string, minLength: 3, maxLength: 3 }
+        dietaryKeys:
+          type: array
+          items: { type: string }
+        accessibilityKeys:
+          type: array
+          items: { type: string }
     RoomConstraints:
       type: object
-      description: A room's current constraint version as read back (RoomSummary.constraints).
+      description: >
+        A room's current constraint version as read back (RoomSummary.constraints).
+        Exact origin coordinates are deliberately absent: they have a limited
+        retention window and the server has never returned them here. A client
+        that needs to leave them untouched simply omits them from a constraint
+        PATCH, which keeps the stored value (BE-BFF-021, GoGo-BE#576).
       required: [budgetMode, budgetAmount, administrativeArea]
       properties:
         originText: { type: string, maxLength: 200 }
-        originLat: { type: number, minimum: -90, maximum: 90 }
-        originLng: { type: number, minimum: -180, maximum: 180 }
         administrativeArea:
           oneOf:
             - $ref: '#/components/schemas/AdministrativeArea'
@@ -10717,6 +10908,17 @@ components:
     AdminRole:
       type: string
       enum: [editor, moderator, ops_admin, super_admin]
+      description: >
+        Every role an account can hold. Responses, `CmsAdmin.role` and the
+        `GET /cms/auth/admins` filter use this; requests that assign a role use
+        `AdminAssignableRole`.
+    AdminAssignableRole:
+      type: string
+      enum: [editor, moderator, ops_admin]
+      description: >
+        #447 / ADR-0018 — the roles a request may assign. `super_admin` is not
+        one: an environment has exactly one, bootstrapped from SSM rather than
+        created or promoted over HTTP.
     AdminStatus:
       type: string
       enum: [active, suspended]
@@ -12580,6 +12782,25 @@ components:
         payload:
           type: object
           additionalProperties: true
+          description: >-
+            Free-form per kind. Rows the outbox writes (`invite`, `preference_reminder`,
+            `plan_ready`, `plan_changed`, `date_reminder`) also carry where the row opens, in the
+            same shape as push data v1: `route`, `entityType`, `entityId`. Plan kinds name the plan
+            current at fan-out, or the room when there is none; a later edit or regenerate can
+            supersede that plan, so a client opening a stale row falls back to the room's current
+            plan. Older rows lack the three fields — route them by `roomId`.
+          properties:
+            eventType: { type: string }
+            roomId: { type: string, format: uuid }
+            resourceId: { type: string, format: uuid }
+            route:
+              type: string
+              description: Canonical app link, `gogo://plan/{id}` or `gogo://room/{id}`.
+            entityType:
+              type: string
+              description: Grows with push data v1; route an unknown value by `roomId`.
+              x-extensible-enum: [room, plan]
+            entityId: { type: string, format: uuid }
         readAt: { type: string, format: date-time }
         createdAt: { type: string, format: date-time }
     OpenState:
@@ -12667,6 +12888,28 @@ components:
               provider: { type: string }
               url: { type: string }
               attribution: { type: string }
+        providerStatus:
+          type: object
+          description: >
+            GoGo-BE#360 — what the place's provider last reported about the
+            business, a fact for core rule 8's "excluded or warned": search
+            already excludes a closed or temporarily closed place, but a saved
+            place, a plan stop or a share link still opens this detail, and the
+            client must warn rather than present it as open (with more than
+            colour). When several provider rows exist the most severe report
+            wins (closed, temporarily_closed, moved, active, unknown). Absent
+            when no provider has reported on the place. `places.status`
+            (`status` above) is GoGo's own moderation decision and is separate.
+          required: [status, fetchedAt]
+          properties:
+            status:
+              type: string
+              description: Treat a value you do not know as `unknown`.
+              x-extensible-enum: [active, moved, temporarily_closed, closed, unknown]
+            fetchedAt:
+              type: string
+              format: date-time
+              description: When the provider was last read for this report.
     SuggestionCandidate:
       type: object
       properties:
@@ -13122,7 +13365,17 @@ components:
         id: { type: string, format: uuid }
         status:
           type: string
-          enum:
+          description: >
+            Two parked values, both resumed by `POST …/start` and cancellable
+            (GoGo-BE#284): `paused_provider_quota` clears by waiting for the
+            next quota window or raising it; `paused_provider_unavailable` is a
+            provider that cannot answer (API disabled, invalid or missing key,
+            upstream timeout or outage) and is not cleared by the quota window —
+            fix the configuration, or confirm the upstream outage is over, then
+            resume. Declared extensible: a client treats a value it does not
+            know as a job that is neither running nor finished, never as a
+            malformed response.
+          x-extensible-enum:
             [
               uploaded,
               validating,
@@ -13133,6 +13386,7 @@ components:
               failed,
               cancelled,
               paused_provider_quota,
+              paused_provider_unavailable,
             ]
         mode:
           type: string
@@ -13779,6 +14033,43 @@ components:
           type: array
           description: Ids of the place's published reviews the caller marked helpful. Never anyone else's marks.
           items: { type: string, format: uuid }
+    PlaceReportReason:
+      type: string
+      description: >
+        What is wrong, as a stable key the client labels through i18n. Mirrors
+        the facts Place Detail shows plus a catch-all. Extensible: a client
+        offers the keys it knows and treats an unknown one in a response as
+        `other`.
+      x-extensible-enum: [wrong_hours, wrong_price, wrong_location, permanently_closed, other]
+
+    PlaceReportRequest:
+      type: object
+      additionalProperties: false
+      required: [reasonCode]
+      properties:
+        reasonCode: { $ref: '#/components/schemas/PlaceReportReason' }
+        note:
+          type: string
+          maxLength: 500
+          description: >
+            Optional detail for moderators. CRLF becomes LF, then the note is
+            trimmed and must be at most 500 characters, so a client enforcing
+            the limit on the raw text is safe. Control characters other than
+            tab and line feed are refused. Blank means no note.
+
+    PlaceReport:
+      type: object
+      required: [id, placeId, reasonCode, status, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        placeId: { type: string, format: uuid }
+        reasonCode: { $ref: '#/components/schemas/PlaceReportReason' }
+        status:
+          type: string
+          description: Moderation state; a freshly filed or deduplicated report is `open`.
+          x-extensible-enum: [open, actioned, dismissed]
+        createdAt: { type: string, format: date-time }
+
     PlaceReviewPreview:
       type: object
       required: [source, order, reviews]
@@ -13869,6 +14160,22 @@ components:
           type: string
           format: uuid
           description: The room's current plan, when one exists.
+        budget:
+          type: object
+          description: >
+            GoGo-BE#637 — the budget of the room's current constraint version,
+            the same facts as RoomSummary.constraints (budgetMode, budgetAmount,
+            currency), so a list row can show it without a call per room. Facts,
+            not a sentence: the client composes the label from `mode` and the
+            room type. Absent when the room has no current constraint row.
+          required: [mode, amount, currency]
+          properties:
+            mode: { type: string, enum: [total, per_person] }
+            amount:
+              type: integer
+              minimum: 0
+              description: Integer minor units, interpreted per mode.
+            currency: { type: string, minLength: 3, maxLength: 3 }
     CmsPlaceMedia:
       type: object
       required: [id, storageKey, sortOrder, moderation, isCover, sourceType]
@@ -13894,6 +14201,17 @@ components:
             has never been anything else. Requests do constrain it — see
             `cmsUpdatePlaceMedia`.
         moderationReason: { type: [string, 'null'] }
+        moderatedBy:
+          type: [string, 'null']
+          format: uuid
+          description: >
+            The admin who last changed `moderation`, null while nobody has. An id
+            only, the same as `CmsAuditEntry.actorId`, which also carries no
+            name (#441).
+        moderatedAt:
+          type: [string, 'null']
+          format: date-time
+          description: When `moderation` last changed, null while it never has (#441).
         caption: { type: [string, 'null'] }
         attribution:
           type: [string, 'null']

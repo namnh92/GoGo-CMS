@@ -35,10 +35,11 @@ export type AdminRole = z.infer<typeof adminRoleSchema>
  * `super_admin`, because one exists and hiding it would make the list lie. Only
  * the two *write* paths, create and role-change, use this.
  *
- * The server's request enum still lists all four values: removing one is a
- * breaking contract change and it waits until no client sends it. This is the
- * client half of that sequence, so the console stops offering a value the API
- * answers 409 to.
+ * Since 1.0.0-alpha.57 (GoGo-BE#447) the server's request enum is
+ * `AdminAssignableRole` too: `POST /cms/auth/admins` and
+ * `PATCH /cms/auth/admins/{id}` refuse `super_admin` with a 400 on `role`
+ * before the service's own 409 `SUPER_ADMIN_SINGLETON`. This schema mirrors
+ * that request enum value for value; responses still use `AdminRole`.
  */
 export const adminAssignableRoleSchema = z.enum(['editor', 'moderator', 'ops_admin'])
 export type AdminAssignableRole = z.infer<typeof adminAssignableRoleSchema>
