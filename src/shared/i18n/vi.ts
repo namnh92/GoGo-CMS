@@ -2622,9 +2622,12 @@ export const vi = {
   'campaigns.destination.external_url': 'Link ngoài',
   'campaigns.destination.unavailableOption': '{label} — App chưa mở được đích này',
   'campaigns.destinationUnavailableNote':
-    'Điểm đến đang lưu là "{label}", app chưa mở được nên chiến dịch này không gửi được. Hãy đổi sang Trang chủ, Địa điểm hoặc Danh sách đã lưu rồi lưu lại.',
+    'App chưa mở được đích "{label}". Hãy đổi sang Trang chủ, Địa điểm hoặc Danh sách đã lưu rồi lưu lại.',
+  'campaigns.scheduledUnopenableNote':
+    'App chưa mở được điểm đến của chiến dịch đã lên lịch này. Muốn đổi điểm đến, hãy huỷ lịch gửi trước rồi đổi.',
+  'campaigns.pastUnopenableNote': 'App chưa mở được điểm đến của chiến dịch này.',
   'campaigns.sendBlockedNote':
-    'Không gửi được, kể cả gửi thử: điểm đến đã lưu là đích app chưa mở được.',
+    'Đang khoá gửi và gửi thử: app chưa mở được điểm đến đã lưu. Đổi điểm đến và lưu trước khi gửi.',
 
   'auth.brandHeadline': 'Trung tâm nội dung & vận hành',
   'auth.brandLede':

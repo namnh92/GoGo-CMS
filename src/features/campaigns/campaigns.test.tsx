@@ -20,14 +20,19 @@ const drafts = cmsCampaigns.filter((campaign) => campaign.status === 'draft').le
 
 const PLACE_ID = '0b6f3c2e-8a41-4d9f-9e27-5c1a7d3b6f80'
 
-/** The draft fixture, served with the given destination instead of its own. */
-function serveDraftAt(destinationType: string, destinationValue: string | null) {
+/** A campaign fixture, served with the given destination instead of its own. */
+function serveAt(
+  base: (typeof cmsCampaigns)[number],
+  destinationType: string,
+  destinationValue: string | null,
+) {
   server.use(
-    http.get(`*/cms/campaigns/${draft.id}`, () =>
-      HttpResponse.json({ ...draft, destinationType, destinationValue }),
+    http.get(`*/cms/campaigns/${base.id}`, () =>
+      HttpResponse.json({ ...base, destinationType, destinationValue }),
     ),
   )
 }
+const serveDraftAt = (type: string, value: string | null) => serveAt(draft, type, value)
 
 function Routed() {
   return (
@@ -289,6 +294,26 @@ describe('destinations the app cannot open (GoGo-BE#604)', () => {
     (await screen.findByLabelText('Loại điểm đến')) as HTMLSelectElement
   const option = (select: HTMLSelectElement, value: string) =>
     Array.from(select.options).find((item) => item.value === value)!
+  /** CMS#222 F-02: the refusal is about the type, so it sits on the type select. */
+  const expectTypeRefused = async () => {
+    const select = screen.getByLabelText('Loại điểm đến')
+    await waitFor(() => expect(select).toHaveAttribute('aria-invalid', 'true'))
+    expect(select).toHaveAccessibleDescription(
+      expect.stringContaining('App chưa mở được đích này.'),
+    )
+    expect(screen.getByLabelText('Điểm đến')).not.toHaveAttribute('aria-invalid')
+  }
+  const refusal = (status: number) =>
+    HttpResponse.json(
+      {
+        code: 'INVALID_DESTINATION',
+        message: 'That destination cannot be used',
+        field_errors: [],
+        request_id: `mock-invalid-destination-${status}`,
+        retryable: false,
+      },
+      { status },
+    )
 
   it('lists the three as disabled, each with the reason in words', async () => {
     signInAs('ops_admin')
@@ -321,9 +346,9 @@ describe('destinations the app cannot open (GoGo-BE#604)', () => {
     // Shown as stored, not silently swapped to something else.
     expect(select.value).toBe('recommendation')
     expect(
-      screen.getByText(/Điểm đến đang lưu là "Gợi ý biên tập", app chưa mở được/),
+      screen.getByText(/App chưa mở được đích "Gợi ý biên tập". Hãy đổi sang/),
     ).toBeInTheDocument()
-    expect(screen.getByText(/Không gửi được, kể cả gửi thử/)).toBeInTheDocument()
+    expect(screen.getByText(/Đang khoá gửi và gửi thử/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Gửi ngay' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Gửi thử cho tôi' })).toBeDisabled()
   })
@@ -341,7 +366,7 @@ describe('destinations the app cannot open (GoGo-BE#604)', () => {
     renderWithProviders(<Routed />, { route: `/campaigns/${draft.id}` })
 
     await user.selectOptions(await destinationSelect(), 'home')
-    expect(screen.queryByText(/app chưa mở được nên chiến dịch/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Hãy đổi sang Trang chủ/)).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Lưu' }))
 
     await waitFor(() => expect(sent?.destinationType).toBe('home'))
@@ -362,9 +387,7 @@ describe('destinations the app cannot open (GoGo-BE#604)', () => {
     await destinationSelect()
     await user.click(screen.getByRole('button', { name: 'Lưu' }))
 
-    const value = screen.getByLabelText('Điểm đến')
-    await waitFor(() => expect(value).toHaveAttribute('aria-invalid', 'true'))
-    expect(value).toHaveAccessibleDescription(expect.stringContaining('App chưa mở được đích này.'))
+    await expectTypeRefused()
     expect(patched).toBe(false)
   })
 
@@ -393,8 +416,80 @@ describe('destinations the app cannot open (GoGo-BE#604)', () => {
     await destinationSelect()
     await user.click(screen.getByRole('button', { name: 'Lưu' }))
 
-    const value = screen.getByLabelText('Điểm đến')
-    await waitFor(() => expect(value).toHaveAttribute('aria-invalid', 'true'))
-    expect(value).toHaveAccessibleDescription(expect.stringContaining('App chưa mở được đích này.'))
+    await expectTypeRefused()
+  })
+
+  it('gives no switch advice on a scheduled campaign, and says to cancel first', async () => {
+    // CMS#222 F-01: the form is locked, so "switch and save" was wrong advice,
+    // and a scheduled send may still go out — no promise that it will not.
+    signInAs('ops_admin')
+    serveAt(scheduled, 'recommendation', '3f1c2b8a-9d4e-4a71-b0c5-8e2f6a1d7c93')
+    renderWithProviders(<Routed />, { route: `/campaigns/${scheduled.id}` })
+
+    expect(await screen.findByText(/hãy huỷ lịch gửi trước rồi đổi/)).toBeInTheDocument()
+    expect(screen.queryByText(/Hãy đổi sang Trang chủ/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Đang khoá gửi/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Huỷ lịch gửi' })).toBeEnabled()
+  })
+
+  it('states only the fact on a campaign that has already gone out', async () => {
+    signInAs('ops_admin')
+    expect(sent.destinationType).toBe('plan_template')
+    renderWithProviders(<Routed />, { route: `/campaigns/${sent.id}` })
+
+    expect(
+      await screen.findByText('App chưa mở được điểm đến của chiến dịch này.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/Hãy đổi sang Trang chủ/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/huỷ lịch gửi trước/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Đang khoá gửi/)).not.toBeInTheDocument()
+  })
+
+  it('clears the refusal once the editor switches the type', async () => {
+    // CMS#222 F-04: the error described the old type and stayed after a switch.
+    signInAs('ops_admin')
+    const user = userEvent.setup()
+    renderWithProviders(<Routed />, { route: `/campaigns/${draft.id}` })
+
+    await destinationSelect()
+    await user.click(screen.getByRole('button', { name: 'Lưu' }))
+    await expectTypeRefused()
+
+    await user.selectOptions(screen.getByLabelText('Loại điểm đến'), 'home')
+    expect(screen.getByLabelText('Loại điểm đến')).not.toHaveAttribute('aria-invalid')
+    expect(screen.getByLabelText('Điểm đến')).not.toHaveAttribute('aria-invalid')
+    expect(screen.queryByText(/App chưa mở được đích này\. Chọn/)).toBeNull()
+  })
+
+  it('leaves a 400 INVALID_DESTINATION as the generic refusal, not "unavailable"', async () => {
+    // CMS#222 F-03: 400 is the existing malformed/unsafe refusal; only 422 is
+    // the app-cannot-open refusal of GoGo-BE#604.
+    signInAs('ops_admin')
+    serveDraftAt('place', PLACE_ID)
+    const user = userEvent.setup()
+    server.use(http.patch(`*/cms/campaigns/${draft.id}`, () => refusal(400)))
+    renderWithProviders(<Routed />, { route: `/campaigns/${draft.id}` })
+
+    await destinationSelect()
+    await user.click(screen.getByRole('button', { name: 'Lưu' }))
+
+    expect(await screen.findByText('That destination cannot be used')).toBeInTheDocument()
+    expect(screen.getByLabelText('Loại điểm đến')).not.toHaveAttribute('aria-invalid')
+    expect(screen.getByLabelText('Điểm đến')).not.toHaveAttribute('aria-invalid')
+    expect(screen.queryByText(/App chưa mở được đích này\. Chọn/)).toBeNull()
+  })
+
+  it('maps a 422 INVALID_DESTINATION on schedule onto the type select', async () => {
+    signInAs('ops_admin')
+    serveDraftAt('place', PLACE_ID)
+    const user = userEvent.setup()
+    server.use(http.post(`*/cms/campaigns/${draft.id}/schedule`, () => refusal(422)))
+    renderWithProviders(<Routed />, { route: `/campaigns/${draft.id}` })
+
+    await user.click(await screen.findByRole('button', { name: 'Gửi ngay' }))
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Gửi ngay' }))
+
+    await expectTypeRefused()
   })
 })

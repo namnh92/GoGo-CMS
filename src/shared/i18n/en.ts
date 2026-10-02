@@ -1911,9 +1911,12 @@ export const en: Partial<Record<MessageKey, string>> = {
   'campaigns.destination.external_url': 'External link',
   'campaigns.destination.unavailableOption': '{label} — the app cannot open this yet',
   'campaigns.destinationUnavailableNote':
-    'The saved destination is "{label}", which the app cannot open yet, so this campaign cannot be sent. Switch to Home, Place or Saved list and save.',
+    'The app cannot open "{label}" yet. Switch to Home, Place or Saved list and save.',
+  'campaigns.scheduledUnopenableNote':
+    "The app cannot open this scheduled campaign's destination. To change it, cancel the schedule first, then switch.",
+  'campaigns.pastUnopenableNote': "The app cannot open this campaign's destination.",
   'campaigns.sendBlockedNote':
-    'Cannot be sent, test sends included: the saved destination is one the app cannot open yet.',
+    'Sending and test sends are locked: the app cannot open the saved destination. Switch the destination and save before sending.',
 
   'auth.brandHeadline': 'Content & Operations Center',
   'auth.brandLede':

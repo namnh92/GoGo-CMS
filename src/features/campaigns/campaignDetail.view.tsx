@@ -247,9 +247,24 @@ export default function CampaignDetailScreen() {
           ? t('campaigns.error.destinationUrl')
           : errors.destination === 'id'
             ? t('campaigns.error.destinationId')
-            : errors.destination === 'unavailable'
-              ? t('campaigns.error.destinationUnavailable')
-              : undefined
+            : undefined
+  // The type is what is wrong, so the refusal belongs on the type select.
+  const destinationTypeError =
+    errors.destination === 'unavailable' ? t('campaigns.error.destinationUnavailable') : undefined
+
+  /*
+   * What the delivery card says about a saved destination the app cannot
+   * open depends on what can still be done (CMS#222 F-01). The BE dispatcher
+   * guard is not on develop yet, so nothing here promises the server will
+   * refuse a send — only that the app cannot open the destination.
+   */
+  const unopenableNote = savedDestinationOpenable
+    ? null
+    : editable
+      ? t('campaigns.sendBlockedNote')
+      : campaign?.status === 'scheduled'
+        ? t('campaigns.scheduledUnopenableNote')
+        : t('campaigns.pastUnopenableNote')
 
   return (
     <>
@@ -391,7 +406,8 @@ export default function CampaignDetailScreen() {
                         label={t('campaigns.field.destinationType')}
                         value={form.destinationType}
                         disabled={!canManage || !editable}
-                        onChange={(event) =>
+                        error={destinationTypeError}
+                        onChange={(event) => {
                           setForm((current) => ({
                             ...current,
                             destinationType: event.target.value as CampaignDestination,
@@ -399,7 +415,10 @@ export default function CampaignDetailScreen() {
                             // for one cannot resolve under another.
                             destinationValue: '',
                           }))
-                        }
+                          // An error about the old type (or the old value)
+                          // no longer describes what is selected.
+                          setErrors((current) => ({ ...current, destination: undefined }))
+                        }}
                       >
                         {/*
                           GoGo-BE#604 (c): the three the app cannot open stay
@@ -441,8 +460,9 @@ export default function CampaignDetailScreen() {
                           }))
                         }
                       />
-                      {!formDestinationOpenable ? (
-                        <p role="alert" className={`${styles.formNote} ${styles.formFull}`}>
+                      {/* Advice to switch only where switching is possible. */}
+                      {!formDestinationOpenable && editable ? (
+                        <p role="status" className={`${styles.formNote} ${styles.formFull}`}>
                           <span aria-hidden="true">⚠</span>
                           {t('campaigns.destinationUnavailableNote', {
                             label: t(`campaigns.destination.${form.destinationType}` as const),
@@ -570,16 +590,16 @@ export default function CampaignDetailScreen() {
                       variant="secondary"
                       size="sm"
                       loading={testSend.isPending}
-                      disabled={!canManage || !online || !savedDestinationOpenable}
+                      disabled={!canManage || !online || (editable && !savedDestinationOpenable)}
                       onClick={() => testSend.mutate()}
                     >
                       {t('campaigns.testSend')}
                     </Button>
                   </div>
-                  {!savedDestinationOpenable ? (
+                  {unopenableNote ? (
                     <p className={styles.note}>
                       <span aria-hidden="true">⚠</span>
-                      {t('campaigns.sendBlockedNote')}
+                      {unopenableNote}
                     </p>
                   ) : null}
                   {item!.status === 'sending' ? (
