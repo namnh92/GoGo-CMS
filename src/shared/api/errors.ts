@@ -7,11 +7,13 @@ import { z } from 'zod'
  * never proves two places are one.
  */
 export const duplicateCandidateSchema = z.object({
-  placeId: z.string(),
-  name: z.string(),
+  // What the contract promises (review F-04). A candidate that breaks it is not
+  // linked to: the entry falls back to its human `message`.
+  placeId: z.string().uuid(),
+  name: z.string().min(1),
   status: z.string(),
-  distanceM: z.number(),
-  nameSimilarity: z.number(),
+  distanceM: z.number().int().nonnegative(),
+  nameSimilarity: z.number().min(0).max(1),
 })
 
 export type DuplicateCandidate = z.infer<typeof duplicateCandidateSchema>

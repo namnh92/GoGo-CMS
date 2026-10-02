@@ -1170,6 +1170,10 @@ export const en: Partial<Record<MessageKey, string>> = {
   'placeCreate.source.phone': 'Source for the phone number',
   'placeCreate.source.website': 'Source for the website',
   'placeCreate.source.description': 'Source for the description',
+  'placeCreate.source.tooLong': 'A source is at most 500 characters.',
+  'placeCreate.link.attached':
+    'Attached to Google record “{name}” ({id}). Changing the link detaches it.',
+  'placeCreate.link.detach': 'Detach',
   'placeCreate.source.required': 'Name a source for this fact',
   'placeCreate.source.invalid':
     'The server refused this source — check it (1–500 characters, for a fact you entered).',

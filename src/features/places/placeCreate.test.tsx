@@ -401,6 +401,38 @@ describe('create a place', () => {
     expect(sent[1]!.key).not.toBe(sent[0]!.key)
   })
 
+  it('a 403 on submit becomes the permission-denied screen, not a form', async () => {
+    signInAs('editor')
+    createAnswers(() => envelope('FORBIDDEN', 403))
+    const user = userEvent.setup()
+    renderWithProviders(<PlaceCreateScreen />)
+
+    await fillRequired(user)
+    await submit(user)
+
+    // Suspended or demoted after the screen opened (review F-02).
+    expect(await screen.findByText('Không đủ quyền')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Tạo địa điểm' })).not.toBeInTheDocument()
+  })
+
+  it('says a source over 500 characters is too long, in Vietnamese', async () => {
+    signInAs('editor')
+    const sent = createAnswers(created)
+    const user = userEvent.setup()
+    renderWithProviders(<PlaceCreateScreen />)
+
+    await user.type(screen.getByLabelText(/Tên hiển thị/), 'Quán Mới')
+    await user.type(screen.getByLabelText(/Vĩ độ/), '10.7769')
+    await user.type(screen.getByLabelText(/Kinh độ/), '106.7009')
+    await fillSources(user, ['geom'])
+    await user.click(screen.getByLabelText(SOURCE_LABEL.name))
+    await user.paste('a'.repeat(501))
+    await submit(user)
+
+    expect(await screen.findByText('Nguồn tối đa 500 ký tự.')).toBeInTheDocument()
+    expect(sent).toHaveLength(0)
+  })
+
   it('is a permission-denied screen for a moderator', async () => {
     signInAs('moderator')
     renderWithProviders(<PlaceCreateScreen />)

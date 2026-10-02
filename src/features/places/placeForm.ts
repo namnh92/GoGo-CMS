@@ -123,6 +123,16 @@ export const placeIdentitySchema = placeIdentityFields.superRefine((values, ctx)
 })
 
 /**
+ * One evidence box. Trimmed **before** the length check, the order GoGo-BE
+ * applies (review F-03): 500 characters of evidence inside a stray space is
+ * valid there and must be valid here. The message is an i18n key, so the
+ * editor never reads zod's English.
+ */
+function sourceReference() {
+  return z.string().trim().max(SOURCE_REFERENCE_MAX, 'placeCreate.source.tooLong').optional()
+}
+
+/**
  * GoGo-CMS#150 — the same fields, with the three a new row cannot do without.
  *
  * `POST /cms/places` requires a name and a position because search, routing and
@@ -158,12 +168,12 @@ const placeCreateFields = placeIdentityFields.extend({
    */
   sourceReferences: z
     .object({
-      name: z.string().max(SOURCE_REFERENCE_MAX).optional(),
-      geom: z.string().max(SOURCE_REFERENCE_MAX).optional(),
-      addressText: z.string().max(SOURCE_REFERENCE_MAX).optional(),
-      phone: z.string().max(SOURCE_REFERENCE_MAX).optional(),
-      website: z.string().max(SOURCE_REFERENCE_MAX).optional(),
-      description: z.string().max(SOURCE_REFERENCE_MAX).optional(),
+      name: sourceReference(),
+      geom: sourceReference(),
+      addressText: sourceReference(),
+      phone: sourceReference(),
+      website: sourceReference(),
+      description: sourceReference(),
     })
     .default({}),
 })

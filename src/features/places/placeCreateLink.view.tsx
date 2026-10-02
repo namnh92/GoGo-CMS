@@ -47,6 +47,11 @@ export function roundCoordinate(value: number): number {
 export type AppliedResolution = {
   googlePlaceId: string
   /**
+   * Google's name for the record, shown only in the "attached to" line so the
+   * editor can see which record is attached. Never written into a form box.
+   */
+  previewName: string
+  /**
    * ADM-017 — from the coordinate, against GoGo's own boundaries. Empty string
    * where the resolve could not name a unit: the selector then opens empty
    * rather than on a guess, and Google's address components are never used.
@@ -86,8 +91,15 @@ export type AppliedResolution = {
 export function PlaceCreateLinkPanel({
   onApply,
   onResolveStart,
+  onLinkChange,
 }: {
   onApply: (values: AppliedResolution) => void
+  /**
+   * GoGo-BE#440 review F-01 — the link box changed. Whatever was attached
+   * belongs to the old link, so the form must drop it: otherwise place A's
+   * Google id would ride along on a create the editor is now typing for B.
+   */
+  onLinkChange?: () => void
   /**
    * Fired the moment a resolve leaves, so the form can remember what it held.
    * That snapshot is what lets an apply skip a box the editor has typed in
@@ -168,7 +180,10 @@ export function PlaceCreateLinkPanel({
           placeholder="https://maps.app.goo.gl/…"
           value={url}
           autoFocus
-          onChange={(event) => setUrl(event.target.value)}
+          onChange={(event) => {
+            setUrl(event.target.value)
+            onLinkChange?.()
+          }}
         />
         <Button
           type="button"
@@ -319,6 +334,7 @@ export function PlaceCreateLinkPanel({
               onClick={() =>
                 onApply({
                   googlePlaceId: candidate.googlePlaceId,
+                  previewName: candidate.name,
                   provinceCode: result.administrative?.provinceCode ?? '',
                   communeCode: result.administrative?.communeCode ?? '',
                   categoryKey: candidate.categoryKey ?? '',

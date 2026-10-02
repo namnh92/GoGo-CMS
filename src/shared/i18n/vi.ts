@@ -1164,6 +1164,9 @@ export const vi = {
   'placeCreate.source.phone': 'Nguồn của số điện thoại',
   'placeCreate.source.website': 'Nguồn của website',
   'placeCreate.source.description': 'Nguồn của mô tả',
+  'placeCreate.source.tooLong': 'Nguồn tối đa 500 ký tự.',
+  'placeCreate.link.attached': 'Đang gắn với bản ghi Google “{name}” ({id}). Đổi link là bỏ gắn.',
+  'placeCreate.link.detach': 'Bỏ gắn',
   'placeCreate.source.required': 'Ghi nguồn cho thông tin này',
   'placeCreate.source.invalid':
     'Máy chủ không nhận nguồn này — kiểm tra lại (1–500 ký tự, đúng thông tin đã nhập).',

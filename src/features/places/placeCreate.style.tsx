@@ -11,6 +11,9 @@ export const styles = {
   duplicateBody: 'mt-1 text-xs text-text-muted',
   duplicateList: 'mt-2 flex flex-col gap-1 text-xs text-text-muted',
   duplicateItem: 'rounded-compact bg-surface px-2.5 py-1.5 font-medium text-text',
+  attached:
+    'mt-3 flex flex-wrap items-center gap-2 rounded-compact border border-line bg-surface px-3 py-2 text-xs text-text',
+  attachedText: 'min-w-0 flex-1 break-words',
   candidateRow: 'flex flex-wrap items-center gap-2',
   candidateName: 'font-semibold text-text',
   candidateMeta: 'mt-0.5 text-xs font-normal text-text-muted',

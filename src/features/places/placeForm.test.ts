@@ -226,6 +226,30 @@ describe('toPlaceCreateBody', () => {
     ).toEqual(['name', 'geom', 'addressText', 'description'])
   })
 
+  it('trims before the 500 limit, the order GoGo-BE applies (F-03)', () => {
+    const padded = placeCreateSchema.safeParse({
+      name: 'Quán Mới',
+      lat: 10.7,
+      lng: 106.7,
+      sourceReferences: { name: `  ${'a'.repeat(500)}  `, geom: 'b' },
+    })
+    expect(padded.success).toBe(true)
+    expect(toPlaceCreateBody(padded.data!).sourceReferences.name).toHaveLength(500)
+
+    const over = placeCreateSchema.safeParse({
+      name: 'Quán Mới',
+      lat: 10.7,
+      lng: 106.7,
+      sourceReferences: { name: 'a'.repeat(501), geom: 'b' },
+    })
+    expect(over.success).toBe(false)
+    // An i18n key, never zod's English sentence.
+    expect(over.error?.issues[0]).toMatchObject({
+      path: ['sourceReferences', 'name'],
+      message: 'placeCreate.source.tooLong',
+    })
+  })
+
   it('refuses a filled fact with no reference, on that reference', () => {
     const result = placeCreateSchema.safeParse({
       name: 'Quán Mới',
@@ -261,6 +285,26 @@ describe('error envelope candidate (GoGo-BE#440)', () => {
     }
     const parsed = errorEnvelopeSchema.parse(envelope([{ ...entry, candidate }]))
     expect(parsed.field_errors[0]!.candidate).toEqual(candidate)
+  })
+
+  it.each([
+    ['a non-uuid placeId', { placeId: 'not-a-uuid' }],
+    ['a fractional distance', { distanceM: 12.5 }],
+    ['a negative distance', { distanceM: -1 }],
+    ['a similarity above 1', { nameSimilarity: 1.2 }],
+    ['a similarity below 0', { nameSimilarity: -0.1 }],
+  ])('drops a candidate with %s (F-04)', (_label, override) => {
+    const candidate = {
+      placeId: '0b7e7a52-1111-4c3f-9c0e-2f2b0f0a2222',
+      name: 'Quán Cũ',
+      status: 'draft',
+      distanceM: 12,
+      nameSimilarity: 0.7,
+      ...override,
+    }
+    const parsed = errorEnvelopeSchema.parse(envelope([{ ...entry, candidate }]))
+    expect(parsed.field_errors[0]!.candidate).toBeUndefined()
+    expect(parsed.field_errors[0]!.message).toBe('Quán Cũ (12m)')
   })
 
   it('a malformed candidate costs the link, not the envelope', () => {

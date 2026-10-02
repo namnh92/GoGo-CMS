@@ -225,6 +225,54 @@ describe('add a place by Google Maps link', () => {
     expect(bodies).toHaveLength(0)
   })
 
+  /*
+   * Review F-01 — an attachment belongs to the link it came from. Attach A,
+   * then change the link and type place B: the create must not carry A's id.
+   */
+  it('changing the link drops the attached Google record', async () => {
+    signInAs('editor')
+    resolvesTo(RESOLVED)
+    const bodies = createdWith()
+    const user = userEvent.setup()
+    renderWithProviders(<PlaceCreateScreen />)
+
+    await pasteAndResolve(user)
+    await user.click(await screen.findByRole('button', { name: ATTACH }))
+    expect(
+      screen.getByText(/Đang gắn với bản ghi Google “Cà Phê Bên Đường” \(ChIJcafe\)/),
+    ).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('Link Google Maps'), 'x')
+    expect(screen.queryByText(/Đang gắn với bản ghi Google/)).not.toBeInTheDocument()
+
+    await typeFacts(user)
+    await fillSources(user)
+    await user.click(screen.getByRole('button', { name: 'Tạo địa điểm' }))
+
+    await waitFor(() => expect(bodies).toHaveLength(1))
+    expect(bodies[0]).not.toHaveProperty('googlePlaceId')
+  })
+
+  it('detaching by hand also drops the Google record', async () => {
+    signInAs('editor')
+    resolvesTo(RESOLVED)
+    const bodies = createdWith()
+    const user = userEvent.setup()
+    renderWithProviders(<PlaceCreateScreen />)
+
+    await pasteAndResolve(user)
+    await user.click(await screen.findByRole('button', { name: ATTACH }))
+    await user.click(screen.getByRole('button', { name: 'Bỏ gắn' }))
+    expect(screen.queryByText(/Đang gắn với bản ghi Google/)).not.toBeInTheDocument()
+
+    await typeFacts(user)
+    await fillSources(user)
+    await user.click(screen.getByRole('button', { name: 'Tạo địa điểm' }))
+
+    await waitFor(() => expect(bodies).toHaveLength(1))
+    expect(bodies[0]).not.toHaveProperty('googlePlaceId')
+  })
+
   it('opens the place that already holds the link rather than duplicating it', async () => {
     signInAs('editor')
     resolvesTo({

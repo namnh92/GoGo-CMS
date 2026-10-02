@@ -81,6 +81,12 @@ export default function PlaceCreateScreen() {
    * check and source like anything typed.
    */
   const [applied, setApplied] = useState<AppliedResolution | null>(null)
+  /**
+   * F-02 — the server said 403 on submit: the editor was suspended or demoted
+   * after the screen opened. The form stops being operable, the same as when
+   * the role never had `place.write`.
+   */
+  const [forbidden, setForbidden] = useState(false)
 
   /**
    * GoGo-BE#440 — one create attempt, one `Idempotency-Key`.
@@ -163,6 +169,11 @@ export default function PlaceCreateScreen() {
       setDuplicates(null)
       setServerError(null)
 
+      if (apiError.isForbidden) {
+        setForbidden(true)
+        return
+      }
+
       /*
        * The key itself was refused, or was already spent on another body. The
        * next press must be a fresh attempt; every other failure keeps the key,
@@ -225,7 +236,7 @@ export default function PlaceCreateScreen() {
     },
   })
 
-  if (!can('place.write')) {
+  if (!can('place.write') || forbidden) {
     return (
       <>
         <PageHeader
@@ -326,7 +337,10 @@ export default function PlaceCreateScreen() {
               <PlaceCreateLinkPanel
                 onResolveStart={() => {
                   snapshot.current = form.getValues()
+                  // A new resolution replaces whatever was attached before it.
+                  setApplied(null)
                 }}
+                onLinkChange={() => setApplied(null)}
                 onApply={(values) => {
                   setApplied(values)
                   /*
@@ -349,6 +363,24 @@ export default function PlaceCreateScreen() {
                   form.clearErrors(['provinceCode', 'communeCode'])
                 }}
               />
+              {/*
+                F-01 — which Google record the create will carry, said out loud.
+                A link change or a new resolve drops it; so does this button.
+              */}
+              {applied ? (
+                <div className={styles.attached} role="status" aria-live="polite">
+                  <InfoIcon size={14} aria-hidden="true" />
+                  <span className={styles.attachedText}>
+                    {t('placeCreate.link.attached', {
+                      name: applied.previewName,
+                      id: applied.googlePlaceId,
+                    })}
+                  </span>
+                  <Button type="button" size="sm" variant="ghost" onClick={() => setApplied(null)}>
+                    {t('placeCreate.link.detach')}
+                  </Button>
+                </div>
+              ) : null}
             </CardBody>
           </Card>
 
