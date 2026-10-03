@@ -6,6 +6,7 @@ import {
   placeCreateSchema,
   placeIdentitySchema,
   missingCodeSources,
+  parseDecimal,
   suppliedFacts,
   toPlaceCreateBody,
   splitFieldErrors,
@@ -362,5 +363,42 @@ describe('toPlaceEditBody code evidence', () => {
   it('reports a changed code sent without evidence', () => {
     const body = toPlaceEditBody({ ...before, communeCode: '26737' }, [], baseline)
     expect(missingCodeSources(body)).toEqual(['communeCode'])
+  })
+})
+
+/** Review F-10/F-11 — what a numeric box accepts. */
+describe('plain decimals only', () => {
+  it.each([
+    ['10,77', 10.77],
+    ['10.77', 10.77],
+    ['-33,5', -33.5],
+    ['90', 90],
+  ])('accepts %s', (typed, value) => {
+    expect(parseDecimal(typed)).toBe(value)
+  })
+
+  it.each(['0x10', '1e1', '0b1', '1,2,3', '1.2.3', '10,', ',5', 'Infinity'])(
+    'refuses %s',
+    (typed) => {
+      expect(parseDecimal(typed)).toBeNull()
+    },
+  )
+
+  it('create: a comma coordinate is a number, a hex one is not', () => {
+    const base = { name: 'Quán', sourceReferences: { name: 'a', geom: 'b' } }
+    const ok = placeCreateSchema.safeParse({ ...base, lat: '10,77', lng: '106,7' })
+    expect(ok.success && ok.data.lat).toBe(10.77)
+    const hex = placeCreateSchema.safeParse({ ...base, lat: '0x10', lng: '106.7' })
+    expect(hex.success).toBe(false)
+    expect(hex.error?.issues[0]).toMatchObject({
+      path: ['lat'],
+      message: 'placeEditor.error.number',
+    })
+  })
+
+  it('edit: "1e1" minutes is refused, "90,0" is 90', () => {
+    expect(placeIdentitySchema.safeParse({ name: 'Q', avgVisitMinutes: '1e1' }).success).toBe(false)
+    const comma = placeIdentitySchema.safeParse({ name: 'Q', avgVisitMinutes: '90,0' })
+    expect(comma.success && comma.data.avgVisitMinutes).toBe(90)
   })
 })

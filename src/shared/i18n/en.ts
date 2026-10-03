@@ -1113,7 +1113,7 @@ export const en: Partial<Record<MessageKey, string>> = {
   'placeCreate.intro':
     'Check it over and add what you know for certain. The place is created as a draft — hours, prices and photos come next in the editor, and publishing is a separate step.',
   'placeCreate.coordinateHint':
-    'Enter coordinates you established yourself (measured on site, a visit…). Without them the place cannot be searched or routed to.',
+    'Enter coordinates you established yourself (measured on site, a visit…), as a decimal such as 10.7769 or 10,7769. Without them the place cannot be searched or routed to.',
   'placeCreate.submit': 'Create place',
   'placeCreate.created': 'Place created as a draft.',
   'placeCreate.failed': 'Could not create the place',

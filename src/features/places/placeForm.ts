@@ -13,6 +13,18 @@ import {
 const L = PLACE_FIELD_LIMITS
 
 /**
+ * A plain decimal as an editor types it (review F-10/F-11): optional sign,
+ * digits, and at most one fraction after `.` or a Vietnamese `,`. `Number()`
+ * alone would take "0x10" as 16, "1e1" as 10 and "0b1" as 1 — values nobody
+ * meant — so the shape is checked first. Null for anything else.
+ */
+const PLAIN_DECIMAL = /^[+-]?\d+(?:[.,]\d+)?$/
+export function parseDecimal(trimmed: string): number | null {
+  if (!PLAIN_DECIMAL.test(trimmed)) return null
+  return Number(trimmed.replace(',', '.'))
+}
+
+/**
  * An untouched `<input>` reads back as `''`. That is "no value", never `0`.
  *
  * The editor used to declare these fields with `z.coerce.number()`, which turns
@@ -32,10 +44,10 @@ function optionalNumber(schema: z.ZodNumber) {
     if (typeof value === 'string') {
       const trimmed = value.trim()
       if (trimmed === '') return undefined
-      const parsed = Number(trimmed)
+      const parsed = parseDecimal(trimmed)
       // A non-numeric string is handed through untouched so zod reports
       // "not a number" against what was typed, rather than swallowing it.
-      return Number.isNaN(parsed) ? value : parsed
+      return parsed === null ? value : parsed
     }
     return value
   }, schema.optional())
@@ -55,8 +67,8 @@ function requiredNumber(schema: z.ZodNumber) {
     if (typeof value !== 'string') return value
     const trimmed = value.trim()
     if (trimmed === '') return undefined
-    const parsed = Number(trimmed)
-    return Number.isNaN(parsed) ? value : parsed
+    const parsed = parseDecimal(trimmed)
+    return parsed === null ? value : parsed
   }, schema)
 }
 

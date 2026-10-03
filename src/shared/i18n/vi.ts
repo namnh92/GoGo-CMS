@@ -1107,7 +1107,7 @@ export const vi = {
   'placeCreate.intro':
     'Kiểm lại và bổ sung những gì bạn biết chắc. Địa điểm được tạo ở trạng thái Nháp — giờ mở cửa, giá và ảnh nhập tiếp ở màn sửa, xuất bản là bước riêng.',
   'placeCreate.coordinateHint':
-    'Nhập toạ độ bạn tự xác định (đo tại chỗ, đến tận nơi…). Không có toạ độ thì không tìm kiếm hay chỉ đường được.',
+    'Nhập toạ độ bạn tự xác định (đo tại chỗ, đến tận nơi…), dạng số thập phân như 10,7769 hoặc 10.7769. Không có toạ độ thì không tìm kiếm hay chỉ đường được.',
   'placeCreate.submit': 'Tạo địa điểm',
   'placeCreate.created': 'Đã tạo địa điểm ở trạng thái Nháp.',
   'placeCreate.failed': 'Chưa tạo được địa điểm',
