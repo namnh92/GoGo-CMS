@@ -42,6 +42,25 @@ function optionalNumber(schema: z.ZodNumber) {
 }
 
 /**
+ * A required coordinate typed into a text box (review F-07). Empty is
+ * "required"; anything that is not a number stays a string so zod reports it
+ * as such — never coerced to `NaN` and reported as empty.
+ */
+const numberMessages = {
+  required_error: 'placeEditor.error.required',
+  invalid_type_error: 'placeEditor.error.number',
+}
+function requiredNumber(schema: z.ZodNumber) {
+  return z.preprocess((value) => {
+    if (typeof value !== 'string') return value
+    const trimmed = value.trim()
+    if (trimmed === '') return undefined
+    const parsed = Number(trimmed)
+    return Number.isNaN(parsed) ? value : parsed
+  }, schema)
+}
+
+/**
  * One evidence box. Trimmed **before** the length check, the order GoGo-BE
  * applies (review F-03): 500 characters of evidence inside a stray space is
  * valid there and must be valid here. The message is an i18n key, so the
@@ -159,14 +178,8 @@ const placeCreateFields = placeIdentityFields.extend({
    */
   categoryId: z.string().max(64).optional(),
   name: z.string().trim().min(L.name.min, 'placeEditor.error.required').max(L.name.max),
-  lat: z.preprocess(
-    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
-    z.coerce.number({ message: 'placeEditor.error.required' }).min(L.lat.min).max(L.lat.max),
-  ),
-  lng: z.preprocess(
-    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
-    z.coerce.number({ message: 'placeEditor.error.required' }).min(L.lng.min).max(L.lng.max),
-  ),
+  lat: requiredNumber(z.number(numberMessages).min(L.lat.min).max(L.lat.max)),
+  lng: requiredNumber(z.number(numberMessages).min(L.lng.min).max(L.lng.max)),
   /**
    * GoGo-BE#440 — the evidence behind each fact this form offers, by the key
    * the contract uses (`geom` is the pin: latitude and longitude together).

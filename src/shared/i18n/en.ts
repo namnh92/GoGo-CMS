@@ -1233,7 +1233,10 @@ export const en: Partial<Record<MessageKey, string>> = {
   'placeEditor.codeSourceHint':
     'A code changed in this save is an assertion to the resolver — say how you know it (a visit, the venue’s papers…).',
   'placeEditor.codeFromMapping': 'From the administrative mapping',
-  'placeEditor.codeFromMappingMeta': '{status} · method {method} · dataset {dataset}',
+  'placeEditor.codeFromMappingMethod': 'method: {method}',
+  'placeEditor.codeFromMappingDataset': 'dataset {dataset}',
+  'mapping.method.boundary_point_in_polygon': 'by boundary, from the coordinates',
+  'mapping.method.trusted_code': 'code asserted by an editor',
   'placeEditor.codeNone': 'No code',
   'placeEditor.provenanceNone': 'No recorded origin',
   'placeEditor.providerStatus.line': 'Google reports: {status} · updated {date}',

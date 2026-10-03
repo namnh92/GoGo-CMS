@@ -200,6 +200,53 @@ describe('code evidence on an edit', () => {
     expect(screen.getByLabelText(SOURCE_LABEL.provinceCode)).toHaveAttribute('aria-invalid', 'true')
   })
 
+  it('a code reference error with no box on screen stays in the panel (F-09)', async () => {
+    server.use(
+      http.patch('/v1/cms/places/:id', () =>
+        HttpResponse.json(
+          {
+            code: 'SOURCE_REFERENCE_INVALID',
+            message: 'm',
+            field_errors: [
+              { field: 'sourceReferences.communeCode', code: 'unused', message: 'unused' },
+            ],
+            request_id: 'req-unused',
+            retryable: false,
+          },
+          { status: 400 },
+        ),
+      ),
+    )
+    openEditor()
+    const phone = await screen.findByLabelText('Điện thoại')
+    await userEvent.clear(phone)
+    await userEvent.type(phone, '0283822999')
+    await save()
+
+    // No code was changed, so no source box exists to carry it.
+    expect(await screen.findByText('sourceReferences.communeCode')).toBeInTheDocument()
+    expect(screen.queryByLabelText(SOURCE_LABEL.communeCode)).not.toBeInTheDocument()
+  })
+
+  it('omits a mapping part with no data rather than dashing it (F-08)', async () => {
+    const base = places.find((place) => place.id === 'pl-chao-ban')!
+    server.use(
+      http.get('/v1/cms/places/:id', () =>
+        HttpResponse.json({
+          ...base,
+          administrative: { ...base.administrative, method: null, datasetVersion: null },
+        }),
+      ),
+    )
+    openEditor()
+    await screen.findByLabelText('Điện thoại')
+
+    // Status alone: no method, no dataset, and no dash standing in for them.
+    for (const row of screen.getAllByText('Theo ánh xạ hành chính')) {
+      expect(row.closest('dd')).toHaveTextContent(/^Theo ánh xạ hành chínhMáy khớp$/)
+    }
+  })
+
   it('a code with no editorial row shows the mapping it came from, not "no origin"', async () => {
     openEditor()
     await screen.findByLabelText('Điện thoại')
@@ -209,7 +256,7 @@ describe('code evidence on an edit', () => {
     expect(rows).toHaveLength(2)
     expect(
       screen.getAllByText(
-        'Máy khớp · phương pháp boundary_point_in_polygon · bộ dữ liệu v5.0.0+v2.4.1+7fac8c45+v5.0.0+r0',
+        'Máy khớp · phương pháp: theo ranh giới, từ toạ độ · bộ dữ liệu v5.0.0+v2.4.1+7fac8c45+v5.0.0+r0',
       ),
     ).toHaveLength(2)
   })

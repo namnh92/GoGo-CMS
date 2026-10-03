@@ -169,8 +169,8 @@ describe('add a place by Google Maps link', () => {
     // a box — the editor types each fact with its own source.
     expect(screen.getByLabelText(/Tên hiển thị/)).toHaveValue('')
     expect(screen.getByLabelText(/Địa chỉ/)).toHaveValue('')
-    expect(screen.getByLabelText(/Vĩ độ/)).toHaveValue(null)
-    expect(screen.getByLabelText(/Kinh độ/)).toHaveValue(null)
+    expect(screen.getByLabelText(/Vĩ độ/)).toHaveValue('')
+    expect(screen.getByLabelText(/Kinh độ/)).toHaveValue('')
   })
 
   /*
@@ -732,7 +732,7 @@ describe('a late answer never wins', () => {
     // Their name survives, and nothing of Google's lands in the boxes they
     // left empty either (GoGo-BE#440) — only GoGo's own suggestions apply.
     expect(name).toHaveValue('Tên tôi tự gõ')
-    expect(screen.getByLabelText(/Vĩ độ/)).toHaveValue(null)
+    expect(screen.getByLabelText(/Vĩ độ/)).toHaveValue('')
     await waitFor(() => expect(screen.getByLabelText(/Nhóm địa điểm/)).toHaveValue('tx-cat-cafe'))
   })
 })

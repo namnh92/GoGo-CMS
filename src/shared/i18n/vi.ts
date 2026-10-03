@@ -1283,7 +1283,10 @@ export const vi = {
   'placeEditor.codeSourceHint':
     'Mã đổi ở lần lưu này là một khẳng định với bộ phân giải — ghi bạn biết nó từ đâu (đến tận nơi, giấy tờ của quán…).',
   'placeEditor.codeFromMapping': 'Theo ánh xạ hành chính',
-  'placeEditor.codeFromMappingMeta': '{status} · phương pháp {method} · bộ dữ liệu {dataset}',
+  'placeEditor.codeFromMappingMethod': 'phương pháp: {method}',
+  'placeEditor.codeFromMappingDataset': 'bộ dữ liệu {dataset}',
+  'mapping.method.boundary_point_in_polygon': 'theo ranh giới, từ toạ độ',
+  'mapping.method.trusted_code': 'mã biên tập viên khẳng định',
   'placeEditor.codeNone': 'Chưa có mã',
   'placeEditor.provenanceNone': 'Chưa ghi nhận nguồn',
   'placeEditor.provenanceVerified': 'xác minh {time}',

@@ -362,7 +362,7 @@ export default function PlaceEditorScreen() {
       // website the server stored rather than the string they typed.
       invalidate()
     },
-    onError: (error) => {
+    onError: (error, { values: sentValues, baseline: sentBaseline }) => {
       const apiError = toApiError(error)
       /*
        * Somebody else saved between load and submit. Nothing the editor typed
@@ -384,8 +384,18 @@ export default function PlaceEditorScreen() {
        * the source box beside the code. `unused` / `unknown` are a console bug,
        * not the editor's, and keep the generic sentence.
        */
+      /*
+       * Only a code this request actually asserted has a source box on screen
+       * (review F-09). An `unused` / `unknown` reference for any other key has
+       * nowhere to land, so it stays in the panel below rather than vanishing.
+       */
+      const asserted = Object.keys(
+        toPlaceEditBody(sentValues, taxonomyIds, sentBaseline).sourceReferences ?? {},
+      )
       const codeIssues = apiError.fieldErrors.filter((issue) =>
-        CODE_SOURCE_KEYS.some((key) => issue.field === `sourceReferences.${key}`),
+        CODE_SOURCE_KEYS.some(
+          (key) => issue.field === `sourceReferences.${key}` && asserted.includes(key),
+        ),
       )
       for (const issue of codeIssues) {
         const key = issue.field.slice('sourceReferences.'.length) as CodeSourceKey
@@ -733,7 +743,11 @@ export default function PlaceEditorScreen() {
                       <div className={styles.fieldRow}>
                         <TextInput
                           label={t('placeEditor.avgVisit')}
-                          type="number"
+                          // Text, not `number` (review F-07): a number input
+                          // reads "9e" back as "", which would clear the stored
+                          // value. As text, the schema sees what was typed and
+                          // says it is not a number.
+                          type="text"
                           inputMode="numeric"
                           hint={t('placeEditor.avgVisitHint')}
                           disabled={!canWrite}
@@ -1509,11 +1523,27 @@ function ProvenanceList({
                   <>
                     {t('placeEditor.codeFromMapping')}
                     <span className={styles.provenanceMeta}>
-                      {t('placeEditor.codeFromMappingMeta', {
-                        status: t(`mapping.status.${administrative.status}` as const),
-                        method: administrative.method ?? '—',
-                        dataset: administrative.datasetVersion ?? '—',
-                      })}
+                      {/* Review F-08 — a part with no data is omitted, never
+                          dashed; a method is a key, labelled, raw only when
+                          this console has no label for it yet. */}
+                      {[
+                        t(`mapping.status.${administrative.status}` as const),
+                        administrative.method
+                          ? t('placeEditor.codeFromMappingMethod', {
+                              method: label(
+                                `mapping.method.${administrative.method}`,
+                                administrative.method,
+                              ),
+                            })
+                          : null,
+                        administrative.datasetVersion
+                          ? t('placeEditor.codeFromMappingDataset', {
+                              dataset: administrative.datasetVersion,
+                            })
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
                     </span>
                   </>
                 ) : (

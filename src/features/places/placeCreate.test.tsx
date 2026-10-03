@@ -453,6 +453,22 @@ describe('create a place', () => {
     expect(sent).toHaveLength(0)
   })
 
+  it('says a coordinate that is not a number is not a number (F-07)', async () => {
+    signInAs('editor')
+    const sent = createAnswers(created)
+    const user = userEvent.setup()
+    renderWithProviders(<PlaceCreateScreen />)
+
+    await user.type(screen.getByLabelText(/Tên hiển thị/), 'Quán Mới')
+    await user.type(screen.getByLabelText(/Vĩ độ/), '10.7e')
+    await user.type(screen.getByLabelText(/Kinh độ/), '106.7009')
+    await fillSources(user)
+    await submit(user)
+
+    expect(await screen.findByText('Nhập một con số')).toBeInTheDocument()
+    expect(sent).toHaveLength(0)
+  })
+
   it('is a permission-denied screen for a moderator', async () => {
     signInAs('moderator')
     renderWithProviders(<PlaceCreateScreen />)

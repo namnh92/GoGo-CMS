@@ -410,9 +410,8 @@ export default function PlaceCreateScreen() {
                   <TextInput
                     label={t('placeEditor.lat')}
                     required
-                    type="number"
+                    type="text"
                     inputMode="decimal"
-                    step="any"
                     hint={t('placeCreate.coordinateHint')}
                     error={errorFor('lat')}
                     {...form.register('lat', numberFieldRegister)}
@@ -420,9 +419,8 @@ export default function PlaceCreateScreen() {
                   <TextInput
                     label={t('placeEditor.lng')}
                     required
-                    type="number"
+                    type="text"
                     inputMode="decimal"
-                    step="any"
                     error={errorFor('lng')}
                     {...form.register('lng', numberFieldRegister)}
                   />
@@ -528,7 +526,9 @@ export default function PlaceCreateScreen() {
 
                 <TextInput
                   label={t('placeEditor.avgVisit')}
-                  type="number"
+                  // Text, not `number` (review F-07): a number input reads a
+                  // bad entry back as "" and the schema never sees it.
+                  type="text"
                   inputMode="numeric"
                   hint={t('placeEditor.avgVisitHint')}
                   error={errorFor('avgVisitMinutes')}
