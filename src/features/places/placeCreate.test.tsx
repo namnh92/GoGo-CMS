@@ -5,6 +5,7 @@ import { http, HttpResponse } from 'msw'
 import { server } from '@/shared/test/server'
 import { renderWithProviders, signInAs } from '@/shared/test/render'
 import PlaceCreateScreen from './placeCreate.view'
+import { fillSources, SOURCE_LABEL, SOURCE_TEXT } from './placeCreate.testkit'
 
 /**
  * GoGo-CMS#150. Three things are worth holding still here, and each of them was
@@ -44,7 +45,39 @@ async function fillRequired(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText(/Tên hiển thị/), 'Quán Mới')
   await user.type(screen.getByLabelText(/Vĩ độ/), '10.7769')
   await user.type(screen.getByLabelText(/Kinh độ/), '106.7009')
+  await fillSources(user)
 }
+
+/** A refusal in the BFF envelope. */
+function envelope(code: string, status: number, fieldErrors: object[] = []) {
+  return HttpResponse.json(
+    { code, message: code, field_errors: fieldErrors, request_id: `req-${code}`, retryable: false },
+    { status },
+  )
+}
+
+/** Every create the screen sends: its body and its `Idempotency-Key`. */
+type Sent = { body: Record<string, unknown>; key: string | null }
+
+/** Answers each create in turn from `replies`; the last one repeats. */
+function createAnswers(...replies: (() => Response)[]) {
+  const sent: Sent[] = []
+  server.use(
+    http.post('*/cms/places', async ({ request }) => {
+      sent.push({
+        body: (await request.json()) as Record<string, unknown>,
+        key: request.headers.get('Idempotency-Key'),
+      })
+      const reply = replies[Math.min(sent.length - 1, replies.length - 1)]!
+      return reply()
+    }),
+  )
+  return sent
+}
+
+const created = () => HttpResponse.json(CREATED, { status: 201 })
+const submit = (user: ReturnType<typeof userEvent.setup>) =>
+  user.click(screen.getByRole('button', { name: 'Tạo địa điểm' }))
 
 beforeEach(() => {
   navigate.mockClear()
@@ -68,8 +101,72 @@ describe('create a place', () => {
 
     await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/places/${CREATED.id}`))
     // Nothing is invented on the way out: an untouched box sends no key at all,
-    // which is what keeps `lat: 0` out of the Gulf of Guinea (#122).
-    expect(bodies[0]).toEqual({ name: 'Quán Mới', lat: 10.7769, lng: 106.7009 })
+    // which is what keeps `lat: 0` out of the Gulf of Guinea (#122). And every
+    // fact that is sent names its evidence (GoGo-BE#440) — `geom` for the pin.
+    expect(bodies[0]).toEqual({
+      name: 'Quán Mới',
+      lat: 10.7769,
+      lng: 106.7009,
+      sourceReferences: { name: SOURCE_TEXT, geom: SOURCE_TEXT },
+    })
+  })
+
+  it('sends an Idempotency-Key and never a googleDerivedFields', async () => {
+    signInAs('editor')
+    const sent = createAnswers(created)
+    const user = userEvent.setup()
+    renderWithProviders(<PlaceCreateScreen />)
+
+    await fillRequired(user)
+    await submit(user)
+
+    await waitFor(() => expect(sent).toHaveLength(1))
+    // The contract's own pattern for the header.
+    expect(sent[0]!.key).toMatch(/^[\w-]{8,128}$/)
+    expect(sent[0]!.body).not.toHaveProperty('googleDerivedFields')
+  })
+
+  it('will not send a fact without its source, and says so on the source box', async () => {
+    signInAs('editor')
+    const sent = createAnswers(created)
+    const user = userEvent.setup()
+    renderWithProviders(<PlaceCreateScreen />)
+
+    await fillRequired(user)
+    await user.type(screen.getByLabelText(/Điện thoại/), '0283822999')
+    await submit(user)
+
+    const phoneSource = await screen.findByLabelText(SOURCE_LABEL.phone)
+    await waitFor(() => expect(phoneSource).toHaveAttribute('aria-invalid', 'true'))
+    expect(screen.getByText('Ghi nguồn cho thông tin này')).toBeInTheDocument()
+    expect(sent).toHaveLength(0)
+
+    await user.type(phoneSource, 'Gọi điện cho quán')
+    await submit(user)
+
+    await waitFor(() => expect(sent).toHaveLength(1))
+    expect(sent[0]!.body).toMatchObject({
+      phone: '0283822999',
+      sourceReferences: { name: SOURCE_TEXT, geom: SOURCE_TEXT, phone: 'Gọi điện cho quán' },
+    })
+  })
+
+  it('drops the source of a fact the editor emptied — no stray reference', async () => {
+    signInAs('editor')
+    const sent = createAnswers(created)
+    const user = userEvent.setup()
+    renderWithProviders(<PlaceCreateScreen />)
+
+    await fillRequired(user)
+    const website = screen.getByLabelText(/Website/)
+    await user.type(website, 'https://quanmoi.vn')
+    await fillSources(user, ['website'], 'Website của quán')
+    await user.clear(website)
+    await submit(user)
+
+    await waitFor(() => expect(sent).toHaveLength(1))
+    expect(sent[0]!.body).not.toHaveProperty('website')
+    expect(sent[0]!.body.sourceReferences).toEqual({ name: SOURCE_TEXT, geom: SOURCE_TEXT })
   })
 
   it('refuses to submit without a name or a position, and says which', async () => {
@@ -91,44 +188,67 @@ describe('create a place', () => {
     expect(navigate).not.toHaveBeenCalledWith(expect.stringContaining('/places/'))
   })
 
-  it('shows the duplicate candidates and lets the editor decide', async () => {
+  it('names each duplicate candidate and opens it by id, in a new tab', async () => {
     signInAs('editor')
-    let calls = 0
-    server.use(
-      http.post('*/cms/places', async ({ request }) => {
-        calls += 1
-        const body = (await request.json()) as { allowDuplicate?: boolean }
-        if (!body.allowDuplicate) {
-          return HttpResponse.json(
-            {
-              code: 'PLACE_DUPLICATE_SUSPECTED',
-              message: 'Địa điểm này có thể đã có trong danh mục',
-              field_errors: [
-                { field: 'name', code: 'duplicate_candidate', message: 'Quán Cũ (12m)' },
-              ],
-              request_id: 'req-dup',
-              retryable: false,
+    const sent = createAnswers(
+      () =>
+        envelope('PLACE_DUPLICATE_SUSPECTED', 409, [
+          {
+            field: 'name',
+            code: 'duplicate_candidate',
+            message: 'Quán Cũ (12m)',
+            candidate: {
+              placeId: '0b7e7a52-1111-4c3f-9c0e-2f2b0f0a2222',
+              name: 'Quán Cũ',
+              status: 'published',
+              distanceM: 12,
+              nameSimilarity: 0.734,
             },
-            { status: 409 },
-          )
-        }
-        return HttpResponse.json(CREATED, { status: 201 })
-      }),
+          },
+        ]),
+      created,
     )
     const user = userEvent.setup()
     renderWithProviders(<PlaceCreateScreen />)
 
     await fillRequired(user)
-    await user.click(screen.getByRole('button', { name: 'Tạo địa điểm' }))
+    await submit(user)
 
-    // The candidate is named with its distance — enough to go and look.
-    expect(await screen.findByText('Quán Cũ (12m)')).toBeInTheDocument()
+    // Enough to go and look: name, status, distance, similarity — and a link
+    // to the place itself, not to a queue.
+    expect(await screen.findByText('Quán Cũ')).toBeInTheDocument()
+    expect(screen.getByText('Cách 12 m · tên giống 73%')).toBeInTheDocument()
+    expect(screen.getByText('Đã xuất bản')).toBeInTheDocument()
+    const open = screen.getByRole('link', { name: 'Mở “Quán Cũ” trong tab mới' })
+    expect(open).toHaveAttribute('href', '/places/0b7e7a52-1111-4c3f-9c0e-2f2b0f0a2222')
+    expect(open).toHaveAttribute('target', '_blank')
     expect(navigate).not.toHaveBeenCalledWith(`/places/${CREATED.id}`)
 
     await user.click(screen.getByRole('button', { name: 'Đây là chỗ khác, vẫn tạo' }))
 
     await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/places/${CREATED.id}`))
-    expect(calls).toBe(2)
+    expect(sent).toHaveLength(2)
+    expect(sent[1]!.body).toMatchObject({ allowDuplicate: true })
+    // A different body is a different attempt: reusing the first key would be
+    // `422 IDEMPOTENCY_KEY_REUSED`.
+    expect(sent[1]!.key).not.toBe(sent[0]!.key)
+  })
+
+  it('still shows a duplicate the server sent without a candidate', async () => {
+    signInAs('editor')
+    createAnswers(() =>
+      envelope('PLACE_DUPLICATE_SUSPECTED', 409, [
+        { field: 'name', code: 'duplicate_candidate', message: 'Quán Cũ (12m)' },
+      ]),
+    )
+    const user = userEvent.setup()
+    renderWithProviders(<PlaceCreateScreen />)
+
+    await fillRequired(user)
+    await submit(user)
+
+    expect(await screen.findByText('Quán Cũ (12m)')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /trong tab mới/ })).not.toBeInTheDocument()
   })
 
   it('puts a rejected phone on the phone box, not in a toast', async () => {
@@ -154,10 +274,199 @@ describe('create a place', () => {
 
     await fillRequired(user)
     await user.type(screen.getByLabelText(/Điện thoại/), '38229999')
+    await fillSources(user, ['phone'], 'Gọi điện cho quán')
     await user.click(screen.getByRole('button', { name: 'Tạo địa điểm' }))
 
     const phone = await screen.findByLabelText(/Điện thoại/)
     await waitFor(() => expect(phone).toHaveAttribute('aria-invalid', 'true'))
+  })
+
+  it('a retry after a lost response reuses the key, so the server can replay', async () => {
+    signInAs('editor')
+    const sent = createAnswers(() => HttpResponse.error(), created)
+    const user = userEvent.setup()
+    renderWithProviders(<PlaceCreateScreen />)
+
+    await fillRequired(user)
+    await submit(user)
+    expect(await screen.findByText('Không kết nối được máy chủ.')).toBeInTheDocument()
+
+    await submit(user)
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/places/${CREATED.id}`))
+    expect(sent).toHaveLength(2)
+    expect(sent[1]!.body).toEqual(sent[0]!.body)
+    expect(sent[1]!.key).toBe(sent[0]!.key)
+  })
+
+  it('a corrected body after a failure is a new attempt with a new key', async () => {
+    signInAs('editor')
+    const sent = createAnswers(() => HttpResponse.error(), created)
+    const user = userEvent.setup()
+    renderWithProviders(<PlaceCreateScreen />)
+
+    await fillRequired(user)
+    await submit(user)
+    await screen.findByText('Không kết nối được máy chủ.')
+
+    await user.type(screen.getByLabelText(/Tên hiển thị/), ' 2')
+    await submit(user)
+
+    await waitFor(() => expect(sent).toHaveLength(2))
+    expect(sent[1]!.body.name).toBe('Quán Mới 2')
+    expect(sent[1]!.key).not.toBe(sent[0]!.key)
+  })
+
+  it('puts SOURCE_REFERENCE_INVALID on the source box it names', async () => {
+    signInAs('editor')
+    createAnswers(() =>
+      envelope('SOURCE_REFERENCE_INVALID', 400, [
+        { field: 'sourceReferences.geom', code: 'too_big', message: 'too long' },
+      ]),
+    )
+    const user = userEvent.setup()
+    renderWithProviders(<PlaceCreateScreen />)
+
+    await fillRequired(user)
+    await submit(user)
+
+    const geom = screen.getByLabelText(SOURCE_LABEL.geom)
+    await waitFor(() => expect(geom).toHaveAttribute('aria-invalid', 'true'))
+    expect(
+      screen.getByText(
+        'Máy chủ không nhận nguồn này — kiểm tra lại (1–500 ký tự, đúng thông tin đã nhập).',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('reads the per-key SOURCE_REFERENCE_INVALID codes (alpha.62)', async () => {
+    signInAs('editor')
+    createAnswers(() =>
+      envelope('SOURCE_REFERENCE_INVALID', 400, [
+        { field: 'sourceReferences.name', code: 'too_long', message: 'too_long' },
+        { field: 'sourceReferences.geom', code: 'required', message: 'required' },
+      ]),
+    )
+    const user = userEvent.setup()
+    renderWithProviders(<PlaceCreateScreen />)
+
+    await fillRequired(user)
+    await submit(user)
+
+    expect(await screen.findByText('Nguồn tối đa 500 ký tự.')).toBeInTheDocument()
+    expect(screen.getByText('Ghi nguồn cho thông tin này')).toBeInTheDocument()
+    expect(screen.getByLabelText(SOURCE_LABEL.name)).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByLabelText(SOURCE_LABEL.geom)).toHaveAttribute('aria-invalid', 'true')
+  })
+
+  it.each([
+    [
+      'GOOGLE_CONTENT_NOT_PERSISTABLE',
+      400,
+      'Dữ liệu lấy từ Google không được lưu như dữ liệu của GoGo. Kiểm tra lại từng thông tin và ghi nguồn độc lập.',
+    ],
+    [
+      'SOURCE_REFERENCE_INVALID',
+      400,
+      'Có thông tin chưa ghi nguồn, hoặc có nguồn cho thông tin chưa nhập.',
+    ],
+    [
+      'IDEMPOTENT_REQUEST_IN_FLIGHT',
+      409,
+      'Lần gửi trước vẫn đang được xử lý. Đợi vài giây rồi thử lại.',
+    ],
+    [
+      'RATE_LIMITED',
+      429,
+      'Bạn đã tạo quá nhiều địa điểm trong một phút (tối đa 20). Đợi một chút rồi bấm “Tạo địa điểm” lại — dữ liệu trong form vẫn giữ nguyên.',
+    ],
+  ])('says what %s means, in Vietnamese, and keeps the key', async (code, status, text) => {
+    signInAs('editor')
+    const sent = createAnswers(() => envelope(code, status))
+    const user = userEvent.setup()
+    renderWithProviders(<PlaceCreateScreen />)
+
+    await fillRequired(user)
+    await submit(user)
+
+    expect(await screen.findByText(text)).toBeInTheDocument()
+    expect(screen.getByText('Chưa tạo được địa điểm')).toBeInTheDocument()
+
+    // Same body, same attempt: the key the server may still be holding.
+    await submit(user)
+    await waitFor(() => expect(sent).toHaveLength(2))
+    expect(sent[1]!.key).toBe(sent[0]!.key)
+  })
+
+  it.each([
+    ['IDEMPOTENCY_KEY_REQUIRED', 400, 'Yêu cầu thiếu mã chống gửi trùng. Bấm lại để gửi lần nữa.'],
+    [
+      'IDEMPOTENCY_KEY_REUSED',
+      422,
+      'Lần gửi trước dùng dữ liệu khác. Bấm lại để gửi dữ liệu hiện tại như một lần tạo mới.',
+    ],
+  ])('says what %s means and starts a fresh attempt', async (code, status, text) => {
+    signInAs('editor')
+    const sent = createAnswers(() => envelope(code, status), created)
+    const user = userEvent.setup()
+    renderWithProviders(<PlaceCreateScreen />)
+
+    await fillRequired(user)
+    await submit(user)
+    expect(await screen.findByText(text)).toBeInTheDocument()
+
+    await submit(user)
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/places/${CREATED.id}`))
+    expect(sent[1]!.key).not.toBe(sent[0]!.key)
+  })
+
+  it('a 403 on submit becomes the permission-denied screen, not a form', async () => {
+    signInAs('editor')
+    createAnswers(() => envelope('FORBIDDEN', 403))
+    const user = userEvent.setup()
+    renderWithProviders(<PlaceCreateScreen />)
+
+    await fillRequired(user)
+    await submit(user)
+
+    // Suspended or demoted after the screen opened (review F-02).
+    expect(await screen.findByText('Không đủ quyền')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Tạo địa điểm' })).not.toBeInTheDocument()
+  })
+
+  it('says a source over 500 characters is too long, in Vietnamese', async () => {
+    signInAs('editor')
+    const sent = createAnswers(created)
+    const user = userEvent.setup()
+    renderWithProviders(<PlaceCreateScreen />)
+
+    await user.type(screen.getByLabelText(/Tên hiển thị/), 'Quán Mới')
+    await user.type(screen.getByLabelText(/Vĩ độ/), '10.7769')
+    await user.type(screen.getByLabelText(/Kinh độ/), '106.7009')
+    await fillSources(user, ['geom'])
+    await user.click(screen.getByLabelText(SOURCE_LABEL.name))
+    await user.paste('a'.repeat(501))
+    await submit(user)
+
+    expect(await screen.findByText('Nguồn tối đa 500 ký tự.')).toBeInTheDocument()
+    expect(sent).toHaveLength(0)
+  })
+
+  it('says a coordinate that is not a number is not a number (F-07)', async () => {
+    signInAs('editor')
+    const sent = createAnswers(created)
+    const user = userEvent.setup()
+    renderWithProviders(<PlaceCreateScreen />)
+
+    await user.type(screen.getByLabelText(/Tên hiển thị/), 'Quán Mới')
+    await user.type(screen.getByLabelText(/Vĩ độ/), '10.7e')
+    await user.type(screen.getByLabelText(/Kinh độ/), '106.7009')
+    await fillSources(user)
+    await submit(user)
+
+    expect(await screen.findByText('Nhập một con số')).toBeInTheDocument()
+    expect(sent).toHaveLength(0)
   })
 
   it('is a permission-denied screen for a moderator', async () => {

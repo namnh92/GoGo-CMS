@@ -1113,7 +1113,7 @@ export const en: Partial<Record<MessageKey, string>> = {
   'placeCreate.intro':
     'Check it over and add what you know for certain. The place is created as a draft — hours, prices and photos come next in the editor, and publishing is a separate step.',
   'placeCreate.coordinateHint':
-    'Paste a Google Maps link above to fill this in. Without coordinates a place cannot be searched or routed to.',
+    'Enter coordinates you established yourself (measured on site, a visit…), as a decimal such as 10.7769 or 10,7769. Without them the place cannot be searched or routed to.',
   'placeCreate.submit': 'Create place',
   'placeCreate.created': 'Place created as a draft.',
   'placeCreate.failed': 'Could not create the place',
@@ -1123,15 +1123,16 @@ export const en: Partial<Record<MessageKey, string>> = {
   'placeCreate.duplicateOpenQueue': 'Open duplicate queue',
   'placeCreate.duplicateCreateAnyway': 'Different place, create anyway',
   'placeCreate.link.intro':
-    'Paste a Google Maps link and the name, address and coordinates are filled in for you — and the place is linked to its Google record, so it can be refreshed later. No link? Type it in below as before.',
+    'Paste a Google Maps link here to compare against and to attach the place to its Google record — for identity and duplicate protection. GoGo copies nothing from Google: type the name, address and coordinates below, each with its source.',
   'placeCreate.link.label': 'Google Maps link',
   'placeCreate.link.hint':
     'Short links (maps.app.goo.gl) and full links both work. The link is read, never opened.',
   'placeCreate.link.resolve': 'Find place',
   'placeCreate.link.found': 'Google returned this place',
   'placeCreate.link.rating': '{rating}★ Google · {count} reviews',
-  'placeCreate.link.apply': 'Use this data',
-  'placeCreate.link.applyNote': 'Fills the form below; edit anything you like.',
+  'placeCreate.link.apply': 'Attach this Google record',
+  'placeCreate.link.applyNote':
+    'Attaches only the Google place ID, with a suggested category and administrative units. Name, address and coordinates are not copied.',
   'placeCreate.link.exists': 'GoGo already has this place',
   'placeCreate.link.existsBody':
     'This link points at a Google record already attached to a place in the catalogue. Open that one instead of creating a second.',
@@ -1157,9 +1158,32 @@ export const en: Partial<Record<MessageKey, string>> = {
   'placeCreate.link.priceLevel': 'Google price level',
   'placeCreate.link.category': 'Derived category',
   'placeCreate.link.providerNote':
-    'The rating, review count, opening hours and canonical Google link are fetched by the server itself when the place is created. Shown here to check, not to edit.',
+    'Google’s rating, hours and price level are shown here only to compare against. On create GoGo stores just the Google place ID, for identity — none of Google’s content.',
   'placeCreate.link.stale':
     'This answer belongs to the previous link — the box now holds a different one. Resolve again to use the current link.',
+  'placeCreate.source.intro':
+    'Every fact you send needs a source: how you know it (a visit, the menu on site, a phone call, the venue’s own website…). The Google preview is for comparison only — Google does not count as a source.',
+  'placeCreate.source.hint': 'E.g. visited on 2 Oct, phoned the venue, menu on site.',
+  'placeCreate.source.name': 'Source for the name',
+  'placeCreate.source.geom': 'Source for the coordinates',
+  'placeCreate.source.addressText': 'Source for the address',
+  'placeCreate.source.phone': 'Source for the phone number',
+  'placeCreate.source.website': 'Source for the website',
+  'placeCreate.source.description': 'Source for the description',
+  'placeCreate.source.tooLong': 'A source is at most 500 characters.',
+  'placeCreate.link.attached':
+    'Attached to Google record “{name}” ({id}). Changing the link detaches it.',
+  'placeCreate.link.detach': 'Detach',
+  'placeCreate.source.provinceCode': 'Source for the province',
+  'placeCreate.source.communeCode': 'Source for the commune',
+  'placeCreate.source.taxonomyIds': 'Source for the category',
+  'placeCreate.source.required': 'Name a source for this fact',
+  'placeCreate.source.invalid':
+    'The server refused this source — check it (1–500 characters, for a fact you entered).',
+  'placeCreate.duplicateMeta': '{distance} m away · name {similarity}% similar',
+  'placeCreate.duplicateOpen': 'Open “{name}” in a new tab',
+  'placeCreate.rateLimited':
+    'Too many places created in one minute (20 at most). Wait a moment, then press “Create place” again — the form keeps what you typed.',
   'places.bulkImport': 'Bulk import',
   'places.hierarchy.title': 'Province → Ward/Commune',
   'places.hierarchy.reviewCount': '{count} to review',
@@ -1206,6 +1230,14 @@ export const en: Partial<Record<MessageKey, string>> = {
   'placeEditor.websiteOpen': 'Open the stored website',
   'placeEditor.provenance': 'Where each field came from',
   'placeEditor.provenanceHint': 'Saving one field does not re-verify the place.',
+  'placeEditor.codeSourceHint':
+    'A code changed in this save is an assertion to the resolver — say how you know it (a visit, the venue’s papers…).',
+  'placeEditor.codeFromMapping': 'From the administrative mapping',
+  'placeEditor.codeFromMappingMethod': 'method: {method}',
+  'placeEditor.codeFromMappingDataset': 'dataset {dataset}',
+  'mapping.method.boundary_point_in_polygon': 'by boundary, from the coordinates',
+  'mapping.method.trusted_code': 'code asserted by an editor',
+  'placeEditor.codeNone': 'No code',
   'placeEditor.provenanceNone': 'No recorded origin',
   'placeEditor.providerStatus.line': 'Google reports: {status} · updated {date}',
   'placeEditor.providerStatus.active': 'Operating',
@@ -1407,6 +1439,20 @@ export const en: Partial<Record<MessageKey, string>> = {
 
   'error.VALIDATION_FAILED': 'The server rejected this data. Details are under each field.',
   'error.INVALID_PLACE_TRANSITION': 'That status cannot follow the current one.',
+  'error.SOURCE_REFERENCE_INVALID':
+    'A fact has no source, or a source names a fact you did not enter.',
+  'error.GOOGLE_CONTENT_NOT_PERSISTABLE':
+    'Values taken from Google cannot be stored as GoGo data. Check each fact and give an independent source.',
+  'error.IDEMPOTENCY_KEY_REQUIRED':
+    'The request was missing its duplicate-protection key. Press again to resend.',
+  'error.INVALID_IDEMPOTENCY_KEY':
+    'The duplicate-protection key was invalid. Press again to resend.',
+  'error.IDEMPOTENCY_KEY_REUSED':
+    'The earlier attempt sent different data. Press again to send the current form as a new create.',
+  'error.IDEMPOTENT_REQUEST_IN_FLIGHT':
+    'The earlier attempt is still being processed. Wait a few seconds and retry.',
+  'error.PLACE_IDENTITY_CONFLICT':
+    'Two places already claim this Google record. Merge them before adding another.',
   'error.PLACE_MODIFIED': 'Somebody else saved this place while you were editing.',
 
   'imports.title': 'Bulk import management',

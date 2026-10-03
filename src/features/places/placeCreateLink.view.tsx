@@ -30,25 +30,27 @@ export function roundCoordinate(value: number): number {
 }
 
 /**
- * What the editor gets to apply.
+ * What attaching a resolution hands the form (GoGo-BE#440, owner decision
+ * 2026-10-02).
  *
- * Two halves, and the split is the point. The top block is **theirs**: it lands
- * in form boxes, they may change any of it before submitting, and whatever they
- * leave alone is recorded `google_derived`. `lat`/`lng` travel together — one
- * position, one provenance row.
+ * Identity, and only suggestions GoGo itself vouches for: the Google place ID
+ * (a `place_sources` row, which puts the place inside provider dedup), the
+ * administrative units GoGo's own boundaries name for the point, and a category
+ * key the server checked against the live vocabulary. **No name, address or
+ * coordinates** — a value copied from a Google preview is not a GoGo fact
+ * however it arrives, so the preview is view/compare-only and the editor types
+ * each fact with its own source.
  *
- * `provider` is **not** theirs and is not editable. Rating, review count, the
- * week and the canonical link are facts GoGo-BE fetches for itself when the
- * place is created (PI-BE-021 / ADR-0020), so the panel renders them as what
- * the row will carry rather than as inputs. A box an editor could type a Google
- * rating into would be a box for authoring one.
+ * `provider` is display-only for the same reason: nothing in it is persisted
+ * on create.
  */
 export type AppliedResolution = {
   googlePlaceId: string
-  name: string
-  addressText: string
-  lat: number
-  lng: number
+  /**
+   * Google's name for the record, shown only in the "attached to" line so the
+   * editor can see which record is attached. Never written into a form box.
+   */
+  previewName: string
   /**
    * ADM-017 — from the coordinate, against GoGo's own boundaries. Empty string
    * where the resolve could not name a unit: the selector then opens empty
@@ -89,8 +91,15 @@ export type AppliedResolution = {
 export function PlaceCreateLinkPanel({
   onApply,
   onResolveStart,
+  onLinkChange,
 }: {
   onApply: (values: AppliedResolution) => void
+  /**
+   * GoGo-BE#440 review F-01 — the link box changed. Whatever was attached
+   * belongs to the old link, so the form must drop it: otherwise place A's
+   * Google id would ride along on a create the editor is now typing for B.
+   */
+  onLinkChange?: () => void
   /**
    * Fired the moment a resolve leaves, so the form can remember what it held.
    * That snapshot is what lets an apply skip a box the editor has typed in
@@ -105,7 +114,7 @@ export function PlaceCreateLinkPanel({
   const describeError = useErrorMessage()
   const [url, setUrl] = useState('')
   const [answer, setAnswer] = useState<{
-    /** The URL this answer is about, or null when a branch id was resolved. */
+    /** The URL this answer is about — for a picked branch, the link that listed it. */
     answersFor: string | null
     data: ResolveLinkResult
   } | null>(null)
@@ -141,7 +150,14 @@ export function PlaceCreateLinkPanel({
      * pay for it again — it simply stops being applicable until the box agrees
      * with it.
      */
-    onSuccess: (data, ask) => setAnswer({ answersFor: 'url' in ask ? ask.url : null, data }),
+    onSuccess: (data, ask) =>
+      // Review F-05 — a branch picked from a list belongs to the link that
+      // produced the list. Inheriting that URL is what lets a later link change
+      // mark the pick stale; `null` would leave it applicable forever.
+      setAnswer((previous) => ({
+        answersFor: 'url' in ask ? ask.url : (previous?.answersFor ?? null),
+        data,
+      })),
     // The link the editor pasted stays in the box: a provider that is down is
     // a reason to press the button again, not to retype the URL.
     onError: (error) => setFailure(toApiError(error)),
@@ -171,7 +187,10 @@ export function PlaceCreateLinkPanel({
           placeholder="https://maps.app.goo.gl/…"
           value={url}
           autoFocus
-          onChange={(event) => setUrl(event.target.value)}
+          onChange={(event) => {
+            setUrl(event.target.value)
+            onLinkChange?.()
+          }}
         />
         <Button
           type="button"
@@ -322,10 +341,7 @@ export function PlaceCreateLinkPanel({
               onClick={() =>
                 onApply({
                   googlePlaceId: candidate.googlePlaceId,
-                  name: candidate.name,
-                  addressText: candidate.address,
-                  lat: roundCoordinate(candidate.location.lat),
-                  lng: roundCoordinate(candidate.location.lng),
+                  previewName: candidate.name,
                   provinceCode: result.administrative?.provinceCode ?? '',
                   communeCode: result.administrative?.communeCode ?? '',
                   categoryKey: candidate.categoryKey ?? '',

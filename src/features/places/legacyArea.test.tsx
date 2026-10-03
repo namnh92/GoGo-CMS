@@ -8,6 +8,7 @@ import { renderWithProviders, signInAs } from '@/shared/test/render'
 import { places } from '@/shared/test/fixtures'
 import PlaceEditorScreen from './placeEditor.view'
 import PlaceCreateScreen from './placeCreate.view'
+import { fillSources } from './placeCreate.testkit'
 import PlaceListScreen from './placeList.view'
 
 /**
@@ -69,6 +70,7 @@ describe('Add place offers one address vocabulary', () => {
     await user.type(screen.getByLabelText(/Tên hiển thị/), 'Quán Mới')
     await user.type(screen.getByLabelText(/Vĩ độ/), '10.77')
     await user.type(screen.getByLabelText(/Kinh độ/), '106.7')
+    await fillSources(user)
     await user.click(screen.getByRole('button', { name: 'Tạo địa điểm' }))
 
     await waitFor(() => expect(bodies).toHaveLength(1))

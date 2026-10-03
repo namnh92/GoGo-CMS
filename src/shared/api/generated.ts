@@ -20,6 +20,7 @@ export type RequestBody<O extends keyof operations> = operations[O] extends {
 
 export type CmsLoginBody = RequestBody<'cmsLogin'>
 export type CmsUpdatePlaceBody = RequestBody<'cmsUpdatePlace'>
+export type CmsCreatePlaceBody = RequestBody<'cmsCreatePlace'>
 export type CmsTransitionPlaceBody = RequestBody<'cmsTransitionPlace'>
 export type CmsSetPlaceHoursBody = RequestBody<'cmsSetPlaceHours'>
 export type CmsAddPlacePriceBody = RequestBody<'cmsAddPlacePrice'>

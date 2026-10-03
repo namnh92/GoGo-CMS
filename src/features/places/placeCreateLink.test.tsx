@@ -5,6 +5,7 @@ import { http, HttpResponse } from 'msw'
 import { server } from '@/shared/test/server'
 import { renderWithProviders, signInAs } from '@/shared/test/render'
 import PlaceCreateScreen from './placeCreate.view'
+import { fillSources, SOURCE_LABEL, SOURCE_TEXT, SUGGESTION_SOURCES } from './placeCreate.testkit'
 import { roundCoordinate } from './placeCreateLink.view'
 
 /**
@@ -101,6 +102,9 @@ const AMBIGUOUS = {
   ],
 }
 
+/** Attaches identity only — GoGo-BE#440, owner decision 2026-10-02. */
+const ATTACH = 'Gắn với bản ghi Google này'
+
 const LINK = 'https://www.google.com/maps/place/?q=place_id:ChIJcafe&place_id=ChIJcafe'
 
 function resolvesTo(body: Record<string, unknown>, status = 201) {
@@ -125,6 +129,13 @@ function createdWith() {
   return bodies
 }
 
+/** What the editor types themselves now that the preview copies nothing. */
+async function typeFacts(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(screen.getByLabelText(/Tên hiển thị/), 'Cà Phê Bên Đường')
+  await user.type(screen.getByLabelText(/Vĩ độ/), '10.79512')
+  await user.type(screen.getByLabelText(/Kinh độ/), '106.72211')
+}
+
 async function pasteAndResolve(user: ReturnType<typeof userEvent.setup>, url = LINK) {
   await user.type(screen.getByLabelText('Link Google Maps'), url)
   await user.click(screen.getByRole('button', { name: 'Tìm địa điểm' }))
@@ -135,7 +146,7 @@ beforeEach(() => {
 })
 
 describe('add a place by Google Maps link', () => {
-  it('fills the form from the resolved place, attribution and all', async () => {
+  it('shows the resolved place to compare, and copies none of its facts', async () => {
     signInAs('editor')
     resolvesTo(RESOLVED)
     const user = userEvent.setup()
@@ -151,14 +162,24 @@ describe('add a place by Google Maps link', () => {
     expect(screen.getByText('4.4★ Google · 88 đánh giá')).toBeInTheDocument()
     expect(screen.getByText('Dữ liệu bản đồ ©2026 Google')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Dùng dữ liệu này' }))
+    await user.click(screen.getByRole('button', { name: ATTACH }))
 
-    expect(screen.getByLabelText(/Tên hiển thị/)).toHaveValue('Cà Phê Bên Đường')
-    expect(screen.getByLabelText(/Vĩ độ/)).toHaveValue(10.7951153)
-    expect(screen.getByLabelText(/Kinh độ/)).toHaveValue(106.7221002)
+    // GoGo-BE#440, owner decision 2026-10-02: the preview is view/compare-only.
+    // A value copied from Google is not a GoGo fact, so nothing of it lands in
+    // a box — the editor types each fact with its own source.
+    expect(screen.getByLabelText(/Tên hiển thị/)).toHaveValue('')
+    expect(screen.getByLabelText(/Địa chỉ/)).toHaveValue('')
+    expect(screen.getByLabelText(/Vĩ độ/)).toHaveValue('')
+    expect(screen.getByLabelText(/Kinh độ/)).toHaveValue('')
   })
 
-  it('sends the Google id and every field left as Google filled it', async () => {
+  /*
+   * GoGo-BE#440 — a value applied from a Google preview is not a GoGo fact
+   * however it arrives. The console sends the Google id as identity only and
+   * declares no `googleDerivedFields` (the server now refuses a non-empty one);
+   * the facts are the ones the editor typed, each with its own evidence.
+   */
+  it('sends the Google id as identity only — no googleDerivedFields', async () => {
     signInAs('editor')
     resolvesTo(RESOLVED)
     const bodies = createdWith()
@@ -166,17 +187,25 @@ describe('add a place by Google Maps link', () => {
     renderWithProviders(<PlaceCreateScreen />)
 
     await pasteAndResolve(user)
-    await user.click(await screen.findByRole('button', { name: 'Dùng dữ liệu này' }))
+    await user.click(await screen.findByRole('button', { name: ATTACH }))
+    await typeFacts(user)
+    await fillSources(user, ['name', 'geom', ...SUGGESTION_SOURCES])
     await user.click(screen.getByRole('button', { name: 'Tạo địa điểm' }))
 
     await waitFor(() => expect(bodies).toHaveLength(1))
     expect(bodies[0]).toMatchObject({
       googlePlaceId: 'ChIJcafe',
-      googleDerivedFields: ['name', 'addressText', 'lat', 'lng'],
+      name: 'Cà Phê Bên Đường',
+      lat: 10.79512,
+      lng: 106.72211,
+      sourceReferences: { name: SOURCE_TEXT, geom: SOURCE_TEXT },
     })
+    expect(bodies[0]).not.toHaveProperty('googleDerivedFields')
+    // Google's address was never copied, so none is sent.
+    expect(bodies[0]).not.toHaveProperty('addressText')
   })
 
-  it('drops a field the editor rewrote — copying does not transfer ownership', async () => {
+  it('attaching a link is not a create: the facts are still the editor’s to type', async () => {
     signInAs('editor')
     resolvesTo(RESOLVED)
     const bodies = createdWith()
@@ -184,16 +213,64 @@ describe('add a place by Google Maps link', () => {
     renderWithProviders(<PlaceCreateScreen />)
 
     await pasteAndResolve(user)
-    await user.click(await screen.findByRole('button', { name: 'Dùng dữ liệu này' }))
+    await user.click(await screen.findByRole('button', { name: ATTACH }))
+    await user.click(screen.getByRole('button', { name: 'Tạo địa điểm' }))
 
-    const name = screen.getByLabelText(/Tên hiển thị/)
-    await user.clear(name)
-    await user.type(name, 'Cà Phê Bên Đường (cơ sở 2)')
+    await waitFor(() =>
+      expect(screen.getByLabelText(/Tên hiển thị/)).toHaveAttribute('aria-invalid', 'true'),
+    )
+    // Evidence is never filled for the editor either: Google is not a source.
+    expect(screen.getByLabelText(SOURCE_LABEL.name)).toHaveValue('')
+    expect(screen.getByLabelText(SOURCE_LABEL.geom)).toHaveValue('')
+    expect(bodies).toHaveLength(0)
+  })
+
+  /*
+   * Review F-01 — an attachment belongs to the link it came from. Attach A,
+   * then change the link and type place B: the create must not carry A's id.
+   */
+  it('changing the link drops the attached Google record', async () => {
+    signInAs('editor')
+    resolvesTo(RESOLVED)
+    const bodies = createdWith()
+    const user = userEvent.setup()
+    renderWithProviders(<PlaceCreateScreen />)
+
+    await pasteAndResolve(user)
+    await user.click(await screen.findByRole('button', { name: ATTACH }))
+    expect(
+      screen.getByText(/Đang gắn với bản ghi Google “Cà Phê Bên Đường” \(ChIJcafe\)/),
+    ).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('Link Google Maps'), 'x')
+    expect(screen.queryByText(/Đang gắn với bản ghi Google/)).not.toBeInTheDocument()
+
+    await typeFacts(user)
+    await fillSources(user, ['name', 'geom', ...SUGGESTION_SOURCES])
     await user.click(screen.getByRole('button', { name: 'Tạo địa điểm' }))
 
     await waitFor(() => expect(bodies).toHaveLength(1))
-    // The position is still Google's; the name is now the editor's own claim.
-    expect(bodies[0]!.googleDerivedFields).toEqual(['addressText', 'lat', 'lng'])
+    expect(bodies[0]).not.toHaveProperty('googlePlaceId')
+  })
+
+  it('detaching by hand also drops the Google record', async () => {
+    signInAs('editor')
+    resolvesTo(RESOLVED)
+    const bodies = createdWith()
+    const user = userEvent.setup()
+    renderWithProviders(<PlaceCreateScreen />)
+
+    await pasteAndResolve(user)
+    await user.click(await screen.findByRole('button', { name: ATTACH }))
+    await user.click(screen.getByRole('button', { name: 'Bỏ gắn' }))
+    expect(screen.queryByText(/Đang gắn với bản ghi Google/)).not.toBeInTheDocument()
+
+    await typeFacts(user)
+    await fillSources(user, ['name', 'geom', ...SUGGESTION_SOURCES])
+    await user.click(screen.getByRole('button', { name: 'Tạo địa điểm' }))
+
+    await waitFor(() => expect(bodies).toHaveLength(1))
+    expect(bodies[0]).not.toHaveProperty('googlePlaceId')
   })
 
   it('opens the place that already holds the link rather than duplicating it', async () => {
@@ -251,8 +328,53 @@ describe('add a place by Google Maps link', () => {
     expect(await screen.findByText('Highlands Hai Bà Trưng')).toBeInTheDocument()
     expect(asked[1]).toEqual({ googlePlaceId: 'ChIJb' })
 
-    await user.click(screen.getByRole('button', { name: 'Dùng dữ liệu này' }))
-    expect(screen.getByLabelText(/Tên hiển thị/)).toHaveValue('Highlands Hai Bà Trưng')
+    await user.click(screen.getByRole('button', { name: ATTACH }))
+    // Attached, not copied (GoGo-BE#440).
+    expect(screen.getByLabelText(/Tên hiển thị/)).toHaveValue('')
+  })
+
+  it('a picked branch goes stale when the link changes (F-05)', async () => {
+    signInAs('editor')
+    const asked: unknown[] = []
+    server.use(
+      http.post('*/cms/places/resolve-link', async ({ request }) => {
+        const body = (await request.json()) as { googlePlaceId?: string }
+        asked.push(body)
+        if (body.googlePlaceId === 'ChIJb') {
+          return HttpResponse.json(
+            {
+              ...RESOLVED,
+              candidate: {
+                ...RESOLVED.candidate,
+                googlePlaceId: 'ChIJb',
+                name: 'Highlands Hai Bà Trưng',
+              },
+            },
+            { status: 201 },
+          )
+        }
+        return HttpResponse.json(AMBIGUOUS, { status: 201 })
+      }),
+    )
+    const user = userEvent.setup()
+    renderWithProviders(<PlaceCreateScreen />)
+
+    await pasteAndResolve(user, 'https://www.google.com/maps/place/Highlands+Coffee')
+    expect(await screen.findByText('Link khớp với nhiều chi nhánh')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /88 Hai Bà Trưng/ }))
+
+    expect(await screen.findByText('Highlands Hai Bà Trưng')).toBeInTheDocument()
+
+    // The editor pastes a different link without resolving it. The pick
+    // belongs to the old link: it may be read, not attached.
+    const box = screen.getByLabelText('Link Google Maps')
+    await user.clear(box)
+    await user.type(box, 'https://www.google.com/maps?place_id=ChIJother')
+
+    expect(screen.getByText(/Kết quả này thuộc về link trước đó/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: ATTACH })).toBeDisabled()
+    expect(screen.queryByText(/Đang gắn với bản ghi Google/)).not.toBeInTheDocument()
   })
 
   it('keeps the other branches on screen when a pick cannot be resolved', async () => {
@@ -311,7 +433,7 @@ describe('add a place by Google Maps link', () => {
     expect(screen.getByRole('button', { name: /1 Lê Lợi/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /88 Hai Bà Trưng/ })).toBeInTheDocument()
     // Nothing to apply yet: no branch has been chosen.
-    expect(screen.queryByRole('button', { name: 'Dùng dữ liệu này' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: ATTACH })).not.toBeInTheDocument()
   })
 
   it('does not call one candidate several branches', async () => {
@@ -395,6 +517,7 @@ describe('add a place by Google Maps link', () => {
     await user.type(screen.getByLabelText(/Tên hiển thị/), 'Quán Không Có Trên Google')
     await user.type(screen.getByLabelText(/Vĩ độ/), '10.7769')
     await user.type(screen.getByLabelText(/Kinh độ/), '106.7009')
+    await fillSources(user)
     await user.click(screen.getByRole('button', { name: 'Tạo địa điểm' }))
 
     await waitFor(() => expect(bodies).toHaveLength(1))
@@ -403,6 +526,7 @@ describe('add a place by Google Maps link', () => {
       name: 'Quán Không Có Trên Google',
       lat: 10.7769,
       lng: 106.7009,
+      sourceReferences: { name: SOURCE_TEXT, geom: SOURCE_TEXT },
     })
   })
 })
@@ -495,11 +619,13 @@ describe('a link fills everything it can', () => {
     renderWithProviders(<PlaceCreateScreen />)
 
     await pasteAndResolve(user)
-    await user.click(await screen.findByRole('button', { name: 'Dùng dữ liệu này' }))
+    await user.click(await screen.findByRole('button', { name: ATTACH }))
 
     // The selectors opened on the units the geometry names, and the category
     // box on the taxonomy the provider's types imply — both still editable.
     await waitFor(() => expect(screen.getByLabelText(/Nhóm địa điểm/)).toHaveValue('tx-cat-cafe'))
+    await typeFacts(user)
+    await fillSources(user, ['name', 'geom', ...SUGGESTION_SOURCES])
     await user.click(screen.getByRole('button', { name: 'Tạo địa điểm' }))
 
     await waitFor(() => expect(bodies).toHaveLength(1))
@@ -508,7 +634,35 @@ describe('a link fills everything it can', () => {
       provinceCode: '79',
       communeCode: '26734',
       taxonomyIds: ['tx-cat-cafe'],
+      // alpha.62 — a suggestion travels only with the editor's own source.
+      sourceReferences: {
+        provinceCode: SOURCE_TEXT,
+        communeCode: SOURCE_TEXT,
+        taxonomyIds: SOURCE_TEXT,
+      },
     })
+  })
+
+  it('a suggested unit or category is not evidence: no source, no create', async () => {
+    signInAs('editor')
+    resolvesTo(RESOLVED)
+    const bodies = createdWith()
+    const user = userEvent.setup()
+    renderWithProviders(<PlaceCreateScreen />)
+
+    await pasteAndResolve(user)
+    await user.click(await screen.findByRole('button', { name: ATTACH }))
+    await waitFor(() => expect(screen.getByLabelText(/Nhóm địa điểm/)).toHaveValue('tx-cat-cafe'))
+    await typeFacts(user)
+    await fillSources(user)
+    await user.click(screen.getByRole('button', { name: 'Tạo địa điểm' }))
+
+    for (const box of SUGGESTION_SOURCES) {
+      await waitFor(() =>
+        expect(screen.getByLabelText(SOURCE_LABEL[box])).toHaveAttribute('aria-invalid', 'true'),
+      )
+    }
+    expect(bodies).toHaveLength(0)
   })
 })
 
@@ -548,7 +702,7 @@ describe('a late answer never wins', () => {
     expect(screen.getByText(/Kết quả này thuộc về link trước đó/)).toBeInTheDocument()
     // Rule 16: it says why rather than looking operable and filling the form
     // from a place the editor has moved on from.
-    expect(screen.getByRole('button', { name: 'Dùng dữ liệu này' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: ATTACH })).toBeDisabled()
     expect(screen.getByLabelText(/Tên hiển thị/)).toHaveValue('')
   })
 
@@ -573,10 +727,12 @@ describe('a late answer never wins', () => {
     await user.type(name, 'Tên tôi tự gõ')
     gate.release?.()
 
-    await user.click(await screen.findByRole('button', { name: 'Dùng dữ liệu này' }))
+    await user.click(await screen.findByRole('button', { name: ATTACH }))
 
-    // Their name survives; the boxes they never touched are filled.
+    // Their name survives, and nothing of Google's lands in the boxes they
+    // left empty either (GoGo-BE#440) — only GoGo's own suggestions apply.
     expect(name).toHaveValue('Tên tôi tự gõ')
-    expect(screen.getByLabelText(/Vĩ độ/)).toHaveValue(10.7951153)
+    expect(screen.getByLabelText(/Vĩ độ/)).toHaveValue('')
+    await waitFor(() => expect(screen.getByLabelText(/Nhóm địa điểm/)).toHaveValue('tx-cat-cafe'))
   })
 })

@@ -2,10 +2,12 @@ import { useMemo, useRef, useState } from 'react'
 import { Controller, useForm, useWatch, type Path, type PathValue } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 
 import { PageBody, PageHeader } from '@/app/PageHeader'
-import { toApiError, type ApiError } from '@/shared/api/errors'
+import { newIdempotencyKey } from '@/shared/api/client'
+import { placeStatusSchema } from '@/shared/api/contracts'
+import { toApiError, type ApiError, type FieldError } from '@/shared/api/errors'
 import { useT } from '@/shared/i18n/i18n'
 import { useSession } from '@/shared/auth/session'
 import { Button } from '@/shared/ui/Button'
@@ -16,15 +18,19 @@ import { PermissionDeniedState, useErrorMessage } from '@/shared/ui/State'
 import { useToast } from '@/shared/ui/Toast'
 import { useOnline } from '@/shared/ui/useOnline'
 
-import { createPlace, GOOGLE_DERIVED_FIELDS, type GoogleDerivedField } from './api'
+import { createPlace, type CreatePlaceInput } from './api'
+import { PlaceStatusBadge } from './status'
 import { fetchTaxonomies } from '@/features/taxonomy/api'
 import { queryKeys } from '@/shared/api/queryKeys'
 import { AdministrativeUnitCombobox } from '@/features/administrative/unitCombobox'
 import { PlaceCreateLinkPanel, type AppliedResolution } from './placeCreateLink.view'
 import { styles } from './placeCreate.style'
 import {
+  isCreateSourceKey,
   numberFieldRegister,
   placeCreateSchema,
+  toPlaceCreateBody,
+  type CreateSourceKey,
   splitFieldErrors,
   usePlaceFieldError,
   type PlaceCreateForm,
@@ -50,6 +56,11 @@ import {
  * Google Place ID, so it sits outside provider dedup and nothing can ever
  * refresh it. Every field below is still typed and still editable — the link is
  * the fast path, not the only one.
+ *
+ * GoGo-BE#440 — every fact sent names its evidence (`sourceReferences`), and a
+ * create is one idempotent attempt: the key is reused for as long as the body
+ * is the same, so a retry after a lost response replays the first place rather
+ * than creating a second.
  */
 export default function PlaceCreateScreen() {
   const t = useT()
@@ -62,19 +73,42 @@ export default function PlaceCreateScreen() {
   const fieldError = usePlaceFieldError()
 
   /** Candidates from a 409, kept so the editor can decide rather than retry blind. */
-  const [duplicates, setDuplicates] = useState<string[] | null>(null)
+  const [duplicates, setDuplicates] = useState<FieldError[] | null>(null)
   const [serverError, setServerError] = useState<ApiError | null>(null)
   /**
-   * What a resolution filled in, kept verbatim so provenance can be worked out
-   * at submit time rather than tracked keystroke by keystroke: a field whose
-   * value still equals what Google gave is `google_derived`, and one the editor
-   * changed — or changed and changed back — is their own claim either way.
+   * The last resolution applied. Only its `googlePlaceId` reaches the create —
+   * identity, not content (GoGo-BE#440): what it filled in is the editor's to
+   * check and source like anything typed.
    */
   const [applied, setApplied] = useState<AppliedResolution | null>(null)
+  /**
+   * F-02 — the server said 403 on submit: the editor was suspended or demoted
+   * after the screen opened. The form stops being operable, the same as when
+   * the role never had `place.write`.
+   */
+  const [forbidden, setForbidden] = useState(false)
+
+  /**
+   * GoGo-BE#440 — one create attempt, one `Idempotency-Key`.
+   *
+   * The key is tied to the exact body it was first sent with. Pressing the
+   * button again after a timeout or a dropped connection sends the same body,
+   * so it reuses the key and the server replays the place it already made. A
+   * changed body — a corrected field, `allowDuplicate` — is a different
+   * attempt and gets a new key; reusing the old one would be `422`.
+   */
+  const attempt = useRef<{ body: string; key: string } | null>(null)
+  const keyFor = (body: CreatePlaceInput): string => {
+    const serialized = JSON.stringify(body)
+    if (attempt.current?.body !== serialized) {
+      attempt.current = { body: serialized, key: newIdempotencyKey() }
+    }
+    return attempt.current.key
+  }
 
   const form = useForm<PlaceCreateForm>({
     resolver: zodResolver(placeCreateSchema),
-    defaultValues: { name: '', categoryId: '' },
+    defaultValues: { name: '', categoryId: '', sourceReferences: {} },
   })
 
   /**
@@ -114,51 +148,16 @@ export default function PlaceCreateScreen() {
    * keystroke in any field.
    */
   const provinceCode = useWatch({ control: form.control, name: 'provinceCode' }) ?? ''
-
-  /**
-   * Which applied fields the editor left alone. Compared by value at submit
-   * time, so retyping Google's own answer character for character is treated as
-   * accepting it — which is the honest reading, and the alternative (tracking
-   * every edit event) would call an undo an editorial claim.
-   */
-  const derivedFields = (values: PlaceCreateForm): GoogleDerivedField[] => {
-    if (!applied) return []
-    const same: Record<GoogleDerivedField, boolean> = {
-      name: values.name.trim() === applied.name.trim(),
-      addressText: (values.addressText ?? '').trim() === applied.addressText.trim(),
-      lat: values.lat === applied.lat,
-      lng: values.lng === applied.lng,
-    }
-    return GOOGLE_DERIVED_FIELDS.filter((field) => same[field])
-  }
+  // The optional facts whose source box is shown — only once there is a fact.
+  const [addressText, phone, website, description, communeCode, categoryId] = useWatch({
+    control: form.control,
+    name: ['addressText', 'phone', 'website', 'description', 'communeCode', 'categoryId'],
+  })
 
   const create = useMutation({
-    mutationFn: (values: PlaceCreateForm & { allowDuplicate?: boolean }) =>
-      createPlace({
-        name: values.name,
-        lat: values.lat,
-        lng: values.lng,
-        ...(applied ? { googlePlaceId: applied.googlePlaceId } : {}),
-        ...(applied && derivedFields(values).length > 0
-          ? { googleDerivedFields: derivedFields(values) }
-          : {}),
-        ...(values.addressText ? { addressText: values.addressText } : {}),
-        // ADM-106 — the canonical pair. `city`/`district` are legacy free text
-        // and no longer have inputs, so a new place carries neither.
-        ...(values.provinceCode ? { provinceCode: values.provinceCode } : {}),
-        ...(values.communeCode ? { communeCode: values.communeCode } : {}),
-        ...(values.phone ? { phone: values.phone } : {}),
-        ...(values.website ? { website: values.website } : {}),
-        ...(values.description ? { description: values.description } : {}),
-        ...(values.avgVisitMinutes !== undefined
-          ? { avgVisitMinutes: values.avgVisitMinutes }
-          : {}),
-        // One category or none. The editor screen owns the rest of the
-        // taxonomy; this is the field a Google link can honestly fill.
-        ...(values.categoryId ? { taxonomyIds: [values.categoryId] } : {}),
-        ...(values.allowDuplicate ? { allowDuplicate: true } : {}),
-      }),
+    mutationFn: (body: CreatePlaceInput) => createPlace(body, keyFor(body)),
     onSuccess: (place) => {
+      attempt.current = null
       void queryClient.invalidateQueries({ queryKey: ['cms', 'places'] })
       toast.success(t('placeCreate.created'))
       // The response is the same record the editor loads, so the next step —
@@ -170,8 +169,26 @@ export default function PlaceCreateScreen() {
       setDuplicates(null)
       setServerError(null)
 
+      if (apiError.isForbidden) {
+        setForbidden(true)
+        return
+      }
+
+      /*
+       * The key itself was refused, or was already spent on another body. The
+       * next press must be a fresh attempt; every other failure keeps the key,
+       * so a retry of the same body stays a retry.
+       */
+      if (
+        apiError.code === 'IDEMPOTENCY_KEY_REUSED' ||
+        apiError.code === 'IDEMPOTENCY_KEY_REQUIRED' ||
+        apiError.code === 'INVALID_IDEMPOTENCY_KEY'
+      ) {
+        attempt.current = null
+      }
+
       if (apiError.code === 'PLACE_DUPLICATE_SUSPECTED') {
-        setDuplicates(apiError.fieldErrors.map((issue) => issue.message))
+        setDuplicates(apiError.fieldErrors)
         return
       }
 
@@ -190,17 +207,44 @@ export default function PlaceCreateScreen() {
         }
       }
 
+      /*
+       * GoGo-BE#440 — `sourceReferences.<key>`: a fact sent without evidence,
+       * or evidence for a fact not sent. Lands on the source box it names;
+       * one the form has no box for is shown whole below.
+       */
+      const sourceIssues: FieldError[] = []
+      const rest: FieldError[] = []
+      for (const issue of apiError.fieldErrors) {
+        const key = issue.field.startsWith('sourceReferences.')
+          ? issue.field.slice('sourceReferences.'.length)
+          : null
+        if (key !== null && isCreateSourceKey(key)) {
+          // alpha.62 names what is wrong per key; `unused` / `unknown` are a
+          // console bug, not the editor's, and keep the generic sentence.
+          const message =
+            issue.code === 'required'
+              ? t('placeCreate.source.required')
+              : issue.code === 'too_long'
+                ? t('placeCreate.source.tooLong')
+                : t('placeCreate.source.invalid')
+          form.setError(`sourceReferences.${key}`, { message })
+          sourceIssues.push(issue)
+        } else rest.push(issue)
+      }
+
       // Field-level rejections land on the boxes that caused them; anything the
       // form cannot point at is shown whole rather than dropped.
-      const { mapped, unmapped } = splitFieldErrors(apiError.fieldErrors)
+      const { mapped, unmapped } = splitFieldErrors(rest)
       for (const issue of mapped) {
         form.setError(issue.field, { message: fieldError(issue.field, issue) })
       }
-      if (mapped.length === 0 || unmapped.length > 0) setServerError(apiError)
+      if (mapped.length + sourceIssues.length === 0 || unmapped.length > 0) {
+        setServerError(apiError)
+      }
     },
   })
 
-  if (!can('place.write')) {
+  if (!can('place.write') || forbidden) {
     return (
       <>
         <PageHeader
@@ -220,6 +264,15 @@ export default function PlaceCreateScreen() {
    * on screen, which is what shipped in the first cut of this screen. The
    * editor's resolver already turns a key and a zod code into Vietnamese.
    */
+  const sourceError = (key: CreateSourceKey): string | undefined => {
+    const issue = form.formState.errors.sourceReferences?.[key]
+    if (!issue) return undefined
+    return fieldError(`sourceReferences.${key}`, {
+      code: String(issue.type ?? ''),
+      message: String(issue.message ?? ''),
+    })
+  }
+
   const errorFor = (field: PlaceIdentityField): string | undefined => {
     const issue = form.formState.errors[field]
     if (!issue) return undefined
@@ -249,7 +302,35 @@ export default function PlaceCreateScreen() {
     form.setValue(field, next, { shouldDirty: true })
   }
 
-  const submit = form.handleSubmit((values) => create.mutate(values))
+  const bodyOf = (values: PlaceCreateForm, allowDuplicate = false) =>
+    toPlaceCreateBody(values, {
+      googlePlaceId: applied?.googlePlaceId,
+      allowDuplicate,
+    })
+
+  const submit = form.handleSubmit((values) => create.mutate(bodyOf(values)))
+  /*
+   * "Create anyway" goes through the same schema as the main button, so a
+   * source box emptied after the 409 is caught here rather than by the server.
+   */
+  const submitAnyway = form.handleSubmit((values) => create.mutate(bodyOf(values, true)))
+
+  /** The evidence box for one fact. Its label names the fact, for screen readers too. */
+  const sourceInput = (key: CreateSourceKey, hint?: string) => (
+    <TextInput
+      label={t(`placeCreate.source.${key}` as const)}
+      required
+      hint={hint}
+      error={sourceError(key)}
+      {...form.register(`sourceReferences.${key}`)}
+    />
+  )
+
+  /** Status text for a candidate, when the server named one this console knows. */
+  const candidateStatus = (status: string) => {
+    const parsed = placeStatusSchema.safeParse(status)
+    return parsed.success ? <PlaceStatusBadge status={parsed.data} /> : null
+  }
 
   return (
     <>
@@ -264,20 +345,20 @@ export default function PlaceCreateScreen() {
               <PlaceCreateLinkPanel
                 onResolveStart={() => {
                   snapshot.current = form.getValues()
+                  // A new resolution replaces whatever was attached before it.
+                  setApplied(null)
                 }}
+                onLinkChange={() => setApplied(null)}
                 onApply={(values) => {
                   setApplied(values)
                   /*
-                   * `shouldDirty` so the unsaved-changes guard treats an applied
-                   * resolution as work in progress, which it is. `applyField`
-                   * skips a box the editor has typed in since this resolve
-                   * began — a link may replace what a previous link filled, and
-                   * may not replace what a person wrote.
+                   * GoGo-BE#440 (owner decision 2026-10-02) — name, address and
+                   * coordinates are never copied from the preview: it is for
+                   * comparing, and the editor types each fact with its own
+                   * source. What is applied is identity plus GoGo's own
+                   * suggestions. `applyField` skips a box the editor has
+                   * touched since this resolve began.
                    */
-                  applyField('name', values.name)
-                  applyField('addressText', values.addressText)
-                  applyField('lat', values.lat)
-                  applyField('lng', values.lng)
                   // ADM-017 — from the coordinate, against GoGo's boundaries.
                   // Empty when the resolve could not name a unit: the selectors
                   // then open empty rather than on a guess.
@@ -287,16 +368,27 @@ export default function PlaceCreateScreen() {
                     ? (categoryIdByKey.get(values.categoryKey) ?? '')
                     : ''
                   if (categoryId) applyField('categoryId', categoryId)
-                  form.clearErrors([
-                    'name',
-                    'addressText',
-                    'lat',
-                    'lng',
-                    'provinceCode',
-                    'communeCode',
-                  ])
+                  form.clearErrors(['provinceCode', 'communeCode'])
                 }}
               />
+              {/*
+                F-01 — which Google record the create will carry, said out loud.
+                A link change or a new resolve drops it; so does this button.
+              */}
+              {applied ? (
+                <div className={styles.attached} role="status" aria-live="polite">
+                  <InfoIcon size={14} aria-hidden="true" />
+                  <span className={styles.attachedText}>
+                    {t('placeCreate.link.attached', {
+                      name: applied.previewName,
+                      id: applied.googlePlaceId,
+                    })}
+                  </span>
+                  <Button type="button" size="sm" variant="ghost" onClick={() => setApplied(null)}>
+                    {t('placeCreate.link.detach')}
+                  </Button>
+                </div>
+              ) : null}
             </CardBody>
           </Card>
 
@@ -304,6 +396,7 @@ export default function PlaceCreateScreen() {
             <CardBody>
               <div className="flex flex-col gap-4">
                 <p className={styles.hint}>{t('placeCreate.intro')}</p>
+                <p className={styles.hint}>{t('placeCreate.source.intro')}</p>
 
                 <TextInput
                   label={t('placeEditor.name')}
@@ -311,14 +404,14 @@ export default function PlaceCreateScreen() {
                   error={errorFor('name')}
                   {...form.register('name')}
                 />
+                {sourceInput('name', t('placeCreate.source.hint'))}
 
                 <div className={styles.fieldRow}>
                   <TextInput
                     label={t('placeEditor.lat')}
                     required
-                    type="number"
+                    type="text"
                     inputMode="decimal"
-                    step="any"
                     hint={t('placeCreate.coordinateHint')}
                     error={errorFor('lat')}
                     {...form.register('lat', numberFieldRegister)}
@@ -326,19 +419,20 @@ export default function PlaceCreateScreen() {
                   <TextInput
                     label={t('placeEditor.lng')}
                     required
-                    type="number"
+                    type="text"
                     inputMode="decimal"
-                    step="any"
                     error={errorFor('lng')}
                     {...form.register('lng', numberFieldRegister)}
                   />
                 </div>
+                {sourceInput('geom')}
 
                 <TextInput
                   label={t('placeEditor.address')}
                   error={errorFor('addressText')}
                   {...form.register('addressText')}
                 />
+                {addressText?.trim() ? sourceInput('addressText') : null}
 
                 {/*
                   GoGo-CMS#179 — prefilled from what the provider's types imply,
@@ -360,6 +454,11 @@ export default function PlaceCreateScreen() {
                     </option>
                   ))}
                 </Select>
+                {/*
+                  GoGo-BE#440 (alpha.62) — a category suggested from Google is
+                  not evidence by itself: it is sent only with a source.
+                */}
+                {categoryId ? sourceInput('taxonomyIds') : null}
 
                 {/*
                   ADM-106 — two levels, because Vietnam has two. The district
@@ -406,6 +505,8 @@ export default function PlaceCreateScreen() {
                     )}
                   />
                 </div>
+                {provinceCode ? sourceInput('provinceCode') : null}
+                {communeCode ? sourceInput('communeCode') : null}
 
                 <div className={styles.fieldRow}>
                   <TextInput
@@ -420,10 +521,14 @@ export default function PlaceCreateScreen() {
                     {...form.register('website')}
                   />
                 </div>
+                {phone?.trim() ? sourceInput('phone') : null}
+                {website?.trim() ? sourceInput('website') : null}
 
                 <TextInput
                   label={t('placeEditor.avgVisit')}
-                  type="number"
+                  // Text, not `number` (review F-07): a number input reads a
+                  // bad entry back as "" and the schema never sees it.
+                  type="text"
                   inputMode="numeric"
                   hint={t('placeEditor.avgVisitHint')}
                   error={errorFor('avgVisitMinutes')}
@@ -436,6 +541,7 @@ export default function PlaceCreateScreen() {
                   error={errorFor('description')}
                   {...form.register('description')}
                 />
+                {description?.trim() ? sourceInput('description') : null}
               </div>
             </CardBody>
           </Card>
@@ -448,11 +554,44 @@ export default function PlaceCreateScreen() {
               </p>
               <p className={styles.duplicateBody}>{t('placeCreate.duplicateBody')}</p>
               <ul className={styles.duplicateList}>
-                {duplicates.map((candidate) => (
-                  <li key={candidate} className={styles.duplicateItem}>
-                    {candidate}
-                  </li>
-                ))}
+                {duplicates.map((issue, index) => {
+                  const candidate = issue.candidate
+                  if (!candidate) {
+                    // An older server, or an entry with no place behind it:
+                    // the human message is still true, just not openable.
+                    return (
+                      <li key={`${issue.message}-${index}`} className={styles.duplicateItem}>
+                        {issue.message}
+                      </li>
+                    )
+                  }
+                  return (
+                    <li key={candidate.placeId} className={styles.duplicateItem}>
+                      <div className={styles.candidateRow}>
+                        <span className={styles.candidateName}>{candidate.name}</span>
+                        {candidateStatus(candidate.status)}
+                      </div>
+                      <p className={styles.candidateMeta}>
+                        {t('placeCreate.duplicateMeta', {
+                          distance: candidate.distanceM,
+                          similarity: Math.round(candidate.nameSimilarity * 100),
+                        })}
+                      </p>
+                      {/*
+                        A new tab, so the form — and everything typed into it —
+                        is still here when the editor comes back to decide.
+                      */}
+                      <Link
+                        to={`/places/${candidate.placeId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={styles.candidateLink}
+                      >
+                        {t('placeCreate.duplicateOpen', { name: candidate.name })}
+                      </Link>
+                    </li>
+                  )
+                })}
               </ul>
               <div className={styles.duplicateActions}>
                 <Button
@@ -469,7 +608,7 @@ export default function PlaceCreateScreen() {
                   variant="primary"
                   loading={create.isPending}
                   disabled={!online}
-                  onClick={() => create.mutate({ ...form.getValues(), allowDuplicate: true })}
+                  onClick={() => void submitAnyway()}
                 >
                   {t('placeCreate.duplicateCreateAnyway')}
                 </Button>
@@ -483,7 +622,15 @@ export default function PlaceCreateScreen() {
                 <InfoIcon size={14} aria-hidden="true" />
                 {t('placeCreate.failed')}
               </p>
-              <p className={styles.errorText}>{describeError(serverError)}</p>
+              <p className={styles.errorText}>
+                {/*
+                  The shared RATE_LIMITED sentence quotes the takedown budget;
+                  this route has its own (20/minute per editor).
+                */}
+                {serverError.status === 429
+                  ? t('placeCreate.rateLimited')
+                  : describeError(serverError)}
+              </p>
               {serverError.fieldErrors.length > 0 ? (
                 <ul className={styles.errorList}>
                   {serverError.fieldErrors.map((issue) => (

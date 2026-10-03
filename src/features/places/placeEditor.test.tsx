@@ -141,7 +141,29 @@ describe('place editor save (GoGo-CMS#122)', () => {
     expect(await screen.findByText('Nhỏ nhất là 10')).toBeInTheDocument()
     expect(sent).toBe(0)
     // What was typed is still there — a rejected save discards nothing.
-    expect(duration).toHaveValue(5)
+    expect(duration).toHaveValue('5')
+  })
+
+  it('a non-number duration is refused, never sent as a cleared value (F-07)', async () => {
+    signInAs('editor')
+    const sent: Record<string, unknown>[] = []
+    server.use(
+      http.patch('/v1/cms/places/:id', async ({ request }) => {
+        sent.push((await request.json()) as Record<string, unknown>)
+        return HttpResponse.json(PLACE)
+      }),
+    )
+    const user = userEvent.setup()
+    open()
+
+    const duration = await screen.findByLabelText(/Thời lượng ghé trung bình/)
+    await user.clear(duration)
+    await user.type(duration, '9e')
+    await user.click(screen.getByRole('button', { name: 'Lưu thông tin' }))
+
+    await waitFor(() => expect(duration).toHaveAttribute('aria-invalid', 'true'))
+    expect(sent).toHaveLength(0)
+    expect(duration).toHaveValue('9e')
   })
 
   it('puts a server field error under its own field, in Vietnamese', async () => {
@@ -166,7 +188,7 @@ describe('place editor save (GoGo-CMS#122)', () => {
     // The one string an operator can quote to whoever reads the logs.
     const panel = await rejectionPanel('Máy chủ từ chối lưu thông tin định danh')
     expect(panel.getByText('req-abc123')).toBeInTheDocument()
-    expect(duration).toHaveValue(90)
+    expect(duration).toHaveValue('90')
   })
 
   it('surfaces a rejected path the form has no control for', async () => {

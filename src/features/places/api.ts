@@ -1,4 +1,5 @@
 import { apiFetch, apiFetchParsed, newIdempotencyKey } from '@/shared/api/client'
+import type { CmsCreatePlaceBody } from '@/shared/api/generated'
 import {
   attachableMediaListSchema,
   auditPageSchema,
@@ -205,6 +206,12 @@ export type UpdatePlaceInput = {
   taxonomyIds?: string[]
   /** Optimistic concurrency; a mismatch answers `409 PLACE_MODIFIED`. */
   expectedUpdatedAt?: string
+  /**
+   * GoGo-BE#440 F-07 — evidence for each `provinceCode` / `communeCode` this
+   * edit sends non-null. Nothing else is accepted on an edit. On create the
+   * field is widened to every fact (`CreatePlaceInput`).
+   */
+  sourceReferences?: Partial<Record<SourceReferenceKey, string>>
 }
 
 export function updatePlace(id: string, input: UpdatePlaceInput) {
@@ -216,9 +223,14 @@ export function updatePlace(id: string, input: UpdatePlaceInput) {
  * the only one where the facts are the editor's own.
  *
  * Always answers a `draft`: publishing is `transitionPlace`, a separate
- * decision. A near-duplicate answers 409 `PLACE_DUPLICATE_SUSPECTED` with the
- * candidates in `field_errors`; resend with `allowDuplicate` once the editor
- * has looked at them.
+ * decision. A near-duplicate answers 409 `PLACE_DUPLICATE_SUSPECTED` with each
+ * candidate in `field_errors[].candidate`; resend with `allowDuplicate` once
+ * the editor has looked at them.
+ *
+ * GoGo-BE#440 — every supplied fact names its evidence in `sourceReferences`,
+ * and `googleDerivedFields` is gone from this console: a value copied from a
+ * Google preview is not a GoGo fact however it arrives, and the server refuses
+ * a non-empty list with `400 GOOGLE_CONTENT_NOT_PERSISTABLE`.
  */
 export type CreatePlaceInput = UpdatePlaceInput & {
   name: string
@@ -232,16 +244,43 @@ export type CreatePlaceInput = UpdatePlaceInput & {
    */
   googlePlaceId?: string
   /**
-   * Which fields still hold what the resolution filled in. They are recorded
-   * `google_derived` rather than `editorial`, so a later refresh knows which
-   * values a person actually owns.
+   * GoGo-BE#440 — the independent evidence behind each supplied fact, keyed by
+   * API field name (`geom` covers `lat` + `lng`). A key for a fact the body
+   * does not carry is refused, and so is a supplied fact with no key.
    */
-  googleDerivedFields?: GoogleDerivedField[]
+  sourceReferences: SourceReferences
 }
 
-/** Exactly the fields GoGo-BE will accept as provider-applied. */
-export const GOOGLE_DERIVED_FIELDS = ['name', 'addressText', 'lat', 'lng'] as const
-export type GoogleDerivedField = (typeof GOOGLE_DERIVED_FIELDS)[number]
+/** `cmsCreatePlace.sourceReferences` property names, exactly as the contract lists them. */
+export const SOURCE_REFERENCE_KEYS = [
+  'name',
+  'description',
+  'addressText',
+  'areaKey',
+  'city',
+  'district',
+  'phone',
+  'website',
+  'geom',
+  'provinceCode',
+  'communeCode',
+  'taxonomyIds',
+] as const
+export type SourceReferenceKey = (typeof SOURCE_REFERENCE_KEYS)[number]
+export type SourceReferences = Partial<Record<SourceReferenceKey, string>>
+
+/** The contract's per-reference limits (trimmed, 1..500). */
+export const SOURCE_REFERENCE_MAX = 500
+
+/*
+ * Compile-time tie to the generated contract: a body this console builds must
+ * be one `cmsCreatePlace` accepts. If GoGo-BE renames or retypes a field, this
+ * stops compiling rather than drifting.
+ */
+type _CreateBodyFitsContract =
+  Omit<CreatePlaceInput, 'expectedUpdatedAt'> extends CmsCreatePlaceBody ? true : never
+const _createBodyFitsContract: _CreateBodyFitsContract = true
+void _createBodyFitsContract
 
 /**
  * GoGo-CMS#157 / GoGo-BE#465 — which Google place a link names.
@@ -271,11 +310,17 @@ export function resolvePlaceLink(input: {
 
 export type { ResolveLinkResult }
 
-export function createPlace(input: CreatePlaceInput) {
+/**
+ * `idempotencyKey` is required (GoGo-BE#440) and belongs to the caller: one key
+ * per create attempt, reused on every retry of that same body, so a retry after
+ * a lost response replays the first place instead of creating a second. A new
+ * body needs a new key — the same key with a different body is `422`.
+ */
+export function createPlace(input: CreatePlaceInput, idempotencyKey: string) {
   return apiFetch<CmsPlaceDetail>('/cms/places', {
     method: 'POST',
     body: input,
-    idempotencyKey: newIdempotencyKey(),
+    idempotencyKey,
   })
 }
 

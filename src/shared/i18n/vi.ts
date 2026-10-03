@@ -1107,7 +1107,7 @@ export const vi = {
   'placeCreate.intro':
     'Kiểm lại và bổ sung những gì bạn biết chắc. Địa điểm được tạo ở trạng thái Nháp — giờ mở cửa, giá và ảnh nhập tiếp ở màn sửa, xuất bản là bước riêng.',
   'placeCreate.coordinateHint':
-    'Dán link Google Maps ở trên để điền sẵn. Không có toạ độ thì không tìm kiếm hay chỉ đường được.',
+    'Nhập toạ độ bạn tự xác định (đo tại chỗ, đến tận nơi…), dạng số thập phân như 10,7769 hoặc 10.7769. Không có toạ độ thì không tìm kiếm hay chỉ đường được.',
   'placeCreate.submit': 'Tạo địa điểm',
   'placeCreate.created': 'Đã tạo địa điểm ở trạng thái Nháp.',
   'placeCreate.failed': 'Chưa tạo được địa điểm',
@@ -1117,15 +1117,16 @@ export const vi = {
   'placeCreate.duplicateOpenQueue': 'Xem danh sách trùng lặp',
   'placeCreate.duplicateCreateAnyway': 'Đây là chỗ khác, vẫn tạo',
   'placeCreate.link.intro':
-    'Có link Google Maps thì dán vào đây — tên, địa chỉ và toạ độ sẽ được điền sẵn, và địa điểm gắn được với bản ghi Google để về sau còn làm mới. Không có link vẫn nhập tay bình thường ở dưới.',
+    'Có link Google Maps thì dán vào đây để đối chiếu và gắn địa điểm với bản ghi Google — để nhận diện và chống tạo trùng. GoGo không chép dữ liệu từ Google: tên, địa chỉ và toạ độ bạn tự nhập ở dưới, kèm nguồn.',
   'placeCreate.link.label': 'Link Google Maps',
   'placeCreate.link.hint':
     'Nhận cả link rút gọn (maps.app.goo.gl) lẫn link đầy đủ. Chỉ đọc link, không mở trang.',
   'placeCreate.link.resolve': 'Tìm địa điểm',
   'placeCreate.link.found': 'Google trả về địa điểm này',
   'placeCreate.link.rating': '{rating}★ Google · {count} đánh giá',
-  'placeCreate.link.apply': 'Dùng dữ liệu này',
-  'placeCreate.link.applyNote': 'Điền vào form bên dưới, sửa lại thoải mái.',
+  'placeCreate.link.apply': 'Gắn với bản ghi Google này',
+  'placeCreate.link.applyNote':
+    'Chỉ gắn mã địa điểm Google, kèm gợi ý nhóm và đơn vị hành chính. Tên, địa chỉ, toạ độ không được chép sang.',
   'placeCreate.link.exists': 'GoGo đã có địa điểm này',
   'placeCreate.link.existsBody':
     'Link này trỏ tới một bản ghi Google đã gắn với địa điểm trong danh mục. Mở địa điểm đó thay vì tạo bản thứ hai.',
@@ -1151,9 +1152,31 @@ export const vi = {
   'placeCreate.link.priceLevel': 'Mức giá Google',
   'placeCreate.link.category': 'Nhóm suy ra',
   'placeCreate.link.providerNote':
-    'Đánh giá, số lượt đánh giá, giờ mở cửa và link Google chuẩn do máy chủ lấy trực tiếp từ Google khi tạo địa điểm — hiển thị ở đây để bạn kiểm tra, không sửa tay được.',
+    'Đánh giá, giờ mở cửa và mức giá Google chỉ hiển thị ở đây để bạn đối chiếu. Khi tạo, GoGo chỉ lưu mã địa điểm Google để nhận diện — không lưu bất kỳ dữ liệu nào của Google.',
   'placeCreate.link.stale':
     'Kết quả này thuộc về link trước đó — link trong ô đã đổi. Bấm “Tìm địa điểm” lần nữa để dùng dữ liệu của link hiện tại.',
+  'placeCreate.source.intro':
+    'Mỗi thông tin bạn gửi cần ghi nguồn: bạn biết nó từ đâu (đến tận nơi, thực đơn tại quán, gọi điện xác nhận, website chính thức của quán…). Bản xem trước từ Google chỉ để đối chiếu — Google không được tính là nguồn.',
+  'placeCreate.source.hint': 'Ví dụ: đến tận nơi ngày 02/10, gọi điện cho quán, thực đơn tại quán.',
+  'placeCreate.source.name': 'Nguồn của tên',
+  'placeCreate.source.geom': 'Nguồn của toạ độ',
+  'placeCreate.source.addressText': 'Nguồn của địa chỉ',
+  'placeCreate.source.phone': 'Nguồn của số điện thoại',
+  'placeCreate.source.website': 'Nguồn của website',
+  'placeCreate.source.description': 'Nguồn của mô tả',
+  'placeCreate.source.tooLong': 'Nguồn tối đa 500 ký tự.',
+  'placeCreate.link.attached': 'Đang gắn với bản ghi Google “{name}” ({id}). Đổi link là bỏ gắn.',
+  'placeCreate.link.detach': 'Bỏ gắn',
+  'placeCreate.source.provinceCode': 'Nguồn của tỉnh / thành phố',
+  'placeCreate.source.communeCode': 'Nguồn của phường / xã',
+  'placeCreate.source.taxonomyIds': 'Nguồn của nhóm địa điểm',
+  'placeCreate.source.required': 'Ghi nguồn cho thông tin này',
+  'placeCreate.source.invalid':
+    'Máy chủ không nhận nguồn này — kiểm tra lại (1–500 ký tự, đúng thông tin đã nhập).',
+  'placeCreate.duplicateMeta': 'Cách {distance} m · tên giống {similarity}%',
+  'placeCreate.duplicateOpen': 'Mở “{name}” trong tab mới',
+  'placeCreate.rateLimited':
+    'Bạn đã tạo quá nhiều địa điểm trong một phút (tối đa 20). Đợi một chút rồi bấm “Tạo địa điểm” lại — dữ liệu trong form vẫn giữ nguyên.',
   'places.bulkImport': 'Nhập hàng loạt',
   'places.searchPlaceholder': 'Tìm theo tên hoặc địa chỉ…',
   'places.filter.allCategories': 'Tất cả nhóm',
@@ -1257,6 +1280,14 @@ export const vi = {
   'placeEditor.websiteOpen': 'Mở website đang lưu',
   'placeEditor.provenance': 'Nguồn của từng trường',
   'placeEditor.provenanceHint': 'Lưu một trường không có nghĩa là đã xác minh lại cả địa điểm.',
+  'placeEditor.codeSourceHint':
+    'Mã đổi ở lần lưu này là một khẳng định với bộ phân giải — ghi bạn biết nó từ đâu (đến tận nơi, giấy tờ của quán…).',
+  'placeEditor.codeFromMapping': 'Theo ánh xạ hành chính',
+  'placeEditor.codeFromMappingMethod': 'phương pháp: {method}',
+  'placeEditor.codeFromMappingDataset': 'bộ dữ liệu {dataset}',
+  'mapping.method.boundary_point_in_polygon': 'theo ranh giới, từ toạ độ',
+  'mapping.method.trusted_code': 'mã biên tập viên khẳng định',
+  'placeEditor.codeNone': 'Chưa có mã',
   'placeEditor.provenanceNone': 'Chưa ghi nhận nguồn',
   'placeEditor.provenanceVerified': 'xác minh {time}',
   'placeEditor.provenanceUnverified': 'chưa có mốc xác minh',
@@ -2046,6 +2077,18 @@ export const vi = {
     'Trạng thái hiện tại không cho phép chuyển sang trạng thái này.',
   'error.NOT_TAKEDOWNABLE': 'Nội dung không ở trạng thái áp dụng được thao tác gỡ khẩn cấp.',
   'error.PLACE_MODIFIED': 'Địa điểm đã được người khác lưu trong lúc bạn đang sửa.',
+  'error.SOURCE_REFERENCE_INVALID':
+    'Có thông tin chưa ghi nguồn, hoặc có nguồn cho thông tin chưa nhập.',
+  'error.GOOGLE_CONTENT_NOT_PERSISTABLE':
+    'Dữ liệu lấy từ Google không được lưu như dữ liệu của GoGo. Kiểm tra lại từng thông tin và ghi nguồn độc lập.',
+  'error.IDEMPOTENCY_KEY_REQUIRED': 'Yêu cầu thiếu mã chống gửi trùng. Bấm lại để gửi lần nữa.',
+  'error.INVALID_IDEMPOTENCY_KEY': 'Mã chống gửi trùng không hợp lệ. Bấm lại để gửi lần nữa.',
+  'error.IDEMPOTENCY_KEY_REUSED':
+    'Lần gửi trước dùng dữ liệu khác. Bấm lại để gửi dữ liệu hiện tại như một lần tạo mới.',
+  'error.IDEMPOTENT_REQUEST_IN_FLIGHT':
+    'Lần gửi trước vẫn đang được xử lý. Đợi vài giây rồi thử lại.',
+  'error.PLACE_IDENTITY_CONFLICT':
+    'Hai địa điểm đang cùng gắn với bản ghi Google này. Gộp chúng trước khi thêm địa điểm mới.',
   'error.PLACE_NOT_FOUND': 'Không tìm thấy địa điểm.',
   'error.REVIEW_NOT_FOUND': 'Không tìm thấy đánh giá.',
   'error.CHECKIN_NOT_FOUND': 'Không tìm thấy check-in.',

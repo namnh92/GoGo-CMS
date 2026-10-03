@@ -1564,11 +1564,77 @@ export const handlers = [
   }),
 
   /**
-   * `cmsCreatePlace` (GoGo-BE#452/#465). The row lands in `db.places` so the
+   * `cmsCreatePlace` (GoGo-BE#452/#465/#440). The row lands in `db.places` so the
    * editor the console navigates to afterwards actually loads.
    */
   http.post(`${BASE}/cms/places`, async ({ request }) => {
     const body = (await request.json()) as Record<string, unknown>
+    /*
+     * GoGo-BE#440 — the request rules the real route enforces, so a console
+     * that drifts from them fails here (dev, unit, e2e) and not on cms-dev.
+     */
+    const refuse = (
+      code: string,
+      fieldErrors: { field: string; code: string; message: string }[] = [],
+    ) =>
+      HttpResponse.json(
+        {
+          code,
+          message: code,
+          field_errors: fieldErrors,
+          request_id: 'req-mock',
+          retryable: false,
+        },
+        { status: 400 },
+      )
+    if (!request.headers.get('Idempotency-Key')) return refuse('IDEMPOTENCY_KEY_REQUIRED')
+    const derived = body.googleDerivedFields
+    if (Array.isArray(derived) && derived.length > 0)
+      return refuse('GOOGLE_CONTENT_NOT_PERSISTABLE')
+    const refs = (body.sourceReferences ?? {}) as Record<string, unknown>
+    const supplied = [
+      'name',
+      'description',
+      'addressText',
+      'areaKey',
+      'city',
+      'district',
+      'phone',
+      'website',
+      'provinceCode',
+      'communeCode',
+    ]
+      .filter((key) => body[key] !== undefined && body[key] !== null)
+      .concat(body.lat !== undefined && body.lng !== undefined ? ['geom'] : [])
+      .concat(Array.isArray(body.taxonomyIds) && body.taxonomyIds.length > 0 ? ['taxonomyIds'] : [])
+    const known = [
+      ...supplied,
+      'name',
+      'description',
+      'addressText',
+      'areaKey',
+      'city',
+      'district',
+      'phone',
+      'website',
+      'geom',
+      'provinceCode',
+      'communeCode',
+      'taxonomyIds',
+    ]
+    // alpha.62 per-key codes: required | unused | unknown | too_long.
+    const sourceIssues = [
+      ...supplied
+        .filter((key) => typeof refs[key] !== 'string' || !String(refs[key]).trim())
+        .map((key) => ({ key, code: 'required' })),
+      ...Object.keys(refs)
+        .filter((key) => !supplied.includes(key))
+        .map((key) => ({ key, code: known.includes(key) ? 'unused' : 'unknown' })),
+      ...Object.entries(refs)
+        .filter(([, value]) => typeof value === 'string' && value.trim().length > 500)
+        .map(([key]) => ({ key, code: 'too_long' })),
+    ].map(({ key, code }) => ({ field: `sourceReferences.${key}`, code, message: code }))
+    if (sourceIssues.length > 0) return refuse('SOURCE_REFERENCE_INVALID', sourceIssues)
     const created = {
       ...db.places[0]!,
       id: `created-${db.places.length + 1}`,
