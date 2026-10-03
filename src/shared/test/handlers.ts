@@ -9,6 +9,7 @@ import {
   mockHoursIssues,
   moderationReasonMissing,
   toFieldErrors,
+  mockContactWriteIssues,
 } from '@/shared/api/cmsPlaceContract'
 import { ALLOWED_ACTIONS, ALLOWED_TRIGGERS } from '@/features/safety/conditions'
 import type { ImportRow } from '@/shared/api/contracts-import'
@@ -221,6 +222,10 @@ export const mockDb = {
   },
   get decisions(): Record<string, unknown>[] {
     return db.decisions
+  },
+  /** Seed a stored review draft (GoGo-BE#280 pre-evidence drafts). */
+  get submissionDetails(): Record<string, unknown> {
+    return db.submissionDetails
   },
 }
 
@@ -1709,6 +1714,26 @@ export const handlers = [
      * the editor has to render.
      */
     const fieldErrors: { field: string; code: string; message: string }[] = []
+    /*
+     * GoGo-BE#280 — a contact value is written only with its evidence, and
+     * writing or clearing one makes `expectedUpdatedAt` mandatory. Checked
+     * before normalising so "unchanged" compares the stored shape.
+     */
+    const contact = mockContactWriteIssues(input, place, (field, value) => {
+      if (field === 'phone') {
+        const result = mockNormalizePhone(value)
+        return result.ok ? result.value : value
+      }
+      if (field === 'website') {
+        const result = mockNormalizeWebsite(value)
+        return result.ok ? result.value : value
+      }
+      return value.trim()
+    })
+    fieldErrors.push(...contact.issues)
+    if (contact.writes && expectedUpdatedAt === undefined) {
+      fieldErrors.push({ field: 'expectedUpdatedAt', code: 'required', message: 'Required' })
+    }
     if (typeof input.phone === 'string') {
       const result = mockNormalizePhone(input.phone)
       if (result.ok) input.phone = result.value
@@ -1739,8 +1764,25 @@ export const handlers = [
      * `provinceCode` at the top level would let the console ship a form that
      * reads its own submission back and never notices the server disagreed.
      */
-    const { provinceCode, communeCode, ...rest } = input
+    const { provinceCode, communeCode, provenance, ...rest } = input
     Object.assign(place, rest)
+    // GoGo-BE#280 — the stored evidence, read back the way the CMS detail
+    // returns it: actor/verification server-owned, ownership `gogo`. A fresh
+    // object, so the seeded fixture's map is never mutated across tests.
+    place.provenance = { ...place.provenance }
+    for (const field of ['addressText', 'phone', 'website'] as const) {
+      if (rest[field] === null) delete place.provenance[field]
+      const evidence = provenance?.[field]
+      if (evidence && typeof rest[field] === 'string') {
+        place.provenance[field] = {
+          sourceType: evidence.sourceType ?? 'editorial',
+          sourceReference: evidence.sourceReference ?? null,
+          collectedAt: evidence.collectedAt ?? null,
+          verifiedAt: new Date().toISOString(),
+          ownership: 'gogo',
+        }
+      }
+    }
     if (provinceCode !== undefined || communeCode !== undefined) {
       const nextProvince =
         provinceCode === undefined ? place.administrative?.provinceCode : provinceCode
@@ -2374,6 +2416,24 @@ export const handlers = [
     if (body.expectedUpdatedAt !== undefined && body.expectedUpdatedAt !== detail.updatedAt) {
       return envelope(409, 'SUBMISSION_MODIFIED', 'This submission changed')
     }
+    // GoGo-BE#280 — every contact value in the draft needs its evidence, on
+    // every save: the draft is checked whole, against no stored row.
+    const contact = mockContactWriteIssues(
+      body.draft as Parameters<typeof mockContactWriteIssues>[0],
+      null,
+    )
+    if (contact.issues.length > 0) {
+      return HttpResponse.json(
+        {
+          code: 'VALIDATION_FAILED',
+          message: 'Request validation failed',
+          field_errors: contact.issues,
+          request_id: 'mock-review-validation',
+          retryable: false,
+        },
+        { status: 400 },
+      )
+    }
     const updatedAt = new Date(Date.parse(detail.updatedAt) + 60_000).toISOString()
     detail.updatedAt = updatedAt
     detail.review = { draft: body.draft }
@@ -2398,6 +2458,30 @@ export const handlers = [
       }
       if (!db.places.some((place: { id: string }) => place.id === body.mergeIntoPlaceId)) {
         return envelope(404, 'MERGE_TARGET_NOT_FOUND', 'Target place not found')
+      }
+    }
+    /*
+     * GoGo-BE#280 — approval re-checks the stored draft. One saved before
+     * contact evidence existed is the draft's fault, not the request's: 409,
+     * naming the fields, so the reviewer re-saves it with its sources.
+     */
+    if (body.decision === 'approved') {
+      const stored = (
+        db.submissionDetails[String(params.id)] as
+          { review?: { draft: Parameters<typeof mockContactWriteIssues>[0] } | null } | undefined
+      )?.review?.draft
+      const contact = stored ? mockContactWriteIssues(stored, null) : { issues: [] }
+      if (contact.issues.length > 0) {
+        return HttpResponse.json(
+          {
+            code: 'REVIEW_EVIDENCE_REQUIRED',
+            message: 'Bản nháp duyệt có địa chỉ / điện thoại / website chưa kèm nguồn',
+            field_errors: contact.issues,
+            request_id: 'mock-review-evidence',
+            retryable: false,
+          },
+          { status: 409 },
+        )
       }
     }
     db.decisions.push({ id: String(params.id), ...body })

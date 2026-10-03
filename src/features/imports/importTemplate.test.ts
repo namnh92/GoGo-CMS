@@ -30,14 +30,7 @@ describe('the published import template', () => {
   })
 
   it('leaves out every column deprecated for new files', () => {
-    for (const gone of [
-      'district',
-      'category_raw',
-      'price_raw',
-      'audiences_raw',
-      'vibes_raw',
-      'address',
-    ]) {
+    for (const gone of ['district', 'category_raw', 'price_raw', 'audiences_raw', 'vibes_raw']) {
       expect(header, gone).not.toContain(gone)
     }
   })
@@ -59,8 +52,14 @@ describe('the published import template', () => {
   it('carries the Place ID column and the GoGo-owned ones', () => {
     for (const column of [
       'google_place_id',
+      'address',
+      'address_source_type',
+      'address_source_reference',
+      'address_collected_at',
       'phone',
+      'phone_source_type',
       'website',
+      'website_collected_at',
       'avg_visit_minutes',
       'is_lodging',
       'curated_rank',
@@ -118,8 +117,14 @@ describe('the mapping vocabulary', () => {
   it('offers the new columns and hides the deprecated ones', () => {
     for (const offered of [
       'google_place_id',
+      'address',
+      'address_source_type',
+      'address_source_reference',
+      'address_collected_at',
       'phone',
+      'phone_source_type',
       'website',
+      'website_collected_at',
       'avg_visit_minutes',
       'is_lodging',
       'curated_rank',

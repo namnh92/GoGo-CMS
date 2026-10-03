@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
@@ -6,8 +6,10 @@ import { http, HttpResponse } from 'msw'
 import { server } from '@/shared/test/server'
 import { renderWithProviders, signInAs } from '@/shared/test/render'
 import { places } from '@/shared/test/fixtures'
+import { resetMockDb } from '@/shared/test/handlers'
 import type { CmsPlaceDetail } from '@/shared/api/contracts'
 import PlaceEditorScreen from './placeEditor.view'
+import { giveEvidence } from './contactEvidence.testkit'
 
 const PLACE = places.find((place) => place.id === 'pl-chao-ban')!
 
@@ -40,6 +42,10 @@ function openCaptured(detail: Partial<CmsPlaceDetail> = {}) {
   return sent
 }
 
+// The live save now records evidence on the mock row (GoGo-BE#280), so each
+// case starts from the seeded provenance rather than the previous case's.
+beforeEach(() => resetMockDb())
+
 const save = async (user: ReturnType<typeof userEvent.setup>) =>
   user.click(await screen.findByRole('button', { name: 'Lưu thông tin' }))
 
@@ -54,6 +60,9 @@ describe('place address and contact (CMS-044)', () => {
     const website = screen.getByLabelText('Website')
     await user.clear(website)
     await user.type(website, 'chaoban.vn')
+    // GoGo-BE#280 — each written contact value carries its source.
+    await giveEvidence(user, 'Điện thoại')
+    await giveEvidence(user, 'Website', { sourceReference: 'Danh thiếp của quán' })
 
     await save(user)
 
@@ -126,11 +135,14 @@ describe('place address and contact (CMS-044)', () => {
     const address = await screen.findByLabelText(/Địa chỉ \(dạng tự do\)/)
     await user.clear(address)
     await user.type(address, '1 Lê Duẩn')
+    await giveEvidence(user, 'Địa chỉ (dạng tự do)')
     await save(user)
 
     await waitFor(() => expect(sent).toHaveLength(1))
-    // A save of one field must not restamp the provenance of seven others.
-    expect(Object.keys(sent[0]!).sort()).toEqual(['addressText', 'expectedUpdatedAt'])
+    // A save of one field must not restamp the provenance of seven others —
+    // and the one it writes carries exactly its own evidence (GoGo-BE#280).
+    expect(Object.keys(sent[0]!).sort()).toEqual(['addressText', 'expectedUpdatedAt', 'provenance'])
+    expect(Object.keys(sent[0]!.provenance as object)).toEqual(['addressText'])
   })
 
   it('always sends the version the form was loaded from', async () => {
@@ -153,6 +165,7 @@ describe('place address and contact (CMS-044)', () => {
     // A bare subscriber number: no trunk 0, no country code. The server refuses
     // it rather than assuming Vietnam, and the client does not pre-empt that.
     await user.type(phone, '38229999')
+    await giveEvidence(user, 'Điện thoại')
     await save(user)
 
     const message = await screen.findByText('Thiếu mã quốc gia hoặc số 0 đầu')
@@ -170,6 +183,7 @@ describe('place address and contact (CMS-044)', () => {
     await user.clear(website)
     // The value is rendered as an href in three clients; the allowlist is why.
     await user.type(website, 'javascript:alert(1)')
+    await giveEvidence(user, 'Website')
     await save(user)
 
     const message = await screen.findByText('Website phải là địa chỉ http hoặc https hợp lệ')

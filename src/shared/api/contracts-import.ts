@@ -214,8 +214,9 @@ export type ImportPublishResult = z.infer<typeof importPublishResultSchema>
  * translate to: `google_maps_url` is the field's name.
  *
  * This replaces a hand-written list that had drifted into a second vocabulary
- * (`googleMapsUrl`, `priceMin`) plus three fields the server has no column for
- * (`address`, `phone`, `website`). The server used to discard anything it did
+ * (`googleMapsUrl`, `priceMin`) plus three fields the server then had no column
+ * for (`address`, `phone`, `website` — all three are columns again since
+ * PI-BE-025 and GoGo-BE#280). The server used to discard anything it did
  * not recognise and auto-detect instead, so the mapping screen silently did
  * nothing; it now answers 400 `MAPPING_FIELD_UNKNOWN`, which is why this list
  * can no longer be maintained by hand.
@@ -244,6 +245,22 @@ export const IMPORT_CANONICAL_FIELDS = [
   'note',
   'phone',
   'website',
+  /*
+   * GoGo-BE#280 — `address` is a GoGo-owned column again, and each of the three
+   * contact values travels with its evidence: a non-blank value cell without
+   * all three of its `<field>_source_*` / `_collected_at` cells fails the row
+   * with `<FIELD>_EVIDENCE_REQUIRED`, in dry-run and commit alike.
+   */
+  'address',
+  'address_source_type',
+  'address_source_reference',
+  'address_collected_at',
+  'phone_source_type',
+  'phone_source_reference',
+  'phone_collected_at',
+  'website_source_type',
+  'website_source_reference',
+  'website_collected_at',
   'avg_visit_minutes',
   'is_lodging',
   'curated_rank',

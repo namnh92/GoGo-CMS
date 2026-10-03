@@ -1297,7 +1297,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Place detail with sources, freshness, hours, verified prices */
+        /**
+         * Place detail with sources, freshness, hours, verified prices
+         * @description GoGo-BE#217 (ADR-0028): carries the GoGo community rating (`gogoRating`, `gogoRatingCount`) beside the provider's (`rating`, `ratingCount`, attributed through `sources`). The two are separate facts from separate populations and are never merged into one score. The GoGo rating is computed on every read from the place's moderator-published reviews, so the response is served `Cache-Control: no-store` and a publish, rejection, edit back to moderation or emergency hide shows on the next read.
+         */
         get: operations["getPlaceDetail"];
         put?: never;
         post?: never;
@@ -1890,6 +1893,8 @@ export interface paths {
          * Moderator/editor: approve, reject or merge a submission (PI-CMS-007)
          * @description `approved` creates the catalogue place and applies whatever a reviewer supplemented through `PUT /cms/place-submissions/{id}/review` over the provider's answer (GoGo-BE#528). Fields the reviewer typed are recorded `editorial` in `place_field_provenance` and carry their id; fields left as Google answered them are `google_derived` and carry the Place ID — so a later provider refresh can tell what it may overwrite.
          *
+         *     **Address, phone and website (GoGo-BE#280)** are GoGo-owned and come only from the review draft, each with the evidence in its `provenance`. The provider's formatted address is no longer a fallback: a place approved with no reviewer address has none. A draft saved before #280 that carries one of these values without evidence is refused `409 REVIEW_EVIDENCE_REQUIRED`, naming the fields in `field_errors`; re-save the draft with its sources and approve again.
+         *
          *     `rejected` creates no place. `merged` points the proposal at an existing one and writes nothing to it.
          *
          *     Approval is not verification and not publication: the administrative mapping is resolved from the new place's own coordinate and is never `VERIFIED`, and the publication blocker stays until somebody confirms it (ADM-017, GoGo-BE#525).
@@ -1943,11 +1948,13 @@ export interface paths {
          *
          *     The canonical `googleMapsUri` is whatever Google returns; the submitted URL is never stored or treated as canonical.
          *
-         *     **GoGo-owned columns (PI-BE-025).** `phone`, `website`, `avg_visit_minutes`, `is_lodging` and `curated_rank` are accepted and persisted, validated by the same rules the console uses: phone normalises to E.164, website to `http(s)`, `avg_visit_minutes` is 10–720. Every one of them fails the row explicitly rather than being dropped on commit. Values from the file are recorded `editorial` in `place_field_provenance`.
+         *     **GoGo-owned columns (PI-BE-025).** `phone`, `website`, `avg_visit_minutes`, `is_lodging` and `curated_rank` are accepted and persisted, validated by the same rules the console uses: phone normalises to E.164, website to `http(s)`, `avg_visit_minutes` is 10–720. Every one of them fails the row explicitly rather than being dropped on commit.
+         *
+         *     **Address, phone and website need evidence (GoGo-BE#280).** They are GoGo-owned place data, written to `address_text` / `phone` / `website`. A non-blank `address`, `phone` or `website` cell is written only together with its three evidence columns — `<field>_source_type` (`editorial`, `community` or `provider`; never Google), `<field>_source_reference` (≤ 500 characters, naming the non-Google origin: a merchant statement, the official website, a field visit or a permitted dataset — not a sheet or job id) and `<field>_collected_at` (ISO-8601 with a zone, not in the future). A missing or invalid one fails the row with `<FIELD>_EVIDENCE_REQUIRED` / `<FIELD>_EVIDENCE_INVALID` against that column, in dry-run and commit alike. A blank value cell leaves the stored value alone (clearing belongs to the console). In `update_existing` a non-blank value replaces the stored one together with its evidence; the provider's address is never written, in any mode.
          *
          *     `places.suitability` is deliberately **not** an import column. `audiences` is the operator-facing vocabulary for the same product concept — who a place suits — and `suitability` is the weighted score GoGo derives from it and from editorial curation. Asking a spreadsheet to author both would be asking one person to write the same fact at two levels of abstraction and keep them consistent. The column and every other API path that writes it are unchanged.
          *
-         *     `phone` and `website` are no longer retired mapping values; `address` still is, because `address_text` is written from the provider's formatted address and a sheet's own address string has no writer.
+         *     No mapping value is retired any more: `phone` and `website` left the list in PI-BE-025 and `address` in GoGo-BE#280.
          *
          *     **Price units (PI-BE-026).** `place_prices.unit` is `per_person`, `per_item`, `per_hour` or `per_night`. A row that states a price must state a unit this table can hold: `per_group` fails with `PRICE_UNIT_UNSUPPORTED` and `unknown` — which is also the default when the column is absent — fails with `PRICE_UNIT_REQUIRED`. Both used to be accepted and then dropped the price on commit without a word. `free` is stored as `per_person` with a zero amount. A row with no price at all is unaffected.
          */
@@ -3008,7 +3015,7 @@ export interface paths {
          *
          *     Always created `draft`. Entering the catalogue and being visible are two decisions, and `cmsTransitionPlace` already owns the second.
          *
-         *     **Provenance.** A value the editor typed is recorded `editorial`, including one they read off a preview and retyped — copying does not transfer ownership (GOGO_PRODUCT_DATA_ARCHITECTURE.md). A value *applied* from `cmsResolvePlaceLink` and left alone is recorded `google_derived` with the Google Place ID as its reference, and `googleDerivedFields` says which. Coordinates carry provenance too, under the field name `geom`.
+         *     **Provenance.** A value the editor typed is recorded `editorial`, including one they read off a preview and retyped — copying does not transfer ownership (GOGO_PRODUCT_DATA_ARCHITECTURE.md). A value *applied* from `cmsResolvePlaceLink` and left alone is recorded `google_derived` with the Google Place ID as its reference, and `googleDerivedFields` says which. Coordinates carry provenance too, under the field name `geom`. `addressText`, `phone` and `website` are the exception since GoGo-BE#280: they record the evidence sent in `provenance`, never a bare `editorial` claim and never `google_derived`.
          *
          *     **Provider facts (PI-BE-021).** Given a `googlePlaceId`, this endpoint makes exactly one `quality` Place Details call and stores what it returns as the *provider's* facts: `ratings.provider`, `priceLevel`, the weekly `hours` at `source: provider`, and the canonical `googleMapsUri` on the place's Google source row. They are attributed to the provider, never presented as GoGo-owned, and never read as recommendation input (`docs/adr/0020-provider-facts-on-editor-created-places.md`).
          *
@@ -3020,7 +3027,7 @@ export interface paths {
          *
          *     **Duplicate check.** Before inserting, the same rule the duplicate queue uses — within 150 m and name similarity above 0.5 — runs against the catalogue. A hit answers `409 PLACE_DUPLICATE_SUSPECTED` with the candidates in `field_errors` (name and distance in metres), so the console can offer the merge screen it already has. `allowDuplicate: true` is how an editor says they looked and these are different places; two cafés of one chain on the same street are real.
          *
-         *     Field limits follow `cmsUpdatePlace` exactly and are stated there.
+         *     Field limits follow `cmsUpdatePlace` exactly and are stated there, and so does the **evidence rule for `addressText`, `phone` and `website`** (GoGo-BE#280): a non-null value needs its `provenance` entry, or the request is `400 VALIDATION_FAILED` naming `provenance.<field>`. `googleDerivedFields` containing `addressText` is refused `400` with code `google_not_independent` — the address is GoGo-owned and the preview may not fill it; the value stays in that enum only because removing it would break `/v1` clients.
          */
         post: operations["cmsCreatePlace"];
         delete?: never;
@@ -6904,15 +6911,23 @@ export interface components {
             name?: string;
             description?: string;
             status?: string;
+            /** @description GoGo-owned postal address (GoGo-BE#280). Absent when unknown — never an empty string. Render as plain text. */
             addressText?: string;
             areaKey?: string;
             lat?: number;
             lng?: number;
+            /** @description E.164 business phone. Absent when unknown, or when a legacy stored value would not pass today's rules (GoGo-BE#280). */
             phone?: string;
+            /** @description `http(s)` URL on a public host. Absent when unknown, or when a legacy stored value would not pass today's rules — so a client may render it as an external link without re-validating. Never fetched or previewed by GoGo. */
             website?: string;
+            provenance?: components["schemas"]["PlaceContactProvenance"];
             /** @description A number, not the string Postgres returns for `numeric`. The endpoint used to pass the row through unmapped, so a client calling `.toFixed` on this crashed (#169). */
             rating?: number;
             ratingCount?: number;
+            /** @description GoGo-BE#217 (ADR-0028) — the GoGo community rating, on a fixed 1–5 scale: the arithmetic mean of every moderator-published GoGo review of this place, each weighted equally, rounded once to one decimal (half away from zero, so 4.25 → 4.3). **Omitted** — never `null`, never 0 — while `gogoRatingCount` is below 5, the sample threshold; present whenever it is 5 or more. Never merged with the provider `rating`, which measures a different population; render each with its own source and count. */
+            gogoRating?: number;
+            /** @description GoGo-BE#217 (ADR-0028) — how many moderator-published GoGo reviews of this place `gogoRating` is computed from; always present, including 0. Counts reviews, not people: one author may have several. Pending, rejected, removed and hidden reviews, plan reviews, check-ins and provider reviews are never counted. Below 5 the client says in words that there are not enough GoGo reviews yet, beside this count, and renders no score. */
+            gogoRatingCount: number;
             priceLevel?: number;
             avgVisitMinutes?: number;
             suitability?: {
@@ -6952,6 +6967,51 @@ export interface components {
                 attribution?: string;
             }[];
             providerStatus?: components["schemas"]["PlaceProviderStatus"];
+        };
+        /** @description GoGo-BE#280 — whose each contact value is, keyed by the field name. An entry appears exactly when its value does; the whole object is absent when the place has none of the three. Evidence references and actors are CMS-only and never appear here. */
+        PlaceContactProvenance: {
+            addressText?: components["schemas"]["PlaceContactFieldProvenance"];
+            phone?: components["schemas"]["PlaceContactFieldProvenance"];
+            website?: components["schemas"]["PlaceContactFieldProvenance"];
+        };
+        PlaceContactFieldProvenance: {
+            /** @description `gogo` — independently sourced and verified by GoGo; `google` — a value seeded from Google before #280, shown with the attribution of the `sources` entry named by `provider`; `unknown` — no adequate evidence was recorded (most values written before #280). Do not present `unknown` as GoGo-verified. Treat a value you do not know as `unknown`. */
+            sourceType: string;
+            /**
+             * Format: date-time
+             * @description `gogo` only — when the value was last independently verified. It moves only on verification, never on an unrelated save or a provider fetch. No freshness window is implied.
+             */
+            verifiedAt?: string;
+            /** @description `google` only — the `sources[].provider` entry, present in this same response, that attributes the value. A Google-seeded value whose place no longer has a Google source is reported `unknown` instead, never as `google` pointing at attribution that is not there. */
+            provider?: string;
+        };
+        /** @description GoGo-BE#280 — where one contact value came from. All three properties are required (missing ones are reported per property as `provenance.<field>.<property>` with code `required`); they are not marked `required` here so that the gate reports them, not the schema layer. Who submitted it and when it was verified are recorded by the server from the authenticated admin and are not accepted from clients. */
+        PlaceContactEvidence: {
+            /** @description `editorial` (a merchant statement, the official website, a field visit), `community` (a contributor's own report) or `provider` (a permitted, non-Google dataset). `google_derived` is refused with code `google_not_independent`: copying, retyping or confirming Google content does not make it GoGo's. */
+            sourceType?: string;
+            /**
+             * @description Enforced: trimmed, 1..500 characters, no control characters. Names the non-Google origin — a phone call with the owner, the official URL, a visit, a dataset release. CMS-only; never public. Checked in this order (ADR-0027 §Transport guard):
+             *
+             *     1. A Google Maps link, share link, Place ID or "Google" is refused `google_not_independent`.
+             *     2. A reference that is, as a whole, a website (`pho24.vn`, `https://chaoban.vn/lien-he#2`) is accepted as an origin — the shape only; GoGo does not fetch it.
+             *     3. A reference that **starts with** a transport keyword (`job`, `jobs`, `sheet`, `sheets`, `tab`, `row`, `rows`, `dòng`, `dong`, `cột`, `cot`, `col`, `column`, `cell`, `import`, `batch`, `file`, `upload`, `csv`, `xlsx`, `spreadsheet`, `id`, `r`; case-insensitive) followed by nothing or a non-letter is refused `transport_only`, whatever follows: `job 123`, `Sheet1!B7`, `Tab Quận 1`, `R12`.
+             *     4. A reference that is only an identifier is refused `transport_only`: a decimal number, a UUID, an A1 cell or range with an optional `label!` (`'HCM'!A2:C9`), or `label#digits` (`HCM#12`).
+             *
+             *     This is a bounded lexical guard, not a classifier. Put the origin first — `job 123; gọi chủ quán` is refused. Passing it (`Bảng Quận 1`, `123, row 4`) does not make a reference adequate evidence; that remains an editorial assertion.
+             * @example Gọi điện chủ quán ngày 2026-09-30
+             */
+            sourceReference?: string;
+            /**
+             * Format: date-time
+             * @description Enforced: ISO-8601 with a zone, not more than 5 minutes in the future. When the evidence was gathered, not when it was typed in.
+             */
+            collectedAt?: string;
+        };
+        /** @description GoGo-BE#280 — evidence for the GoGo-owned contact fields written in the same request. A non-null `addressText` / `phone` / `website` needs its entry (`provenance.<field>` code `required`); an entry for a field the request does not write is `value_missing`, and one beside a `null` clear is `not_allowed`. Re-sending a field's stored value unchanged and without evidence is not a write and needs nothing. */
+        PlaceContactProvenanceInput: {
+            addressText?: components["schemas"]["PlaceContactEvidence"];
+            phone?: components["schemas"]["PlaceContactEvidence"];
+            website?: components["schemas"]["PlaceContactEvidence"];
         };
         /** @description GoGo-BE#360 — what the place's provider last reported about the business, a fact for core rule 8's "excluded or warned": search already excludes a closed or temporarily closed place, but a saved place, a plan stop or a share link still opens this detail, and the client must warn rather than present it as open (with more than colour). When several provider rows exist the most severe report wins (closed, temporarily_closed, moved, active, unknown). Absent when no provider has reported on the place. The place's own `status` is GoGo's moderation decision and is separate. */
         PlaceProviderStatus: {
@@ -7276,7 +7336,7 @@ export interface components {
          *     Request schemas keep `mapping` as a plain string map: narrowing an existing `/v1` request property to an enum is a breaking change (ADR-0005), so the vocabulary is published here rather than enforced in the wire type. `/v1` rejects no value — one outside this list leaves its column unmapped and is reported. Strict rejection belongs in `/v2`.
          * @enum {string}
          */
-        ImportCanonicalField: "source_row_id" | "name" | "city" | "district" | "google_maps_url" | "google_maps_query" | "google_place_id" | "category" | "category_raw" | "price_min" | "price_max" | "price_unit" | "price_raw" | "audiences" | "audiences_raw" | "vibes" | "vibes_raw" | "highlight" | "note" | "phone" | "website" | "avg_visit_minutes" | "is_lodging" | "curated_rank";
+        ImportCanonicalField: "source_row_id" | "name" | "city" | "district" | "google_maps_url" | "google_maps_query" | "google_place_id" | "category" | "category_raw" | "price_min" | "price_max" | "price_unit" | "price_raw" | "audiences" | "audiences_raw" | "vibes" | "vibes_raw" | "highlight" | "note" | "phone" | "website" | "address" | "address_source_type" | "address_source_reference" | "address_collected_at" | "phone_source_type" | "phone_source_reference" | "phone_collected_at" | "website_source_type" | "website_source_reference" | "website_collected_at" | "avg_visit_minutes" | "is_lodging" | "curated_rank";
         ImportJob: components["schemas"]["ImportJobSummary"] & {
             defaultCity?: string | null;
             rowsByStatus?: {
@@ -7313,6 +7373,10 @@ export interface components {
         ImportCandidate: {
             googlePlaceId?: string;
             name?: string;
+            /**
+             * @deprecated
+             * @description No longer written (GoGo-BE#280): Google's formatted address is not persisted, candidate JSON included. Present only on rows stored before #280. Do not depend on it.
+             */
             address?: string;
             /** Format: float */
             confidence?: number;
@@ -7559,6 +7623,8 @@ export interface components {
             priceMax?: number | null;
             /** @enum {string|null} */
             priceUnit?: "per_person" | "per_item" | "per_hour" | "per_night" | null;
+            /** @description GoGo-BE#280 — evidence for `addressText`, `phone` and `website`, under the same rule as `cmsUpdatePlace`: a non-null value needs its entry, `null` needs none. Values and evidence are stored normalized (E.164, `https://`, `collectedAt` in UTC) and returned that way. */
+            provenance?: components["schemas"]["PlaceContactProvenanceInput"];
         };
         /** @description PI-BE-031 (GoGo-BE#528) — everything a decision needs that GoGo already holds. No provider request: this endpoint costs nothing to open, and `POST /cms/place-submissions/{id}/provider-preview` is the explicit, separately-counted way to ask Google. */
         PlaceSubmissionDetail: {
@@ -7853,6 +7919,13 @@ export interface components {
                     sourceReference?: string | null;
                     /** Format: date-time */
                     verifiedAt?: string | null;
+                    /**
+                     * Format: date-time
+                     * @description GoGo-BE#280 — when the evidence named by `sourceReference` was gathered. Null on every row that is not independently sourced, including all rows written before #280.
+                     */
+                    collectedAt?: string | null;
+                    /** @description GoGo-BE#280, on `addressText` / `phone` / `website` only — the same verdict the public `PlaceDetail.provenance` gives. `gogo` requires an independent source, a non-Google reference and a collection time; a legacy `editorial` row without them is `unknown`. Treat a value you do not know as `unknown`. */
+                    ownership?: string;
                 };
             };
             /** @description A day with no row here is *unknown*, not closed — the two are different facts and the UI must not render one as the other. */
@@ -11186,6 +11259,8 @@ export interface operations {
             /** @description Place aggregate with hours, verified prices, sources and freshness */
             200: {
                 headers: {
+                    /** @description Always `no-store` — the GoGo rating follows moderation on the next read. */
+                    "Cache-Control"?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -12298,7 +12373,7 @@ export interface operations {
                     tabCityMapping?: {
                         [key: string]: string;
                     };
-                    /** @description Raw header → canonical field. Supported values are the ones listed by `ImportCanonicalField`; generate against that schema rather than sending free text. The property stays a plain string map because narrowing a `/v1` request to an enum is a breaking change (ADR-0005) — the constraint is enforced at runtime, not in the wire type. A header left out is auto-detected; a header mapped to `""` is ignored. No value here is rejected: three legacy spellings (`googleMapsUrl`, `priceMin`, `priceMax`) normalise, three retired values (`address`, `phone`, `website`) are accepted and skipped, and any other value leaves its column unmapped — reported in `unmappedHeaders` and counted as `place_import_unknown_mapping_total`, never auto-detected into some other field. A mapping that is not a JSON object of strings is a 400 `MAPPING_INVALID`. */
+                    /** @description Raw header → canonical field. Supported values are the ones listed by `ImportCanonicalField`; generate against that schema rather than sending free text. The property stays a plain string map because narrowing a `/v1` request to an enum is a breaking change (ADR-0005) — the constraint is enforced at runtime, not in the wire type. A header left out is auto-detected; a header mapped to `""` is ignored. No value here is rejected: three legacy spellings (`googleMapsUrl`, `priceMin`, `priceMax`) normalise, and any other value leaves its column unmapped — reported in `unmappedHeaders` and counted as `place_import_unknown_mapping_total`, never auto-detected into some other field. A mapping that is not a JSON object of strings is a 400 `MAPPING_INVALID`. */
                     mapping?: {
                         [key: string]: string;
                     };
@@ -14223,7 +14298,9 @@ export interface operations {
                     /** @description Enforced: -180..180. */
                     lng: number;
                     description?: string | null;
+                    /** @description GoGo-owned postal address (GoGo-BE#280). Rules and evidence: see `cmsUpdatePlace`. */
                     addressText?: string | null;
+                    provenance?: components["schemas"]["PlaceContactProvenanceInput"];
                     areaKey?: string | null;
                     /** @description ADR-0016 legacy free text, kept for rows that carry it and read by the resolver as one piece of evidence. It is **not** the administrative identity and selects no code — send `provinceCode`/`communeCode` for that. */
                     city?: string | null;
@@ -14256,6 +14333,8 @@ export interface operations {
                      *     The enum is short on purpose. `cmsResolvePlaceLink` also returns a rating and a review count, and neither may be applied: per GOGO_PRODUCT_DATA_ARCHITECTURE.md §2 canonical name/address/geo are GoGo-owned and persist, while Google rating/review/photo/hours are "No by default". The preview shows them so an editor can tell two branches of one chain apart, and nothing writes them.
                      *
                      *     Requires `googlePlaceId` when non-empty — provenance pointing at nothing is worse than no provenance.
+                     *
+                     *     **`addressText` is refused** (`400`, `code: google_not_independent`) since GoGo-BE#280: the address is GoGo-owned and the preview may not fill it. It stays in the enum only because removing a request enum value breaks `/v1` clients.
                      */
                     googleDerivedFields?: ("name" | "addressText" | "lat" | "lng")[];
                 };
@@ -14502,7 +14581,7 @@ export interface operations {
                     name?: string;
                     /** @description Enforced: at most 4000 characters. */
                     description?: string | null;
-                    /** @description Enforced: at most 400 characters. */
+                    /** @description GoGo-owned postal address (GoGo-BE#280). Enforced: trimmed, non-blank, at most 400 characters, plain text — control characters and angle brackets are refused; Unicode is kept as written. An address edit never moves the pin or changes the administrative codes. A non-null value needs `provenance.addressText`. */
                     addressText?: string | null;
                     /** @description Enforced: at most 64 characters. A key from `cmsListAreas` — the discovery area, not the postal address. Not validated against the catalog: rows predating it carry keys it does not list. */
                     areaKey?: string | null;
@@ -14526,10 +14605,11 @@ export interface operations {
                      *     A code is not an identity: 2,212 of the 3,321 current commune codes named a different unit before 2025-07-01, which is why every check here names the dataset version it was made against.
                      */
                     communeCode?: string | null;
-                    /** @description Normalized to E.164 on write (`0283 822 9999` → `+842838229999`). A bare subscriber number with neither a trunk `0` nor a country code is refused rather than assumed Vietnamese. */
+                    /** @description Normalized to E.164 on write (`0283 822 9999` → `+842838229999`). A bare subscriber number with neither a trunk `0` nor a country code is refused rather than assumed Vietnamese. Since GoGo-BE#280 the result must match `^\+[1-9][0-9]{7,14}$` (a country code never starts with 0), extensions and letters are refused, and a non-null value needs `provenance.phone`. A valid shape says nothing about whether the number answers. */
                     phone?: string | null;
-                    /** @description `http`/`https` only, host required. A bare host is upgraded to `https://`. Other schemes are refused — the value is rendered as an href in three clients. */
+                    /** @description `http`/`https` only, host required. A bare host is upgraded to `https://`. Other schemes are refused — the value is rendered as an href in three clients. Since GoGo-BE#280 the host must be a public DNS name — no credentials (`code: credentials`), IP literals, `localhost` or private suffixes — path, query and fragment are kept, and a non-null value needs `provenance.website`. GoGo never fetches the URL to check it. */
                     website?: string | null;
+                    provenance?: components["schemas"]["PlaceContactProvenanceInput"];
                     /** @description Enforced: -90..90. Moves the pin only together with `lng`. */
                     lat?: number;
                     /** @description Enforced: -180..180. Moves the pin only together with `lat`. */
@@ -14544,7 +14624,7 @@ export interface operations {
                     taxonomyIds?: string[];
                     /**
                      * Format: date-time
-                     * @description Optimistic concurrency: the `updatedAt` the form was loaded from. A mismatch is refused `409 PLACE_MODIFIED`, with the current value in `field_errors[0].message` so the client can show what it would have overwritten. Omitting it skips the check.
+                     * @description Optimistic concurrency: the `updatedAt` the form was loaded from. A mismatch is refused `409 PLACE_MODIFIED`, with the current value in `field_errors[0].message` so the client can show what it would have overwritten. The comparison is made under the row lock, so of two saves loaded from the same version exactly one commits. Omitting it skips the check — except for a request that writes or clears `addressText`, `phone` or `website` (GoGo-BE#280), which is refused `400 VALIDATION_FAILED` with `field: expectedUpdatedAt`, `code: required`.
                      */
                     expectedUpdatedAt?: string;
                 };

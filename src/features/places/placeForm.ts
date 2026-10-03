@@ -4,6 +4,15 @@ import { useLabel, useT } from '@/shared/i18n/i18n'
 import { PLACE_FIELD_LIMITS, placeFieldLimit } from '@/shared/api/cmsPlaceContract'
 import type { FieldError } from '@/shared/api/errors'
 import type { UpdatePlaceInput } from './api'
+import {
+  CONTACT_FIELDS,
+  evidenceIssues,
+  evidenceTarget,
+  toWireEvidence,
+  type ContactField,
+  type EvidenceDrafts,
+  type EvidenceProperty,
+} from './contactEvidence'
 
 const L = PLACE_FIELD_LIMITS
 
@@ -34,6 +43,14 @@ function optionalNumber(schema: z.ZodNumber) {
     }
     return value
   }, schema.optional())
+}
+
+function evidenceDraftSchema() {
+  return z.object({
+    sourceType: z.string(),
+    sourceReference: z.string(),
+    collectedAt: z.string(),
+  })
 }
 
 /**
@@ -75,6 +92,19 @@ const placeIdentityFields = z.object({
    */
   phone: z.string().max(L.phone.max).optional(),
   website: z.string().max(L.website.max).optional(),
+  /**
+   * GoGo-BE#280 — the source behind each contact value being written. Checked
+   * by `contactEvidenceIssues` rather than here, because whether a box needs
+   * evidence depends on the baseline (an untouched value needs none), which a
+   * static schema does not have.
+   */
+  evidence: z
+    .object({
+      addressText: evidenceDraftSchema(),
+      phone: evidenceDraftSchema(),
+      website: evidenceDraftSchema(),
+    })
+    .optional(),
   description: z.string().max(L.description.max).optional(),
   avgVisitMinutes: optionalNumber(
     z.number().int().min(L.avgVisitMinutes.min).max(L.avgVisitMinutes.max),
@@ -201,14 +231,20 @@ export function isIdentityField(field: string): field is PlaceIdentityField {
  * `(root)`) is still shown, because an error nobody renders is an editor
  * staring at a form that looks fine.
  */
+export type EvidencePath = `evidence.${ContactField}.${EvidenceProperty}`
+
 export function splitFieldErrors(fieldErrors: readonly FieldError[]): {
-  mapped: (FieldError & { field: PlaceIdentityField })[]
+  mapped: (FieldError & { field: PlaceIdentityField | EvidencePath })[]
   unmapped: FieldError[]
 } {
-  const mapped: (FieldError & { field: PlaceIdentityField })[] = []
+  const mapped: (FieldError & { field: PlaceIdentityField | EvidencePath })[] = []
   const unmapped: FieldError[] = []
   for (const error of fieldErrors) {
-    if (isIdentityField(error.field)) mapped.push({ ...error, field: error.field })
+    // GoGo-BE#280 — `provenance.phone.sourceReference` belongs to the evidence
+    // box the editor typed it in, not to an error list under the save bar.
+    const target = evidenceTarget(error.field)
+    if (target) mapped.push({ ...error, field: `evidence.${target.field}.${target.property}` })
+    else if (isIdentityField(error.field)) mapped.push({ ...error, field: error.field })
     else unmapped.push(error)
   }
   return { mapped, unmapped }
@@ -309,6 +345,17 @@ export function toPlaceEditBody(
   text('phone')
   text('website')
 
+  /*
+   * GoGo-BE#280 — a contact value that is being written carries its evidence.
+   * Only then: a clear (`null`) takes none (`not_allowed` otherwise), and an
+   * entry beside a field the body does not write is `value_missing`.
+   */
+  for (const field of writtenContactFields(values, baseline)) {
+    const evidence = values.evidence?.[field]
+    if (!evidence) continue
+    body.provenance = { ...body.provenance, [field]: toWireEvidence(evidence) }
+  }
+
   if (!baseline) {
     if (values.avgVisitMinutes !== undefined) body.avgVisitMinutes = values.avgVisitMinutes
   } else if (values.avgVisitMinutes !== baseline.values.avgVisitMinutes) {
@@ -333,6 +380,41 @@ export function toPlaceEditBody(
 
   return body
 }
+
+/**
+ * GoGo-BE#280 — the contact fields this save writes a non-empty value to,
+ * which are exactly the ones that need evidence. Same diff `toPlaceEditBody`
+ * makes: an unchanged value is not a write and is not asked to be re-proved.
+ */
+export function writtenContactFields(
+  values: PlaceIdentityForm,
+  baseline?: PlaceEditBaseline,
+): ContactField[] {
+  return CONTACT_FIELDS.filter((field) => {
+    const next = textOf(values[field])
+    if (next === '') return false
+    return !baseline || next !== textOf(baseline.values[field])
+  })
+}
+
+/** Local evidence check for every value this save writes, with form paths. */
+export function contactEvidenceIssues(
+  values: PlaceIdentityForm,
+  baseline?: PlaceEditBaseline,
+  now: Date = new Date(),
+): (FieldError & { field: EvidencePath })[] {
+  return splitFieldErrors(
+    writtenContactFields(values, baseline).flatMap((field) =>
+      evidenceIssues(
+        field,
+        values.evidence?.[field] ?? { sourceType: '', sourceReference: '', collectedAt: '' },
+        now,
+      ),
+    ),
+  ).mapped as (FieldError & { field: EvidencePath })[]
+}
+
+export type { EvidenceDrafts }
 
 /**
  * The fields whose current value differs from what the server now holds —
