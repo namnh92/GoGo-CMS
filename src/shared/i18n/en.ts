@@ -1230,6 +1230,11 @@ export const en: Partial<Record<MessageKey, string>> = {
   'placeEditor.websiteOpen': 'Open the stored website',
   'placeEditor.provenance': 'Where each field came from',
   'placeEditor.provenanceHint': 'Saving one field does not re-verify the place.',
+  'placeEditor.codeSourceHint':
+    'A code changed in this save is an assertion to the resolver — say how you know it (a visit, the venue’s papers…).',
+  'placeEditor.codeFromMapping': 'From the administrative mapping',
+  'placeEditor.codeFromMappingMeta': '{status} · method {method} · dataset {dataset}',
+  'placeEditor.codeNone': 'No code',
   'placeEditor.provenanceNone': 'No recorded origin',
   'placeEditor.providerStatus.line': 'Google reports: {status} · updated {date}',
   'placeEditor.providerStatus.active': 'Operating',

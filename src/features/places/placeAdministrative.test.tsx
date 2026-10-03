@@ -8,7 +8,7 @@ import { renderWithProviders, signInAs } from '@/shared/test/render'
 import { places } from '@/shared/test/fixtures'
 import PlaceEditorScreen from './placeEditor.view'
 import PlaceCreateScreen from './placeCreate.view'
-import { fillSources } from './placeCreate.testkit'
+import { fillSources, SOURCE_LABEL } from './placeCreate.testkit'
 
 /**
  * ADM-106 — the place forms speak the two administrative levels that exist.
@@ -88,10 +88,19 @@ describe('the address block on the place editor', () => {
 
     await pick(/Tỉnh \/ thành phố/, /Hà Nội/)
     await pick(/Phường \/ xã/, /Ba Đình/)
+    await fillSources(userEvent, ['provinceCode', 'communeCode'], 'Giấy phép kinh doanh')
     await save()
 
     await waitFor(() => expect(sent).toHaveLength(1))
-    expect(sent[0]).toMatchObject({ provinceCode: '01', communeCode: '00163' })
+    expect(sent[0]).toMatchObject({
+      provinceCode: '01',
+      communeCode: '00163',
+      // GoGo-BE#440 F-07 — each code asserted in this edit carries evidence.
+      sourceReferences: {
+        provinceCode: 'Giấy phép kinh doanh',
+        communeCode: 'Giấy phép kinh doanh',
+      },
+    })
     // Not the label, at either level. A code rebuilt from a name is a different
     // claim, and the server would validate it against the wrong unit.
     expect(JSON.stringify(sent[0])).not.toContain('Thành phố Hà Nội')
@@ -119,6 +128,90 @@ describe('the address block on the place editor', () => {
     await save()
     expect(await screen.findByText(/Chọn phường \/ xã/)).toBeInTheDocument()
     expect(sent).toHaveLength(0)
+  })
+})
+
+/**
+ * GoGo-BE#440 F-07 — a province or commune code sent non-null in an edit is an
+ * assertion to the resolver, and carries the editor's evidence. A code that is
+ * not sent (unchanged, or cleared) carries none: the server refuses a stray one.
+ */
+describe('code evidence on an edit', () => {
+  it('will not send a changed code without its source', async () => {
+    const sent = captureSave()
+    openEditor()
+    await screen.findByLabelText('Điện thoại')
+
+    await pick(/Tỉnh \/ thành phố/, /Hà Nội/)
+    await pick(/Phường \/ xã/, /Ba Đình/)
+    await save()
+
+    await waitFor(() =>
+      expect(screen.getByLabelText(SOURCE_LABEL.provinceCode)).toHaveAttribute(
+        'aria-invalid',
+        'true',
+      ),
+    )
+    expect(screen.getByLabelText(SOURCE_LABEL.communeCode)).toHaveAttribute('aria-invalid', 'true')
+    expect(sent).toHaveLength(0)
+  })
+
+  it('sends no source and no code when the codes did not change', async () => {
+    const sent = captureSave()
+    openEditor()
+    const phone = await screen.findByLabelText('Điện thoại')
+
+    expect(screen.queryByLabelText(SOURCE_LABEL.provinceCode)).not.toBeInTheDocument()
+    await userEvent.clear(phone)
+    await userEvent.type(phone, '0283822999')
+    await save()
+
+    await waitFor(() => expect(sent).toHaveLength(1))
+    expect(sent[0]).not.toHaveProperty('provinceCode')
+    expect(sent[0]).not.toHaveProperty('sourceReferences')
+  })
+
+  it('puts a per-key SOURCE_REFERENCE_INVALID on the code source box', async () => {
+    server.use(
+      http.patch('/v1/cms/places/:id', () =>
+        HttpResponse.json(
+          {
+            code: 'SOURCE_REFERENCE_INVALID',
+            message: 'm',
+            field_errors: [
+              { field: 'sourceReferences.provinceCode', code: 'too_long', message: 'too_long' },
+            ],
+            request_id: 'r',
+            retryable: false,
+          },
+          { status: 400 },
+        ),
+      ),
+    )
+    openEditor()
+    await screen.findByLabelText('Điện thoại')
+
+    await pick(/Tỉnh \/ thành phố/, /Hà Nội/)
+    await pick(/Phường \/ xã/, /Ba Đình/)
+    await fillSources(userEvent, ['provinceCode', 'communeCode'], 'Giấy phép kinh doanh')
+    await save()
+
+    expect(await screen.findByText('Nguồn tối đa 500 ký tự.')).toBeInTheDocument()
+    expect(screen.getByLabelText(SOURCE_LABEL.provinceCode)).toHaveAttribute('aria-invalid', 'true')
+  })
+
+  it('a code with no editorial row shows the mapping it came from, not "no origin"', async () => {
+    openEditor()
+    await screen.findByLabelText('Điện thoại')
+
+    // The fixture has no provenance row for the codes; they came from geometry.
+    const rows = screen.getAllByText('Theo ánh xạ hành chính')
+    expect(rows).toHaveLength(2)
+    expect(
+      screen.getAllByText(
+        'Máy khớp · phương pháp boundary_point_in_polygon · bộ dữ liệu v5.0.0+v2.4.1+7fac8c45+v5.0.0+r0',
+      ),
+    ).toHaveLength(2)
   })
 })
 

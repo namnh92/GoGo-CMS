@@ -42,6 +42,16 @@ function optionalNumber(schema: z.ZodNumber) {
 }
 
 /**
+ * One evidence box. Trimmed **before** the length check, the order GoGo-BE
+ * applies (review F-03): 500 characters of evidence inside a stray space is
+ * valid there and must be valid here. The message is an i18n key, so the
+ * editor never reads zod's English.
+ */
+function sourceReference() {
+  return z.string().trim().max(SOURCE_REFERENCE_MAX, 'placeCreate.source.tooLong').optional()
+}
+
+/**
  * Messages here are i18n keys, resolved by `usePlaceFieldError`. Limits come
  * from the contract mirror, so they cannot drift away from GoGo-BE silently.
  */
@@ -86,6 +96,14 @@ const placeIdentityFields = z.object({
   ),
   lat: optionalNumber(z.number().min(L.lat.min).max(L.lat.max)),
   lng: optionalNumber(z.number().min(L.lng.min).max(L.lng.max)),
+  /**
+   * GoGo-BE#440 F-07 — on an edit, a province or commune code sent non-null is
+   * an assertion to the resolver and carries the editor's evidence. Only these
+   * two keys exist on an edit; the create form widens this object.
+   */
+  sourceReferences: z
+    .object({ provinceCode: sourceReference(), communeCode: sourceReference() })
+    .default({}),
 })
 
 export const placeIdentitySchema = placeIdentityFields.superRefine((values, ctx) => {
@@ -121,16 +139,6 @@ export const placeIdentitySchema = placeIdentityFields.superRefine((values, ctx)
     message: 'placeEditor.error.coordinatePair',
   })
 })
-
-/**
- * One evidence box. Trimmed **before** the length check, the order GoGo-BE
- * applies (review F-03): 500 characters of evidence inside a stray space is
- * valid there and must be valid here. The message is an i18n key, so the
- * editor never reads zod's English.
- */
-function sourceReference() {
-  return z.string().trim().max(SOURCE_REFERENCE_MAX, 'placeCreate.source.tooLong').optional()
-}
 
 /**
  * GoGo-CMS#150 — the same fields, with the three a new row cannot do without.
@@ -478,7 +486,30 @@ export function toPlaceEditBody(
   if (!baseline || !sameIds(taxonomyIds, baseline.taxonomyIds)) body.taxonomyIds = taxonomyIds
   if (baseline) body.expectedUpdatedAt = baseline.updatedAt
 
+  /*
+   * GoGo-BE#440 F-07 — a reference for each code this body sends non-null, and
+   * none for a code that is absent, unchanged or cleared (`null`): the server
+   * refuses a reference for a code it was not sent (`unused`). An empty string
+   * here is a gap `missingCodeSources` reports before anything is sent.
+   */
+  const refs: Partial<Record<CodeSourceKey, string>> = {}
+  for (const key of CODE_SOURCE_KEYS) {
+    if (typeof body[key] === 'string') refs[key] = textOf(values.sourceReferences?.[key])
+  }
+  if (Object.keys(refs).length > 0) body.sourceReferences = refs
+
   return body
+}
+
+/** The only `sourceReferences` keys an edit accepts (GoGo-BE#440 F-07). */
+export const CODE_SOURCE_KEYS = ['provinceCode', 'communeCode'] as const
+export type CodeSourceKey = (typeof CODE_SOURCE_KEYS)[number]
+
+/** Codes the edit body sends without the evidence the server requires. */
+export function missingCodeSources(body: UpdatePlaceInput): CodeSourceKey[] {
+  return CODE_SOURCE_KEYS.filter(
+    (key) => typeof body[key] === 'string' && !body.sourceReferences?.[key],
+  )
 }
 
 /**

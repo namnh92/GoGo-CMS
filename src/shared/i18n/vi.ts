@@ -1280,6 +1280,11 @@ export const vi = {
   'placeEditor.websiteOpen': 'Mở website đang lưu',
   'placeEditor.provenance': 'Nguồn của từng trường',
   'placeEditor.provenanceHint': 'Lưu một trường không có nghĩa là đã xác minh lại cả địa điểm.',
+  'placeEditor.codeSourceHint':
+    'Mã đổi ở lần lưu này là một khẳng định với bộ phân giải — ghi bạn biết nó từ đâu (đến tận nơi, giấy tờ của quán…).',
+  'placeEditor.codeFromMapping': 'Theo ánh xạ hành chính',
+  'placeEditor.codeFromMappingMeta': '{status} · phương pháp {method} · bộ dữ liệu {dataset}',
+  'placeEditor.codeNone': 'Chưa có mã',
   'placeEditor.provenanceNone': 'Chưa ghi nhận nguồn',
   'placeEditor.provenanceVerified': 'xác minh {time}',
   'placeEditor.provenanceUnverified': 'chưa có mốc xác minh',

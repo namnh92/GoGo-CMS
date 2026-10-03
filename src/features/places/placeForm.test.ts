@@ -5,6 +5,7 @@ import {
   diffAgainstServer,
   placeCreateSchema,
   placeIdentitySchema,
+  missingCodeSources,
   suppliedFacts,
   toPlaceCreateBody,
   splitFieldErrors,
@@ -312,5 +313,54 @@ describe('error envelope candidate (GoGo-BE#440)', () => {
     expect(parsed.code).toBe('PLACE_DUPLICATE_SUSPECTED')
     expect(parsed.field_errors[0]!.message).toBe('Quán Cũ (12m)')
     expect(parsed.field_errors[0]!.candidate).toBeUndefined()
+  })
+})
+
+/**
+ * GoGo-BE#440 F-07 — the edit body carries a reference for each province /
+ * commune code it sends non-null, and none for an absent, unchanged or cleared
+ * code.
+ */
+describe('toPlaceEditBody code evidence', () => {
+  const before = placeIdentitySchema.parse({
+    name: 'Quán',
+    provinceCode: '79',
+    communeCode: '26734',
+  })
+  const baseline: PlaceEditBaseline = { values: before, taxonomyIds: [], updatedAt: 't' }
+
+  it('sends a reference for each changed code', () => {
+    const body = toPlaceEditBody(
+      {
+        ...before,
+        provinceCode: '01',
+        communeCode: '00163',
+        sourceReferences: { provinceCode: ' Giấy phép ', communeCode: 'Giấy phép' },
+      },
+      [],
+      baseline,
+    )
+    expect(body.sourceReferences).toEqual({ provinceCode: 'Giấy phép', communeCode: 'Giấy phép' })
+  })
+
+  it('sends none for unchanged or cleared codes', () => {
+    const unchanged = toPlaceEditBody(
+      { ...before, sourceReferences: { provinceCode: 'stale' } },
+      [],
+      baseline,
+    )
+    expect(unchanged).not.toHaveProperty('sourceReferences')
+    const cleared = toPlaceEditBody(
+      { ...before, provinceCode: '', communeCode: '', sourceReferences: { provinceCode: 'x' } },
+      [],
+      baseline,
+    )
+    expect(cleared).toMatchObject({ provinceCode: null, communeCode: null })
+    expect(cleared).not.toHaveProperty('sourceReferences')
+  })
+
+  it('reports a changed code sent without evidence', () => {
+    const body = toPlaceEditBody({ ...before, communeCode: '26737' }, [], baseline)
+    expect(missingCodeSources(body)).toEqual(['communeCode'])
   })
 })

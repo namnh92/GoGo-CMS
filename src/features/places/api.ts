@@ -206,6 +206,12 @@ export type UpdatePlaceInput = {
   taxonomyIds?: string[]
   /** Optimistic concurrency; a mismatch answers `409 PLACE_MODIFIED`. */
   expectedUpdatedAt?: string
+  /**
+   * GoGo-BE#440 F-07 — evidence for each `provinceCode` / `communeCode` this
+   * edit sends non-null. Nothing else is accepted on an edit. On create the
+   * field is widened to every fact (`CreatePlaceInput`).
+   */
+  sourceReferences?: Partial<Record<SourceReferenceKey, string>>
 }
 
 export function updatePlace(id: string, input: UpdatePlaceInput) {

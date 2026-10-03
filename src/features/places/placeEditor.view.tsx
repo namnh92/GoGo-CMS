@@ -29,6 +29,7 @@ import { TakedownDialog } from '@/features/emergency/takedownDialog.view'
 import { fetchTaxonomies } from '@/features/taxonomy/api'
 import type {
   CmsPlaceDetail,
+  PlaceAdministrativeSummary,
   PlaceProvenance,
   PlaceStatus,
   PriceUnit,
@@ -55,11 +56,14 @@ import { PlaceLocationPanel } from './placeLocation.view'
 import { PublishChecklist } from './publishChecklist.view'
 import { emptyWeek, parseWeek, weekFromServer, weekSignature, type WeekDraft } from './hoursModel'
 import {
+  CODE_SOURCE_KEYS,
   diffAgainstServer,
+  missingCodeSources,
   placeIdentitySchema,
   splitFieldErrors,
   toPlaceEditBody,
   usePlaceFieldError,
+  type CodeSourceKey,
   type PlaceEditBaseline,
   type PlaceIdentityForm,
   numberFieldRegister,
@@ -201,6 +205,13 @@ export default function PlaceEditorScreen() {
 
   /** ADM-106 — the commune list is fetched for whichever province is chosen. */
   const provinceCodeValue = useWatch({ control: form.control, name: 'provinceCode' }) ?? ''
+  const communeCodeValue = useWatch({ control: form.control, name: 'communeCode' }) ?? ''
+  /** F-07 — the codes this save would send non-null, so need a source box. */
+  const assertedCodes = CODE_SOURCE_KEYS.filter((key) => {
+    const now = (key === 'provinceCode' ? provinceCodeValue : communeCodeValue).trim()
+    const before = (identityBaseline?.values[key] ?? '').trim()
+    return now !== '' && now !== before
+  })
 
   const hoursDirty = useMemo(
     () => hoursBaseline !== null && weekSignature(week) !== hoursBaseline,
@@ -255,6 +266,9 @@ export default function PlaceEditorScreen() {
         avgVisitMinutes: detail.avgVisitMinutes ?? undefined,
         lat: detail.lat ?? undefined,
         lng: detail.lng ?? undefined,
+        // Evidence is per edit: it belongs to a code being asserted now, never
+        // carried over from a previous save.
+        sourceReferences: {},
       }
       identityAppliedRef.current = `${detail.id}:${detail.updatedAt}`
       reset(values)
@@ -321,7 +335,10 @@ export default function PlaceEditorScreen() {
       values: PlaceIdentityForm
       baseline: PlaceEditBaseline
     }) => updatePlace(id, toPlaceEditBody(values, taxonomyIds, baseline)),
-    onSuccess: (result, { values, baseline }) => {
+    onSuccess: (result, { values: sent, baseline }) => {
+      // The evidence went with the assertion it was given for (F-07); the next
+      // code change asks again rather than reusing it.
+      const values = { ...sent, sourceReferences: {} }
       setIdentityError(null)
       setConflict(null)
       setIdentitySavedAt(new Date().toISOString())
@@ -362,7 +379,29 @@ export default function PlaceEditorScreen() {
         toast.error(describeError(apiError), apiError.requestId || undefined)
         return
       }
-      const { mapped, unmapped } = splitFieldErrors(apiError.fieldErrors)
+      /*
+       * GoGo-BE#440 F-07 — `sourceReferences.provinceCode|communeCode` land on
+       * the source box beside the code. `unused` / `unknown` are a console bug,
+       * not the editor's, and keep the generic sentence.
+       */
+      const codeIssues = apiError.fieldErrors.filter((issue) =>
+        CODE_SOURCE_KEYS.some((key) => issue.field === `sourceReferences.${key}`),
+      )
+      for (const issue of codeIssues) {
+        const key = issue.field.slice('sourceReferences.'.length) as CodeSourceKey
+        setError(`sourceReferences.${key}`, {
+          type: issue.code,
+          message:
+            issue.code === 'required'
+              ? 'placeCreate.source.required'
+              : issue.code === 'too_long'
+                ? 'placeCreate.source.tooLong'
+                : 'placeCreate.source.invalid',
+        })
+      }
+      const { mapped, unmapped } = splitFieldErrors(
+        apiError.fieldErrors.filter((issue) => !codeIssues.includes(issue)),
+      )
       // Every rejected field lands back on its own control; the first one takes
       // focus, so the fix starts where the problem is.
       mapped.forEach((fieldError, index) =>
@@ -477,6 +516,15 @@ export default function PlaceEditorScreen() {
   })
 
   /** Vietnamese text for a field the form — or the server — rejected. */
+  const codeSourceError = (key: CodeSourceKey): string | undefined => {
+    const error = errors.sourceReferences?.[key]
+    if (!error) return undefined
+    return describeField(`sourceReferences.${key}`, {
+      code: String(error.type ?? ''),
+      message: String(error.message ?? ''),
+    })
+  }
+
   const fieldError = (name: keyof PlaceIdentityForm): string | undefined => {
     const error = errors[name]
     if (!error) return undefined
@@ -552,18 +600,32 @@ export default function PlaceEditorScreen() {
         >
           {(detail) => (
             <form
+              // The schema owns validation (as on the create form): a native
+              // `required` popup would pre-empt the sentences it writes.
+              noValidate
               onSubmit={handleSubmit((values) => {
                 setIdentityError(null)
-                saveIdentity.mutate({
+                // Never absent in practice: the form only renders once the
+                // detail has loaded, and that is what sets the baseline.
+                const baseline = identityBaseline ?? {
                   values,
-                  // Never absent in practice: the form only renders once the
-                  // detail has loaded, and that is what sets the baseline.
-                  baseline: identityBaseline ?? {
-                    values,
-                    taxonomyIds,
-                    updatedAt: detail.updatedAt,
-                  },
-                })
+                  taxonomyIds,
+                  updatedAt: detail.updatedAt,
+                }
+                // F-07 — a code sent without evidence is refused by the server;
+                // say so beside the code instead of after a round trip.
+                const gaps = missingCodeSources(toPlaceEditBody(values, taxonomyIds, baseline))
+                if (gaps.length > 0) {
+                  gaps.forEach((key, index) =>
+                    setError(
+                      `sourceReferences.${key}`,
+                      { type: 'required', message: 'placeCreate.source.required' },
+                      { shouldFocus: index === 0 },
+                    ),
+                  )
+                  return
+                }
+                saveIdentity.mutate({ values, baseline })
               })}
             >
               <div className={styles.grid}>
@@ -823,6 +885,24 @@ export default function PlaceEditorScreen() {
                           )}
                         />
                       </div>
+                      {/*
+                        GoGo-BE#440 F-07 — a code this save will assert needs the
+                        editor's evidence. Shown only for a code that changed to
+                        a value; an unchanged or cleared code sends none.
+                      */}
+                      {CODE_SOURCE_KEYS.map((key) =>
+                        assertedCodes.includes(key) ? (
+                          <TextInput
+                            key={key}
+                            label={t(`placeCreate.source.${key}` as const)}
+                            required
+                            hint={t('placeEditor.codeSourceHint')}
+                            disabled={!canWrite}
+                            error={codeSourceError(key)}
+                            {...register(`sourceReferences.${key}`)}
+                          />
+                        ) : null,
+                      )}
                       <AdministrativeSummary
                         summary={place?.administrative ?? null}
                         placeId={place?.id ?? null}
@@ -870,7 +950,10 @@ export default function PlaceEditorScreen() {
                           ) : null}
                         </div>
                       </div>
-                      <ProvenanceList provenance={detail.provenance} />
+                      <ProvenanceList
+                        provenance={detail.provenance}
+                        administrative={detail.administrative ?? null}
+                      />
                     </CardBody>
                   </Card>
 
@@ -1352,7 +1435,13 @@ function SaveErrorPanel({ title, error }: { title: string; error: BlockError }) 
  * `google_derived` is not `provider` — applying a value from a preview copies
  * it, it does not transfer ownership of it.
  */
-function ProvenanceList({ provenance }: { provenance: Record<string, PlaceProvenance> }) {
+function ProvenanceList({
+  provenance,
+  administrative,
+}: {
+  provenance: Record<string, PlaceProvenance>
+  administrative: PlaceAdministrativeSummary | null
+}) {
   const t = useT()
   const label = useLabel()
   const { locale } = useI18n()
@@ -1383,6 +1472,52 @@ function ProvenanceList({ provenance }: { provenance: Record<string, PlaceProven
                   </>
                 ) : (
                   <span className={styles.provenanceEmpty}>{t('placeEditor.provenanceNone')}</span>
+                )}
+              </dd>
+            </div>
+          )
+        })}
+        {/*
+          GoGo-BE#440 F-07 — a code row means an editor's assertion the
+          resolver adopted. Its absence does not mean "no origin": a code from
+          geometry or from a reviewer carries its provenance in the mapping
+          (method, dataset). Saying "no recorded origin" there would be false.
+        */}
+        {CODE_SOURCE_KEYS.map((key) => {
+          const row = provenance[key]
+          const code =
+            key === 'provinceCode' ? administrative?.provinceCode : administrative?.communeCode
+          return (
+            <div key={key} className={styles.provenanceRow}>
+              <dt className={styles.factLabel}>
+                {t(key === 'provinceCode' ? 'placeEditor.province' : 'placeEditor.commune')}
+              </dt>
+              <dd className={styles.provenanceValue}>
+                {row ? (
+                  <>
+                    {label(`fieldSource.${row.sourceType}`, row.sourceType)}
+                    <span className={styles.provenanceMeta}>
+                      {row.verifiedAt
+                        ? t('placeEditor.provenanceVerified', {
+                            time: formatDateTime(row.verifiedAt, locale),
+                          })
+                        : t('placeEditor.provenanceUnverified')}
+                      {row.sourceReference ? ` · ${row.sourceReference}` : ''}
+                    </span>
+                  </>
+                ) : code && administrative ? (
+                  <>
+                    {t('placeEditor.codeFromMapping')}
+                    <span className={styles.provenanceMeta}>
+                      {t('placeEditor.codeFromMappingMeta', {
+                        status: t(`mapping.status.${administrative.status}` as const),
+                        method: administrative.method ?? '—',
+                        dataset: administrative.datasetVersion ?? '—',
+                      })}
+                    </span>
+                  </>
+                ) : (
+                  <span className={styles.provenanceEmpty}>{t('placeEditor.codeNone')}</span>
                 )}
               </dd>
             </div>
