@@ -1227,7 +1227,7 @@ export const en: Partial<Record<MessageKey, string>> = {
   'contactEvidence.type.provider': 'Permitted dataset (not Google)',
   'contactEvidence.sourceReference': 'Source reference',
   'contactEvidence.sourceReferenceHint':
-    'Name the origin, e.g. “Called the owner on 1 Oct”, the official website URL. A job or sheet id is not a source.',
+    'Put the origin first, e.g. “Called the owner on 30 Sep” or the whole official website URL (chaoban.vn/contact). Do not start with job / sheet / tab / row, and do not give a bare id or A1 cell.',
   'contactEvidence.collectedAt': 'Collected at',
   'contactEvidence.error.required': 'Required to save this value',
   'contactEvidence.error.too_long': 'At most 500 characters',
@@ -1236,7 +1236,7 @@ export const en: Partial<Record<MessageKey, string>> = {
   'contactEvidence.error.google_not_independent':
     'Google is not an independent source — name the real origin',
   'contactEvidence.error.transport_only':
-    'A job / sheet / row id only names transport — say who stated it',
+    'That names transport (job / sheet / tab / row, a bare id or A1 cell), not a source — put the origin first',
   'contactEvidence.error.invalid': 'Invalid value',
   'contactEvidence.error.not_allowed': 'A cleared value takes no source',
   'contactEvidence.error.value_missing': 'Source given without a value',

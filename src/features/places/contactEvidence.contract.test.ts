@@ -133,3 +133,60 @@ describe('import mapping vs the GoGo-BE#280 contract', () => {
     }
   })
 })
+
+describe('MSW mirror of the GoGo-BE#280 transport rule (Astra accept/refuse table)', () => {
+  const NOW = new Date('2026-10-02T10:00:00Z')
+  const codeFor = (sourceReference: string) =>
+    mockContactWriteIssues(
+      {
+        phone: '+842838229999',
+        provenance: {
+          phone: { sourceType: 'editorial', sourceReference, collectedAt: '2026-09-30T02:00:00Z' },
+        },
+      },
+      null,
+      undefined,
+      NOW,
+    ).issues.find((issue) => issue.field === 'provenance.phone.sourceReference')?.code
+
+  it.each([
+    'pho24.vn',
+    'pho24.vn/lien-he#2',
+    'https://chaoban.vn/lien-he#2',
+    'http://chaoban.vn/menu?page=2#12',
+    'job.vn',
+    'Gọi điện chủ quán 2026-09-30',
+    'OSM',
+    'Thực đơn in tại quán (row of photos on the wall)',
+    // Documented detection gaps: accepted syntactically, not adequate evidence.
+    'Bảng Quận 1',
+    '123, row 4',
+  ])('accepts %s', (reference) => expect(codeFor(reference)).toBeUndefined())
+
+  it.each([
+    'job 123',
+    'Sheet1!B7',
+    "'HCM'!A2:C9",
+    'row 42',
+    'R12',
+    'HCM#12',
+    'job 123, row 4',
+    'Import job 77 / Sheet HCM',
+    'sheet HCM row 12',
+    'Job #4521 - Sheet1!B7',
+    'Tab Quận 1',
+    'TAB QUẬN 1',
+    '12345',
+    '7f3c2a10-1b2c-4d5e-8f90-123456789abc',
+    // Accepted conservative false positives: put the origin first.
+    'job 123; gọi chủ quán',
+    'Job Café merchant statement',
+  ])('refuses %s as transport_only', (reference) =>
+    expect(codeFor(reference)).toBe('transport_only'),
+  )
+
+  it.each(['https://maps.app.goo.gl/abc', 'ChIJN1t_tDeuEmsRUsoyG83frY4'])(
+    'refuses %s as Google before the website exemption',
+    (reference) => expect(codeFor(reference)).toBe('google_not_independent'),
+  )
+})

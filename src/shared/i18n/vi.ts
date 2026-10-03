@@ -1271,7 +1271,7 @@ export const vi = {
   'contactEvidence.type.provider': 'Bộ dữ liệu được phép (không phải Google)',
   'contactEvidence.sourceReference': 'Tham chiếu nguồn',
   'contactEvidence.sourceReferenceHint':
-    'Ghi nguồn gốc, ví dụ “Gọi chủ quán ngày 01/10”, URL website chính thức. Mã job / sheet không phải nguồn.',
+    'Ghi nguồn gốc trước tiên, ví dụ “Gọi chủ quán ngày 30/09” hoặc nguyên URL website chính thức (chaoban.vn/lien-he). Không bắt đầu bằng job / sheet / tab / dòng, không ghi mã trơn hay ô A1.',
   'contactEvidence.collectedAt': 'Thu thập lúc',
   'contactEvidence.error.required': 'Bắt buộc khi lưu giá trị này',
   'contactEvidence.error.too_long': 'Tối đa 500 ký tự',
@@ -1280,7 +1280,7 @@ export const vi = {
   'contactEvidence.error.google_not_independent':
     'Google không phải nguồn độc lập — ghi nguồn gốc thật',
   'contactEvidence.error.transport_only':
-    'Mã job / sheet / dòng chỉ là đường truyền — ghi rõ ai cung cấp',
+    'Đây là đường truyền (job / sheet / tab / dòng, mã trơn hoặc ô A1), không phải nguồn — ghi nguồn gốc trước tiên',
   'contactEvidence.error.invalid': 'Giá trị không hợp lệ',
   'contactEvidence.error.not_allowed': 'Xoá giá trị thì không kèm nguồn',
   'contactEvidence.error.value_missing': 'Có nguồn nhưng thiếu giá trị',

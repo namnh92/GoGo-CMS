@@ -6989,7 +6989,17 @@ export interface components {
         PlaceContactEvidence: {
             /** @description `editorial` (a merchant statement, the official website, a field visit), `community` (a contributor's own report) or `provider` (a permitted, non-Google dataset). `google_derived` is refused with code `google_not_independent`: copying, retyping or confirming Google content does not make it GoGo's. */
             sourceType?: string;
-            /** @description Enforced: trimmed, 1..500 characters, no control characters. Names the non-Google origin — a phone call with the owner, the official URL, a visit, a dataset release. A Google Maps link, share link, Place ID or "Google" is refused `google_not_independent`. A sheet or job id alone names transport, not origin. CMS-only; never public. */
+            /**
+             * @description Enforced: trimmed, 1..500 characters, no control characters. Names the non-Google origin — a phone call with the owner, the official URL, a visit, a dataset release. CMS-only; never public. Checked in this order (ADR-0027 §Transport guard):
+             *
+             *     1. A Google Maps link, share link, Place ID or "Google" is refused `google_not_independent`.
+             *     2. A reference that is, as a whole, a website (`pho24.vn`, `https://chaoban.vn/lien-he#2`) is accepted as an origin — the shape only; GoGo does not fetch it.
+             *     3. A reference that **starts with** a transport keyword (`job`, `jobs`, `sheet`, `sheets`, `tab`, `row`, `rows`, `dòng`, `dong`, `cột`, `cot`, `col`, `column`, `cell`, `import`, `batch`, `file`, `upload`, `csv`, `xlsx`, `spreadsheet`, `id`, `r`; case-insensitive) followed by nothing or a non-letter is refused `transport_only`, whatever follows: `job 123`, `Sheet1!B7`, `Tab Quận 1`, `R12`.
+             *     4. A reference that is only an identifier is refused `transport_only`: a decimal number, a UUID, an A1 cell or range with an optional `label!` (`'HCM'!A2:C9`), or `label#digits` (`HCM#12`).
+             *
+             *     This is a bounded lexical guard, not a classifier. Put the origin first — `job 123; gọi chủ quán` is refused. Passing it (`Bảng Quận 1`, `123, row 4`) does not make a reference adequate evidence; that remains an editorial assertion.
+             * @example Gọi điện chủ quán ngày 2026-09-30
+             */
             sourceReference?: string;
             /**
              * Format: date-time

@@ -218,6 +218,77 @@ const INDEPENDENT_SOURCE_TYPES = ['editorial', 'community', 'provider']
 const GOOGLE_REFERENCE =
   /google\.|goo\.gl|g\.page|g\.co\/|\bChIJ[\w-]{8,}|\bGhIJ[\w-]{8,}|\bgoogle\b/i
 
+/*
+ * GoGo-BE#280 transport rule (Astra decision, BE `isTransportReference`),
+ * mirrored for the MOCK only — production code never classifies a reference;
+ * GoGo-BE decides and the console renders its `transport_only`.
+ */
+const TRANSPORT_KEYWORDS = [
+  'job',
+  'jobs',
+  'sheet',
+  'sheets',
+  'tab',
+  'row',
+  'rows',
+  'dòng',
+  'dong',
+  'cột',
+  'cot',
+  'col',
+  'column',
+  'cell',
+  'import',
+  'batch',
+  'file',
+  'upload',
+  'csv',
+  'xlsx',
+  'spreadsheet',
+  'id',
+  'r',
+]
+const STANDALONE_IDENTIFIERS = [
+  /^[0-9]+$/,
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+  /^(?:[^!]+!)?\$?[A-Za-z]{1,3}\$?[1-9][0-9]*(?::\$?[A-Za-z]{1,3}\$?[1-9][0-9]*)?$/,
+  /^[^#]+#[0-9]+$/,
+]
+
+/** A whole reference shaped like a public http(s) website — BE `normalizeWebsite().ok`. */
+function looksLikeWebsite(reference: string): boolean {
+  const candidate = /^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(reference) ? reference : `https://${reference}`
+  try {
+    const url = new URL(candidate)
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return false
+    if (url.username !== '' || url.password !== '') return false
+    const host = url.hostname
+    if (
+      !host.includes('.') ||
+      host === 'localhost' ||
+      /^[\d.]+$/.test(host) ||
+      host.startsWith('[')
+    )
+      return false
+    return /^[a-z0-9.-]+$/i.test(host) && url.href.length <= 500
+  } catch {
+    return false
+  }
+}
+
+export function mockIsTransportReference(reference: string): boolean {
+  const ref = reference.trim()
+  if (ref === '' || looksLikeWebsite(ref)) return false
+  const lower = ref.normalize('NFC').toLocaleLowerCase('vi')
+  for (const keyword of TRANSPORT_KEYWORDS) {
+    if (!lower.startsWith(keyword)) continue
+    const rest = lower.slice(keyword.length)
+    const next = rest === '' ? '' : String.fromCodePoint(rest.codePointAt(0)!)
+    if (next === '' || !/\p{L}/u.test(next)) return true
+  }
+  return STANDALONE_IDENTIFIERS.some((pattern) => pattern.test(ref))
+}
+
 function mockEvidenceIssues(
   evidence: ContactEvidenceBody,
   path: string,
@@ -258,6 +329,12 @@ function mockEvidenceIssues(
       field: `${path}.sourceReference`,
       code: 'google_not_independent',
       message: 'Tham chiếu Google không phải nguồn độc lập',
+    })
+  else if (mockIsTransportReference(reference))
+    issues.push({
+      field: `${path}.sourceReference`,
+      code: 'transport_only',
+      message: 'Mã job / sheet / dòng chỉ là đường truyền, không phải nguồn — ghi rõ nguồn gốc',
     })
   if (collected === '')
     issues.push({
