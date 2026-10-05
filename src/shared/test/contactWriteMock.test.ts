@@ -16,14 +16,14 @@ const EVIDENCE = {
   collectedAt: '2026-09-30T09:00:00+07:00',
 }
 
-const api = (path: string, init: { method: string; body: unknown; key?: boolean }) =>
+const api = (path: string, init: { method: string; body?: unknown; key?: boolean }) =>
   fetch(new URL(`/v1${path}`, window.location.origin), {
     method: init.method,
     headers: {
       'content-type': 'application/json',
       ...(init.key ? { 'Idempotency-Key': `test-key-${Math.random().toString(16).slice(2)}` } : {}),
     },
-    body: JSON.stringify(init.body),
+    ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
   })
 
 const createBody = (extra: Record<string, unknown>) => ({
@@ -49,12 +49,93 @@ describe('F-01 — the mock create persists the request, normalised', () => {
     // Nothing inherited from the seed row the mock copies its shape from.
     expect(created.website).toBeNull()
     expect(created.addressText).toBeNull()
-    expect(Object.keys(created.provenance as object)).toEqual(['phone'])
+    // The two references this create made, and the one contact claim: no
+    // seed-row origin, and no claim for a contact the body did not send.
+    expect(Object.keys(created.provenance as object).sort()).toEqual(['geom', 'name', 'phone'])
     expect((created.provenance as Record<string, unknown>).phone).toMatchObject({
       sourceType: 'editorial',
       sourceReference: 'Gọi chủ quán ngày 30/09',
       collectedAt: '2026-09-30T02:00:00.000Z',
       ownership: 'gogo',
+    })
+  })
+
+  /*
+   * Fable F-01 (CMS#228 @af0c2ef) — GoGo-BE `createPlace` writes an
+   * `editorial` provenance row for every accepted `sourceReferences` entry
+   * (`claimed` → `place_field_provenance`) and then the contact claims
+   * (`writeContactProvenance`); the detail reads all of them back under the
+   * API field name. The mock used to answer provenance for the contact claims
+   * only, so a console reading `provenance.name` after a create saw nothing.
+   */
+  it('reads back an editorial claim per source reference beside the contact claim', async () => {
+    const response = await api('/cms/places', {
+      method: 'POST',
+      key: true,
+      body: createBody({ phone: '028 3822 9999', provenance: { phone: EVIDENCE } }),
+    })
+    expect(response.status).toBe(201)
+    const { id } = (await response.json()) as { id: string }
+
+    const read = await api(`/cms/places/${id}`, { method: 'GET' })
+    expect(read.status).toBe(200)
+    const { provenance } = (await read.json()) as { provenance: Record<string, unknown> }
+    expect(Object.keys(provenance).sort()).toEqual(['geom', 'name', 'phone'])
+    // A reference is an assertion: `editorial`, verified at the write, no
+    // collection time and — outside the contact columns — no `ownership`.
+    expect(provenance.name).toEqual({
+      sourceType: 'editorial',
+      sourceReference: 'Đến tận nơi',
+      verifiedAt: expect.any(String),
+      collectedAt: null,
+    })
+    expect(provenance.geom).toEqual({
+      sourceType: 'editorial',
+      sourceReference: 'Đo tại chỗ',
+      verifiedAt: expect.any(String),
+      collectedAt: null,
+    })
+    expect(provenance.phone).toEqual({
+      sourceType: 'editorial',
+      sourceReference: 'Gọi chủ quán ngày 30/09',
+      collectedAt: '2026-09-30T02:00:00.000Z',
+      verifiedAt: expect.any(String),
+      ownership: 'gogo',
+    })
+  })
+
+  it('claims every supplied fact its reference names, codes included', async () => {
+    const response = await api('/cms/places', {
+      method: 'POST',
+      key: true,
+      body: createBody({
+        description: 'Quán nhỏ trong hẻm',
+        taxonomyIds: ['tx-cat-cafe'],
+        provinceCode: '01',
+        communeCode: '00004',
+        sourceReferences: {
+          name: 'Đến tận nơi',
+          geom: 'Đo tại chỗ',
+          description: 'Ghi nhận tại chỗ',
+          taxonomyIds: 'Quan sát tại quán',
+          provinceCode: 'Biển số nhà',
+          communeCode: 'Biển số nhà',
+        },
+      }),
+    })
+    expect(response.status).toBe(201)
+    const { provenance } = (await response.json()) as { provenance: Record<string, unknown> }
+    expect(Object.keys(provenance).sort()).toEqual([
+      'communeCode',
+      'description',
+      'geom',
+      'name',
+      'provinceCode',
+      'taxonomyIds',
+    ])
+    expect(provenance.taxonomyIds).toMatchObject({
+      sourceType: 'editorial',
+      sourceReference: 'Quan sát tại quán',
     })
   })
 

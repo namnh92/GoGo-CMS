@@ -1062,6 +1062,24 @@ export const importJobs: ImportJob[] = [
   },
 ]
 
+/**
+ * GoGo-BE#280 — what a row parsed after #280 carries for its `address`:
+ * `normalized.contactEvidence.address_text`, the sheet's
+ * `address_source_type` / `_source_reference` / `_collected_at` cells
+ * normalised. A decision on a row (confirm, merge, publish) re-checks this
+ * against today's rules, so every row below that is meant to stay actionable
+ * carries it. `row-14` deliberately does not: it is the legacy row.
+ */
+const ADDRESS_EVIDENCE = {
+  contactEvidence: {
+    address_text: {
+      sourceType: 'editorial',
+      sourceReference: 'Khảo sát thực địa ngày 30/09',
+      collectedAt: '2026-09-30T02:00:00.000Z',
+    },
+  },
+}
+
 export const importRows: Record<string, ImportRow[]> = {
   [importJobs[0]!.id]: [
     {
@@ -1074,6 +1092,7 @@ export const importRows: Record<string, ImportRow[]> = {
         address: '120 Nguyễn Thị Minh Khai',
         city: 'Hồ Chí Minh',
         category: 'cafe',
+        ...ADDRESS_EVIDENCE,
       },
       resolvedGooglePlaceId: null,
       matchedPlaceId: null,
@@ -1127,6 +1146,7 @@ export const importRows: Record<string, ImportRow[]> = {
         name: 'The Coffee House Cao Thắng',
         address: '86 Cao Thắng',
         city: 'Hồ Chí Minh',
+        ...ADDRESS_EVIDENCE,
       },
       resolvedGooglePlaceId: 'ChIJ_tch_caothang',
       matchedPlaceId: null,
@@ -1160,6 +1180,13 @@ export const importRows: Record<string, ImportRow[]> = {
       rowNumber: 14,
       sourceRowId: '14',
       status: 'duplicate',
+      /*
+       * GoGo-BE#280 — parsed before #280: an address with no
+       * `contactEvidence`. The merge the screen offers for it is refused
+       * `409 CONTACT_EVIDENCE_REQUIRED` and the row becomes
+       * `validation_failed`, which is the case `rowDecisionEvidence.test.tsx`
+       * and the import e2e drive.
+       */
       normalized: {
         name: 'Chào Bạn Cafe',
         address: '126 Nguyễn Thị Minh Khai',
@@ -1232,7 +1259,7 @@ export const importRows: Record<string, ImportRow[]> = {
       rowNumber: 17,
       sourceRowId: '17',
       status: 'ready',
-      normalized: { name: 'Quán Bên Sông', address: 'Km 12 QL1A' },
+      normalized: { name: 'Quán Bên Sông', address: 'Km 12 QL1A', ...ADDRESS_EVIDENCE },
       resolvedGooglePlaceId: 'ChIJ_ben_song',
       matchedPlaceId: null,
       matchedPlaceName: null,
@@ -1264,7 +1291,7 @@ export const importRows: Record<string, ImportRow[]> = {
       rowNumber: 18,
       sourceRowId: '18',
       status: 'ready',
-      normalized: { name: 'Bánh Cuốn Bà Hoành', address: '66 Tô Hiến Thành' },
+      normalized: { name: 'Bánh Cuốn Bà Hoành', address: '66 Tô Hiến Thành', ...ADDRESS_EVIDENCE },
       resolvedGooglePlaceId: 'ChIJ_banh_cuon',
       matchedPlaceId: null,
       matchedPlaceName: null,

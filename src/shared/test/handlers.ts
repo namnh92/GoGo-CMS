@@ -12,6 +12,8 @@ import {
   mockContactWriteIssues,
   mockPlanContactWrite,
   mockStoredContactProvenance,
+  mockStoredEditorialProvenance,
+  mockStaleContactErrors,
   mockSourceReferenceIssues,
   CREATE_SOURCE_REFERENCE_KEYS,
   EDIT_SOURCE_REFERENCE_KEYS,
@@ -233,6 +235,10 @@ export const mockDb = {
   get submissionDetails(): Record<string, unknown> {
     return db.submissionDetails
   },
+  /** The stored import rows by job, so a test can age one (GoGo-BE#280 pre-evidence rows). */
+  get importRows(): Record<string, ImportRow[]> {
+    return db.rows
+  },
 }
 
 /**
@@ -270,6 +276,74 @@ function envelope(status: number, code: string, message: string) {
       retryable: status >= 500,
     },
     { status },
+  )
+}
+
+type MockImportJob = (typeof db.jobs)[number]
+
+/**
+ * GoGo-BE `refuseStaleContact` (DEV-F-12, BE#672 @cda3e2a) — fails the row
+ * with column-specific errors when its stored contact values do not pass
+ * today's rules, and moves the job's counters with it. `validation_failed`
+ * rows are not retried: the operator corrects the sheet and re-uploads.
+ * Returns whether the row was refused.
+ *
+ * `refreshCounters` recounts the job from its rows; the fixture job counts
+ * the 500 rows of a real sheet while the mock holds seven of them, so one
+ * row is moved between buckets rather than the whole job recounted.
+ */
+function mockRefuseStaleContact(job: MockImportJob, row: ImportRow): boolean {
+  const errors = mockStaleContactErrors(row.normalized)
+  if (errors.length === 0) return false
+  const previous = row.status
+  row.status = 'validation_failed'
+  row.errors = errors
+  if (previous !== 'validation_failed') {
+    job.rowsByStatus = {
+      ...job.rowsByStatus,
+      [previous]: Math.max(0, (job.rowsByStatus[previous] ?? 0) - 1),
+      validation_failed: (job.rowsByStatus.validation_failed ?? 0) + 1,
+    }
+    job.totals = {
+      ...job.totals,
+      processed:
+        previous === 'pending' || previous === 'resolving'
+          ? job.totals.processed + 1
+          : job.totals.processed,
+      success:
+        previous === 'ready' || previous === 'imported'
+          ? Math.max(0, job.totals.success - 1)
+          : job.totals.success,
+      failed: previous === 'failed' ? job.totals.failed : job.totals.failed + 1,
+    }
+  }
+  return true
+}
+
+/**
+ * GoGo-BE `assertContactCurrent` (SA-F-12) — the decision paths' form of
+ * `mockRefuseStaleContact`: the row is persisted `validation_failed` with its
+ * column errors, the counters move, and the request is refused
+ * `409 CONTACT_EVIDENCE_REQUIRED` carrying the same errors so the console can
+ * show them. `null` when the row's contacts are current.
+ */
+function mockAssertContactCurrent(jobId: string, row: ImportRow) {
+  const job = db.jobs.find((item) => item.id === jobId)
+  if (!job || !mockRefuseStaleContact(job, row)) return null
+  return HttpResponse.json(
+    {
+      code: 'CONTACT_EVIDENCE_REQUIRED',
+      message:
+        'Dòng có địa chỉ / điện thoại / website chưa đạt quy tắc nguồn — sửa sheet và tải lại',
+      field_errors: row.errors.map((e) => ({
+        field: e.field ?? 'contact',
+        code: e.code,
+        message: e.message ?? '',
+      })),
+      request_id: 'mock-contact_evidence_required',
+      retryable: false,
+    },
+    { status: 409 },
   )
 }
 
@@ -1581,6 +1655,18 @@ export const handlers = [
      * claims this create made.
      */
     const now = new Date().toISOString()
+    /*
+     * Fable F-01 (@af0c2ef) — GoGo-BE `createPlace` writes one `editorial`
+     * provenance row per accepted `sourceReferences` entry before
+     * `writeContactProvenance` adds the contact claims, so the read-back
+     * carries `name`, `geom`, `taxonomyIds`, … beside `phone`. The two codes
+     * are claims the resolver settles (`settleCodeClaims`): adopted — and so
+     * recorded — exactly when the mapping below stores them, which this mock
+     * always does for a supplied code.
+     */
+    const editorialProvenance = Object.fromEntries(
+      supplied.map((key) => [key, mockStoredEditorialProvenance(String(refs[key]), now)]),
+    )
     const created = {
       ...db.places[0]!,
       id: `created-${db.places.length + 1}`,
@@ -1592,12 +1678,15 @@ export const handlers = [
       phone: contact.plan.values.phone ?? null,
       website: contact.plan.values.website ?? null,
       description: (body.description as string | null | undefined) ?? null,
-      provenance: Object.fromEntries(
-        contact.plan.claims.map(({ field, evidence }) => [
-          field,
-          mockStoredContactProvenance(evidence, now),
-        ]),
-      ),
+      provenance: {
+        ...editorialProvenance,
+        ...Object.fromEntries(
+          contact.plan.claims.map(({ field, evidence }) => [
+            field,
+            mockStoredContactProvenance(evidence, now),
+          ]),
+        ),
+      },
       media: [],
       /*
        * ADM-016 — the server resolves the mapping inside the create
@@ -4026,6 +4115,9 @@ export const handlers = [
       const rows = db.rows[String(params.jobId)] ?? []
       const row = rows.find((item) => item.id === params.rowId)
       if (!row) return envelope(404, 'NOT_FOUND', 'row not found')
+      // SA-F-12 — the row's stored contacts are checked before the candidate.
+      const stale = mockAssertContactCurrent(String(params.jobId), row)
+      if (stale) return stale
       const body = (await request.json()) as { googlePlaceId: string }
       if (!row.candidates.some((candidate) => candidate.googlePlaceId === body.googlePlaceId)) {
         return envelope(400, 'CANDIDATE_NOT_LISTED', 'candidate was not surfaced for this row')
@@ -4041,6 +4133,9 @@ export const handlers = [
     const rows = db.rows[String(params.jobId)] ?? []
     const row = rows.find((item) => item.id === params.rowId)
     if (!row) return envelope(404, 'NOT_FOUND', 'row not found')
+    // SA-F-12 — merging reports the row `imported`; a stale row must not get there.
+    const stale = mockAssertContactCurrent(String(params.jobId), row)
+    if (stale) return stale
     const body = (await request.json()) as { placeId: string }
     row.status = 'imported'
     row.matchedPlaceId = body.placeId
@@ -4059,11 +4154,22 @@ export const handlers = [
     const job = db.jobs.find((item) => item.id === params.jobId)
     if (!job) return envelope(404, 'NOT_FOUND', 'job not found')
     const rows = db.rows[String(params.jobId)] ?? []
-    const ready = rows.filter((row) => row.status === 'ready')
+    /*
+     * DEV-F-12 — a `ready` row validated before #280 is checked again here
+     * (`refuseStaleContact`): it fails with its column errors instead of
+     * being imported with its contact values silently dropped.
+     */
+    const failed: { rowId: string; code: string }[] = []
+    const ready: ImportRow[] = []
+    for (const row of rows.filter((item) => item.status === 'ready')) {
+      if (mockRefuseStaleContact(job, row))
+        failed.push({ rowId: row.id, code: 'CONTACT_EVIDENCE_REQUIRED' })
+      else ready.push(row)
+    }
     for (const row of ready) row.status = 'imported'
     job.rowsByStatus = { ...job.rowsByStatus, ready: 0, imported: ready.length }
     job.status = 'completed'
-    return HttpResponse.json({ jobId: job.id, created: ready.length, failed: [] }, { status: 201 })
+    return HttpResponse.json({ jobId: job.id, created: ready.length, failed }, { status: 201 })
   }),
 
   http.get(`${BASE}/cms/place-imports/:jobId`, ({ params }) => {

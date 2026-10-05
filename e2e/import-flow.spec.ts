@@ -49,6 +49,25 @@ test('an ambiguous row is resolved by picking a surfaced candidate', async ({ pa
   await expect(drawer).toBeHidden()
 })
 
+/*
+ * GoGo-BE#280 — `row-14` was parsed before #280 (an address with no evidence).
+ * The merge the screen offers is refused `409 CONTACT_EVIDENCE_REQUIRED`, the
+ * server has already failed the row, and the reload shows it that way.
+ */
+test('a merge on a row whose address has no evidence fails the row in place', async ({ page }) => {
+  await page.goto('/imports')
+  await page.getByText('hcm_q3_cafe_batch4.xlsx').click()
+
+  const row = page.getByRole('row', { name: /Chào Bạn Cafe/ })
+  await expect(row.getByText('Trùng lặp')).toBeVisible()
+  await row.getByRole('button', { name: 'Gộp' }).click()
+
+  await expect(page.getByText(/chưa đủ nguồn theo quy định hiện hành/)).toBeVisible()
+  await expect(row.getByText('Không hợp lệ')).toBeVisible()
+  await expect(row.getByText('ADDRESS_EVIDENCE_REQUIRED').first()).toBeVisible()
+  await expect(row.getByRole('button', { name: 'Gộp' })).toHaveCount(0)
+})
+
 test('publishing shows what will change before it runs', async ({ page }) => {
   await page.goto('/imports')
   await page.getByText('hcm_q3_cafe_batch4.xlsx').click()

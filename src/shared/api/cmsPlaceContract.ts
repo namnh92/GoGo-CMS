@@ -435,10 +435,26 @@ export function mockParseZonedDateTime(raw: string): Date | null {
 
 type MockEvidence = { sourceType: string; sourceReference: string; collectedAt: string }
 
+/**
+ * GoGo-BE `validateEvidence`'s `path` — how the caller names the three
+ * evidence properties in its own errors: `provenance.phone.sourceType` for a
+ * console write, `phone_source_type` for a sheet column.
+ */
+type MockEvidencePaths = { sourceType: string; sourceReference: string; collectedAt: string }
+
+/** The console's naming: `<prefix>.sourceType` … */
+function mockEvidencePaths(prefix: string): MockEvidencePaths {
+  return {
+    sourceType: `${prefix}.sourceType`,
+    sourceReference: `${prefix}.sourceReference`,
+    collectedAt: `${prefix}.collectedAt`,
+  }
+}
+
 /** GoGo-BE `validateEvidence`. */
 function mockValidateEvidence(
   evidence: ContactEvidenceBody,
-  path: string,
+  path: MockEvidencePaths,
   now: Date,
 ): { ok: true; value: MockEvidence } | { ok: false; issues: MockContactIssue[] } {
   const issues: MockContactIssue[] = []
@@ -447,53 +463,53 @@ function mockValidateEvidence(
     typeof evidence.sourceReference === 'string' ? evidence.sourceReference.trim() : ''
   const collected = typeof evidence.collectedAt === 'string' ? evidence.collectedAt.trim() : ''
   if (type === '')
-    issues.push({ field: `${path}.sourceType`, code: 'required', message: 'Thiếu nguồn dữ liệu' })
+    issues.push({ field: path.sourceType, code: 'required', message: 'Thiếu nguồn dữ liệu' })
   else if (type === 'google_derived' || type === 'google')
     issues.push({
-      field: `${path}.sourceType`,
+      field: path.sourceType,
       code: 'google_not_independent',
       message: 'Dữ liệu từ Google không phải nguồn độc lập',
     })
   else if (!INDEPENDENT_SOURCE_TYPES.includes(type))
     issues.push({
-      field: `${path}.sourceType`,
+      field: path.sourceType,
       code: 'invalid',
       message: 'Nguồn dữ liệu không hợp lệ',
     })
   if (reference === '')
     issues.push({
-      field: `${path}.sourceReference`,
+      field: path.sourceReference,
       code: 'required',
       message: 'Thiếu tham chiếu nguồn',
     })
   else if (reference.length > 500)
     issues.push({
-      field: `${path}.sourceReference`,
+      field: path.sourceReference,
       code: 'too_long',
       message: 'Tham chiếu nguồn quá dài',
     })
   else if (CONTROL_CHARS.test(reference))
     issues.push({
-      field: `${path}.sourceReference`,
+      field: path.sourceReference,
       code: 'invalid',
       message: 'Tham chiếu nguồn không hợp lệ',
     })
   else if (GOOGLE_REFERENCE.test(reference))
     issues.push({
-      field: `${path}.sourceReference`,
+      field: path.sourceReference,
       code: 'google_not_independent',
       message: 'Tham chiếu Google không phải nguồn độc lập',
     })
   else if (mockIsTransportReference(reference))
     issues.push({
-      field: `${path}.sourceReference`,
+      field: path.sourceReference,
       code: 'transport_only',
       message: 'Mã job / sheet / dòng chỉ là đường truyền, không phải nguồn — ghi rõ nguồn gốc',
     })
   let collectedAt: Date | null = null
   if (collected === '')
     issues.push({
-      field: `${path}.collectedAt`,
+      field: path.collectedAt,
       code: 'required',
       message: 'Thiếu thời điểm thu thập',
     })
@@ -501,13 +517,13 @@ function mockValidateEvidence(
     const parsed = mockParseZonedDateTime(collected)
     if (!parsed)
       issues.push({
-        field: `${path}.collectedAt`,
+        field: path.collectedAt,
         code: 'invalid_datetime',
         message: 'Không phải thời điểm ISO',
       })
     else if (parsed.getTime() > now.getTime() + 5 * 60_000)
       issues.push({
-        field: `${path}.collectedAt`,
+        field: path.collectedAt,
         code: 'in_future',
         message: 'Thời điểm thu thập ở tương lai',
       })
@@ -588,7 +604,7 @@ export function mockPlanContactWrite(
       })
       continue
     }
-    const checked = mockValidateEvidence(evidence, path, now)
+    const checked = mockValidateEvidence(evidence, mockEvidencePaths(path), now)
     if (!checked.ok) {
       issues.push(...checked.issues)
       continue
@@ -628,6 +644,88 @@ export function mockStoredContactProvenance(evidence: MockEvidence, verifiedAt: 
     verifiedAt,
     ownership: 'gogo' as const,
   }
+}
+
+/**
+ * GoGo-BE#440 `createPlace` read-back of a `sourceReferences` claim: one
+ * `editorial` row per claimed field carrying the editor's reference as the
+ * server stores it (`checkReferences` trims it), `verified_at` defaulted to
+ * the write, `collectedAt` null — no evidence was gathered, a reference was
+ * asserted — and no `ownership`, which only the contact columns carry.
+ */
+export function mockStoredEditorialProvenance(sourceReference: string, verifiedAt: string) {
+  return {
+    sourceType: 'editorial' as const,
+    sourceReference: sourceReference.trim(),
+    verifiedAt,
+    collectedAt: null,
+  }
+}
+
+/** GoGo-BE `IngestMessage` as the import rows carry it. */
+export type MockIngestMessage = { code: string; field: string | null; message: string }
+
+/**
+ * GoGo-BE `STALE_CONTACT_COLUMNS` — the three sheet columns, the provenance
+ * field each one's evidence is keyed by in `normalized.contactEvidence`, and
+ * the code prefix a fresh parse (`validateRow`) uses for it.
+ */
+const MOCK_STALE_CONTACT_COLUMNS: {
+  field: 'address_text' | 'phone' | 'website'
+  column: 'address' | 'phone' | 'website'
+  code: 'ADDRESS' | 'PHONE' | 'WEBSITE'
+  normalize: (raw: string) => MockNormalized
+}[] = [
+  { field: 'address_text', column: 'address', code: 'ADDRESS', normalize: mockNormalizeAddress },
+  { field: 'phone', column: 'phone', code: 'PHONE', normalize: mockNormalizePhone },
+  { field: 'website', column: 'website', code: 'WEBSITE', normalize: mockNormalizeWebsite },
+]
+
+/**
+ * GoGo-BE `staleContactErrors` (`place-import-job.service.ts`, BE#672
+ * @cda3e2a), mirrored for the mock: a stored import row's contact values and
+ * evidence checked again by today's rules. A row parsed before #280 carries
+ * `address` / `phone` / `website` with no `contactEvidence`, and a decision on
+ * it (confirm-candidate, merge, publish) is refused rather than turning an
+ * unsourced cell into a GoGo-owned fact. Same codes and columns as a fresh
+ * parse, so the operator reads one vocabulary.
+ */
+export function mockStaleContactErrors(
+  normalized: Record<string, unknown>,
+  now: Date = new Date(),
+): MockIngestMessage[] {
+  const errors: MockIngestMessage[] = []
+  const evidence = (normalized.contactEvidence ?? {}) as Record<string, ContactEvidenceBody>
+  for (const col of MOCK_STALE_CONTACT_COLUMNS) {
+    const value = normalized[col.column]
+    if (typeof value !== 'string' || value === '') continue
+    if (!col.normalize(value).ok) {
+      errors.push({
+        code: `${col.code}_INVALID`,
+        field: col.column,
+        message: `${col.column} không còn hợp lệ theo quy tắc hiện tại — sửa sheet và tải lại`,
+      })
+    }
+    const paths: MockEvidencePaths = {
+      sourceType: `${col.column}_source_type`,
+      sourceReference: `${col.column}_source_reference`,
+      collectedAt: `${col.column}_collected_at`,
+    }
+    const checked = mockValidateEvidence(evidence[col.field] ?? {}, paths, now)
+    if (!checked.ok) {
+      for (const issue of checked.issues) {
+        errors.push({
+          code:
+            issue.code === 'required'
+              ? `${col.code}_EVIDENCE_REQUIRED`
+              : `${col.code}_EVIDENCE_INVALID`,
+          field: issue.field,
+          message: `${col.column}: ${issue.message} — sửa sheet và tải lại`,
+        })
+      }
+    }
+  }
+  return errors
 }
 
 /**
