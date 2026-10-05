@@ -1656,16 +1656,43 @@ export const handlers = [
      */
     const now = new Date().toISOString()
     /*
+     * ADM-016 × GoGo-BE#440 F-07 — the codes are a current pair or the create
+     * is refused on the box (`assertCurrentPair`, 400), and then the resolver
+     * weighs them against the coordinates inside the create transaction
+     * (`resolvePlaceWithin` → `adjudicate`). The mapping the record answers
+     * with is what that run decided, never the editor's codes echoed back.
+     */
+    const codes = {
+      provinceCode: (body.provinceCode as string | null | undefined) ?? null,
+      communeCode: (body.communeCode as string | null | undefined) ?? null,
+    }
+    const pairIssue = mockCurrentPairIssue(codes)
+    if (pairIssue) {
+      return refuse(pairIssue.code, [
+        { field: pairIssue.field, code: pairIssue.code.toLowerCase(), message: pairIssue.message },
+      ])
+    }
+    const mapping = mockResolveCreateMapping(
+      { lat: Number(body.lat), lng: Number(body.lng) },
+      codes,
+    )
+    /*
      * Fable F-01 (@af0c2ef) — GoGo-BE `createPlace` writes one `editorial`
      * provenance row per accepted `sourceReferences` entry before
      * `writeContactProvenance` adds the contact claims, so the read-back
-     * carries `name`, `geom`, `taxonomyIds`, … beside `phone`. The two codes
-     * are claims the resolver settles (`settleCodeClaims`): adopted — and so
-     * recorded — exactly when the mapping below stores them, which this mock
-     * always does for a supplied code.
+     * carries `name`, `geom`, `taxonomyIds`, … beside `phone`.
+     *
+     * Fable F-01' (@d84afec) — the two codes are not among them. They are
+     * assertions `settleCodeClaims` settles after the resolver has run:
+     * recorded only for an adopted `trusted_code` outcome whose stored codes
+     * are the asserted ones, and not at all when the boundary contradicted
+     * them (NEEDS_REVIEW, nothing stored — `not_adopted`).
      */
+    const claimed = supplied.filter((key) =>
+      key === 'provinceCode' || key === 'communeCode' ? mapping.codesAdopted : true,
+    )
     const editorialProvenance = Object.fromEntries(
-      supplied.map((key) => [key, mockStoredEditorialProvenance(String(refs[key]), now)]),
+      claimed.map((key) => [key, mockStoredEditorialProvenance(String(refs[key]), now)]),
     )
     const created = {
       ...db.places[0]!,
@@ -1691,24 +1718,10 @@ export const handlers = [
       /*
        * ADM-016 — the server resolves the mapping inside the create
        * transaction, so the record it answers with already carries one. It is
-       * AUTO_MATCHED and blocked, because nothing about creating a place
-       * verifies its mapping.
+       * blocked either way, because nothing about creating a place verifies
+       * its mapping.
        */
-      administrative: {
-        status: 'AUTO_MATCHED' as const,
-        provinceCode: (body.provinceCode as string | undefined) ?? null,
-        provinceName: (body.provinceCode as string | undefined) ? 'Thành phố Hà Nội' : null,
-        communeCode: (body.communeCode as string | undefined) ?? null,
-        communeName: (body.communeCode as string | undefined) ? 'Phường Ba Đình' : null,
-        method: body.provinceCode ? 'trusted_code' : 'boundary_point_in_polygon',
-        datasetVersion: ACTIVE_DATASET_VERSION,
-        activeDatasetVersion: ACTIVE_DATASET_VERSION,
-        mappedAt: new Date().toISOString(),
-        approvalBlock: {
-          code: 'MAPPING_NOT_VERIFIED',
-          message: 'the administrative mapping is AUTO_MATCHED: a resolver result, not an approval',
-        },
-      },
+      administrative: mapping.administrative,
       updatedAt: new Date().toISOString(),
     }
     db.places.push(created as (typeof db.places)[number])
@@ -4926,6 +4939,152 @@ export const COMMUNES: Record<string, { code: string; name: string; fullName: st
     { code: '00166', name: 'Ngọc Hà', fullName: 'Phường Ngọc Hà' },
   ],
   '79': [{ code: '26734', name: 'Bến Nghé', fullName: 'Phường Bến Nghé' }],
+}
+
+/**
+ * The mock's pinned boundary release: one box per province, standing for the
+ * commune polygons GoGo-BE's resolver tests a point against (`fromBoundary`).
+ * A point in the box of a province other than the asserted one lies in a
+ * commune that is not the asserted commune, which is the one disagreement
+ * `adjudicate` needs to see on a create. A point in no box is
+ * `NO_BOUNDARY_MATCH`, as off the released polygons.
+ */
+const PROVINCE_BOUNDS: Record<string, { lat: [number, number]; lng: [number, number] }> = {
+  '01': { lat: [20.55, 21.4], lng: [105.3, 106.05] },
+  '79': { lat: [10.35, 11.2], lng: [106.35, 107.05] },
+}
+
+function mockProvinceContaining(point: { lat: number; lng: number }): string | null {
+  for (const [code, box] of Object.entries(PROVINCE_BOUNDS)) {
+    const inLat = point.lat >= box.lat[0] && point.lat <= box.lat[1]
+    const inLng = point.lng >= box.lng[0] && point.lng <= box.lng[1]
+    if (inLat && inLng) return code
+  }
+  return null
+}
+
+type MockCodePair = { provinceCode: string | null; communeCode: string | null }
+type MockPairIssue = { code: string; message: string; field: 'provinceCode' | 'communeCode' }
+
+/**
+ * GoGo-BE `validateCurrentPair` (`administrative/domain/unit-validation.ts`)
+ * over the mock's units — what `assertCurrentPair` refuses a create or edit
+ * with *before* the resolver runs, pointed at the box responsible. A pair
+ * that passes is a current pair; whether the coordinates agree with it is
+ * the resolver's question, not this one's.
+ */
+function mockCurrentPairIssue(pair: MockCodePair): MockPairIssue | null {
+  const { provinceCode, communeCode } = pair
+  if (provinceCode === null && communeCode === null) return null
+  if (provinceCode === null || communeCode === null) {
+    return {
+      code: 'ADMINISTRATIVE_CODES_INCOMPLETE',
+      message:
+        provinceCode === null
+          ? 'a commune code needs the province code it belongs to'
+          : 'a province code alone is not an address; choose a commune',
+      field: provinceCode === null ? 'provinceCode' : 'communeCode',
+    }
+  }
+  if (!PROVINCES.some((province) => province.code === provinceCode)) {
+    return {
+      code: 'PROVINCE_NOT_CURRENT',
+      message: `${provinceCode} is not a current province in ${ACTIVE_DATASET_VERSION}`,
+      field: 'provinceCode',
+    }
+  }
+  const parent = Object.entries(COMMUNES).find(([, communes]) =>
+    communes.some((commune) => commune.code === communeCode),
+  )?.[0]
+  if (parent === undefined) {
+    return {
+      code: 'COMMUNE_NOT_CURRENT',
+      message: `${communeCode} is not a current commune in ${ACTIVE_DATASET_VERSION}`,
+      field: 'communeCode',
+    }
+  }
+  if (parent !== provinceCode) {
+    return {
+      code: 'HIERARCHY_INVALID',
+      message: `commune ${communeCode} belongs to ${parent}, not to ${provinceCode}`,
+      field: 'communeCode',
+    }
+  }
+  return null
+}
+
+/**
+ * GoGo-BE `resolvePlaceWithin` → `adjudicate` on a create (BE#672 @cda3e2a,
+ * `administrative/domain/resolver.ts`), mirrored for the mock.
+ *
+ * With a current pair asserted, two deterministic sources speak: the trusted
+ * codes (precedence 2) and the boundary the point falls in (3). When they
+ * name the same pair the answer is AUTO_MATCHED and attributed to the
+ * stronger source, `trusted_code`; `settleCodeClaims` then records the two
+ * code claims (`codesAdopted`). When they disagree it is `EVIDENCE_CONFLICT`:
+ * NEEDS_REVIEW, the current codes kept — a new place has none — no method,
+ * and the assertions are audited `not_adopted` with no provenance written.
+ * A point off every released polygon leaves the codes as the only evidence,
+ * and they are adopted.
+ *
+ * Without codes the mock keeps its pre-existing geometry-only answer: the
+ * mock's boundary carries no commune polygons, so it does not pretend to
+ * resolve a commune from a point.
+ */
+function mockResolveCreateMapping(point: { lat: number; lng: number }, pair: MockCodePair) {
+  const notVerified = (status: 'AUTO_MATCHED' | 'NEEDS_REVIEW') => ({
+    code: 'MAPPING_NOT_VERIFIED',
+    message: `the administrative mapping is ${status}: a resolver result, not an approval`,
+  })
+  const release = {
+    datasetVersion: ACTIVE_DATASET_VERSION,
+    activeDatasetVersion: ACTIVE_DATASET_VERSION,
+    mappedAt: new Date().toISOString(),
+  }
+  if (pair.provinceCode === null || pair.communeCode === null) {
+    return {
+      codesAdopted: false,
+      administrative: {
+        status: 'AUTO_MATCHED' as const,
+        provinceCode: null,
+        provinceName: null,
+        communeCode: null,
+        communeName: null,
+        method: 'boundary_point_in_polygon',
+        ...release,
+        approvalBlock: notVerified('AUTO_MATCHED'),
+      },
+    }
+  }
+  const boundaryProvince = mockProvinceContaining(point)
+  if (boundaryProvince !== null && boundaryProvince !== pair.provinceCode) {
+    return {
+      codesAdopted: false,
+      administrative: {
+        status: 'NEEDS_REVIEW' as const,
+        provinceCode: null,
+        provinceName: null,
+        communeCode: null,
+        communeName: null,
+        method: null,
+        ...release,
+        approvalBlock: notVerified('NEEDS_REVIEW'),
+      },
+    }
+  }
+  return {
+    codesAdopted: true,
+    administrative: {
+      status: 'AUTO_MATCHED' as const,
+      provinceCode: pair.provinceCode,
+      provinceName: unitNameFor(pair.provinceCode),
+      communeCode: pair.communeCode,
+      communeName: unitNameFor(pair.communeCode),
+      method: 'trusted_code',
+      ...release,
+      approvalBlock: notVerified('AUTO_MATCHED'),
+    },
+  }
 }
 
 const BASE_MAPPINGS: MappingFixture[] = [

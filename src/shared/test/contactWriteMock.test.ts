@@ -104,35 +104,24 @@ describe('F-01 — the mock create persists the request, normalised', () => {
     })
   })
 
-  it('claims every supplied fact its reference names, codes included', async () => {
+  it('claims every supplied fact its reference names', async () => {
     const response = await api('/cms/places', {
       method: 'POST',
       key: true,
       body: createBody({
         description: 'Quán nhỏ trong hẻm',
         taxonomyIds: ['tx-cat-cafe'],
-        provinceCode: '01',
-        communeCode: '00004',
         sourceReferences: {
           name: 'Đến tận nơi',
           geom: 'Đo tại chỗ',
           description: 'Ghi nhận tại chỗ',
           taxonomyIds: 'Quan sát tại quán',
-          provinceCode: 'Biển số nhà',
-          communeCode: 'Biển số nhà',
         },
       }),
     })
     expect(response.status).toBe(201)
     const { provenance } = (await response.json()) as { provenance: Record<string, unknown> }
-    expect(Object.keys(provenance).sort()).toEqual([
-      'communeCode',
-      'description',
-      'geom',
-      'name',
-      'provinceCode',
-      'taxonomyIds',
-    ])
+    expect(Object.keys(provenance).sort()).toEqual(['description', 'geom', 'name', 'taxonomyIds'])
     expect(provenance.taxonomyIds).toMatchObject({
       sourceType: 'editorial',
       sourceReference: 'Quan sát tại quán',
@@ -155,6 +144,114 @@ describe('F-01 — the mock create persists the request, normalised', () => {
     const body = (await response.json()) as { code: string; field_errors: unknown[] }
     expect(body.code).toBe('VALIDATION_FAILED')
     expect(body.field_errors).toEqual([expect.objectContaining({ field, code })])
+  })
+})
+
+/*
+ * Fable F-01' (CMS#228 @d84afec) — GoGo-BE#440 F-07: the two codes are
+ * assertions, settled by the resolver run inside the create transaction
+ * (`resolvePlaceWithin` → `adjudicate` → `settleCodeClaims`). The mock used to
+ * echo them back as an AUTO_MATCHED mapping with two editorial claims whatever
+ * the coordinates said.
+ */
+describe('F-01′ — code assertions are settled by the resolver, not echoed', () => {
+  const CODES = {
+    provinceCode: '01',
+    communeCode: '00163',
+    sourceReferences: {
+      name: 'Đến tận nơi',
+      geom: 'Đo tại chỗ',
+      provinceCode: 'Biển số nhà',
+      communeCode: 'Biển số nhà',
+    },
+  }
+  type Created = {
+    provenance: Record<string, unknown>
+    administrative: Record<string, unknown>
+  }
+
+  it('adopts a current pair the boundary agrees with, and records both claims', async () => {
+    // Inside Hà Nội, asserting a Hà Nội commune.
+    const response = await api('/cms/places', {
+      method: 'POST',
+      key: true,
+      body: createBody({ ...CODES, lat: 21.0333, lng: 105.8452 }),
+    })
+    expect(response.status).toBe(201)
+    const { provenance, administrative } = (await response.json()) as Created
+    expect(administrative).toMatchObject({
+      status: 'AUTO_MATCHED',
+      method: 'trusted_code',
+      provinceCode: '01',
+      provinceName: 'Thành phố Hà Nội',
+      communeCode: '00163',
+      communeName: 'Phường Ba Đình',
+      approvalBlock: { code: 'MAPPING_NOT_VERIFIED' },
+    })
+    expect(Object.keys(provenance).sort()).toEqual(['communeCode', 'geom', 'name', 'provinceCode'])
+    expect(provenance.communeCode).toMatchObject({
+      sourceType: 'editorial',
+      sourceReference: 'Biển số nhà',
+      collectedAt: null,
+    })
+  })
+
+  it('a pair the boundary contradicts is NEEDS_REVIEW with no codes and no code claims', async () => {
+    // `createBody` sits in Hồ Chí Minh; the codes name a Hà Nội commune.
+    const response = await api('/cms/places', {
+      method: 'POST',
+      key: true,
+      body: createBody(CODES),
+    })
+    expect(response.status).toBe(201)
+    const { provenance, administrative } = (await response.json()) as Created
+    expect(administrative).toMatchObject({
+      status: 'NEEDS_REVIEW',
+      method: null,
+      provinceCode: null,
+      provinceName: null,
+      communeCode: null,
+      communeName: null,
+      approvalBlock: { code: 'MAPPING_NOT_VERIFIED' },
+    })
+    // The references for the facts that were stored stay; the two assertions
+    // that were not adopted leave no provenance behind.
+    expect(Object.keys(provenance).sort()).toEqual(['geom', 'name'])
+  })
+
+  it('off every released polygon the codes are the only evidence, and are adopted', async () => {
+    const response = await api('/cms/places', {
+      method: 'POST',
+      key: true,
+      body: createBody({ ...CODES, lat: 12.0, lng: 108.5 }),
+    })
+    expect(response.status).toBe(201)
+    const { provenance, administrative } = (await response.json()) as Created
+    expect(administrative).toMatchObject({ status: 'AUTO_MATCHED', method: 'trusted_code' })
+    expect(Object.keys(provenance).sort()).toEqual(['communeCode', 'geom', 'name', 'provinceCode'])
+  })
+
+  it.each([
+    [{ provinceCode: '01', communeCode: '00004' }, 'COMMUNE_NOT_CURRENT', 'communeCode'],
+    [{ provinceCode: '99', communeCode: '00163' }, 'PROVINCE_NOT_CURRENT', 'provinceCode'],
+    [{ provinceCode: '79', communeCode: '00163' }, 'HIERARCHY_INVALID', 'communeCode'],
+    [{ provinceCode: '01' }, 'ADMINISTRATIVE_CODES_INCOMPLETE', 'communeCode'],
+  ])('refuses %j as %s before the resolver runs', async (pair, code, field) => {
+    const refs = Object.fromEntries(Object.keys(pair).map((key) => [key, 'Biển số nhà']))
+    const response = await api('/cms/places', {
+      method: 'POST',
+      key: true,
+      body: createBody({
+        ...pair,
+        sourceReferences: { name: 'Đến tận nơi', geom: 'Đo tại chỗ', ...refs },
+      }),
+    })
+    expect(response.status).toBe(400)
+    const body = (await response.json()) as { code: string; field_errors: unknown[] }
+    expect(body.code).toBe(code)
+    expect(body.field_errors).toEqual([
+      expect.objectContaining({ field, code: code.toLowerCase() }),
+    ])
   })
 })
 
