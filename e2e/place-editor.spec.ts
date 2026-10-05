@@ -86,6 +86,29 @@ test.describe('the editor composes', () => {
   })
 })
 
+test.describe('contact evidence (GoGo-BE#280)', () => {
+  test('a changed phone asks for its source, and saves with it', async ({ page }) => {
+    await openEditor(page)
+    const phone = page.getByLabel('Điện thoại', { exact: true })
+    await phone.fill('028 3822 9999')
+
+    const group = page.getByRole('group', { name: 'Nguồn của Điện thoại' })
+    await expect(group).toBeVisible()
+    // Without a source the save is refused on the empty boxes.
+    await page.getByRole('button', { name: 'Lưu thông tin' }).click()
+    await expect(group.getByText('Bắt buộc khi lưu giá trị này')).toHaveCount(3)
+
+    await group.getByLabel('Loại nguồn').selectOption('editorial')
+    await group.getByLabel('Tham chiếu nguồn').fill('Gọi chủ quán ngày 30/09')
+    await group.getByLabel('Thu thập lúc').fill('2026-09-30T09:00')
+    await page.getByRole('button', { name: 'Lưu thông tin' }).click()
+
+    await expect(page.getByText('Đã lưu thông tin định danh')).toBeVisible()
+    await expect(group).toBeHidden()
+    await expect(page.getByText('Dữ liệu GoGo (có nguồn độc lập)')).toBeVisible()
+  })
+})
+
 test.describe('opening hours in a real browser', () => {
   test('a day group fills the week and a single day is edited after it', async ({ page }) => {
     await openEditor(page)

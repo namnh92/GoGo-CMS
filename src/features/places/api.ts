@@ -1,5 +1,11 @@
 import { apiFetch, apiFetchParsed, newIdempotencyKey } from '@/shared/api/client'
 import type { CmsCreatePlaceBody } from '@/shared/api/generated'
+import type { ContactProvenanceWire } from './contactEvidence'
+import {
+  CREATE_SOURCE_REFERENCE_KEYS,
+  type CreateSourceReferenceKey,
+  type EditSourceReferenceKey,
+} from '@/shared/api/cmsPlaceContract'
 import {
   attachableMediaListSchema,
   auditPageSchema,
@@ -197,6 +203,13 @@ export type UpdatePlaceInput = {
   phone?: string | null
   /** Sent as typed; GoGo-BE enforces http(s) and answers on `website`. */
   website?: string | null
+  /**
+   * GoGo-BE#280 — evidence for each of `addressText` / `phone` / `website` this
+   * body writes a value to. A written value without its entry is `400
+   * provenance.<field> required`; a `null` clear takes none. Writing or
+   * clearing any of the three also makes `expectedUpdatedAt` mandatory.
+   */
+  provenance?: ContactProvenanceWire
   lat?: number
   lng?: number
   avgVisitMinutes?: number | null
@@ -211,7 +224,7 @@ export type UpdatePlaceInput = {
    * edit sends non-null. Nothing else is accepted on an edit. On create the
    * field is widened to every fact (`CreatePlaceInput`).
    */
-  sourceReferences?: Partial<Record<SourceReferenceKey, string>>
+  sourceReferences?: Partial<Record<EditSourceReferenceKey, string>>
 }
 
 export function updatePlace(id: string, input: UpdatePlaceInput) {
@@ -232,7 +245,7 @@ export function updatePlace(id: string, input: UpdatePlaceInput) {
  * Google preview is not a GoGo fact however it arrives, and the server refuses
  * a non-empty list with `400 GOOGLE_CONTENT_NOT_PERSISTABLE`.
  */
-export type CreatePlaceInput = UpdatePlaceInput & {
+export type CreatePlaceInput = Omit<UpdatePlaceInput, 'sourceReferences'> & {
   name: string
   lat: number
   lng: number
@@ -246,27 +259,19 @@ export type CreatePlaceInput = UpdatePlaceInput & {
   /**
    * GoGo-BE#440 — the independent evidence behind each supplied fact, keyed by
    * API field name (`geom` covers `lat` + `lng`). A key for a fact the body
-   * does not carry is refused, and so is a supplied fact with no key.
+   * does not carry is refused, and so is a supplied fact with no key. The
+   * contact fields are not keys here: their evidence is `provenance`.
    */
   sourceReferences: SourceReferences
 }
 
-/** `cmsCreatePlace.sourceReferences` property names, exactly as the contract lists them. */
-export const SOURCE_REFERENCE_KEYS = [
-  'name',
-  'description',
-  'addressText',
-  'areaKey',
-  'city',
-  'district',
-  'phone',
-  'website',
-  'geom',
-  'provinceCode',
-  'communeCode',
-  'taxonomyIds',
-] as const
-export type SourceReferenceKey = (typeof SOURCE_REFERENCE_KEYS)[number]
+/**
+ * `cmsCreatePlace.sourceReferences` property names, exactly as the contract
+ * lists them (alpha.66: no `addressText` / `phone` / `website` — their
+ * evidence is `provenance`). The mirror owns the list.
+ */
+export const SOURCE_REFERENCE_KEYS = CREATE_SOURCE_REFERENCE_KEYS
+export type SourceReferenceKey = CreateSourceReferenceKey
 export type SourceReferences = Partial<Record<SourceReferenceKey, string>>
 
 /** The contract's per-reference limits (trimmed, 1..500). */

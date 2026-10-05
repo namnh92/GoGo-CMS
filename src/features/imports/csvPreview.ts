@@ -104,6 +104,20 @@ const HEADER_HINTS: { field: ImportCanonicalField; hints: string[] }[] = [
   // `note`, not `notes` — the singular is the canonical field, and a sheet
   // column called `notes` was being dropped for want of this alias.
   { field: 'note', hints: ['note', 'notes', 'ghi chu', 'ghi chú'] },
+  /*
+   * GoGo-BE#280 — the evidence columns, matched by their exact canonical names
+   * and **ahead of** `address` / `phone` / `website`: those hints are substrings
+   * of these headers, so `phone_source_type` would otherwise be guessed as a
+   * second `phone` column (and dropped as a duplicate).
+   */
+  ...(['address', 'phone', 'website'] as const).flatMap((field) =>
+    (['source_type', 'source_reference', 'collected_at'] as const).map((part) => ({
+      field: `${field}_${part}` as ImportCanonicalField,
+      hints: [`${field}_${part}`],
+    })),
+  ),
+  // GoGo-BE#280 — the sheet's own address, written with its evidence.
+  { field: 'address', hints: ['address', 'dia chi', 'địa chỉ'] },
   // PI-BE-025 — GoGo's own facts, now columns rather than retired values.
   { field: 'phone', hints: ['phone', 'sdt', 'sđt', 'dien thoai', 'điện thoại'] },
   { field: 'website', hints: ['website', 'web'] },

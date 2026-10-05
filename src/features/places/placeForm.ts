@@ -9,6 +9,19 @@ import {
   type SourceReferences,
   type UpdatePlaceInput,
 } from './api'
+import {
+  CONTACT_FIELDS,
+  EMPTY_EVIDENCE,
+  evidenceIssues,
+  evidenceTarget,
+  isContactField,
+  useContactValueError,
+  toWireEvidence,
+  type ContactField,
+  type ContactProvenanceWire,
+  type EvidenceDrafts,
+  type EvidenceProperty,
+} from './contactEvidence'
 
 const L = PLACE_FIELD_LIMITS
 
@@ -51,6 +64,14 @@ function optionalNumber(schema: z.ZodNumber) {
     }
     return value
   }, schema.optional())
+}
+
+function evidenceDraftSchema() {
+  return z.object({
+    sourceType: z.string(),
+    sourceReference: z.string(),
+    collectedAt: z.string(),
+  })
 }
 
 /**
@@ -121,6 +142,19 @@ const placeIdentityFields = z.object({
    */
   phone: z.string().max(L.phone.max).optional(),
   website: z.string().max(L.website.max).optional(),
+  /**
+   * GoGo-BE#280 — the source behind each contact value being written. Checked
+   * by `contactEvidenceIssues` rather than here, because whether a box needs
+   * evidence depends on the baseline (an untouched value needs none), which a
+   * static schema does not have.
+   */
+  evidence: z
+    .object({
+      addressText: evidenceDraftSchema(),
+      phone: evidenceDraftSchema(),
+      website: evidenceDraftSchema(),
+    })
+    .optional(),
   description: z.string().max(L.description.max).optional(),
   avgVisitMinutes: optionalNumber(
     z.number().int().min(L.avgVisitMinutes.min).max(L.avgVisitMinutes.max),
@@ -198,14 +232,15 @@ const placeCreateFields = placeIdentityFields.extend({
    * Kept for every box, filled or not; only the ones whose fact is actually
    * sent leave the browser (`toPlaceCreateBody`), because a reference for a
    * fact the body does not carry is refused.
+   *
+   * GoGo-BE#672 (alpha.66) — not `addressText` / `phone` / `website`: their
+   * evidence is the structured `evidence.<field>` entry the editor screen
+   * uses too, sent as `provenance.<field>`.
    */
   sourceReferences: z
     .object({
       name: sourceReference(),
       geom: sourceReference(),
-      addressText: sourceReference(),
-      phone: sourceReference(),
-      website: sourceReference(),
       description: sourceReference(),
       /*
        * GoGo-BE#440 (alpha.62) — a province, commune or category suggested
@@ -230,17 +265,48 @@ export const placeCreateSchema = placeCreateFields.superRefine((values, ctx) => 
       message: 'placeCreate.source.required',
     })
   }
+  /*
+   * GoGo-BE#672 — a contact value without complete evidence is
+   * `provenance.<field> required` there; here it is said on the evidence box
+   * that is empty. A new row has no baseline, so every filled contact is a
+   * write. The message is the evidence vocabulary's own i18n key.
+   */
+  for (const issue of createContactEvidenceIssues(values)) {
+    const [, field, property] = issue.field.split('.')
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['evidence', field!, property!],
+      message: `contactEvidence.error.${issue.code}`,
+    })
+  }
 })
+
+/** Local evidence check for each contact value a create writes, with form paths. */
+export function createContactEvidenceIssues(
+  values: Pick<PlaceIdentityForm, ContactField | 'evidence'>,
+  now: Date = new Date(),
+): (FieldError & { field: EvidencePath })[] {
+  return CONTACT_FIELDS.filter((field) => textOf(values[field]) !== '').flatMap((field) =>
+    evidenceIssues(field, values.evidence?.[field] ?? { ...EMPTY_EVIDENCE }, now).flatMap(
+      (issue) => {
+        const target = evidenceTarget(issue.field)
+        return target
+          ? [{ ...issue, field: `evidence.${target.field}.${target.property}` as EvidencePath }]
+          : []
+      },
+    ),
+  )
+}
 
 export type PlaceCreateForm = z.infer<typeof placeCreateSchema>
 
-/** The `sourceReferences` keys this form offers an input for. */
+/**
+ * The `sourceReferences` keys this form offers an input for. The contact
+ * fields are not among them (GoGo-BE#672): their evidence is `provenance`.
+ */
 export const CREATE_SOURCE_KEYS = [
   'name',
   'geom',
-  'addressText',
-  'phone',
-  'website',
   'description',
   'provinceCode',
   'communeCode',
@@ -268,13 +334,12 @@ type CreateFacts = Pick<
  * Which facts the create body will carry, by `sourceReferences` key. One
  * function decides it for both the form rule and the body builder, so the
  * references sent always match the facts sent — no missing key, no stray one.
- * `name` and `geom` are always supplied (the schema requires them).
+ * `name` and `geom` are always supplied (the schema requires them). Address,
+ * phone and website are facts too, but their evidence is `provenance`
+ * (GoGo-BE#672), so they are never listed here.
  */
 export function suppliedFacts(values: CreateFacts): CreateSourceKey[] {
   const out: CreateSourceKey[] = ['name', 'geom']
-  if (textOf(values.addressText)) out.push('addressText')
-  if (textOf(values.phone)) out.push('phone')
-  if (textOf(values.website)) out.push('website')
   if (textOf(values.description)) out.push('description')
   if (textOf(values.provinceCode)) out.push('provinceCode')
   if (textOf(values.communeCode)) out.push('communeCode')
@@ -287,7 +352,9 @@ export function suppliedFacts(values: CreateFacts): CreateSourceKey[] {
  * The `POST /cms/places` body (GoGo-BE#440).
  *
  * An empty box sends no key at all — never `''`, never `0` (#122). Every fact
- * that is sent carries its trimmed reference; nothing else does. There is no
+ * that is sent carries its trimmed reference; nothing else does. Address,
+ * phone and website carry `provenance.<field>` instead (GoGo-BE#672), one
+ * entry per value sent and none for a box left empty. There is no
  * `googleDerivedFields`: a value applied from a Google preview is not a GoGo
  * fact however it arrives, so the console no longer declares any.
  */
@@ -306,6 +373,11 @@ export function toPlaceCreateBody(
   const communeCode = textOf(values.communeCode)
   // `description` keeps its whitespace — a paragraph break is content there.
   const description = textOf(values.description) ? values.description : undefined
+  const provenance: ContactProvenanceWire = {}
+  for (const field of CONTACT_FIELDS) {
+    const evidence = values.evidence?.[field]
+    if (textOf(values[field]) && evidence) provenance[field] = toWireEvidence(evidence)
+  }
 
   return {
     name: values.name.trim(),
@@ -325,6 +397,7 @@ export function toPlaceCreateBody(
     ...(values.categoryId ? { taxonomyIds: [values.categoryId] } : {}),
     ...(options.allowDuplicate ? { allowDuplicate: true } : {}),
     sourceReferences,
+    ...(Object.keys(provenance).length > 0 ? { provenance } : {}),
   }
 }
 
@@ -381,14 +454,20 @@ export function isIdentityField(field: string): field is PlaceIdentityField {
  * `(root)`) is still shown, because an error nobody renders is an editor
  * staring at a form that looks fine.
  */
+export type EvidencePath = `evidence.${ContactField}.${EvidenceProperty}`
+
 export function splitFieldErrors(fieldErrors: readonly FieldError[]): {
-  mapped: (FieldError & { field: PlaceIdentityField })[]
+  mapped: (FieldError & { field: PlaceIdentityField | EvidencePath })[]
   unmapped: FieldError[]
 } {
-  const mapped: (FieldError & { field: PlaceIdentityField })[] = []
+  const mapped: (FieldError & { field: PlaceIdentityField | EvidencePath })[] = []
   const unmapped: FieldError[] = []
   for (const error of fieldErrors) {
-    if (isIdentityField(error.field)) mapped.push({ ...error, field: error.field })
+    // GoGo-BE#280 — `provenance.phone.sourceReference` belongs to the evidence
+    // box the editor typed it in, not to an error list under the save bar.
+    const target = evidenceTarget(error.field)
+    if (target) mapped.push({ ...error, field: `evidence.${target.field}.${target.property}` })
+    else if (isIdentityField(error.field)) mapped.push({ ...error, field: error.field })
     else unmapped.push(error)
   }
   return { mapped, unmapped }
@@ -489,6 +568,17 @@ export function toPlaceEditBody(
   text('phone')
   text('website')
 
+  /*
+   * GoGo-BE#280 — a contact value that is being written carries its evidence.
+   * Only then: a clear (`null`) takes none (`not_allowed` otherwise), and an
+   * entry beside a field the body does not write is `value_missing`.
+   */
+  for (const field of writtenContactFields(values, baseline)) {
+    const evidence = values.evidence?.[field]
+    if (!evidence) continue
+    body.provenance = { ...body.provenance, [field]: toWireEvidence(evidence) }
+  }
+
   if (!baseline) {
     if (values.avgVisitMinutes !== undefined) body.avgVisitMinutes = values.avgVisitMinutes
   } else if (values.avgVisitMinutes !== baseline.values.avgVisitMinutes) {
@@ -538,6 +628,41 @@ export function missingCodeSources(body: UpdatePlaceInput): CodeSourceKey[] {
 }
 
 /**
+ * GoGo-BE#280 — the contact fields this save writes a non-empty value to,
+ * which are exactly the ones that need evidence. Same diff `toPlaceEditBody`
+ * makes: an unchanged value is not a write and is not asked to be re-proved.
+ */
+export function writtenContactFields(
+  values: PlaceIdentityForm,
+  baseline?: PlaceEditBaseline,
+): ContactField[] {
+  return CONTACT_FIELDS.filter((field) => {
+    const next = textOf(values[field])
+    if (next === '') return false
+    return !baseline || next !== textOf(baseline.values[field])
+  })
+}
+
+/** Local evidence check for every value this save writes, with form paths. */
+export function contactEvidenceIssues(
+  values: PlaceIdentityForm,
+  baseline?: PlaceEditBaseline,
+  now: Date = new Date(),
+): (FieldError & { field: EvidencePath })[] {
+  return splitFieldErrors(
+    writtenContactFields(values, baseline).flatMap((field) =>
+      evidenceIssues(
+        field,
+        values.evidence?.[field] ?? { sourceType: '', sourceReference: '', collectedAt: '' },
+        now,
+      ),
+    ),
+  ).mapped as (FieldError & { field: EvidencePath })[]
+}
+
+export type { EvidenceDrafts }
+
+/**
  * The fields whose current value differs from what the server now holds —
  * what a `409 PLACE_MODIFIED` needs to show, because "somebody else saved" is
  * useless without "and here is what you would have overwritten".
@@ -564,11 +689,15 @@ export function diffAgainstServer(
 export function usePlaceFieldError(): (field: string, issue: FieldIssue) => string {
   const t = useT()
   const label = useLabel()
+  const contactValueError = useContactValueError()
   return useCallback(
     (field: string, issue: FieldIssue) => {
       // A message our own schema authored is an i18n key.
       const authored = label(issue.message, '')
       if (authored) return authored
+      // Sol F-04 — GoGo-BE's contact value codes, in the console's words.
+      const contact = contactValueError(field, issue)
+      if (contact) return contact
 
       const limit = placeFieldLimit(field)
       switch (issue.code) {
@@ -597,11 +726,14 @@ export function usePlaceFieldError(): (field: string, issue: FieldIssue) => stri
         default:
           break
       }
+      // A contact code this console has no sentence for reads as the generic
+      // refusal in the UI language, not as GoGo-BE's Vietnamese text (F-04).
+      if (isContactField(field)) return t('placeEditor.error.invalid')
       // A code the client has never seen still says something true: the raw
       // server text, which is better than a blank line under the field.
       return issue.message || t('placeEditor.error.invalid')
     },
-    [t, label],
+    [t, label, contactValueError],
   )
 }
 

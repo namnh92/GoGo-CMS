@@ -40,7 +40,15 @@ export function CandidateDrawer({
 
   if (!row) return null
 
-  const facts = Object.entries(row.normalized).filter(([, value]) => value != null && value !== '')
+  /*
+   * `normalized` is the parser's whole output. Scalars and lists read as
+   * facts; a nested object (GoGo-BE#280 `contactEvidence`) would print as
+   * `[object Object]`, so it is left out rather than misread.
+   */
+  const facts = Object.entries(row.normalized).filter(
+    ([, value]) =>
+      value != null && value !== '' && (typeof value !== 'object' || Array.isArray(value)),
+  )
 
   return (
     <Drawer

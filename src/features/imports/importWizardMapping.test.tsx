@@ -38,9 +38,13 @@ describe('import wizard mapping step', () => {
       .filter(Boolean)
 
     expect(values).toEqual([...MAPPABLE_FIELDS])
-    // The field the server still has no column for is gone…
-    expect(values).not.toContain('address')
-    // …as is the camelCase spelling the server used to discard…
+    // `address` is a GoGo-owned column again (GoGo-BE#280), with the three
+    // evidence columns that make a value written from a sheet GoGo's…
+    expect(values).toContain('address')
+    expect(values).toContain('address_source_type')
+    expect(values).toContain('phone_source_reference')
+    expect(values).toContain('website_collected_at')
+    // …while the camelCase spelling the server used to discard…
     expect(values).not.toContain('googleMapsUrl')
     expect(values).toContain('google_maps_url')
     // …and the legacy free-text columns, which read old sheets and should not

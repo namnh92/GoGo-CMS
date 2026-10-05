@@ -9,6 +9,15 @@ import {
   mockHoursIssues,
   moderationReasonMissing,
   toFieldErrors,
+  mockContactWriteIssues,
+  mockPlanContactWrite,
+  mockStoredContactProvenance,
+  mockStoredEditorialProvenance,
+  mockStaleContactErrors,
+  mockSourceReferenceIssues,
+  CREATE_SOURCE_REFERENCE_KEYS,
+  EDIT_SOURCE_REFERENCE_KEYS,
+  contactProvenanceSchema,
 } from '@/shared/api/cmsPlaceContract'
 import { ALLOWED_ACTIONS, ALLOWED_TRIGGERS } from '@/features/safety/conditions'
 import type { ImportRow } from '@/shared/api/contracts-import'
@@ -222,6 +231,14 @@ export const mockDb = {
   get decisions(): Record<string, unknown>[] {
     return db.decisions
   },
+  /** Seed a stored review draft (GoGo-BE#280 pre-evidence drafts). */
+  get submissionDetails(): Record<string, unknown> {
+    return db.submissionDetails
+  },
+  /** The stored import rows by job, so a test can age one (GoGo-BE#280 pre-evidence rows). */
+  get importRows(): Record<string, ImportRow[]> {
+    return db.rows
+  },
 }
 
 /**
@@ -262,6 +279,74 @@ function envelope(status: number, code: string, message: string) {
   )
 }
 
+type MockImportJob = (typeof db.jobs)[number]
+
+/**
+ * GoGo-BE `refuseStaleContact` (DEV-F-12, BE#672 @cda3e2a) — fails the row
+ * with column-specific errors when its stored contact values do not pass
+ * today's rules, and moves the job's counters with it. `validation_failed`
+ * rows are not retried: the operator corrects the sheet and re-uploads.
+ * Returns whether the row was refused.
+ *
+ * `refreshCounters` recounts the job from its rows; the fixture job counts
+ * the 500 rows of a real sheet while the mock holds seven of them, so one
+ * row is moved between buckets rather than the whole job recounted.
+ */
+function mockRefuseStaleContact(job: MockImportJob, row: ImportRow): boolean {
+  const errors = mockStaleContactErrors(row.normalized)
+  if (errors.length === 0) return false
+  const previous = row.status
+  row.status = 'validation_failed'
+  row.errors = errors
+  if (previous !== 'validation_failed') {
+    job.rowsByStatus = {
+      ...job.rowsByStatus,
+      [previous]: Math.max(0, (job.rowsByStatus[previous] ?? 0) - 1),
+      validation_failed: (job.rowsByStatus.validation_failed ?? 0) + 1,
+    }
+    job.totals = {
+      ...job.totals,
+      processed:
+        previous === 'pending' || previous === 'resolving'
+          ? job.totals.processed + 1
+          : job.totals.processed,
+      success:
+        previous === 'ready' || previous === 'imported'
+          ? Math.max(0, job.totals.success - 1)
+          : job.totals.success,
+      failed: previous === 'failed' ? job.totals.failed : job.totals.failed + 1,
+    }
+  }
+  return true
+}
+
+/**
+ * GoGo-BE `assertContactCurrent` (SA-F-12) — the decision paths' form of
+ * `mockRefuseStaleContact`: the row is persisted `validation_failed` with its
+ * column errors, the counters move, and the request is refused
+ * `409 CONTACT_EVIDENCE_REQUIRED` carrying the same errors so the console can
+ * show them. `null` when the row's contacts are current.
+ */
+function mockAssertContactCurrent(jobId: string, row: ImportRow) {
+  const job = db.jobs.find((item) => item.id === jobId)
+  if (!job || !mockRefuseStaleContact(job, row)) return null
+  return HttpResponse.json(
+    {
+      code: 'CONTACT_EVIDENCE_REQUIRED',
+      message:
+        'Dòng có địa chỉ / điện thoại / website chưa đạt quy tắc nguồn — sửa sheet và tải lại',
+      field_errors: row.errors.map((e) => ({
+        field: e.field ?? 'contact',
+        code: e.code,
+        message: e.message ?? '',
+      })),
+      request_id: 'mock-contact_evidence_required',
+      retryable: false,
+    },
+    { status: 409 },
+  )
+}
+
 /**
  * What GoGo-BE's `ZodValidationPipe` returns for a body its schema refuses —
  * status, code, message and per-field paths, byte for byte.
@@ -296,72 +381,6 @@ function foldVietnamese(value: string): string {
     .replace(/Đ/g, 'D')
     .trim()
     .toLowerCase()
-}
-
-type ContactIssue = { field: string; code: string; message: string }
-type Normalized = { ok: true; value: string } | { ok: false; issue: ContactIssue }
-
-/**
- * `normalizePhone` from `GoGo-BE/libs/modules/cms/domain/place-contact.ts`.
- *
- * Lives in the mock, not in the app: the console must send what the editor
- * typed and render whatever the server answers. A second normalizer in the
- * browser would accept values the server refuses and refuse values it accepts,
- * and neither client would ever hear about the difference.
- */
-function mockNormalizePhone(raw: string): Normalized {
-  const trimmed = raw.trim()
-  const invalid: ContactIssue = {
-    field: 'phone',
-    code: 'invalid',
-    message: 'Số điện thoại không hợp lệ',
-  }
-  if (trimmed === '') return { ok: false, issue: invalid }
-  const cleaned = trimmed.replace(/[\s().\-–—]/g, '')
-  if (!/^\+?\d+$/.test(cleaned)) return { ok: false, issue: invalid }
-  const digits = cleaned.startsWith('+') ? cleaned.slice(1) : cleaned
-
-  let e164: string
-  if (cleaned.startsWith('+')) e164 = digits
-  else if (digits.startsWith('00')) e164 = digits.slice(2)
-  else if (digits.startsWith('0')) e164 = `84${digits.slice(1)}`
-  else if (digits.startsWith('84')) e164 = digits
-  else {
-    // A bare subscriber number could belong to any country; guessing one would
-    // invent a fact about the place.
-    return {
-      ok: false,
-      issue: { field: 'phone', code: 'no_country', message: 'Thiếu mã quốc gia hoặc số 0 đầu' },
-    }
-  }
-  if (e164.length < 8 || e164.length > 15) return { ok: false, issue: invalid }
-  return { ok: true, value: `+${e164}` }
-}
-
-/** `normalizeWebsite` from the same file: `http(s)` only, bare host upgraded. */
-function mockNormalizeWebsite(raw: string): Normalized {
-  const trimmed = raw.trim()
-  const invalid: ContactIssue = {
-    field: 'website',
-    code: 'invalid',
-    message: 'Website phải là địa chỉ http hoặc https hợp lệ',
-  }
-  if (trimmed === '') return { ok: false, issue: invalid }
-  const candidate = /^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(trimmed) ? trimmed : `https://${trimmed}`
-  let url: URL
-  try {
-    url = new URL(candidate)
-  } catch {
-    return { ok: false, issue: invalid }
-  }
-  // An allowlist, not a denylist: the value is rendered as an href in three
-  // clients, so `javascript:` and `data:` are the whole point.
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') return { ok: false, issue: invalid }
-  if (url.hostname === '' || !url.hostname.includes('.')) return { ok: false, issue: invalid }
-  if (url.href.length > 500) {
-    return { ok: false, issue: { field: 'website', code: 'too_long', message: 'Website quá dài' } }
-  }
-  return { ok: true, value: url.href }
 }
 
 /** Mirrors `PLACE_TRANSITIONS` in `cms-catalog.service.ts`. */
@@ -1592,49 +1611,89 @@ export const handlers = [
     if (Array.isArray(derived) && derived.length > 0)
       return refuse('GOOGLE_CONTENT_NOT_PERSISTABLE')
     const refs = (body.sourceReferences ?? {}) as Record<string, unknown>
+    /*
+     * GoGo-BE#672 (alpha.66) — address, phone and website are facts but not
+     * `sourceReferences` keys: their evidence is `provenance.<field>`, and a
+     * reference key for one is `unknown`.
+     */
     const supplied = [
       'name',
       'description',
-      'addressText',
       'areaKey',
       'city',
       'district',
-      'phone',
-      'website',
       'provinceCode',
       'communeCode',
     ]
       .filter((key) => body[key] !== undefined && body[key] !== null)
       .concat(body.lat !== undefined && body.lng !== undefined ? ['geom'] : [])
       .concat(Array.isArray(body.taxonomyIds) && body.taxonomyIds.length > 0 ? ['taxonomyIds'] : [])
-    const known = [
-      ...supplied,
-      'name',
-      'description',
-      'addressText',
-      'areaKey',
-      'city',
-      'district',
-      'phone',
-      'website',
-      'geom',
-      'provinceCode',
-      'communeCode',
-      'taxonomyIds',
-    ]
     // alpha.62 per-key codes: required | unused | unknown | too_long.
-    const sourceIssues = [
-      ...supplied
-        .filter((key) => typeof refs[key] !== 'string' || !String(refs[key]).trim())
-        .map((key) => ({ key, code: 'required' })),
-      ...Object.keys(refs)
-        .filter((key) => !supplied.includes(key))
-        .map((key) => ({ key, code: known.includes(key) ? 'unused' : 'unknown' })),
-      ...Object.entries(refs)
-        .filter(([, value]) => typeof value === 'string' && value.trim().length > 500)
-        .map(([key]) => ({ key, code: 'too_long' })),
-    ].map(({ key, code }) => ({ field: `sourceReferences.${key}`, code, message: code }))
+    const sourceIssues = mockSourceReferenceIssues(refs, supplied, CREATE_SOURCE_REFERENCE_KEYS)
     if (sourceIssues.length > 0) return refuse('SOURCE_REFERENCE_INVALID', sourceIssues)
+    /*
+     * GoGo-BE#672 `planContactWrite(input, null)` — a contact value sent on a
+     * create needs its `provenance` entry; an entry needs a value; `null`
+     * takes none. Every problem is `400 VALIDATION_FAILED`.
+     */
+    const provenance = contactProvenanceSchema.safeParse(body.provenance ?? {})
+    if (!provenance.success) return validationEnvelope(provenance.error.issues)
+    const contact = mockPlanContactWrite(
+      {
+        addressText: body.addressText as string | null | undefined,
+        phone: body.phone as string | null | undefined,
+        website: body.website as string | null | undefined,
+        provenance: provenance.data,
+      },
+      null,
+    )
+    if (!contact.ok) return refuse('VALIDATION_FAILED', contact.issues)
+    /*
+     * Sol F-01 — the created row is what the request says, normalised the way
+     * GoGo-BE stores it: a contact the body did not send is `null`, never a
+     * value inherited from the seed row, and its provenance holds exactly the
+     * claims this create made.
+     */
+    const now = new Date().toISOString()
+    /*
+     * ADM-016 × GoGo-BE#440 F-07 — the codes are a current pair or the create
+     * is refused on the box (`assertCurrentPair`, 400), and then the resolver
+     * weighs them against the coordinates inside the create transaction
+     * (`resolvePlaceWithin` → `adjudicate`). The mapping the record answers
+     * with is what that run decided, never the editor's codes echoed back.
+     */
+    const codes = {
+      provinceCode: (body.provinceCode as string | null | undefined) ?? null,
+      communeCode: (body.communeCode as string | null | undefined) ?? null,
+    }
+    const pairIssue = mockCurrentPairIssue(codes)
+    if (pairIssue) {
+      return refuse(pairIssue.code, [
+        { field: pairIssue.field, code: pairIssue.code.toLowerCase(), message: pairIssue.message },
+      ])
+    }
+    const mapping = mockResolveCreateMapping(
+      { lat: Number(body.lat), lng: Number(body.lng) },
+      codes,
+    )
+    /*
+     * Fable F-01 (@af0c2ef) — GoGo-BE `createPlace` writes one `editorial`
+     * provenance row per accepted `sourceReferences` entry before
+     * `writeContactProvenance` adds the contact claims, so the read-back
+     * carries `name`, `geom`, `taxonomyIds`, … beside `phone`.
+     *
+     * Fable F-01' (@d84afec) — the two codes are not among them. They are
+     * assertions `settleCodeClaims` settles after the resolver has run:
+     * recorded only for an adopted `trusted_code` outcome whose stored codes
+     * are the asserted ones, and not at all when the boundary contradicted
+     * them (NEEDS_REVIEW, nothing stored — `not_adopted`).
+     */
+    const claimed = supplied.filter((key) =>
+      key === 'provinceCode' || key === 'communeCode' ? mapping.codesAdopted : true,
+    )
+    const editorialProvenance = Object.fromEntries(
+      claimed.map((key) => [key, mockStoredEditorialProvenance(String(refs[key]), now)]),
+    )
     const created = {
       ...db.places[0]!,
       id: `created-${db.places.length + 1}`,
@@ -1642,29 +1701,27 @@ export const handlers = [
       status: 'draft',
       lat: Number(body.lat ?? 0),
       lng: Number(body.lng ?? 0),
-      addressText: (body.addressText as string | undefined) ?? null,
+      addressText: contact.plan.values.addressText ?? null,
+      phone: contact.plan.values.phone ?? null,
+      website: contact.plan.values.website ?? null,
+      description: (body.description as string | null | undefined) ?? null,
+      provenance: {
+        ...editorialProvenance,
+        ...Object.fromEntries(
+          contact.plan.claims.map(({ field, evidence }) => [
+            field,
+            mockStoredContactProvenance(evidence, now),
+          ]),
+        ),
+      },
       media: [],
       /*
        * ADM-016 — the server resolves the mapping inside the create
        * transaction, so the record it answers with already carries one. It is
-       * AUTO_MATCHED and blocked, because nothing about creating a place
-       * verifies its mapping.
+       * blocked either way, because nothing about creating a place verifies
+       * its mapping.
        */
-      administrative: {
-        status: 'AUTO_MATCHED' as const,
-        provinceCode: (body.provinceCode as string | undefined) ?? null,
-        provinceName: (body.provinceCode as string | undefined) ? 'Thành phố Hà Nội' : null,
-        communeCode: (body.communeCode as string | undefined) ?? null,
-        communeName: (body.communeCode as string | undefined) ? 'Phường Ba Đình' : null,
-        method: body.provinceCode ? 'trusted_code' : 'boundary_point_in_polygon',
-        datasetVersion: ACTIVE_DATASET_VERSION,
-        activeDatasetVersion: ACTIVE_DATASET_VERSION,
-        mappedAt: new Date().toISOString(),
-        approvalBlock: {
-          code: 'MAPPING_NOT_VERIFIED',
-          message: 'the administrative mapping is AUTO_MATCHED: a resolver result, not an approval',
-        },
-      },
+      administrative: mapping.administrative,
       updatedAt: new Date().toISOString(),
     }
     db.places.push(created as (typeof db.places)[number])
@@ -1747,7 +1804,28 @@ export const handlers = [
     if (!place) return envelope(404, 'NOT_FOUND', 'place not found')
     const parsed = cmsPlaceEditMockSchema.safeParse(await request.json())
     if (!parsed.success) return validationEnvelope(parsed.error.issues)
-    const { expectedUpdatedAt, ...input } = parsed.data
+    const { expectedUpdatedAt, sourceReferences, ...input } = parsed.data
+    /*
+     * GoGo-BE#440 F-07 / #672 — an edit takes references for the two codes
+     * only; `sourceReferences.phone` and friends are `unknown` (contact
+     * evidence is `provenance`).
+     */
+    const editRefIssues = mockSourceReferenceIssues(
+      sourceReferences ?? {},
+      EDIT_SOURCE_REFERENCE_KEYS.filter((key) => typeof input[key] === 'string'),
+      EDIT_SOURCE_REFERENCE_KEYS,
+    )
+    if (editRefIssues.length > 0)
+      return HttpResponse.json(
+        {
+          code: 'SOURCE_REFERENCE_INVALID',
+          message: 'SOURCE_REFERENCE_INVALID',
+          field_errors: editRefIssues,
+          request_id: 'mock-source-reference-invalid',
+          retryable: false,
+        },
+        { status: 400 },
+      )
 
     // Optimistic concurrency, byte for byte: the code, and the *current*
     // `updatedAt` in the first field error, are what the console diffs against.
@@ -1775,15 +1853,19 @@ export const handlers = [
      * the editor has to render.
      */
     const fieldErrors: { field: string; code: string; message: string }[] = []
-    if (typeof input.phone === 'string') {
-      const result = mockNormalizePhone(input.phone)
-      if (result.ok) input.phone = result.value
-      else fieldErrors.push(result.issue)
-    }
-    if (typeof input.website === 'string') {
-      const result = mockNormalizeWebsite(input.website)
-      if (result.ok) input.website = result.value
-      else fieldErrors.push(result.issue)
+    /*
+     * GoGo-BE#280 — a contact value is written only with its evidence, and
+     * writing or clearing one makes `expectedUpdatedAt` mandatory. Checked
+     * before normalising so "unchanged" compares the stored shape.
+     */
+    const contact = mockPlanContactWrite(input, place)
+    if (!contact.ok) fieldErrors.push(...contact.issues)
+    if (
+      contact.ok &&
+      Object.keys(contact.plan.values).length > 0 &&
+      expectedUpdatedAt === undefined
+    ) {
+      fieldErrors.push({ field: 'expectedUpdatedAt', code: 'required', message: 'Required' })
     }
     if (fieldErrors.length > 0) {
       return HttpResponse.json(
@@ -1805,8 +1887,25 @@ export const handlers = [
      * `provinceCode` at the top level would let the console ship a form that
      * reads its own submission back and never notices the server disagreed.
      */
-    const { provinceCode, communeCode, ...rest } = input
+    const { provinceCode, communeCode, provenance: _evidence, ...rest } = input
+    void _evidence
+    // Contact columns: only what the plan writes, normalised (GoGo-BE#280).
+    // A re-sent unchanged value is not a write and leaves the row alone.
+    delete rest.addressText
+    delete rest.phone
+    delete rest.website
     Object.assign(place, rest)
+    const plan = contact.ok ? contact.plan : { values: {}, claims: [], cleared: [] }
+    Object.assign(place, plan.values)
+    // GoGo-BE#280 — the stored evidence, read back the way the CMS detail
+    // returns it: actor/verification server-owned, ownership `gogo`. A fresh
+    // object, so the seeded fixture's map is never mutated across tests.
+    place.provenance = { ...place.provenance }
+    for (const field of plan.cleared) delete place.provenance[field]
+    const verifiedAt = new Date().toISOString()
+    for (const { field, evidence } of plan.claims) {
+      place.provenance[field] = mockStoredContactProvenance(evidence, verifiedAt)
+    }
     if (provinceCode !== undefined || communeCode !== undefined) {
       const nextProvince =
         provinceCode === undefined ? place.administrative?.provinceCode : provinceCode
@@ -2440,11 +2539,47 @@ export const handlers = [
     if (body.expectedUpdatedAt !== undefined && body.expectedUpdatedAt !== detail.updatedAt) {
       return envelope(409, 'SUBMISSION_MODIFIED', 'This submission changed')
     }
+    // GoGo-BE#280 — every contact value in the draft needs its evidence, on
+    // every save: the draft is checked whole, against no stored row.
+    const evidence = contactProvenanceSchema.safeParse(body.draft.provenance ?? {})
+    if (!evidence.success) return validationEnvelope(evidence.error.issues)
+    const contact = mockPlanContactWrite(
+      { ...(body.draft as Parameters<typeof mockPlanContactWrite>[0]), provenance: evidence.data },
+      null,
+    )
+    if (!contact.ok) {
+      return HttpResponse.json(
+        {
+          code: 'VALIDATION_FAILED',
+          message: 'Request validation failed',
+          field_errors: contact.issues,
+          request_id: 'mock-review-validation',
+          retryable: false,
+        },
+        { status: 400 },
+      )
+    }
+    /*
+     * Sol F-01 — GoGo-BE `normalizeDraftContact(draft, 'save')`: the draft is
+     * stored normalised (phone in E.164, website with its scheme, collectedAt
+     * in UTC), so what approval reads is what the editor would have written.
+     */
+    const { provenance: _sent, ...draftRest } = body.draft
+    void _sent
+    const claims = Object.fromEntries(
+      contact.plan.claims.map(({ field, evidence: claim }) => [field, claim]),
+    )
+    const draft: Record<string, unknown> = {
+      ...draftRest,
+      ...contact.plan.values,
+      ...(Object.keys(claims).length > 0 ? { provenance: claims } : {}),
+    }
     const updatedAt = new Date(Date.parse(detail.updatedAt) + 60_000).toISOString()
     detail.updatedAt = updatedAt
-    detail.review = { draft: body.draft }
+    detail.review = { draft }
+    // What the console sent, as the tests assert it; the row keeps the stored shape.
     db.reviewSaves.push({ id, draft: body.draft })
-    return HttpResponse.json({ id, draft: body.draft, updatedAt })
+    return HttpResponse.json({ id, draft, updatedAt })
   }),
 
   http.post(`${BASE}/cms/place-submissions/:id/decide`, async ({ params, request }) => {
@@ -2464,6 +2599,30 @@ export const handlers = [
       }
       if (!db.places.some((place: { id: string }) => place.id === body.mergeIntoPlaceId)) {
         return envelope(404, 'MERGE_TARGET_NOT_FOUND', 'Target place not found')
+      }
+    }
+    /*
+     * GoGo-BE#280 — approval re-checks the stored draft. One saved before
+     * contact evidence existed is the draft's fault, not the request's: 409,
+     * naming the fields, so the reviewer re-saves it with its sources.
+     */
+    if (body.decision === 'approved') {
+      const stored = (
+        db.submissionDetails[String(params.id)] as
+          { review?: { draft: Parameters<typeof mockContactWriteIssues>[0] } | null } | undefined
+      )?.review?.draft
+      const contact = stored ? mockContactWriteIssues(stored, null) : { issues: [] }
+      if (contact.issues.length > 0) {
+        return HttpResponse.json(
+          {
+            code: 'REVIEW_EVIDENCE_REQUIRED',
+            message: 'Bản nháp duyệt có địa chỉ / điện thoại / website chưa kèm nguồn',
+            field_errors: contact.issues,
+            request_id: 'mock-review-evidence',
+            retryable: false,
+          },
+          { status: 409 },
+        )
       }
     }
     db.decisions.push({ id: String(params.id), ...body })
@@ -3969,6 +4128,9 @@ export const handlers = [
       const rows = db.rows[String(params.jobId)] ?? []
       const row = rows.find((item) => item.id === params.rowId)
       if (!row) return envelope(404, 'NOT_FOUND', 'row not found')
+      // SA-F-12 — the row's stored contacts are checked before the candidate.
+      const stale = mockAssertContactCurrent(String(params.jobId), row)
+      if (stale) return stale
       const body = (await request.json()) as { googlePlaceId: string }
       if (!row.candidates.some((candidate) => candidate.googlePlaceId === body.googlePlaceId)) {
         return envelope(400, 'CANDIDATE_NOT_LISTED', 'candidate was not surfaced for this row')
@@ -3984,6 +4146,9 @@ export const handlers = [
     const rows = db.rows[String(params.jobId)] ?? []
     const row = rows.find((item) => item.id === params.rowId)
     if (!row) return envelope(404, 'NOT_FOUND', 'row not found')
+    // SA-F-12 — merging reports the row `imported`; a stale row must not get there.
+    const stale = mockAssertContactCurrent(String(params.jobId), row)
+    if (stale) return stale
     const body = (await request.json()) as { placeId: string }
     row.status = 'imported'
     row.matchedPlaceId = body.placeId
@@ -4002,11 +4167,22 @@ export const handlers = [
     const job = db.jobs.find((item) => item.id === params.jobId)
     if (!job) return envelope(404, 'NOT_FOUND', 'job not found')
     const rows = db.rows[String(params.jobId)] ?? []
-    const ready = rows.filter((row) => row.status === 'ready')
+    /*
+     * DEV-F-12 — a `ready` row validated before #280 is checked again here
+     * (`refuseStaleContact`): it fails with its column errors instead of
+     * being imported with its contact values silently dropped.
+     */
+    const failed: { rowId: string; code: string }[] = []
+    const ready: ImportRow[] = []
+    for (const row of rows.filter((item) => item.status === 'ready')) {
+      if (mockRefuseStaleContact(job, row))
+        failed.push({ rowId: row.id, code: 'CONTACT_EVIDENCE_REQUIRED' })
+      else ready.push(row)
+    }
     for (const row of ready) row.status = 'imported'
     job.rowsByStatus = { ...job.rowsByStatus, ready: 0, imported: ready.length }
     job.status = 'completed'
-    return HttpResponse.json({ jobId: job.id, created: ready.length, failed: [] }, { status: 201 })
+    return HttpResponse.json({ jobId: job.id, created: ready.length, failed }, { status: 201 })
   }),
 
   http.get(`${BASE}/cms/place-imports/:jobId`, ({ params }) => {
@@ -4763,6 +4939,152 @@ export const COMMUNES: Record<string, { code: string; name: string; fullName: st
     { code: '00166', name: 'Ngọc Hà', fullName: 'Phường Ngọc Hà' },
   ],
   '79': [{ code: '26734', name: 'Bến Nghé', fullName: 'Phường Bến Nghé' }],
+}
+
+/**
+ * The mock's pinned boundary release: one box per province, standing for the
+ * commune polygons GoGo-BE's resolver tests a point against (`fromBoundary`).
+ * A point in the box of a province other than the asserted one lies in a
+ * commune that is not the asserted commune, which is the one disagreement
+ * `adjudicate` needs to see on a create. A point in no box is
+ * `NO_BOUNDARY_MATCH`, as off the released polygons.
+ */
+const PROVINCE_BOUNDS: Record<string, { lat: [number, number]; lng: [number, number] }> = {
+  '01': { lat: [20.55, 21.4], lng: [105.3, 106.05] },
+  '79': { lat: [10.35, 11.2], lng: [106.35, 107.05] },
+}
+
+function mockProvinceContaining(point: { lat: number; lng: number }): string | null {
+  for (const [code, box] of Object.entries(PROVINCE_BOUNDS)) {
+    const inLat = point.lat >= box.lat[0] && point.lat <= box.lat[1]
+    const inLng = point.lng >= box.lng[0] && point.lng <= box.lng[1]
+    if (inLat && inLng) return code
+  }
+  return null
+}
+
+type MockCodePair = { provinceCode: string | null; communeCode: string | null }
+type MockPairIssue = { code: string; message: string; field: 'provinceCode' | 'communeCode' }
+
+/**
+ * GoGo-BE `validateCurrentPair` (`administrative/domain/unit-validation.ts`)
+ * over the mock's units — what `assertCurrentPair` refuses a create or edit
+ * with *before* the resolver runs, pointed at the box responsible. A pair
+ * that passes is a current pair; whether the coordinates agree with it is
+ * the resolver's question, not this one's.
+ */
+function mockCurrentPairIssue(pair: MockCodePair): MockPairIssue | null {
+  const { provinceCode, communeCode } = pair
+  if (provinceCode === null && communeCode === null) return null
+  if (provinceCode === null || communeCode === null) {
+    return {
+      code: 'ADMINISTRATIVE_CODES_INCOMPLETE',
+      message:
+        provinceCode === null
+          ? 'a commune code needs the province code it belongs to'
+          : 'a province code alone is not an address; choose a commune',
+      field: provinceCode === null ? 'provinceCode' : 'communeCode',
+    }
+  }
+  if (!PROVINCES.some((province) => province.code === provinceCode)) {
+    return {
+      code: 'PROVINCE_NOT_CURRENT',
+      message: `${provinceCode} is not a current province in ${ACTIVE_DATASET_VERSION}`,
+      field: 'provinceCode',
+    }
+  }
+  const parent = Object.entries(COMMUNES).find(([, communes]) =>
+    communes.some((commune) => commune.code === communeCode),
+  )?.[0]
+  if (parent === undefined) {
+    return {
+      code: 'COMMUNE_NOT_CURRENT',
+      message: `${communeCode} is not a current commune in ${ACTIVE_DATASET_VERSION}`,
+      field: 'communeCode',
+    }
+  }
+  if (parent !== provinceCode) {
+    return {
+      code: 'HIERARCHY_INVALID',
+      message: `commune ${communeCode} belongs to ${parent}, not to ${provinceCode}`,
+      field: 'communeCode',
+    }
+  }
+  return null
+}
+
+/**
+ * GoGo-BE `resolvePlaceWithin` → `adjudicate` on a create (BE#672 @cda3e2a,
+ * `administrative/domain/resolver.ts`), mirrored for the mock.
+ *
+ * With a current pair asserted, two deterministic sources speak: the trusted
+ * codes (precedence 2) and the boundary the point falls in (3). When they
+ * name the same pair the answer is AUTO_MATCHED and attributed to the
+ * stronger source, `trusted_code`; `settleCodeClaims` then records the two
+ * code claims (`codesAdopted`). When they disagree it is `EVIDENCE_CONFLICT`:
+ * NEEDS_REVIEW, the current codes kept — a new place has none — no method,
+ * and the assertions are audited `not_adopted` with no provenance written.
+ * A point off every released polygon leaves the codes as the only evidence,
+ * and they are adopted.
+ *
+ * Without codes the mock keeps its pre-existing geometry-only answer: the
+ * mock's boundary carries no commune polygons, so it does not pretend to
+ * resolve a commune from a point.
+ */
+function mockResolveCreateMapping(point: { lat: number; lng: number }, pair: MockCodePair) {
+  const notVerified = (status: 'AUTO_MATCHED' | 'NEEDS_REVIEW') => ({
+    code: 'MAPPING_NOT_VERIFIED',
+    message: `the administrative mapping is ${status}: a resolver result, not an approval`,
+  })
+  const release = {
+    datasetVersion: ACTIVE_DATASET_VERSION,
+    activeDatasetVersion: ACTIVE_DATASET_VERSION,
+    mappedAt: new Date().toISOString(),
+  }
+  if (pair.provinceCode === null || pair.communeCode === null) {
+    return {
+      codesAdopted: false,
+      administrative: {
+        status: 'AUTO_MATCHED' as const,
+        provinceCode: null,
+        provinceName: null,
+        communeCode: null,
+        communeName: null,
+        method: 'boundary_point_in_polygon',
+        ...release,
+        approvalBlock: notVerified('AUTO_MATCHED'),
+      },
+    }
+  }
+  const boundaryProvince = mockProvinceContaining(point)
+  if (boundaryProvince !== null && boundaryProvince !== pair.provinceCode) {
+    return {
+      codesAdopted: false,
+      administrative: {
+        status: 'NEEDS_REVIEW' as const,
+        provinceCode: null,
+        provinceName: null,
+        communeCode: null,
+        communeName: null,
+        method: null,
+        ...release,
+        approvalBlock: notVerified('NEEDS_REVIEW'),
+      },
+    }
+  }
+  return {
+    codesAdopted: true,
+    administrative: {
+      status: 'AUTO_MATCHED' as const,
+      provinceCode: pair.provinceCode,
+      provinceName: unitNameFor(pair.provinceCode),
+      communeCode: pair.communeCode,
+      communeName: unitNameFor(pair.communeCode),
+      method: 'trusted_code',
+      ...release,
+      approvalBlock: notVerified('AUTO_MATCHED'),
+    },
+  }
 }
 
 const BASE_MAPPINGS: MappingFixture[] = [

@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/shared/test/server'
 import { renderWithProviders, signInAs } from '@/shared/test/render'
 import PlaceCreateScreen from './placeCreate.view'
+import { evidenceGroup, giveEvidence } from './contactEvidence.testkit'
 import { fillSources, SOURCE_LABEL, SOURCE_TEXT } from './placeCreate.testkit'
 
 /**
@@ -126,32 +127,82 @@ describe('create a place', () => {
     expect(sent[0]!.body).not.toHaveProperty('googleDerivedFields')
   })
 
-  it('will not send a fact without its source, and says so on the source box', async () => {
+  /*
+   * GoGo-BE#672 (alpha.66) — a contact's evidence is structured
+   * `provenance.<field>` (source type, reference, when collected), asked for by
+   * the same boxes the place editor uses; `sourceReferences.phone` is refused
+   * `unknown`, so it is never sent.
+   */
+  it('will not send a contact without its evidence, and says so on its evidence boxes', async () => {
     signInAs('editor')
     const sent = createAnswers(created)
     const user = userEvent.setup()
     renderWithProviders(<PlaceCreateScreen />)
 
     await fillRequired(user)
+    expect(evidenceGroup('Điện thoại')).not.toBeInTheDocument()
     await user.type(screen.getByLabelText(/Điện thoại/), '0283822999')
+    expect(screen.queryByLabelText(/^Nguồn của số điện thoại/)).not.toBeInTheDocument()
     await submit(user)
 
-    const phoneSource = await screen.findByLabelText(SOURCE_LABEL.phone)
-    await waitFor(() => expect(phoneSource).toHaveAttribute('aria-invalid', 'true'))
-    expect(screen.getByText('Ghi nguồn cho thông tin này')).toBeInTheDocument()
+    const group = within(await screen.findByRole('group', { name: 'Nguồn của Điện thoại' }))
+    await waitFor(() =>
+      expect(group.getByLabelText('Loại nguồn')).toHaveAttribute('aria-invalid', 'true'),
+    )
+    expect(group.getAllByText('Bắt buộc khi lưu giá trị này')).toHaveLength(3)
     expect(sent).toHaveLength(0)
 
-    await user.type(phoneSource, 'Gọi điện cho quán')
+    await giveEvidence(user, 'Điện thoại', { sourceReference: 'Gọi điện cho quán' })
     await submit(user)
 
     await waitFor(() => expect(sent).toHaveLength(1))
     expect(sent[0]!.body).toMatchObject({
       phone: '0283822999',
-      sourceReferences: { name: SOURCE_TEXT, geom: SOURCE_TEXT, phone: 'Gọi điện cho quán' },
+      sourceReferences: { name: SOURCE_TEXT, geom: SOURCE_TEXT },
+      provenance: {
+        phone: {
+          sourceType: 'editorial',
+          sourceReference: 'Gọi điện cho quán',
+          collectedAt: new Date('2026-09-30T09:00').toISOString(),
+        },
+      },
     })
+    expect(sent[0]!.body.sourceReferences).not.toHaveProperty('phone')
   })
 
-  it('drops the source of a fact the editor emptied — no stray reference', async () => {
+  it('sends address, phone and website evidence as provenance, one entry each', async () => {
+    signInAs('editor')
+    const sent = createAnswers(created)
+    const user = userEvent.setup()
+    renderWithProviders(<PlaceCreateScreen />)
+
+    await fillRequired(user)
+    await user.type(screen.getByLabelText(/^Địa chỉ/), '1 Lê Lợi')
+    await user.type(screen.getByLabelText(/Điện thoại/), '0283822999')
+    await user.type(screen.getByLabelText(/Website/), 'https://quanmoi.vn')
+    await giveEvidence(user, 'Địa chỉ (dạng tự do)', {
+      sourceType: 'community',
+      sourceReference: 'Biển số nhà',
+    })
+    await giveEvidence(user, 'Điện thoại')
+    await giveEvidence(user, 'Website', { sourceReference: 'Trang chính thức' })
+    await submit(user)
+
+    await waitFor(() => expect(sent).toHaveLength(1))
+    const body = sent[0]!.body as {
+      provenance: Record<string, { sourceType: string; sourceReference: string }>
+      sourceReferences: Record<string, string>
+    }
+    expect(Object.keys(body.provenance).sort()).toEqual(['addressText', 'phone', 'website'])
+    expect(body.provenance.addressText).toMatchObject({
+      sourceType: 'community',
+      sourceReference: 'Biển số nhà',
+    })
+    expect(body.provenance.website).toMatchObject({ sourceReference: 'Trang chính thức' })
+    expect(body.sourceReferences).toEqual({ name: SOURCE_TEXT, geom: SOURCE_TEXT })
+  })
+
+  it('drops the evidence of a contact the editor emptied — no stray entry', async () => {
     signInAs('editor')
     const sent = createAnswers(created)
     const user = userEvent.setup()
@@ -160,13 +211,35 @@ describe('create a place', () => {
     await fillRequired(user)
     const website = screen.getByLabelText(/Website/)
     await user.type(website, 'https://quanmoi.vn')
-    await fillSources(user, ['website'], 'Website của quán')
+    await giveEvidence(user, 'Website', { sourceReference: 'Website của quán' })
     await user.clear(website)
+    expect(evidenceGroup('Website')).not.toBeInTheDocument()
     await submit(user)
 
     await waitFor(() => expect(sent).toHaveLength(1))
     expect(sent[0]!.body).not.toHaveProperty('website')
+    expect(sent[0]!.body).not.toHaveProperty('provenance')
     expect(sent[0]!.body.sourceReferences).toEqual({ name: SOURCE_TEXT, geom: SOURCE_TEXT })
+  })
+
+  it('puts a server evidence refusal on the evidence box it names', async () => {
+    signInAs('editor')
+    createAnswers(() =>
+      envelope('VALIDATION_FAILED', 400, [
+        { field: 'provenance.phone.collectedAt', code: 'in_future', message: 'in_future' },
+      ]),
+    )
+    const user = userEvent.setup()
+    renderWithProviders(<PlaceCreateScreen />)
+
+    await fillRequired(user)
+    await user.type(screen.getByLabelText(/Điện thoại/), '0283822999')
+    const group = await giveEvidence(user, 'Điện thoại')
+    await submit(user)
+
+    await waitFor(() =>
+      expect(group.getByLabelText('Thu thập lúc')).toHaveAttribute('aria-invalid', 'true'),
+    )
   })
 
   it('refuses to submit without a name or a position, and says which', async () => {
@@ -274,7 +347,7 @@ describe('create a place', () => {
 
     await fillRequired(user)
     await user.type(screen.getByLabelText(/Điện thoại/), '38229999')
-    await fillSources(user, ['phone'], 'Gọi điện cho quán')
+    await giveEvidence(user, 'Điện thoại')
     await user.click(screen.getByRole('button', { name: 'Tạo địa điểm' }))
 
     const phone = await screen.findByLabelText(/Điện thoại/)

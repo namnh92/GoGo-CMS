@@ -779,10 +779,10 @@ export const en: Partial<Record<MessageKey, string>> = {
     'Three sources that look identical in the table below. Fixing the wrong one means knowing which is which.',
   'jobDetail.sourceFile': 'Your file',
   'jobDetail.sourceFileFields':
-    'name, category, vibes, audiences, highlight, price, phone, website, avg_visit_minutes, is_lodging, curated_rank. Wrong here means fix the file and re-import.',
+    'name, category, vibes, audiences, highlight, price, address, phone, website (each with its three source columns), avg_visit_minutes, is_lodging, curated_rank. Wrong here means fix the file and re-import.',
   'jobDetail.sourceGoogle': 'Fetched from Google',
   'jobDetail.sourceGoogleFields':
-    'Display name, address, coordinates, canonical Google link, rating, review count, price level, opening hours, business status, types. Read-only — check the link or Place ID instead.',
+    'Display name, coordinates, canonical Google link, rating, review count, price level, opening hours, business status, types. Read-only — check the link or Place ID instead.',
   'jobDetail.sourceDerived': 'Derived by GoGo',
   'jobDetail.sourceDerivedFields':
     'Province and commune codes and names, mapping status, dataset version, publication blocker, category derived from the provider types. Computed from the coordinate; never typed.',
@@ -1166,9 +1166,6 @@ export const en: Partial<Record<MessageKey, string>> = {
   'placeCreate.source.hint': 'E.g. visited on 2 Oct, phoned the venue, menu on site.',
   'placeCreate.source.name': 'Source for the name',
   'placeCreate.source.geom': 'Source for the coordinates',
-  'placeCreate.source.addressText': 'Source for the address',
-  'placeCreate.source.phone': 'Source for the phone number',
-  'placeCreate.source.website': 'Source for the website',
   'placeCreate.source.description': 'Source for the description',
   'placeCreate.source.tooLong': 'A source is at most 500 characters.',
   'placeCreate.link.attached':
@@ -1248,6 +1245,49 @@ export const en: Partial<Record<MessageKey, string>> = {
   'placeEditor.providerStatus.other': 'Other status ({value})',
   'placeEditor.provenanceVerified': 'verified {time}',
   'placeEditor.provenanceUnverified': 'no verification timestamp',
+  'placeEditor.provenanceCollected': 'collected {time}',
+  'contactEvidence.legend': 'Source for {field}',
+  'contactEvidence.hint':
+    'A new value becomes GoGo data only with an independent source: who stated it, where, and when. Google (links, Place IDs, previews) is not a source.',
+  'contactEvidence.sourceType': 'Source type',
+  'contactEvidence.sourceTypePlaceholder': 'Choose a source type',
+  'contactEvidence.type.editorial': 'GoGo editorial (owner, official website, field visit)',
+  'contactEvidence.type.community': 'Community (contributor’s own report)',
+  'contactEvidence.type.provider': 'Permitted dataset (not Google)',
+  'contactEvidence.sourceReference': 'Source reference',
+  'contactEvidence.sourceReferenceHint':
+    'Put the origin first, e.g. “Called the owner on 30 Sep” or the whole official website URL (chaoban.vn/contact). Do not start with job / sheet / tab / row, and do not give a bare id or A1 cell.',
+  'contactEvidence.collectedAt': 'Collected at',
+  'contactEvidence.error.required': 'Required to save this value',
+  'contactEvidence.error.too_long': 'At most 500 characters',
+  'contactEvidence.error.in_future': 'Cannot be in the future',
+  'contactEvidence.error.invalid_datetime': 'Not a valid time',
+  'contactEvidence.error.google_not_independent':
+    'Google is not an independent source — name the real origin',
+  'contactEvidence.error.transport_only':
+    'That names transport (job / sheet / tab / row, a bare id or A1 cell), not a source — put the origin first',
+  'contactEvidence.error.invalid': 'Invalid value',
+  'contactEvidence.error.not_allowed': 'A cleared value takes no source',
+  'contactEvidence.error.value_missing': 'Source given without a value',
+  'contactEvidence.error.unknown':
+    "This field's source belongs in the source boxes below (type, reference, time) — reload the page and try again",
+  'contactValue.error.phone.invalid': 'Invalid phone number',
+  'contactValue.error.phone.too_long': 'A phone number is at most 40 characters',
+  'contactValue.error.phone.no_country':
+    'Add a country code or a leading 0 (e.g. 028 3822 9999 or +84 28 3822 9999)',
+  'contactValue.error.website.invalid': 'The website must be a valid public http or https address',
+  'contactValue.error.website.credentials': 'The website must not contain a username or password',
+  'contactValue.error.website.too_long': 'A website is at most 500 characters',
+  'contactValue.error.addressText.blank': 'The address is empty',
+  'contactValue.error.addressText.too_long': 'An address is at most 400 characters',
+  'contactValue.error.addressText.invalid':
+    'The address must be plain text, with no control characters or < >',
+  'contactOwnership.gogo': 'GoGo data (independent source)',
+  'contactOwnership.google': 'From Google (legacy)',
+  'contactOwnership.unknown': 'Source unknown — not GoGo-verified',
+  'submissions.review.evidenceRequired':
+    'The draft has an address / phone / website without a source. Add the sources, save the supplement, then approve again.',
+  'submissions.review.invalid': 'The supplement is not valid — see the marked boxes.',
   'placeEditor.conflictTitle': 'Somebody else saved this place',
   'placeEditor.conflictBody':
     'The server copy changed at {time}, after you opened the form. Nothing you typed was lost.',
@@ -1760,6 +1800,8 @@ export const en: Partial<Record<MessageKey, string>> = {
   'error.PLACE_MEDIA_NOT_FOUND': 'No such photo on this place.',
   'error.FILE_TOO_LARGE': 'The file is over the size ceiling.',
   'error.UNSUPPORTED_CONTENT_TYPE': 'Unsupported image format. Use JPEG, PNG, WebP or HEIC.',
+  'error.CONTACT_EVIDENCE_REQUIRED':
+    "This row's stored address / phone / website lack the evidence today's rules require. The row is now a validation failure — correct the sheet and upload it again.",
   'error.UPLOAD_NOT_CONFIGURED': 'Object storage is not configured in this environment.',
 
   'banners.title': 'Home banners',

@@ -182,6 +182,615 @@ const ADMINISTRATIVE_CODE = z
   .trim()
   .regex(/^[0-9]{2,5}$/, 'an administrative code is 2 to 5 digits')
 
+/**
+ * GoGo-BE#280 — `PlaceContactEvidence`, as GoGo-BE's `contactEvidenceSchema`
+ * (`libs/modules/shared/place-contact-schema.ts`) declares it. Every property
+ * is optional at the schema layer on purpose, exactly as in the spec: a missing
+ * one is reported by `mockPlanContactWrite` per property
+ * (`provenance.phone.collectedAt required`), not as a schema failure. Unknown
+ * keys are refused, and so is a `null` entry — the contract has no nullable
+ * evidence (Sol F-02).
+ */
+const contactEvidenceSchema = z
+  .object({
+    sourceType: z.string().max(40).optional(),
+    sourceReference: z.string().max(2000).optional(),
+    collectedAt: z.string().max(64).optional(),
+  })
+  .strict()
+
+export const contactProvenanceSchema = z
+  .object({
+    addressText: contactEvidenceSchema.optional(),
+    phone: contactEvidenceSchema.optional(),
+    website: contactEvidenceSchema.optional(),
+  })
+  .strict()
+
+type ContactEvidenceBody = z.infer<typeof contactEvidenceSchema>
+type ContactWireField = 'addressText' | 'phone' | 'website'
+type ContactWriteBody = {
+  addressText?: string | null | undefined
+  phone?: string | null | undefined
+  website?: string | null | undefined
+  provenance?: Partial<Record<ContactWireField, ContactEvidenceBody | null | undefined>> | undefined
+}
+type MockContactIssue = { field: string; code: string; message: string }
+type MockNormalized = { ok: true; value: string } | { ok: false; issue: MockContactIssue }
+
+const CONTACT_WIRE_FIELDS = ['addressText', 'phone', 'website'] as const
+const INDEPENDENT_SOURCE_TYPES = ['editorial', 'community', 'provider']
+/** GoGo-BE `GOOGLE_REFERENCE` in `place-contact.ts`, verbatim. */
+const GOOGLE_REFERENCE =
+  /google\.|goo\.gl|g\.page|g\.co\/|\bChIJ[\w-]{8,}|\bGhIJ[\w-]{8,}|\bgoogle\b/i
+/** GoGo-BE `CONTROL_CHARS`: C0 and C1 control characters, DEL included. */
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]/
+/** GoGo-BE `E164`. */
+const E164 = /^\+[1-9][0-9]{7,14}$/
+
+/*
+ * Everything from here to `mockPlanContactWrite` is GoGo-BE's
+ * `libs/modules/shared/place-contact.ts` and `place-contact-write.ts`
+ * (BE#672 @cda3e2a), ported for the MOCK only. Production code never
+ * normalises or classifies a contact value or a reference: the console sends
+ * what the editor typed and renders what GoGo-BE answers. A second normaliser
+ * in the app would accept values the server refuses and refuse values it
+ * accepts, and neither side would hear about it.
+ */
+
+/** GoGo-BE `normalizePhone`. */
+export function mockNormalizePhone(raw: string): MockNormalized {
+  const trimmed = raw.trim()
+  const invalid: MockContactIssue = {
+    field: 'phone',
+    code: 'invalid',
+    message: 'Số điện thoại không hợp lệ',
+  }
+  if (CONTROL_CHARS.test(trimmed)) return { ok: false, issue: invalid }
+  if (trimmed === '') return { ok: false, issue: invalid }
+  if (trimmed.length > 40)
+    return {
+      ok: false,
+      issue: { field: 'phone', code: 'too_long', message: 'Số điện thoại quá dài' },
+    }
+  const cleaned = trimmed.replace(/[\s().\-–—]/g, '')
+  if (!/^\+?\d+$/.test(cleaned)) return { ok: false, issue: invalid }
+  const digits = cleaned.startsWith('+') ? cleaned.slice(1) : cleaned
+  let e164: string
+  if (cleaned.startsWith('+')) e164 = digits
+  else if (digits.startsWith('00')) e164 = digits.slice(2)
+  else if (digits.startsWith('0')) e164 = `84${digits.slice(1)}`
+  else if (digits.startsWith('84')) e164 = digits
+  else
+    return {
+      ok: false,
+      issue: { field: 'phone', code: 'no_country', message: 'Thiếu mã quốc gia hoặc số 0 đầu' },
+    }
+  const value = `+${e164}`
+  if (!E164.test(value)) return { ok: false, issue: invalid }
+  return { ok: true, value }
+}
+
+/** GoGo-BE `PRIVATE_SUFFIXES`. */
+const PRIVATE_SUFFIXES = [
+  'localhost',
+  'local',
+  'localdomain',
+  'internal',
+  'intranet',
+  'lan',
+  'home.arpa',
+  'test',
+  'invalid',
+  'example',
+  'onion',
+]
+
+/** GoGo-BE `isPublicHostname`. */
+function isPublicHostname(host: string): boolean {
+  if (host === '' || host.startsWith('[') || host.length > 253) return false
+  const labels = host.replace(/\.$/, '').split('.')
+  if (labels.length < 2) return false
+  if (!labels.every((l) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(l))) return false
+  const tld = labels[labels.length - 1]!
+  if (!/^(?:[a-z]{2,63}|xn--[a-z0-9-]{1,59})$/.test(tld)) return false
+  const name = labels.join('.')
+  return !PRIVATE_SUFFIXES.some((suffix) => name === suffix || name.endsWith(`.${suffix}`))
+}
+
+/** GoGo-BE `normalizeWebsite`. */
+export function mockNormalizeWebsite(raw: string): MockNormalized {
+  const invalid: MockContactIssue = {
+    field: 'website',
+    code: 'invalid',
+    message: 'Website phải là địa chỉ http hoặc https hợp lệ',
+  }
+  if (CONTROL_CHARS.test(raw)) return { ok: false, issue: invalid }
+  const trimmed = raw.trim()
+  if (trimmed === '') return { ok: false, issue: invalid }
+  const candidate = /^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(trimmed) ? trimmed : `https://${trimmed}`
+  let url: URL
+  try {
+    url = new URL(candidate)
+  } catch {
+    return { ok: false, issue: invalid }
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return { ok: false, issue: invalid }
+  if (url.username !== '' || url.password !== '')
+    return {
+      ok: false,
+      issue: {
+        field: 'website',
+        code: 'credentials',
+        message: 'Website không được chứa tài khoản',
+      },
+    }
+  if (!isPublicHostname(url.hostname)) return { ok: false, issue: invalid }
+  if (url.href.length > 500)
+    return { ok: false, issue: { field: 'website', code: 'too_long', message: 'Website quá dài' } }
+  return { ok: true, value: url.href }
+}
+
+/** GoGo-BE `normalizeAddress`. */
+export function mockNormalizeAddress(raw: string): MockNormalized {
+  const invalid: MockContactIssue = {
+    field: 'addressText',
+    code: 'invalid',
+    message: 'Địa chỉ phải là văn bản thuần, không chứa ký tự điều khiển',
+  }
+  const trimmed = raw.trim()
+  if (trimmed === '')
+    return { ok: false, issue: { field: 'addressText', code: 'blank', message: 'Địa chỉ trống' } }
+  if (trimmed.length > 400)
+    return {
+      ok: false,
+      issue: { field: 'addressText', code: 'too_long', message: 'Địa chỉ quá dài' },
+    }
+  if (CONTROL_CHARS.test(trimmed) || /[<>]/.test(trimmed)) return { ok: false, issue: invalid }
+  return { ok: true, value: trimmed }
+}
+
+const MOCK_NORMALIZE: Record<ContactWireField, (raw: string) => MockNormalized> = {
+  addressText: mockNormalizeAddress,
+  phone: mockNormalizePhone,
+  website: mockNormalizeWebsite,
+}
+
+/*
+ * GoGo-BE#280 transport rule (Astra decision, BE `isTransportReference`).
+ */
+const TRANSPORT_KEYWORDS = [
+  'job',
+  'jobs',
+  'sheet',
+  'sheets',
+  'tab',
+  'row',
+  'rows',
+  'dòng',
+  'dong',
+  'cột',
+  'cot',
+  'col',
+  'column',
+  'cell',
+  'import',
+  'batch',
+  'file',
+  'upload',
+  'csv',
+  'xlsx',
+  'spreadsheet',
+  'id',
+  'r',
+]
+const STANDALONE_IDENTIFIERS = [
+  /^[0-9]+$/,
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+  /^(?:[^!]+!)?\$?[A-Za-z]{1,3}\$?[1-9][0-9]*(?::\$?[A-Za-z]{1,3}\$?[1-9][0-9]*)?$/,
+  /^[^#]+#[0-9]+$/,
+]
+
+export function mockIsTransportReference(reference: string): boolean {
+  const ref = reference.trim()
+  if (ref === '') return false
+  if (mockNormalizeWebsite(ref).ok) return false
+  const lower = ref.normalize('NFC').toLocaleLowerCase('vi')
+  for (const keyword of TRANSPORT_KEYWORDS) {
+    if (!lower.startsWith(keyword)) continue
+    const rest = lower.slice(keyword.length)
+    const next = rest === '' ? '' : String.fromCodePoint(rest.codePointAt(0)!)
+    if (next === '' || !/\p{L}/u.test(next)) return true
+  }
+  return STANDALONE_IDENTIFIERS.some((pattern) => pattern.test(ref))
+}
+
+/**
+ * GoGo-BE `parseZonedDateTime`: seconds optional, a zone required (`Z` or
+ * `±hh:mm` — not `+0700`), and a real calendar date (`02-30` is refused, not
+ * rolled into March).
+ */
+export function mockParseZonedDateTime(raw: string): Date | null {
+  const m =
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,9})?)?(Z|[+-](\d{2}):(\d{2}))$/.exec(
+      raw,
+    )
+  if (!m) return null
+  const [year, month, day, hour, minute] = [m[1], m[2], m[3], m[4], m[5]].map(Number) as [
+    number,
+    number,
+    number,
+    number,
+    number,
+  ]
+  const second = m[6] !== undefined ? Number(m[6]) : 0
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate()
+  if (month < 1 || month > 12 || day < 1 || day > daysInMonth) return null
+  if (hour > 23 || minute > 59 || second > 59) return null
+  if (m[8] !== undefined && (Number(m[8]) > 23 || Number(m[9]) > 59)) return null
+  const parsed = new Date(raw)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+type MockEvidence = { sourceType: string; sourceReference: string; collectedAt: string }
+
+/**
+ * GoGo-BE `validateEvidence`'s `path` — how the caller names the three
+ * evidence properties in its own errors: `provenance.phone.sourceType` for a
+ * console write, `phone_source_type` for a sheet column.
+ */
+type MockEvidencePaths = { sourceType: string; sourceReference: string; collectedAt: string }
+
+/** The console's naming: `<prefix>.sourceType` … */
+function mockEvidencePaths(prefix: string): MockEvidencePaths {
+  return {
+    sourceType: `${prefix}.sourceType`,
+    sourceReference: `${prefix}.sourceReference`,
+    collectedAt: `${prefix}.collectedAt`,
+  }
+}
+
+/** GoGo-BE `validateEvidence`. */
+function mockValidateEvidence(
+  evidence: ContactEvidenceBody,
+  path: MockEvidencePaths,
+  now: Date,
+): { ok: true; value: MockEvidence } | { ok: false; issues: MockContactIssue[] } {
+  const issues: MockContactIssue[] = []
+  const type = typeof evidence.sourceType === 'string' ? evidence.sourceType.trim() : ''
+  const reference =
+    typeof evidence.sourceReference === 'string' ? evidence.sourceReference.trim() : ''
+  const collected = typeof evidence.collectedAt === 'string' ? evidence.collectedAt.trim() : ''
+  if (type === '')
+    issues.push({ field: path.sourceType, code: 'required', message: 'Thiếu nguồn dữ liệu' })
+  else if (type === 'google_derived' || type === 'google')
+    issues.push({
+      field: path.sourceType,
+      code: 'google_not_independent',
+      message: 'Dữ liệu từ Google không phải nguồn độc lập',
+    })
+  else if (!INDEPENDENT_SOURCE_TYPES.includes(type))
+    issues.push({
+      field: path.sourceType,
+      code: 'invalid',
+      message: 'Nguồn dữ liệu không hợp lệ',
+    })
+  if (reference === '')
+    issues.push({
+      field: path.sourceReference,
+      code: 'required',
+      message: 'Thiếu tham chiếu nguồn',
+    })
+  else if (reference.length > 500)
+    issues.push({
+      field: path.sourceReference,
+      code: 'too_long',
+      message: 'Tham chiếu nguồn quá dài',
+    })
+  else if (CONTROL_CHARS.test(reference))
+    issues.push({
+      field: path.sourceReference,
+      code: 'invalid',
+      message: 'Tham chiếu nguồn không hợp lệ',
+    })
+  else if (GOOGLE_REFERENCE.test(reference))
+    issues.push({
+      field: path.sourceReference,
+      code: 'google_not_independent',
+      message: 'Tham chiếu Google không phải nguồn độc lập',
+    })
+  else if (mockIsTransportReference(reference))
+    issues.push({
+      field: path.sourceReference,
+      code: 'transport_only',
+      message: 'Mã job / sheet / dòng chỉ là đường truyền, không phải nguồn — ghi rõ nguồn gốc',
+    })
+  let collectedAt: Date | null = null
+  if (collected === '')
+    issues.push({
+      field: path.collectedAt,
+      code: 'required',
+      message: 'Thiếu thời điểm thu thập',
+    })
+  else {
+    const parsed = mockParseZonedDateTime(collected)
+    if (!parsed)
+      issues.push({
+        field: path.collectedAt,
+        code: 'invalid_datetime',
+        message: 'Không phải thời điểm ISO',
+      })
+    else if (parsed.getTime() > now.getTime() + 5 * 60_000)
+      issues.push({
+        field: path.collectedAt,
+        code: 'in_future',
+        message: 'Thời điểm thu thập ở tương lai',
+      })
+    else collectedAt = parsed
+  }
+  if (issues.length > 0) return { ok: false, issues }
+  return {
+    ok: true,
+    value: {
+      sourceType: type,
+      sourceReference: reference,
+      collectedAt: collectedAt!.toISOString(),
+    },
+  }
+}
+
+/** GoGo-BE `ContactWritePlan`: what one write does to the three fields. */
+export type MockContactWritePlan = {
+  /** Normalised column values to set. Absent = untouched; `null` = cleared. */
+  values: Partial<Record<ContactWireField, string | null>>
+  /** Fields written with evidence, and that evidence as the server stores it. */
+  claims: { field: ContactWireField; evidence: MockEvidence }[]
+  cleared: ContactWireField[]
+}
+
+/**
+ * GoGo-BE#280 `planContactWrite`, mirrored for the mock. `current` is the
+ * stored row for an edit, `null` for a create or a review draft (which is
+ * always checked whole). With a stored row, re-sending the stored value
+ * without evidence is not a write and needs nothing — so a whole-form save
+ * still works. Value refusals come back on the field (`phone`, `invalid`),
+ * evidence refusals on `provenance.<field>[.<property>]`.
+ */
+export function mockPlanContactWrite(
+  body: ContactWriteBody,
+  current: { addressText?: string | null; phone?: string | null; website?: string | null } | null,
+  now: Date = new Date(),
+): { ok: true; plan: MockContactWritePlan } | { ok: false; issues: MockContactIssue[] } {
+  const issues: MockContactIssue[] = []
+  const plan: MockContactWritePlan = { values: {}, claims: [], cleared: [] }
+  for (const field of CONTACT_WIRE_FIELDS) {
+    const value = body[field]
+    const evidence = body.provenance?.[field]
+    const path = `provenance.${field}`
+    const hasEvidence = evidence !== undefined && evidence !== null
+    const stored = current === null ? null : (current[field] ?? null)
+    if (value === undefined) {
+      if (hasEvidence)
+        issues.push({
+          field: path,
+          code: 'value_missing',
+          message: 'Có nguồn nhưng không có giá trị đi kèm',
+        })
+      continue
+    }
+    if (value === null) {
+      if (hasEvidence) {
+        issues.push({ field: path, code: 'not_allowed', message: 'Xoá giá trị không kèm nguồn' })
+        continue
+      }
+      if (current === null || stored === null) continue
+      plan.values[field] = null
+      plan.cleared.push(field)
+      continue
+    }
+    if (!hasEvidence && current !== null && stored === value) continue
+    const normalized = MOCK_NORMALIZE[field](value)
+    if (!normalized.ok) {
+      issues.push({ ...normalized.issue, field })
+      continue
+    }
+    if (!hasEvidence && current !== null && stored === normalized.value) continue
+    if (!hasEvidence) {
+      issues.push({
+        field: path,
+        code: 'required',
+        message: 'Giá trị này cần nguồn độc lập: loại nguồn, tham chiếu và thời điểm thu thập',
+      })
+      continue
+    }
+    const checked = mockValidateEvidence(evidence, mockEvidencePaths(path), now)
+    if (!checked.ok) {
+      issues.push(...checked.issues)
+      continue
+    }
+    plan.values[field] = normalized.value
+    plan.claims.push({ field, evidence: checked.value })
+  }
+  if (issues.length > 0) return { ok: false, issues }
+  return { ok: true, plan }
+}
+
+/**
+ * `mockPlanContactWrite` as a list of refusals plus "does this body write a
+ * contact" — the shape the review-draft gate and the payload-shape tests use.
+ */
+export function mockContactWriteIssues(
+  body: ContactWriteBody,
+  current: { addressText?: string | null; phone?: string | null; website?: string | null } | null,
+  now: Date = new Date(),
+): { issues: MockContactIssue[]; writes: boolean } {
+  const result = mockPlanContactWrite(body, current, now)
+  return result.ok
+    ? { issues: [], writes: Object.keys(result.plan.values).length > 0 }
+    : { issues: result.issues, writes: true }
+}
+
+/**
+ * GoGo-BE `CmsPlacesService` read-back of a contact claim: what the CMS detail
+ * returns under `provenance.<field>` after the write — actor and verification
+ * server-owned, `ownership` derived, never echoed from the request.
+ */
+export function mockStoredContactProvenance(evidence: MockEvidence, verifiedAt: string) {
+  return {
+    sourceType: evidence.sourceType,
+    sourceReference: evidence.sourceReference,
+    collectedAt: evidence.collectedAt,
+    verifiedAt,
+    ownership: 'gogo' as const,
+  }
+}
+
+/**
+ * GoGo-BE#440 `createPlace` read-back of a `sourceReferences` claim: one
+ * `editorial` row per claimed field carrying the editor's reference as the
+ * server stores it (`checkReferences` trims it), `verified_at` defaulted to
+ * the write, `collectedAt` null — no evidence was gathered, a reference was
+ * asserted — and no `ownership`, which only the contact columns carry.
+ */
+export function mockStoredEditorialProvenance(sourceReference: string, verifiedAt: string) {
+  return {
+    sourceType: 'editorial' as const,
+    sourceReference: sourceReference.trim(),
+    verifiedAt,
+    collectedAt: null,
+  }
+}
+
+/** GoGo-BE `IngestMessage` as the import rows carry it. */
+export type MockIngestMessage = { code: string; field: string | null; message: string }
+
+/**
+ * GoGo-BE `STALE_CONTACT_COLUMNS` — the three sheet columns, the provenance
+ * field each one's evidence is keyed by in `normalized.contactEvidence`, and
+ * the code prefix a fresh parse (`validateRow`) uses for it.
+ */
+const MOCK_STALE_CONTACT_COLUMNS: {
+  field: 'address_text' | 'phone' | 'website'
+  column: 'address' | 'phone' | 'website'
+  code: 'ADDRESS' | 'PHONE' | 'WEBSITE'
+  normalize: (raw: string) => MockNormalized
+}[] = [
+  { field: 'address_text', column: 'address', code: 'ADDRESS', normalize: mockNormalizeAddress },
+  { field: 'phone', column: 'phone', code: 'PHONE', normalize: mockNormalizePhone },
+  { field: 'website', column: 'website', code: 'WEBSITE', normalize: mockNormalizeWebsite },
+]
+
+/**
+ * GoGo-BE `staleContactErrors` (`place-import-job.service.ts`, BE#672
+ * @cda3e2a), mirrored for the mock: a stored import row's contact values and
+ * evidence checked again by today's rules. A row parsed before #280 carries
+ * `address` / `phone` / `website` with no `contactEvidence`, and a decision on
+ * it (confirm-candidate, merge, publish) is refused rather than turning an
+ * unsourced cell into a GoGo-owned fact. Same codes and columns as a fresh
+ * parse, so the operator reads one vocabulary.
+ */
+export function mockStaleContactErrors(
+  normalized: Record<string, unknown>,
+  now: Date = new Date(),
+): MockIngestMessage[] {
+  const errors: MockIngestMessage[] = []
+  const evidence = (normalized.contactEvidence ?? {}) as Record<string, ContactEvidenceBody>
+  for (const col of MOCK_STALE_CONTACT_COLUMNS) {
+    const value = normalized[col.column]
+    if (typeof value !== 'string' || value === '') continue
+    if (!col.normalize(value).ok) {
+      errors.push({
+        code: `${col.code}_INVALID`,
+        field: col.column,
+        message: `${col.column} không còn hợp lệ theo quy tắc hiện tại — sửa sheet và tải lại`,
+      })
+    }
+    const paths: MockEvidencePaths = {
+      sourceType: `${col.column}_source_type`,
+      sourceReference: `${col.column}_source_reference`,
+      collectedAt: `${col.column}_collected_at`,
+    }
+    const checked = mockValidateEvidence(evidence[col.field] ?? {}, paths, now)
+    if (!checked.ok) {
+      for (const issue of checked.issues) {
+        errors.push({
+          code:
+            issue.code === 'required'
+              ? `${col.code}_EVIDENCE_REQUIRED`
+              : `${col.code}_EVIDENCE_INVALID`,
+          field: issue.field,
+          message: `${col.column}: ${issue.message} — sửa sheet và tải lại`,
+        })
+      }
+    }
+  }
+  return errors
+}
+
+/**
+ * GoGo-BE#440 × #280 (alpha.66) — the `sourceReferences` keys each route
+ * accepts, exactly as the contract's `propertyNames` enums list them. The two
+ * sets and the contact provenance keys are disjoint: `addressText`, `phone`
+ * and `website` carry their evidence in `provenance.<field>`, and a
+ * `sourceReferences` key for one of them is refused with `code: unknown`.
+ */
+export const CREATE_SOURCE_REFERENCE_KEYS = [
+  'name',
+  'description',
+  'areaKey',
+  'city',
+  'district',
+  'geom',
+  'provinceCode',
+  'communeCode',
+  'taxonomyIds',
+] as const
+export const EDIT_SOURCE_REFERENCE_KEYS = ['provinceCode', 'communeCode'] as const
+
+export type CreateSourceReferenceKey = (typeof CREATE_SOURCE_REFERENCE_KEYS)[number]
+export type EditSourceReferenceKey = (typeof EDIT_SOURCE_REFERENCE_KEYS)[number]
+
+/**
+ * GoGo-BE `assertSourceReferences`, mirrored for the mock: one issue per key,
+ * `required | unused | unknown | too_long`. `supplied` is the keys whose fact
+ * the body carries non-null; `accepted` is the route's key set. A contact key
+ * is `unknown` and its message names `provenance.<field>`, as the server's does.
+ */
+export function mockSourceReferenceIssues(
+  refs: Record<string, unknown>,
+  supplied: readonly string[],
+  accepted: readonly string[],
+): { field: string; code: string; message: string }[] {
+  const issues: { key: string; code: string; message: string }[] = []
+  for (const key of supplied) {
+    const value = refs[key]
+    if (typeof value !== 'string' || value.trim() === '')
+      issues.push({ key, code: 'required', message: 'required' })
+  }
+  for (const key of Object.keys(refs)) {
+    if (supplied.includes(key)) continue
+    if (!accepted.includes(key))
+      issues.push({
+        key,
+        code: 'unknown',
+        message: (CONTACT_WIRE_FIELDS as readonly string[]).includes(key)
+          ? `use provenance.${key} for this field's evidence`
+          : 'unknown',
+      })
+    else issues.push({ key, code: 'unused', message: 'unused' })
+  }
+  for (const [key, value] of Object.entries(refs)) {
+    if (typeof value === 'string' && value.trim().length > 500)
+      issues.push({ key, code: 'too_long', message: 'too_long' })
+  }
+  return issues.map(({ key, code, message }) => ({
+    field: `sourceReferences.${key}`,
+    code,
+    message,
+  }))
+}
+
 function buildPlaceEditSchema(taxonomyId: z.ZodType<string>) {
   return z.object({
     name: z.string().trim().min(L.name.min).max(L.name.max).optional(),
@@ -213,6 +822,14 @@ function buildPlaceEditSchema(taxonomyId: z.ZodType<string>) {
     isLodging: z.boolean().optional(),
     curatedRank: z.number().int().min(L.curatedRank.min).nullable().optional(),
     taxonomyIds: z.array(taxonomyId).max(L.taxonomyIds.max).optional(),
+    /** GoGo-BE#280 — evidence for the contact values the body writes. */
+    provenance: contactProvenanceSchema.optional(),
+    /**
+     * GoGo-BE#440 F-07 — evidence for the codes; key rules are
+     * `mockSourceReferenceIssues` against `EDIT_SOURCE_REFERENCE_KEYS`, so a
+     * stray key is `SOURCE_REFERENCE_INVALID`, not a schema failure.
+     */
+    sourceReferences: z.record(z.string(), z.unknown()).optional(),
     /** Optimistic concurrency — the `updatedAt` the form was loaded from. */
     expectedUpdatedAt: z.string().datetime({ offset: true }).optional(),
   })

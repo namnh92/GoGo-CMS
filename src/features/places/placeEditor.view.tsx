@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Controller, useForm, useWatch, type Control } from 'react-hook-form'
@@ -55,8 +55,18 @@ import { GoogleLinkPanel } from './googleLink.view'
 import { PlaceLocationPanel } from './placeLocation.view'
 import { PublishChecklist } from './publishChecklist.view'
 import { emptyWeek, parseWeek, weekFromServer, weekSignature, type WeekDraft } from './hoursModel'
+import { ContactEvidenceFields } from './contactEvidence.view'
+import {
+  emptyEvidenceDrafts,
+  isContactField,
+  useEvidenceError,
+  useOwnershipLabel,
+  type ContactField,
+  type EvidenceProperty,
+} from './contactEvidence'
 import {
   CODE_SOURCE_KEYS,
+  contactEvidenceIssues,
   diffAgainstServer,
   missingCodeSources,
   placeIdentitySchema,
@@ -269,6 +279,10 @@ export default function PlaceEditorScreen() {
         // Evidence is per edit: it belongs to a code being asserted now, never
         // carried over from a previous save.
         sourceReferences: {},
+        // GoGo-BE#280 — evidence is asked for per write, never pre-filled from
+        // the stored row: re-sending last year's source would re-verify a
+        // value nobody re-checked.
+        evidence: emptyEvidenceDrafts(),
       }
       identityAppliedRef.current = `${detail.id}:${detail.updatedAt}`
       reset(values)
@@ -336,13 +350,13 @@ export default function PlaceEditorScreen() {
       baseline: PlaceEditBaseline
     }) => updatePlace(id, toPlaceEditBody(values, taxonomyIds, baseline)),
     onSuccess: (result, { values: sent, baseline }) => {
-      // The evidence went with the assertion it was given for (F-07); the next
-      // code change asks again rather than reusing it.
-      const values = { ...sent, sourceReferences: {} }
+      // Keep exactly what was typed, but stop calling it unsaved. Evidence went
+      // with the write it was given for — code references (F-07) and contact
+      // provenance (GoGo-BE#280) alike; the next change asks again.
+      const values = { ...sent, sourceReferences: {}, evidence: emptyEvidenceDrafts() }
       setIdentityError(null)
       setConflict(null)
       setIdentitySavedAt(new Date().toISOString())
-      // Keep exactly what was typed, but stop calling it unsaved.
       reset(values)
       setTaxonomyBaseline(taxonomySignature(taxonomyIds))
       /*
@@ -525,6 +539,28 @@ export default function PlaceEditorScreen() {
     onError: (error) => toast.error(describeError(error)),
   })
 
+  const describeEvidence = useEvidenceError()
+  /** GoGo-BE#280 — the evidence box's own refusal, local or from the server. */
+  const evidenceError = (field: ContactField, property: EvidenceProperty) => {
+    const error = errors.evidence?.[field]?.[property]
+    if (!error) return undefined
+    return describeEvidence({
+      code: String(error.type ?? ''),
+      message: String(error.message ?? ''),
+    })
+  }
+
+  const evidenceFor = (field: ContactField) => (
+    <EvidenceSlot
+      control={form.control}
+      field={field}
+      baselineValue={identityBaseline?.values[field]}
+      disabled={!canWrite}
+      bind={(property) => register(`evidence.${field}.${property}`)}
+      error={(property) => evidenceError(field, property)}
+    />
+  )
+
   /** Vietnamese text for a field the form — or the server — rejected. */
   const codeSourceError = (key: CodeSourceKey): string | undefined => {
     const error = errors.sourceReferences?.[key]
@@ -535,7 +571,9 @@ export default function PlaceEditorScreen() {
     })
   }
 
-  const fieldError = (name: keyof PlaceIdentityForm): string | undefined => {
+  const fieldError = (
+    name: Exclude<keyof PlaceIdentityForm, 'evidence' | 'sourceReferences'>,
+  ): string | undefined => {
     const error = errors[name]
     if (!error) return undefined
     return describeField(name, {
@@ -624,12 +662,23 @@ export default function PlaceEditorScreen() {
                 }
                 // F-07 — a code sent without evidence is refused by the server;
                 // say so beside the code instead of after a round trip.
+                // GoGo-BE#280 — a contact value without its source is refused
+                // here too, on the box that is empty, before a request is made.
                 const gaps = missingCodeSources(toPlaceEditBody(values, taxonomyIds, baseline))
-                if (gaps.length > 0) {
-                  gaps.forEach((key, index) =>
+                const missing = contactEvidenceIssues(values, baseline)
+                const issues = [
+                  ...gaps.map((key) => ({
+                    field: `sourceReferences.${key}` as const,
+                    code: 'required',
+                    message: 'placeCreate.source.required',
+                  })),
+                  ...missing,
+                ]
+                if (issues.length > 0) {
+                  issues.forEach((issue, index) =>
                     setError(
-                      `sourceReferences.${key}`,
-                      { type: 'required', message: 'placeCreate.source.required' },
+                      issue.field,
+                      { type: issue.code, message: issue.message },
                       { shouldFocus: index === 0 },
                     ),
                   )
@@ -844,6 +893,7 @@ export default function PlaceEditorScreen() {
                         error={fieldError('addressText')}
                         {...register('addressText')}
                       />
+                      {evidenceFor('addressText')}
                       {/*
                         ADM-106 — the address, as the two levels Vietnam
                         currently has.
@@ -964,6 +1014,8 @@ export default function PlaceEditorScreen() {
                           ) : null}
                         </div>
                       </div>
+                      {evidenceFor('phone')}
+                      {evidenceFor('website')}
                       <ProvenanceList
                         provenance={detail.provenance}
                         administrative={detail.administrative ?? null}
@@ -1442,6 +1494,41 @@ function SaveErrorPanel({ title, error }: { title: string; error: BlockError }) 
 }
 
 /**
+ * GoGo-BE#280 — the evidence boxes for one contact field, shown exactly while
+ * the form would write a new non-empty value to it (the same diff
+ * `writtenContactFields` makes). Its own component so that watching the value
+ * re-renders these few boxes per keystroke, not the whole editor.
+ */
+function EvidenceSlot({
+  control,
+  field,
+  baselineValue,
+  disabled,
+  bind,
+  error,
+}: {
+  control: Control<PlaceIdentityForm>
+  field: ContactField
+  baselineValue: string | undefined
+  disabled: boolean
+  bind: ComponentProps<typeof ContactEvidenceFields>['bind']
+  error: ComponentProps<typeof ContactEvidenceFields>['error']
+}) {
+  const value = useWatch({ control, name: field })
+  const next = (value ?? '').trim()
+  if (next === '' || next === (baselineValue ?? '').trim()) return null
+  return (
+    <ContactEvidenceFields
+      field={field}
+      idPrefix="place"
+      disabled={disabled}
+      bind={bind}
+      error={error}
+    />
+  )
+}
+
+/**
  * Where each editable field came from.
  *
  * Two rules, both from `GOGO_PRODUCT_DATA_ARCHITECTURE.md`: a field with no row
@@ -1458,6 +1545,7 @@ function ProvenanceList({
 }) {
   const t = useT()
   const label = useLabel()
+  const ownershipLabel = useOwnershipLabel()
   const { locale } = useI18n()
   return (
     <section>
@@ -1475,12 +1563,25 @@ function ProvenanceList({
                   <>
                     {/* An unknown source type renders as itself, never blank. */}
                     {label(`fieldSource.${row.sourceType}`, row.sourceType)}
+                    {/*
+                      GoGo-BE#280 — for a contact field the verdict is the
+                      headline: a legacy "editorial" row with no evidence is
+                      unknown, and must not read as GoGo-verified.
+                    */}
+                    {isContactField(field.name) ? (
+                      <span className={styles.provenanceMeta}>{ownershipLabel(row.ownership)}</span>
+                    ) : null}
                     <span className={styles.provenanceMeta}>
                       {row.verifiedAt
                         ? t('placeEditor.provenanceVerified', {
                             time: formatDateTime(row.verifiedAt, locale),
                           })
                         : t('placeEditor.provenanceUnverified')}
+                      {row.collectedAt
+                        ? ` · ${t('placeEditor.provenanceCollected', {
+                            time: formatDateTime(row.collectedAt, locale),
+                          })}`
+                        : ''}
                       {row.sourceReference ? ` · ${row.sourceReference}` : ''}
                     </span>
                   </>

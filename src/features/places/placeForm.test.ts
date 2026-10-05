@@ -14,6 +14,13 @@ import {
   type PlaceEditBaseline,
 } from './placeForm'
 
+const EVIDENCE = {
+  sourceType: 'editorial',
+  sourceReference: 'Gọi chủ quán ngày 30/09',
+  collectedAt: '2026-09-30T09:00',
+}
+const NO_EVIDENCE = { sourceType: '', sourceReference: '', collectedAt: '' }
+
 /** What react-hook-form hands the resolver for an untouched form. */
 const emptyForm = {
   name: 'Chào Bạn Cafe & Space',
@@ -215,17 +222,57 @@ describe('toPlaceCreateBody', () => {
   it('drops the reference of a fact left blank, so no key is stray', () => {
     const body = toPlaceCreateBody({
       ...base,
-      phone: '   ',
-      sourceReferences: { ...base.sourceReferences, phone: 'Gọi điện' },
+      description: '   ',
+      sourceReferences: { ...base.sourceReferences, description: 'Thực đơn tại quán' },
     })
-    expect(body).not.toHaveProperty('phone')
-    expect(body.sourceReferences).not.toHaveProperty('phone')
+    expect(body).not.toHaveProperty('description')
+    expect(body.sourceReferences).not.toHaveProperty('description')
   })
 
-  it('lists exactly the facts the body carries', () => {
+  it('drops the evidence of a contact left blank, so no entry is stray', () => {
+    const body = toPlaceCreateBody({
+      ...base,
+      phone: '   ',
+      evidence: { addressText: NO_EVIDENCE, phone: EVIDENCE, website: NO_EVIDENCE },
+    })
+    expect(body).not.toHaveProperty('phone')
+    expect(body).not.toHaveProperty('provenance')
+  })
+
+  /*
+   * GoGo-BE#672 (alpha.66) — address, phone and website carry their evidence
+   * as `provenance.<field>`; a `sourceReferences` key for one of them is
+   * refused with `unknown`.
+   */
+  it('sends contact evidence as provenance, never as sourceReferences', () => {
+    const body = toPlaceCreateBody({
+      ...base,
+      addressText: ' 1 Lê Lợi ',
+      phone: '0283822999',
+      website: 'https://quanmoi.vn',
+      evidence: { addressText: EVIDENCE, phone: EVIDENCE, website: EVIDENCE },
+    })
+    expect(body.sourceReferences).toEqual({ name: 'Đến tận nơi', geom: 'Đo tại chỗ' })
+    for (const field of ['addressText', 'phone', 'website'] as const) {
+      expect(body.provenance?.[field]).toEqual({
+        sourceType: 'editorial',
+        sourceReference: 'Gọi chủ quán ngày 30/09',
+        collectedAt: new Date(EVIDENCE.collectedAt).toISOString(),
+      })
+    }
+    expect(body.addressText).toBe('1 Lê Lợi')
+  })
+
+  it('lists exactly the facts the body carries a reference for', () => {
     expect(
-      suppliedFacts({ name: 'x', addressText: ' 1 Lê Lợi ', description: 'Yên tĩnh' }),
-    ).toEqual(['name', 'geom', 'addressText', 'description'])
+      suppliedFacts({
+        name: 'x',
+        addressText: ' 1 Lê Lợi ',
+        phone: '0283822999',
+        website: 'https://quanmoi.vn',
+        description: 'Yên tĩnh',
+      }),
+    ).toEqual(['name', 'geom', 'description'])
   })
 
   it('trims before the 500 limit, the order GoGo-BE applies (F-03)', () => {
@@ -257,13 +304,86 @@ describe('toPlaceCreateBody', () => {
       name: 'Quán Mới',
       lat: 10.7,
       lng: 106.7,
+      description: 'Yên tĩnh',
+      sourceReferences: { name: 'a', geom: 'b' },
+    })
+    expect(result.success).toBe(false)
+    expect(result.error?.issues.map((issue) => issue.path.join('.'))).toEqual([
+      'sourceReferences.description',
+    ])
+  })
+
+  it('refuses a filled contact with no evidence, on its evidence boxes', () => {
+    const result = placeCreateSchema.safeParse({
+      name: 'Quán Mới',
+      lat: 10.7,
+      lng: 106.7,
       website: 'https://quanmoi.vn',
       sourceReferences: { name: 'a', geom: 'b' },
     })
     expect(result.success).toBe(false)
     expect(result.error?.issues.map((issue) => issue.path.join('.'))).toEqual([
-      'sourceReferences.website',
+      'evidence.website.sourceType',
+      'evidence.website.sourceReference',
+      'evidence.website.collectedAt',
     ])
+    expect(result.error?.issues[0]?.message).toBe('contactEvidence.error.required')
+  })
+
+  it('accepts a filled contact once its evidence is complete', () => {
+    const result = placeCreateSchema.safeParse({
+      name: 'Quán Mới',
+      lat: 10.7,
+      lng: 106.7,
+      website: 'https://quanmoi.vn',
+      evidence: { addressText: NO_EVIDENCE, phone: NO_EVIDENCE, website: EVIDENCE },
+      sourceReferences: { name: 'a', geom: 'b' },
+    })
+    expect(result.success).toBe(true)
+  })
+})
+
+/**
+ * GoGo-BE#672 × #440 — one edit body carries both kinds of evidence: the
+ * contact `provenance` and the code `sourceReferences`, with the
+ * `expectedUpdatedAt` a contact write requires.
+ */
+describe('toPlaceEditBody — contact provenance beside code references', () => {
+  const loaded = placeIdentitySchema.parse({
+    name: 'Chào Bạn',
+    phone: '+842839301234',
+    provinceCode: '',
+    communeCode: '',
+  })
+  const baseline: PlaceEditBaseline = {
+    values: loaded,
+    taxonomyIds: [],
+    updatedAt: '2026-09-01T00:00:00.000Z',
+  }
+
+  it('sends provenance.phone, sourceReferences for the codes, and expectedUpdatedAt', () => {
+    const body = toPlaceEditBody(
+      {
+        ...loaded,
+        phone: '028 3822 9999',
+        provinceCode: '01',
+        communeCode: '00004',
+        sourceReferences: { provinceCode: 'Biển số nhà', communeCode: 'Biển số nhà' },
+        evidence: { addressText: NO_EVIDENCE, phone: EVIDENCE, website: NO_EVIDENCE },
+      },
+      [],
+      baseline,
+    )
+    expect(body).toMatchObject({
+      phone: '028 3822 9999',
+      provinceCode: '01',
+      communeCode: '00004',
+      expectedUpdatedAt: '2026-09-01T00:00:00.000Z',
+      sourceReferences: { provinceCode: 'Biển số nhà', communeCode: 'Biển số nhà' },
+      provenance: { phone: { sourceType: 'editorial' } },
+    })
+    expect(body.sourceReferences).not.toHaveProperty('phone')
+    expect(Object.keys(body.provenance ?? {})).toEqual(['phone'])
   })
 })
 

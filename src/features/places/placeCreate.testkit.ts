@@ -8,9 +8,6 @@ import { screen } from '@testing-library/react'
 export const SOURCE_LABEL = {
   name: /^Nguồn của tên/,
   geom: /^Nguồn của toạ độ/,
-  addressText: /^Nguồn của địa chỉ/,
-  phone: /^Nguồn của số điện thoại/,
-  website: /^Nguồn của website/,
   description: /^Nguồn của mô tả/,
   provinceCode: /^Nguồn của tỉnh/,
   communeCode: /^Nguồn của phường/,

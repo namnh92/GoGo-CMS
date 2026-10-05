@@ -1160,9 +1160,6 @@ export const vi = {
   'placeCreate.source.hint': 'Ví dụ: đến tận nơi ngày 02/10, gọi điện cho quán, thực đơn tại quán.',
   'placeCreate.source.name': 'Nguồn của tên',
   'placeCreate.source.geom': 'Nguồn của toạ độ',
-  'placeCreate.source.addressText': 'Nguồn của địa chỉ',
-  'placeCreate.source.phone': 'Nguồn của số điện thoại',
-  'placeCreate.source.website': 'Nguồn của website',
   'placeCreate.source.description': 'Nguồn của mô tả',
   'placeCreate.source.tooLong': 'Nguồn tối đa 500 ký tự.',
   'placeCreate.link.attached': 'Đang gắn với bản ghi Google “{name}” ({id}). Đổi link là bỏ gắn.',
@@ -1291,6 +1288,49 @@ export const vi = {
   'placeEditor.provenanceNone': 'Chưa ghi nhận nguồn',
   'placeEditor.provenanceVerified': 'xác minh {time}',
   'placeEditor.provenanceUnverified': 'chưa có mốc xác minh',
+  'placeEditor.provenanceCollected': 'thu thập {time}',
+  'contactEvidence.legend': 'Nguồn của {field}',
+  'contactEvidence.hint':
+    'Giá trị mới chỉ thành dữ liệu GoGo khi kèm nguồn độc lập: ai cung cấp, ở đâu, lúc nào. Google (link, Place ID, bản xem trước) không phải nguồn.',
+  'contactEvidence.sourceType': 'Loại nguồn',
+  'contactEvidence.sourceTypePlaceholder': 'Chọn loại nguồn',
+  'contactEvidence.type.editorial': 'Biên tập GoGo (chủ quán, website chính thức, khảo sát)',
+  'contactEvidence.type.community': 'Cộng đồng (người đóng góp tự báo)',
+  'contactEvidence.type.provider': 'Bộ dữ liệu được phép (không phải Google)',
+  'contactEvidence.sourceReference': 'Tham chiếu nguồn',
+  'contactEvidence.sourceReferenceHint':
+    'Ghi nguồn gốc trước tiên, ví dụ “Gọi chủ quán ngày 30/09” hoặc nguyên URL website chính thức (chaoban.vn/lien-he). Không bắt đầu bằng job / sheet / tab / dòng, không ghi mã trơn hay ô A1.',
+  'contactEvidence.collectedAt': 'Thu thập lúc',
+  'contactEvidence.error.required': 'Bắt buộc khi lưu giá trị này',
+  'contactEvidence.error.too_long': 'Tối đa 500 ký tự',
+  'contactEvidence.error.in_future': 'Không được là thời điểm trong tương lai',
+  'contactEvidence.error.invalid_datetime': 'Thời điểm không hợp lệ',
+  'contactEvidence.error.google_not_independent':
+    'Google không phải nguồn độc lập — ghi nguồn gốc thật',
+  'contactEvidence.error.transport_only':
+    'Đây là đường truyền (job / sheet / tab / dòng, mã trơn hoặc ô A1), không phải nguồn — ghi nguồn gốc trước tiên',
+  'contactEvidence.error.invalid': 'Giá trị không hợp lệ',
+  'contactEvidence.error.not_allowed': 'Xoá giá trị thì không kèm nguồn',
+  'contactEvidence.error.value_missing': 'Có nguồn nhưng thiếu giá trị',
+  'contactEvidence.error.unknown':
+    'Nguồn của trường này phải ghi trong ô nguồn bên dưới (loại nguồn, tham chiếu, thời điểm) — tải lại trang rồi thử lại',
+  'contactValue.error.phone.invalid': 'Số điện thoại không hợp lệ',
+  'contactValue.error.phone.too_long': 'Số điện thoại tối đa 40 ký tự',
+  'contactValue.error.phone.no_country':
+    'Thiếu mã quốc gia hoặc số 0 đầu (ví dụ 028 3822 9999 hoặc +84 28 3822 9999)',
+  'contactValue.error.website.invalid': 'Website phải là địa chỉ http hoặc https công khai hợp lệ',
+  'contactValue.error.website.credentials': 'Website không được chứa tên đăng nhập hoặc mật khẩu',
+  'contactValue.error.website.too_long': 'Website tối đa 500 ký tự',
+  'contactValue.error.addressText.blank': 'Địa chỉ đang trống',
+  'contactValue.error.addressText.too_long': 'Địa chỉ tối đa 400 ký tự',
+  'contactValue.error.addressText.invalid':
+    'Địa chỉ phải là văn bản thuần, không chứa ký tự điều khiển hoặc dấu < >',
+  'contactOwnership.gogo': 'Dữ liệu GoGo (có nguồn độc lập)',
+  'contactOwnership.google': 'Từ Google (dữ liệu cũ)',
+  'contactOwnership.unknown': 'Chưa rõ nguồn — không phải GoGo xác minh',
+  'submissions.review.evidenceRequired':
+    'Bản nháp có địa chỉ / điện thoại / website chưa kèm nguồn. Điền nguồn, lưu bổ sung rồi duyệt lại.',
+  'submissions.review.invalid': 'Bổ sung chưa hợp lệ — xem các ô được đánh dấu.',
   'placeEditor.conflictTitle': 'Người khác đã lưu địa điểm này',
   'placeEditor.conflictBody':
     'Bản trên máy chủ đổi lúc {time}, sau khi bạn mở biểu mẫu. Không có gì bạn vừa gõ bị mất.',
@@ -1804,10 +1844,10 @@ export const vi = {
     'Ba nguồn, trông giống nhau trên bảng bên dưới. Sửa sai ở đúng chỗ thì phải biết giá trị đến từ đâu.',
   'jobDetail.sourceFile': 'File của bạn',
   'jobDetail.sourceFileFields':
-    'name, category, vibes, audiences, highlight, giá, phone, website, avg_visit_minutes, is_lodging, curated_rank. Sai thì sửa file rồi nhập lại.',
+    'name, category, vibes, audiences, highlight, giá, address, phone, website (mỗi cột kèm ba cột nguồn), avg_visit_minutes, is_lodging, curated_rank. Sai thì sửa file rồi nhập lại.',
   'jobDetail.sourceGoogle': 'Google trả về',
   'jobDetail.sourceGoogleFields':
-    'Tên hiển thị, địa chỉ, toạ độ, link Google chuẩn, đánh giá, số lượt đánh giá, mức giá, giờ mở cửa, trạng thái kinh doanh, loại hình. Không sửa được ở đây — kiểm tra lại link hoặc Place ID.',
+    'Tên hiển thị, toạ độ, link Google chuẩn, đánh giá, số lượt đánh giá, mức giá, giờ mở cửa, trạng thái kinh doanh, loại hình. Không sửa được ở đây — kiểm tra lại link hoặc Place ID.',
   'jobDetail.sourceDerived': 'GoGo suy ra',
   'jobDetail.sourceDerivedFields':
     'Mã và tên Tỉnh/Phường, trạng thái ánh xạ, phiên bản bộ dữ liệu, lý do chặn xuất bản, nhóm suy ra từ loại hình Google. Tính từ toạ độ, không nhập tay được.',
@@ -2456,6 +2496,8 @@ export const vi = {
   'error.FILE_TOO_LARGE': 'Ảnh vượt quá dung lượng tối đa.',
   'error.UNSUPPORTED_CONTENT_TYPE':
     'Định dạng ảnh không được hỗ trợ. Dùng JPEG, PNG, WebP hoặc HEIC.',
+  'error.CONTACT_EVIDENCE_REQUIRED':
+    'Địa chỉ / điện thoại / website đã lưu của dòng này chưa đủ nguồn theo quy định hiện hành. Dòng đã chuyển sang lỗi kiểm tra — sửa sheet rồi tải lên lại.',
   'error.UPLOAD_NOT_CONFIGURED': 'Môi trường này chưa cấu hình kho lưu trữ ảnh.',
 
   'nav.banners': 'Banner',
