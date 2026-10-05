@@ -309,3 +309,170 @@ describe('single sign-on exchange (GoGo-BE#679)', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Đăng nhập bằng mật khẩu đã tắt')
   })
 })
+
+/** Review round 1 on GoGo-CMS#232: the rest of the matrix, cell by cell. */
+describe('sign-in matrix, remaining cells (GoGo-CMS#232 review)', () => {
+  const ssoButton = () => screen.findByRole('button', { name: 'Đăng nhập qua Cloudflare Access' })
+
+  it('makes single sign-on the one filled CTA when both doors are open', async () => {
+    methods({ password: true, accessSso: true })
+    renderWithProviders(app(), { route: '/login' })
+
+    expect(await ssoButton()).toHaveClass('bg-coral')
+    expect(screen.getByRole('button', { name: 'Tiếp tục' })).not.toHaveClass('bg-coral')
+  })
+
+  it('renders no sign-in control at all when no door is open', async () => {
+    methods({ password: false, accessSso: false })
+    renderWithProviders(app(), { route: '/login' })
+
+    await screen.findByRole('alert')
+    expect(screen.queryByRole('button', { name: /Cloudflare Access/ })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/Mật khẩu/)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/Email công việc/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Tiếp tục' })).not.toBeInTheDocument()
+  })
+
+  // A retry puts the query back to pending: the card shows the busy skeleton
+  // and the retry control is gone, so it cannot be pressed again meanwhile.
+  it('shows the retry as busy while the doors are being re-read', async () => {
+    let calls = 0
+    server.use(
+      http.get('/v1/cms/auth/methods', async () => {
+        calls += 1
+        if (calls === 1) return envelope(500, 'INTERNAL')
+        await delay('infinite')
+        return HttpResponse.json({})
+      }),
+    )
+    const user = userEvent.setup()
+    renderWithProviders(app(), { route: '/login' })
+
+    const retry = await screen.findByRole('button', { name: 'Thử lại' })
+    await user.click(retry)
+    expect(await screen.findByLabelText('Đang kiểm tra cách đăng nhập')).toHaveAttribute(
+      'aria-busy',
+      'true',
+    )
+    expect(screen.queryByRole('button', { name: /Thử lại/ })).not.toBeInTheDocument()
+  })
+
+  it('never exchanges on its own across a re-read of the doors or a remount', async () => {
+    let fail = true
+    server.use(
+      http.get('/v1/cms/auth/methods', () =>
+        fail ? envelope(500, 'INTERNAL') : HttpResponse.json({ password: false, accessSso: true }),
+      ),
+    )
+    const calls = exchange(() => session())
+    const user = userEvent.setup()
+    const first = renderWithProviders(app(), { route: '/login' })
+
+    const retry = await screen.findByRole('button', { name: 'Thử lại' })
+    fail = false
+    await user.click(retry)
+    await ssoButton()
+    first.unmount()
+
+    // Back on the sign-in screen, as after a logout.
+    renderWithProviders(app(), { route: '/login' })
+    await ssoButton()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(calls.count).toBe(0)
+  })
+
+  it('adopts an SSO session the same way as a password one: the hint is written', async () => {
+    methods({ password: false, accessSso: true })
+    exchange(() => session())
+    const user = userEvent.setup()
+    renderWithProviders(app(), { route: '/login' })
+
+    await user.click(await ssoButton())
+    await screen.findByText('console')
+    expect(JSON.parse(window.localStorage.getItem(HINT_KEY) ?? 'null')).toEqual({
+      role: 'super_admin',
+      displayName: 'owner',
+      mustChangePassword: false,
+    })
+  })
+
+  it('offers a reload when the Access assertion is stale', async () => {
+    methods({ password: false, accessSso: true })
+    exchange(() => envelope(401, 'ACCESS_ASSERTION_INVALID'))
+    const user = userEvent.setup()
+    renderWithProviders(app(), { route: '/login' })
+
+    await user.click(await ssoButton())
+    expect(await screen.findByRole('button', { name: 'Tải lại trang' })).toBeInTheDocument()
+  })
+
+  it('reports a cross-site refusal as an error, without a session', async () => {
+    methods({ password: false, accessSso: true })
+    exchange(() => envelope(403, 'CROSS_SITE_REQUEST'))
+    const user = userEvent.setup()
+    renderWithProviders(app(), { route: '/login' })
+
+    await user.click(await ssoButton())
+    expect(await screen.findByRole('alert')).toHaveTextContent('CROSS_SITE_REQUEST')
+    expect(window.localStorage.getItem(HINT_KEY)).toBeNull()
+  })
+
+  it('re-reads the doors when the exchange says the password door changed', async () => {
+    let calls = 0
+    server.use(
+      http.get('/v1/cms/auth/methods', () => {
+        calls += 1
+        return HttpResponse.json({ password: false, accessSso: true })
+      }),
+    )
+    exchange(() => envelope(403, 'PASSWORD_LOGIN_DISABLED'))
+    const user = userEvent.setup()
+    renderWithProviders(app(), { route: '/login' })
+
+    await user.click(await ssoButton())
+    await waitFor(() => expect(calls).toBe(2))
+    expect(screen.getByRole('alert')).toHaveTextContent('vừa thay đổi')
+  })
+
+  it('says to wait when the exchange is rate limited', async () => {
+    methods({ password: false, accessSso: true })
+    exchange(() => envelope(429, 'RATE_LIMITED'))
+    const user = userEvent.setup()
+    renderWithProviders(app(), { route: '/login' })
+
+    await user.click(await ssoButton())
+    expect(await screen.findByRole('alert')).toHaveTextContent('Bạn đã thử quá nhiều lần')
+  })
+
+  /*
+   * Review F-01: the door closes between the MFA challenge and the code. The
+   * screen goes back to the first step, the code is dropped, and no password
+   * or code field is left behind.
+   */
+  it('leaves the MFA step when the password door closes under it', async () => {
+    let password = true
+    server.use(
+      http.get('/v1/cms/auth/methods', () => HttpResponse.json({ password, accessSso: true })),
+      http.post('/v1/cms/auth/login', async ({ request }) => {
+        const body = (await request.json()) as { totp?: string }
+        if (!body.totp) return envelope(401, 'MFA_REQUIRED')
+        password = false
+        return envelope(403, 'PASSWORD_LOGIN_DISABLED')
+      }),
+    )
+    const user = userEvent.setup()
+    renderWithProviders(app(), { route: '/login' })
+
+    await user.type(await screen.findByLabelText(/Email công việc/), 'ops@gogo.vn')
+    await user.type(screen.getByLabelText(/Mật khẩu/), 'correct-horse-battery')
+    await user.click(screen.getByRole('button', { name: 'Tiếp tục' }))
+    await screen.findByRole('heading', { name: 'Xác thực hai lớp' })
+    await user.type(screen.getByLabelText(/Mã xác thực/), '123456')
+    await user.click(screen.getByRole('button', { name: 'Xác thực & đăng nhập' }))
+
+    await waitFor(() => expect(screen.queryByLabelText(/Mã xác thực/)).not.toBeInTheDocument())
+    expect(screen.queryByLabelText(/Mật khẩu/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Xác thực hai lớp' })).not.toBeInTheDocument()
+    expect(await ssoButton()).toBeInTheDocument()
+  })
+})

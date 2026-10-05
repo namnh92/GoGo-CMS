@@ -68,7 +68,11 @@ export default function LoginScreen() {
     useSession()
   const methods = useAuthMethods()
   /** Set by a failed exchange; `adminOnly` also offers to switch identity. */
-  const [ssoError, setSsoError] = useState<{ message: string; adminOnly?: boolean } | null>(null)
+  const [ssoError, setSsoError] = useState<{
+    message: string
+    adminOnly?: boolean
+    reload?: boolean
+  } | null>(null)
   const [ssoPending, setSsoPending] = useState(false)
   const environment = getAppEnvironment()
   // Set by RequireAuth when it bounced an authenticated route.
@@ -142,6 +146,10 @@ export default function LoginScreen() {
         return
       }
       if (error.code === 'PASSWORD_LOGIN_DISABLED') {
+        // Back to the first step with the code cleared: the MFA step belongs
+        // to a door that no longer exists (review F-01).
+        setStep('credentials')
+        setValue('totp', '')
         // The door closed under an open form. Re-read which doors exist; the
         // form goes away with the answer.
         // Said beside the single sign-on button, since the form this error
@@ -185,7 +193,7 @@ export default function LoginScreen() {
           message: import.meta.env.DEV ? t('auth.sso.missingLocal') : t('auth.sso.missing'),
         })
       } else if (error.code === 'ACCESS_ASSERTION_INVALID') {
-        setSsoError({ message: t('auth.sso.invalid') })
+        setSsoError({ message: t('auth.sso.invalid'), reload: true })
       } else if (
         error.code === 'ACCESS_SSO_NOT_CONFIGURED' ||
         error.code === 'PASSWORD_LOGIN_DISABLED'
@@ -206,6 +214,15 @@ export default function LoginScreen() {
 
   const passwordOpen = methods.data?.password === true
   const ssoOpen = methods.data?.accessSso === true
+
+  // A refetch can close the password door while the MFA step is showing. That
+  // step then belongs to nothing: go back, and drop the code typed so far.
+  useEffect(() => {
+    if (methods.data && !methods.data.password && step === 'mfa') {
+      setStep('credentials')
+      setValue('totp', '')
+    }
+  }, [methods.data, step, setValue])
 
   const submitChangePassword = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -368,7 +385,13 @@ export default function LoginScreen() {
                 {t('auth.sso.methodsError')}
               </p>
               <div className="mt-4 flex flex-col gap-2">
-                <Button type="button" variant="primary" onClick={() => void methods.refetch()}>
+                <Button
+                  type="button"
+                  variant="primary"
+                  loading={methods.isFetching}
+                  disabled={methods.isFetching}
+                  onClick={() => void methods.refetch()}
+                >
                   {t('auth.sso.retry')}
                 </Button>
               </div>
@@ -408,12 +431,23 @@ export default function LoginScreen() {
                       </span>
                     </div>
                   ) : null}
+                  {ssoError?.reload ? (
+                    // Access issues a fresh assertion only on a navigation; a
+                    // second exchange from this page would send the stale one.
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => window.location.reload()}
+                    >
+                      {t('auth.sso.reload')}
+                    </Button>
+                  ) : null}
                   {passwordOpen ? (
                     <p className={styles.ssoDivider}>{t('auth.sso.orPassword')}</p>
                   ) : null}
                 </div>
               ) : null}
-              {passwordOpen || step === 'mfa' ? (
+              {passwordOpen ? (
                 <form key="credentials" onSubmit={onSubmit} noValidate>
                   {/* Credentials and MFA deliberately share this one form and this
                 one key: hiding a field keeps its value, and the request has to

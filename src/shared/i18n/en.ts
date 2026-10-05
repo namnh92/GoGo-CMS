@@ -1086,6 +1086,7 @@ export const en: Partial<Record<MessageKey, string>> = {
   'auth.sso.loading': 'Checking sign-in methods',
   'auth.sso.methodsError':
     'Could not load the sign-in methods. Check your connection and try again.',
+  'auth.sso.reload': 'Reload the page',
   'auth.sso.retry': 'Try again',
   'auth.sso.noMethod': 'No sign-in method is configured for this environment. Tell the operator.',
   'auth.sso.adminOnly':

@@ -1065,6 +1065,7 @@ export const vi = {
   'auth.sso.orPassword': 'Hoặc đăng nhập bằng mật khẩu',
   'auth.sso.loading': 'Đang kiểm tra cách đăng nhập',
   'auth.sso.methodsError': 'Không lấy được danh sách cách đăng nhập. Kiểm tra kết nối rồi thử lại.',
+  'auth.sso.reload': 'Tải lại trang',
   'auth.sso.retry': 'Thử lại',
   'auth.sso.noMethod': 'Môi trường này chưa cấu hình cách đăng nhập nào. Báo cho người vận hành.',
   'auth.sso.adminOnly':

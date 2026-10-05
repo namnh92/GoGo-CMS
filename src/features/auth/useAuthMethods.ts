@@ -2,13 +2,22 @@ import { useQuery } from '@tanstack/react-query'
 import { z } from 'zod'
 import { apiFetchParsed } from '@/shared/api/client'
 import { ApiError } from '@/shared/api/errors'
+import type { Schemas } from '@/shared/api/generated'
 
-/** `GET /cms/auth/methods` — `CmsAuthMethods` in the contract. */
+/**
+ * `GET /cms/auth/methods`. The type is the generated `CmsAuthMethods`; the zod
+ * schema validates the response at runtime and is bound to that type below,
+ * so a contract change fails `tsc` instead of passing silently.
+ */
+export type AuthMethods = Schemas['CmsAuthMethods']
 export const authMethodsSchema = z.object({
   password: z.boolean(),
   accessSso: z.boolean(),
 })
-export type AuthMethods = z.infer<typeof authMethodsSchema>
+
+/** Fails to compile unless the zod shape and the generated type are the same. */
+type Exact<A extends B, B extends C, C = A> = A
+export type AuthMethodsBinding = Exact<z.infer<typeof authMethodsSchema>, AuthMethods>
 
 /**
  * An API older than GoGo-BE#679 has no `methods` route and only one door: the
