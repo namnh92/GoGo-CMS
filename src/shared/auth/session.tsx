@@ -168,6 +168,13 @@ type SessionValue = {
   /** The last sign-out cleared this device but the server never confirmed. */
   signOutIncomplete: boolean
   login: (input: LoginInput) => Promise<SessionHint>
+  /**
+   * GoGo-BE#679 / ADR-0032 — open a session from the Cloudflare Access
+   * assertion this request carries (the Worker forwards it). Only ever called
+   * from an explicit click: an exchange on mount would sign an operator
+   * straight back in after they logged out.
+   */
+  signInWithAccess: () => Promise<SessionHint>
   /** Identifies the signed-in session, for a reply that may outlive it. */
   currentEpoch: () => number
   /** The temporary password was replaced; the obligation is discharged. */
@@ -291,19 +298,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
   }, [session, endSession])
 
-  const login = useCallback(async (input: LoginInput) => {
-    // A sign-out still in flight answers with cookie-clearing headers. Landing
-    // after a fresh login, those would wipe the session just established, so
-    // the new credential waits for the old one to finish dying.
-    if (pendingRevoke) await pendingRevoke
-    const raw = await apiFetch<unknown>('/cms/auth/login', {
-      method: 'POST',
-      body: {
-        email: input.email,
-        password: input.password,
-        ...(input.totp ? { totp: input.totp } : {}),
-      },
-    })
+  /** One way to adopt a session, whichever door opened it. */
+  const adopt = useCallback((raw: unknown): SessionHint => {
     const parsed = loginResponseSchema.parse(raw)
     setAccessToken(parsed.accessToken ?? null)
     signedIn.current = true
@@ -322,6 +318,31 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setIdleSecondsLeft(null)
     return hint
   }, [])
+
+  const login = useCallback(
+    async (input: LoginInput) => {
+      // A sign-out still in flight answers with cookie-clearing headers. Landing
+      // after a fresh login, those would wipe the session just established, so
+      // the new credential waits for the old one to finish dying.
+      if (pendingRevoke) await pendingRevoke
+      const raw = await apiFetch<unknown>('/cms/auth/login', {
+        method: 'POST',
+        body: {
+          email: input.email,
+          password: input.password,
+          ...(input.totp ? { totp: input.totp } : {}),
+        },
+      })
+      return adopt(raw)
+    },
+    [adopt],
+  )
+
+  const signInWithAccess = useCallback(async () => {
+    if (pendingRevoke) await pendingRevoke
+    const raw = await apiFetch<unknown>('/cms/auth/access-exchange', { method: 'POST' })
+    return adopt(raw)
+  }, [adopt])
 
   const currentEpoch = useCallback(() => sessionEpoch, [])
 
@@ -346,6 +367,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       signOutIncomplete,
       keepAlive,
       login,
+      signInWithAccess,
       currentEpoch,
       passwordChanged,
       logout,
@@ -358,6 +380,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       signOutIncomplete,
       keepAlive,
       login,
+      signInWithAccess,
       currentEpoch,
       passwordChanged,
       logout,

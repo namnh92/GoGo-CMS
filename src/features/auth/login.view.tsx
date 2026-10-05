@@ -18,7 +18,9 @@ import {
   LockIcon,
   LogoMark,
 } from '@/shared/ui/icons'
+import { Skeleton } from '@/shared/ui/State'
 import { useChangeOwnPassword } from './useChangeOwnPassword'
+import { useAuthMethods } from './useAuthMethods'
 import { styles } from './login.style'
 
 // One schema, used by the form resolver. Never duplicated for the request.
@@ -46,6 +48,12 @@ type LoginForm = z.infer<typeof loginSchema>
  * with `mustChangePassword` when a temporary password is outstanding, and
  * every other CMS route refuses 403 `PASSWORD_CHANGE_REQUIRED` until it is
  * replaced — so the console routes here rather than into a dead shell.
+ *
+ * GoGo-BE#679 / ADR-0032 — which doors exist comes from the API
+ * (`GET /cms/auth/methods`), read at runtime. Single sign-on through Cloudflare
+ * Access is an explicit button, never automatic: an exchange on mount would
+ * sign an operator straight back in after logout or an idle timeout. Where the
+ * password door is closed the form is not rendered at all.
  */
 type Step = 'credentials' | 'mfa' | 'change-password'
 
@@ -56,7 +64,12 @@ export default function LoginScreen() {
   const { locale, setLocale } = useI18n()
   const navigate = useNavigate()
   const location = useLocation()
-  const { login, expired, signOutIncomplete, passwordChanged, currentEpoch } = useSession()
+  const { login, signInWithAccess, expired, signOutIncomplete, passwordChanged, currentEpoch } =
+    useSession()
+  const methods = useAuthMethods()
+  /** Set by a failed exchange; `adminOnly` also offers to switch identity. */
+  const [ssoError, setSsoError] = useState<{ message: string; adminOnly?: boolean } | null>(null)
+  const [ssoPending, setSsoPending] = useState(false)
   const environment = getAppEnvironment()
   // Set by RequireAuth when it bounced an authenticated route.
   const returnTo = (location.state as { from?: string } | null)?.from
@@ -128,6 +141,15 @@ export default function LoginScreen() {
         setFormError(t('auth.mfaSetupRequired'))
         return
       }
+      if (error.code === 'PASSWORD_LOGIN_DISABLED') {
+        // The door closed under an open form. Re-read which doors exist; the
+        // form goes away with the answer.
+        // Said beside the single sign-on button, since the form this error
+        // would sit in is about to go.
+        setSsoError({ message: t('auth.sso.passwordDisabled') })
+        void methods.refetch()
+        return
+      }
       if (error.status === 429) {
         setFormError(t('auth.rateLimited'))
         return
@@ -141,6 +163,49 @@ export default function LoginScreen() {
       setFormError(error.message)
     }
   })
+
+  const startSso = async () => {
+    setSsoError(null)
+    setFormError(null)
+    setSsoPending(true)
+    try {
+      const session = await signInWithAccess()
+      // A reset outstanding is routed by RequireAuth to /account/password,
+      // which asks for the current password itself. The change step on this
+      // screen cannot be used: it submits the password typed into this form,
+      // and a single sign-on typed none.
+      navigate(returnTo ?? landingPathFor(session.role), { replace: true })
+    } catch (error) {
+      if (!(error instanceof ApiError)) {
+        setSsoError({ message: t('error.UNKNOWN') })
+      } else if (error.code === 'ADMIN_ONLY') {
+        setSsoError({ message: t('auth.sso.adminOnly'), adminOnly: true })
+      } else if (error.code === 'ACCESS_ASSERTION_MISSING') {
+        setSsoError({
+          message: import.meta.env.DEV ? t('auth.sso.missingLocal') : t('auth.sso.missing'),
+        })
+      } else if (error.code === 'ACCESS_ASSERTION_INVALID') {
+        setSsoError({ message: t('auth.sso.invalid') })
+      } else if (
+        error.code === 'ACCESS_SSO_NOT_CONFIGURED' ||
+        error.code === 'PASSWORD_LOGIN_DISABLED'
+      ) {
+        setSsoError({ message: t('auth.sso.changed') })
+        void methods.refetch()
+      } else if (error.code === 'ACCESS_KEYS_UNAVAILABLE') {
+        setSsoError({ message: t('auth.sso.unavailable') })
+      } else if (error.status === 429) {
+        setSsoError({ message: t('auth.rateLimited') })
+      } else {
+        setSsoError({ message: error.message })
+      }
+    } finally {
+      setSsoPending(false)
+    }
+  }
+
+  const passwordOpen = methods.data?.password === true
+  const ssoOpen = methods.data?.accessSso === true
 
   const submitChangePassword = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -290,82 +355,153 @@ export default function LoginScreen() {
                 </Button>
               </div>
             </form>
+          ) : step === 'credentials' && methods.isPending ? (
+            <div className={styles.fields} aria-busy="true" aria-label={t('auth.sso.loading')}>
+              <Skeleton className="h-11 w-full" />
+              <Skeleton className="h-11 w-full" />
+              <Skeleton className="h-11 w-full" />
+            </div>
+          ) : step === 'credentials' && methods.isError ? (
+            <div>
+              <p role="alert" className={styles.alertDanger}>
+                <span aria-hidden="true">⚠</span>
+                {t('auth.sso.methodsError')}
+              </p>
+              <div className="mt-4 flex flex-col gap-2">
+                <Button type="button" variant="primary" onClick={() => void methods.refetch()}>
+                  {t('auth.sso.retry')}
+                </Button>
+              </div>
+            </div>
+          ) : step === 'credentials' && !passwordOpen && !ssoOpen ? (
+            <p role="alert" className={styles.alertDanger}>
+              <span aria-hidden="true">⚠</span>
+              {t('auth.sso.noMethod')}
+            </p>
           ) : (
-            <form key="credentials" onSubmit={onSubmit} noValidate>
-              {/* Credentials and MFA deliberately share this one form and this
+            <>
+              {step === 'credentials' && ssoOpen ? (
+                <div className={styles.ssoBlock}>
+                  <Button
+                    type="button"
+                    variant="primary"
+                    loading={ssoPending}
+                    disabled={isSubmitting}
+                    onClick={() => void startSso()}
+                  >
+                    {ssoPending ? t('auth.submitting') : t('auth.sso.button')}
+                  </Button>
+                  <p className={styles.ssoHint}>{t('auth.sso.hint')}</p>
+                  {ssoError ? (
+                    <div role="alert" className={styles.alertDanger}>
+                      <span aria-hidden="true">⚠</span>
+                      <span>
+                        {ssoError.message}
+                        {ssoError.adminOnly ? (
+                          <>
+                            {' '}
+                            <a className={styles.ssoLink} href="/cdn-cgi/access/logout">
+                              {t('auth.sso.switchIdentity')}
+                            </a>
+                          </>
+                        ) : null}
+                      </span>
+                    </div>
+                  ) : null}
+                  {passwordOpen ? (
+                    <p className={styles.ssoDivider}>{t('auth.sso.orPassword')}</p>
+                  ) : null}
+                </div>
+              ) : null}
+              {passwordOpen || step === 'mfa' ? (
+                <form key="credentials" onSubmit={onSubmit} noValidate>
+                  {/* Credentials and MFA deliberately share this one form and this
                 one key: hiding a field keeps its value, and the request has to
                 carry email, password and code together. The keyed boundary is
                 between *that* form and the change-password form, not between
                 these two steps. */}
-              <div className={styles.fields} hidden={step !== 'credentials'}>
-                <TextInput
-                  label={t('auth.email')}
-                  type="email"
-                  autoComplete="username"
-                  required
-                  error={errors.email ? t('auth.badCredentials') : undefined}
-                  {...register('email')}
-                />
-                <div className={styles.passwordWrap}>
-                  <TextInput
-                    label={t('auth.password')}
-                    type={showPassword ? 'text' : 'password'}
-                    autoComplete="current-password"
-                    required
-                    error={errors.password ? t('auth.badCredentials') : undefined}
-                    {...register('password')}
-                  />
-                  <IconButton
-                    label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
-                    className={styles.passwordToggle}
-                    onClick={() => setShowPassword((current) => !current)}
-                  >
-                    {showPassword ? <EyeOffIcon size={16} /> : <EyeIcon size={16} />}
-                  </IconButton>
-                </div>
-              </div>
+                  <div className={styles.fields} hidden={step !== 'credentials'}>
+                    <TextInput
+                      label={t('auth.email')}
+                      type="email"
+                      autoComplete="username"
+                      required
+                      error={errors.email ? t('auth.badCredentials') : undefined}
+                      {...register('email')}
+                    />
+                    <div className={styles.passwordWrap}>
+                      <TextInput
+                        label={t('auth.password')}
+                        type={showPassword ? 'text' : 'password'}
+                        autoComplete="current-password"
+                        required
+                        error={errors.password ? t('auth.badCredentials') : undefined}
+                        {...register('password')}
+                      />
+                      <IconButton
+                        label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
+                        className={styles.passwordToggle}
+                        onClick={() => setShowPassword((current) => !current)}
+                      >
+                        {showPassword ? <EyeOffIcon size={16} /> : <EyeIcon size={16} />}
+                      </IconButton>
+                    </div>
+                  </div>
 
-              <div className={styles.fields} hidden={step !== 'mfa'}>
-                <TextInput
-                  label={t('auth.totp')}
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  maxLength={6}
-                  placeholder="000000"
-                  className="w-full"
-                  hint={t('auth.totpHint')}
-                  required={step === 'mfa'}
-                  error={errors.totp ? t('auth.totpHint') : undefined}
-                  {...totpField}
-                  ref={(node) => {
-                    totpField.ref(node)
-                    otpRef.current = node
-                  }}
-                />
-              </div>
+                  <div className={styles.fields} hidden={step !== 'mfa'}>
+                    <TextInput
+                      label={t('auth.totp')}
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      maxLength={6}
+                      placeholder="000000"
+                      className="w-full"
+                      hint={t('auth.totpHint')}
+                      required={step === 'mfa'}
+                      error={errors.totp ? t('auth.totpHint') : undefined}
+                      {...totpField}
+                      ref={(node) => {
+                        totpField.ref(node)
+                        otpRef.current = node
+                      }}
+                    />
+                  </div>
 
-              {formError ? (
-                <p role="alert" className={`${styles.alertDanger} mt-4`}>
-                  <span aria-hidden="true">⚠</span>
-                  {formError}
-                </p>
+                  {formError ? (
+                    <p role="alert" className={`${styles.alertDanger} mt-4`}>
+                      <span aria-hidden="true">⚠</span>
+                      {formError}
+                    </p>
+                  ) : null}
+
+                  <div className="mt-4 flex flex-col gap-2">
+                    {/* One filled CTA per screen: beside single sign-on, the password
+                    submit steps down to secondary. */}
+                    <Button
+                      type="submit"
+                      variant={ssoOpen && step === 'credentials' ? 'secondary' : 'primary'}
+                      loading={isSubmitting}
+                      disabled={ssoPending}
+                    >
+                      {isSubmitting
+                        ? t('auth.submitting')
+                        : step === 'credentials'
+                          ? t('auth.continue')
+                          : t('auth.verifySubmit')}
+                    </Button>
+                    {step === 'mfa' ? (
+                      <button
+                        type="button"
+                        className={styles.backButton}
+                        onClick={backToCredentials}
+                      >
+                        {t('auth.backToCredentials')}
+                      </button>
+                    ) : null}
+                  </div>
+                </form>
               ) : null}
-
-              <div className="mt-4 flex flex-col gap-2">
-                <Button type="submit" variant="primary" loading={isSubmitting}>
-                  {isSubmitting
-                    ? t('auth.submitting')
-                    : step === 'credentials'
-                      ? t('auth.continue')
-                      : t('auth.verifySubmit')}
-                </Button>
-                {step === 'mfa' ? (
-                  <button type="button" className={styles.backButton} onClick={backToCredentials}>
-                    {t('auth.backToCredentials')}
-                  </button>
-                ) : null}
-              </div>
-            </form>
+            </>
           )}
 
           {step === 'mfa' ? <p className={styles.otpCompat}>{t('auth.totpApps')}</p> : null}

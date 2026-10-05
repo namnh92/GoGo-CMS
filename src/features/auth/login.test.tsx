@@ -10,6 +10,8 @@ describe('CMS sign-in (CMS-034, stepped)', () => {
   it('moves to the MFA step when the API answers MFA_REQUIRED', async () => {
     const user = userEvent.setup()
     renderWithProviders(<LoginScreen />)
+    // The form renders once the API has said the password door is open.
+    await screen.findByLabelText(/Email công việc/)
 
     await user.type(screen.getByLabelText(/Email công việc/), 'ops@gogo.vn')
     await user.type(screen.getByLabelText(/Mật khẩu/), 'correct-horse-battery')
@@ -25,6 +27,8 @@ describe('CMS sign-in (CMS-034, stepped)', () => {
   it('returns to the password step on bad credentials, never trapping behind the code', async () => {
     const user = userEvent.setup()
     renderWithProviders(<LoginScreen />)
+    // The form renders once the API has said the password door is open.
+    await screen.findByLabelText(/Email công việc/)
 
     await user.type(screen.getByLabelText(/Email công việc/), 'ops@gogo.vn')
     await user.type(screen.getByLabelText(/Mật khẩu/), 'correct-horse-battery')
@@ -39,6 +43,8 @@ describe('CMS sign-in (CMS-034, stepped)', () => {
   it('toggles password visibility with a labelled control', async () => {
     const user = userEvent.setup()
     renderWithProviders(<LoginScreen />)
+    // The form renders once the API has said the password door is open.
+    await screen.findByLabelText(/Email công việc/)
 
     const password = screen.getByLabelText(/Mật khẩu/) as HTMLInputElement
     expect(password.type).toBe('password')
@@ -51,6 +57,8 @@ describe('CMS sign-in (CMS-034, stepped)', () => {
   it('routes into the forced change-password step when a temporary password is outstanding', async () => {
     const user = userEvent.setup()
     renderWithProviders(<LoginScreen />)
+    // The form renders once the API has said the password door is open.
+    await screen.findByLabelText(/Email công việc/)
 
     // The mock flags any "temp*" local part as owing a password change.
     await user.type(screen.getByLabelText(/Email công việc/), 'temp.ops@gogo.vn')
@@ -87,6 +95,8 @@ describe('CMS sign-in (CMS-034, stepped)', () => {
     try {
       const user = userEvent.setup()
       renderWithProviders(<LoginScreen />)
+      // The form renders once the API has said the password door is open.
+      await screen.findByLabelText(/Email công việc/)
 
       const email = screen.getByLabelText(/Email công việc/)
       const password = screen.getByLabelText(/Mật khẩu/)
@@ -133,6 +143,8 @@ describe('CMS sign-in (CMS-034, stepped)', () => {
     )
     const user = userEvent.setup()
     renderWithProviders(<LoginScreen />)
+    // The form renders once the API has said the password door is open.
+    await screen.findByLabelText(/Email công việc/)
 
     await user.type(screen.getByLabelText(/Email công việc/), 'temp.ops@gogo.vn')
     await user.type(screen.getByLabelText(/Mật khẩu/), 'temporary-pass-123')
@@ -153,13 +165,17 @@ describe('CMS sign-in (CMS-034, stepped)', () => {
     )
   })
 
-  it('states that no token is kept in localStorage', () => {
+  it('states that no token is kept in localStorage', async () => {
     renderWithProviders(<LoginScreen />)
+    // The form renders once the API has said the password door is open.
+    await screen.findByLabelText(/Email công việc/)
     expect(screen.getByText(/HttpOnly/)).toBeInTheDocument()
   })
 
-  it('names the environment under the form without inferring it from the hostname', () => {
+  it('names the environment under the form without inferring it from the hostname', async () => {
     renderWithProviders(<LoginScreen />)
+    // The form renders once the API has said the password door is open.
+    await screen.findByLabelText(/Email công việc/)
     // VITE_APP_ENV is unset in tests, so the config degrades to dev.
     expect(screen.getByText('DEV')).toBeInTheDocument()
   })

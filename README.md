@@ -162,6 +162,21 @@ cần PostgreSQL/Redis trên máy: DEV là môi trường được deploy, khôn
 mỗi người tự dựng (GoGo-Infra INF-038/INF-042). Tài khoản CMS ở đó là dữ liệu
 seed của môi trường DEV, dùng chung.
 
+**DEV chỉ đăng nhập qua Cloudflare Access** (GoGo-BE#679, ADR-0032): khi
+`GET /v1/cms/auth/methods` trả `password: false`, màn đăng nhập chỉ còn nút
+SSO, không có form mật khẩu. Trình duyệt ở `localhost` không đi qua Access, nên
+assertion phải tự lấy rồi đưa cho dev server (biến phía server, **không** có
+tiền tố `VITE_`, vì Vite sẽ inline biến `VITE_*` vào bundle):
+
+```bash
+cloudflared access login https://cms-dev.gogo.id.vn          # mở trình duyệt, OTP; hiệu lực 8 giờ
+CF_ACCESS_TOKEN=$(cloudflared access token -app=https://cms-dev.gogo.id.vn) pnpm dev
+```
+
+Proxy chỉ gắn header `cf-access-jwt-assertion` vào
+`POST /v1/cms/auth/access-exchange`. Token hết hạn thì chạy lại hai lệnh trên.
+Chế độ mock (`VITE_USE_MOCK=true`) vẫn là môi trường chỉ có mật khẩu.
+
 Dựng GoGo-BE tại chỗ vẫn được, nhưng là **chế độ gỡ lỗi tuỳ chọn** — khi cần
 sửa BE cùng lúc, hoặc cần một database bỏ đi được. Hệ quả phải biết trước: đó
 là một database khác, seed khác, migration có thể khác — UI chạy đúng ở đó

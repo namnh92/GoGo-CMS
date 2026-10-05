@@ -1131,6 +1131,19 @@ export const handlers = [
     )
   }),
 
+  /*
+   * GoGo-BE#679 / ADR-0032. The mock is a password-only environment, which is
+   * what every environment was before the switch: the existing flows and the
+   * e2e suite sign in exactly as they did. Tests that need single sign-on
+   * override these two with `server.use`.
+   */
+  http.get(`${BASE}/cms/auth/methods`, () =>
+    HttpResponse.json({ password: true, accessSso: false }),
+  ),
+  http.post(`${BASE}/cms/auth/access-exchange`, () =>
+    envelope(503, 'ACCESS_SSO_NOT_CONFIGURED', 'Single sign-on is not configured'),
+  ),
+
   http.post(`${BASE}/cms/auth/login`, async ({ request }) => {
     const body = (await request.json()) as { email?: string; password?: string; totp?: string }
     if (!body.email || !body.password) return envelope(401, 'UNAUTHORIZED', 'bad credentials')

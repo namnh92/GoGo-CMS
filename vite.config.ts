@@ -20,6 +20,23 @@ export default defineConfig({
         target: process.env.VITE_API_ORIGIN ?? 'https://api-dev.gogo.id.vn',
         changeOrigin: true,
         configure(proxy) {
+          // GoGo-BE#679 — single sign-on from a local dev server. The browser
+          // here never passed Cloudflare Access, so the assertion is supplied
+          // by the developer: `cloudflared access login <cms-dev URL>`, then
+          // `CF_ACCESS_TOKEN=$(cloudflared access token -app=<cms-dev URL>)`.
+          // Read from the server's environment and attached to the exchange
+          // only — never a VITE_ variable, which Vite would inline into the
+          // bundle.
+          const accessToken = process.env.CF_ACCESS_TOKEN
+          proxy.on('proxyReq', (proxyReq, req) => {
+            if (
+              accessToken &&
+              req.method === 'POST' &&
+              req.url?.split('?')[0] === '/v1/cms/auth/access-exchange'
+            ) {
+              proxyReq.setHeader('cf-access-jwt-assertion', accessToken)
+            }
+          })
           // The dev API is served over TLS, so it sets the session cookie
           // `Secure`. This dev server is plain http on localhost, where a
           // browser drops a Secure cookie without a word — login would appear
