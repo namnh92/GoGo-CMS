@@ -183,6 +183,27 @@ export function useEvidenceError(): (issue: { code: string; message?: string }) 
 }
 
 /**
+ * Sol F-04 — GoGo-BE's refusal of a contact *value* (`phone` `no_country`,
+ * `website` `credentials`, `addressText` `blank`, …) in the console's own
+ * words, vi or en. `undefined` for a code this console has no sentence for, so
+ * the caller falls back to its generic field vocabulary — never to the
+ * server's Vietnamese text in an English UI.
+ */
+export function useContactValueError(): (
+  field: string,
+  issue: { code: string },
+) => string | undefined {
+  const label = useLabel()
+  return useCallback(
+    (field, issue) =>
+      isContactField(field)
+        ? label(`contactValue.error.${field}.${issue.code}`, '') || undefined
+        : undefined,
+    [label],
+  )
+}
+
+/**
  * `ownership` as words. Anything that is not exactly `gogo` or `google` reads
  * as unknown — an unrecognised verdict must never look GoGo-verified.
  */

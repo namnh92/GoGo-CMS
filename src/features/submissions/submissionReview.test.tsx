@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { renderWithProviders, signInAs } from '@/shared/test/render'
+import { delay, http, HttpResponse } from 'msw'
+import { server } from '@/shared/test/server'
 import { mockDb, resetMockDb } from '@/shared/test/handlers'
 import { giveEvidence } from '@/features/places/contactEvidence.testkit'
 import SubmissionQueueScreen from './submissionQueue.view'
@@ -248,5 +250,100 @@ describe('the decisions', () => {
       'href',
       '/places/pl-chao-ban',
     )
+  })
+})
+
+/*
+ * Sol F-03 — before the stored draft has been seeded there is nothing the
+ * reviewer could have changed. A drawer still loading, or one whose load
+ * failed, closes without asking about "unsaved" work.
+ */
+describe('closing before the submission has loaded', () => {
+  it.each([
+    ['while loading', () => http.get('*/cms/place-submissions/:id', () => delay('infinite'))],
+    [
+      'after a failed load',
+      () =>
+        http.get('*/cms/place-submissions/:id', () =>
+          HttpResponse.json(
+            {
+              code: 'INTERNAL',
+              message: 'boom',
+              field_errors: [],
+              request_id: 'r',
+              retryable: true,
+            },
+            { status: 500 },
+          ),
+        ),
+    ],
+  ])('asks nothing %s', async (_when, handler) => {
+    signInAs('moderator')
+    server.use(handler())
+    const user = userEvent.setup()
+    renderWithProviders(<SubmissionRoutes />, { route: FRESH })
+
+    const dialog = await screen.findByRole('dialog', { name: /Kiểm duyệt đề xuất/ })
+    if (_when === 'after a failed load') {
+      await within(dialog).findByText('boom', undefined, { timeout: 4000 })
+    }
+    expect(within(dialog).queryByText('Có bổ sung chưa lưu')).not.toBeInTheDocument()
+    const close = within(dialog).getAllByRole('button', { name: /Đóng/ })
+    await user.click(close[close.length - 1]!)
+
+    expect(screen.queryByRole('dialog', { name: /Rời trang/ })).not.toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: /Kiểm duyệt đề xuất/ })).not.toBeInTheDocument(),
+    )
+  })
+})
+
+/*
+ * Sol F-04 — GoGo-BE's contact value codes (`credentials`, `no_country`, …)
+ * come back with a Vietnamese `message`. An English console says them in
+ * English, from its own vocabulary.
+ */
+describe('contact value refusals in the UI language', () => {
+  it('says a website credentials refusal in English', async () => {
+    window.localStorage.setItem('gogo.cms.locale', 'en')
+    signInAs('moderator')
+    server.use(
+      http.put('*/cms/place-submissions/:id/review', () =>
+        HttpResponse.json(
+          {
+            code: 'VALIDATION_FAILED',
+            message: 'Request validation failed',
+            field_errors: [
+              {
+                field: 'website',
+                code: 'credentials',
+                message: 'Website không được chứa tài khoản',
+              },
+            ],
+            request_id: 'req-credentials',
+            retryable: false,
+          },
+          { status: 400 },
+        ),
+      ),
+    )
+    const user = userEvent.setup()
+    renderWithProviders(<SubmissionRoutes />, { route: FRESH })
+
+    const dialog = await screen.findByRole('dialog', { name: /Review submission|Kiểm duyệt/ })
+    const website = await within(dialog).findByLabelText(/^Website/)
+    await user.type(website, 'https://user:pw@quan.vn')
+    const group = within(await within(dialog).findByRole('group', { name: /Website/ }))
+    await user.selectOptions(group.getByLabelText('Source type'), 'editorial')
+    await user.type(group.getByLabelText('Source reference'), 'Gọi chủ quán ngày 30/09')
+    fireEvent.change(group.getByLabelText('Collected at'), {
+      target: { value: '2026-09-30T09:00' },
+    })
+    await user.click(within(dialog).getByRole('button', { name: 'Save supplement' }))
+
+    expect(
+      await within(dialog).findByText('The website must not contain a username or password'),
+    ).toBeInTheDocument()
+    expect(within(dialog).queryByText('Website không được chứa tài khoản')).not.toBeInTheDocument()
   })
 })

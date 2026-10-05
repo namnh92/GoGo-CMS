@@ -10,6 +10,8 @@ import {
   moderationReasonMissing,
   toFieldErrors,
   mockContactWriteIssues,
+  mockPlanContactWrite,
+  mockStoredContactProvenance,
   mockSourceReferenceIssues,
   CREATE_SOURCE_REFERENCE_KEYS,
   EDIT_SOURCE_REFERENCE_KEYS,
@@ -305,72 +307,6 @@ function foldVietnamese(value: string): string {
     .replace(/Đ/g, 'D')
     .trim()
     .toLowerCase()
-}
-
-type ContactIssue = { field: string; code: string; message: string }
-type Normalized = { ok: true; value: string } | { ok: false; issue: ContactIssue }
-
-/**
- * `normalizePhone` from `GoGo-BE/libs/modules/cms/domain/place-contact.ts`.
- *
- * Lives in the mock, not in the app: the console must send what the editor
- * typed and render whatever the server answers. A second normalizer in the
- * browser would accept values the server refuses and refuse values it accepts,
- * and neither client would ever hear about the difference.
- */
-function mockNormalizePhone(raw: string): Normalized {
-  const trimmed = raw.trim()
-  const invalid: ContactIssue = {
-    field: 'phone',
-    code: 'invalid',
-    message: 'Số điện thoại không hợp lệ',
-  }
-  if (trimmed === '') return { ok: false, issue: invalid }
-  const cleaned = trimmed.replace(/[\s().\-–—]/g, '')
-  if (!/^\+?\d+$/.test(cleaned)) return { ok: false, issue: invalid }
-  const digits = cleaned.startsWith('+') ? cleaned.slice(1) : cleaned
-
-  let e164: string
-  if (cleaned.startsWith('+')) e164 = digits
-  else if (digits.startsWith('00')) e164 = digits.slice(2)
-  else if (digits.startsWith('0')) e164 = `84${digits.slice(1)}`
-  else if (digits.startsWith('84')) e164 = digits
-  else {
-    // A bare subscriber number could belong to any country; guessing one would
-    // invent a fact about the place.
-    return {
-      ok: false,
-      issue: { field: 'phone', code: 'no_country', message: 'Thiếu mã quốc gia hoặc số 0 đầu' },
-    }
-  }
-  if (e164.length < 8 || e164.length > 15) return { ok: false, issue: invalid }
-  return { ok: true, value: `+${e164}` }
-}
-
-/** `normalizeWebsite` from the same file: `http(s)` only, bare host upgraded. */
-function mockNormalizeWebsite(raw: string): Normalized {
-  const trimmed = raw.trim()
-  const invalid: ContactIssue = {
-    field: 'website',
-    code: 'invalid',
-    message: 'Website phải là địa chỉ http hoặc https hợp lệ',
-  }
-  if (trimmed === '') return { ok: false, issue: invalid }
-  const candidate = /^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(trimmed) ? trimmed : `https://${trimmed}`
-  let url: URL
-  try {
-    url = new URL(candidate)
-  } catch {
-    return { ok: false, issue: invalid }
-  }
-  // An allowlist, not a denylist: the value is rendered as an href in three
-  // clients, so `javascript:` and `data:` are the whole point.
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') return { ok: false, issue: invalid }
-  if (url.hostname === '' || !url.hostname.includes('.')) return { ok: false, issue: invalid }
-  if (url.href.length > 500) {
-    return { ok: false, issue: { field: 'website', code: 'too_long', message: 'Website quá dài' } }
-  }
-  return { ok: true, value: url.href }
 }
 
 /** Mirrors `PLACE_TRANSITIONS` in `cms-catalog.service.ts`. */
@@ -1628,7 +1564,7 @@ export const handlers = [
      */
     const provenance = contactProvenanceSchema.safeParse(body.provenance ?? {})
     if (!provenance.success) return validationEnvelope(provenance.error.issues)
-    const contact = mockContactWriteIssues(
+    const contact = mockPlanContactWrite(
       {
         addressText: body.addressText as string | null | undefined,
         phone: body.phone as string | null | undefined,
@@ -1637,7 +1573,14 @@ export const handlers = [
       },
       null,
     )
-    if (contact.issues.length > 0) return refuse('VALIDATION_FAILED', contact.issues)
+    if (!contact.ok) return refuse('VALIDATION_FAILED', contact.issues)
+    /*
+     * Sol F-01 — the created row is what the request says, normalised the way
+     * GoGo-BE stores it: a contact the body did not send is `null`, never a
+     * value inherited from the seed row, and its provenance holds exactly the
+     * claims this create made.
+     */
+    const now = new Date().toISOString()
     const created = {
       ...db.places[0]!,
       id: `created-${db.places.length + 1}`,
@@ -1645,7 +1588,16 @@ export const handlers = [
       status: 'draft',
       lat: Number(body.lat ?? 0),
       lng: Number(body.lng ?? 0),
-      addressText: (body.addressText as string | undefined) ?? null,
+      addressText: contact.plan.values.addressText ?? null,
+      phone: contact.plan.values.phone ?? null,
+      website: contact.plan.values.website ?? null,
+      description: (body.description as string | null | undefined) ?? null,
+      provenance: Object.fromEntries(
+        contact.plan.claims.map(({ field, evidence }) => [
+          field,
+          mockStoredContactProvenance(evidence, now),
+        ]),
+      ),
       media: [],
       /*
        * ADM-016 — the server resolves the mapping inside the create
@@ -1804,30 +1756,14 @@ export const handlers = [
      * writing or clearing one makes `expectedUpdatedAt` mandatory. Checked
      * before normalising so "unchanged" compares the stored shape.
      */
-    const contact = mockContactWriteIssues(input, place, (field, value) => {
-      if (field === 'phone') {
-        const result = mockNormalizePhone(value)
-        return result.ok ? result.value : value
-      }
-      if (field === 'website') {
-        const result = mockNormalizeWebsite(value)
-        return result.ok ? result.value : value
-      }
-      return value.trim()
-    })
-    fieldErrors.push(...contact.issues)
-    if (contact.writes && expectedUpdatedAt === undefined) {
+    const contact = mockPlanContactWrite(input, place)
+    if (!contact.ok) fieldErrors.push(...contact.issues)
+    if (
+      contact.ok &&
+      Object.keys(contact.plan.values).length > 0 &&
+      expectedUpdatedAt === undefined
+    ) {
       fieldErrors.push({ field: 'expectedUpdatedAt', code: 'required', message: 'Required' })
-    }
-    if (typeof input.phone === 'string') {
-      const result = mockNormalizePhone(input.phone)
-      if (result.ok) input.phone = result.value
-      else fieldErrors.push(result.issue)
-    }
-    if (typeof input.website === 'string') {
-      const result = mockNormalizeWebsite(input.website)
-      if (result.ok) input.website = result.value
-      else fieldErrors.push(result.issue)
     }
     if (fieldErrors.length > 0) {
       return HttpResponse.json(
@@ -1849,24 +1785,24 @@ export const handlers = [
      * `provinceCode` at the top level would let the console ship a form that
      * reads its own submission back and never notices the server disagreed.
      */
-    const { provinceCode, communeCode, provenance, ...rest } = input
+    const { provinceCode, communeCode, provenance: _evidence, ...rest } = input
+    void _evidence
+    // Contact columns: only what the plan writes, normalised (GoGo-BE#280).
+    // A re-sent unchanged value is not a write and leaves the row alone.
+    delete rest.addressText
+    delete rest.phone
+    delete rest.website
     Object.assign(place, rest)
+    const plan = contact.ok ? contact.plan : { values: {}, claims: [], cleared: [] }
+    Object.assign(place, plan.values)
     // GoGo-BE#280 — the stored evidence, read back the way the CMS detail
     // returns it: actor/verification server-owned, ownership `gogo`. A fresh
     // object, so the seeded fixture's map is never mutated across tests.
     place.provenance = { ...place.provenance }
-    for (const field of ['addressText', 'phone', 'website'] as const) {
-      if (rest[field] === null) delete place.provenance[field]
-      const evidence = provenance?.[field]
-      if (evidence && typeof rest[field] === 'string') {
-        place.provenance[field] = {
-          sourceType: evidence.sourceType ?? 'editorial',
-          sourceReference: evidence.sourceReference ?? null,
-          collectedAt: evidence.collectedAt ?? null,
-          verifiedAt: new Date().toISOString(),
-          ownership: 'gogo',
-        }
-      }
+    for (const field of plan.cleared) delete place.provenance[field]
+    const verifiedAt = new Date().toISOString()
+    for (const { field, evidence } of plan.claims) {
+      place.provenance[field] = mockStoredContactProvenance(evidence, verifiedAt)
     }
     if (provinceCode !== undefined || communeCode !== undefined) {
       const nextProvince =
@@ -2503,11 +2439,13 @@ export const handlers = [
     }
     // GoGo-BE#280 — every contact value in the draft needs its evidence, on
     // every save: the draft is checked whole, against no stored row.
-    const contact = mockContactWriteIssues(
-      body.draft as Parameters<typeof mockContactWriteIssues>[0],
+    const evidence = contactProvenanceSchema.safeParse(body.draft.provenance ?? {})
+    if (!evidence.success) return validationEnvelope(evidence.error.issues)
+    const contact = mockPlanContactWrite(
+      { ...(body.draft as Parameters<typeof mockPlanContactWrite>[0]), provenance: evidence.data },
       null,
     )
-    if (contact.issues.length > 0) {
+    if (!contact.ok) {
       return HttpResponse.json(
         {
           code: 'VALIDATION_FAILED',
@@ -2519,11 +2457,27 @@ export const handlers = [
         { status: 400 },
       )
     }
+    /*
+     * Sol F-01 — GoGo-BE `normalizeDraftContact(draft, 'save')`: the draft is
+     * stored normalised (phone in E.164, website with its scheme, collectedAt
+     * in UTC), so what approval reads is what the editor would have written.
+     */
+    const { provenance: _sent, ...draftRest } = body.draft
+    void _sent
+    const claims = Object.fromEntries(
+      contact.plan.claims.map(({ field, evidence: claim }) => [field, claim]),
+    )
+    const draft: Record<string, unknown> = {
+      ...draftRest,
+      ...contact.plan.values,
+      ...(Object.keys(claims).length > 0 ? { provenance: claims } : {}),
+    }
     const updatedAt = new Date(Date.parse(detail.updatedAt) + 60_000).toISOString()
     detail.updatedAt = updatedAt
-    detail.review = { draft: body.draft }
+    detail.review = { draft }
+    // What the console sent, as the tests assert it; the row keeps the stored shape.
     db.reviewSaves.push({ id, draft: body.draft })
-    return HttpResponse.json({ id, draft: body.draft, updatedAt })
+    return HttpResponse.json({ id, draft, updatedAt })
   }),
 
   http.post(`${BASE}/cms/place-submissions/:id/decide`, async ({ params, request }) => {

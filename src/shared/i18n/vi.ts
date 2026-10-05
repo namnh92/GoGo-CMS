@@ -1314,6 +1314,17 @@ export const vi = {
   'contactEvidence.error.value_missing': 'Có nguồn nhưng thiếu giá trị',
   'contactEvidence.error.unknown':
     'Nguồn của trường này phải ghi trong ô nguồn bên dưới (loại nguồn, tham chiếu, thời điểm) — tải lại trang rồi thử lại',
+  'contactValue.error.phone.invalid': 'Số điện thoại không hợp lệ',
+  'contactValue.error.phone.too_long': 'Số điện thoại tối đa 40 ký tự',
+  'contactValue.error.phone.no_country':
+    'Thiếu mã quốc gia hoặc số 0 đầu (ví dụ 028 3822 9999 hoặc +84 28 3822 9999)',
+  'contactValue.error.website.invalid': 'Website phải là địa chỉ http hoặc https công khai hợp lệ',
+  'contactValue.error.website.credentials': 'Website không được chứa tên đăng nhập hoặc mật khẩu',
+  'contactValue.error.website.too_long': 'Website tối đa 500 ký tự',
+  'contactValue.error.addressText.blank': 'Địa chỉ đang trống',
+  'contactValue.error.addressText.too_long': 'Địa chỉ tối đa 400 ký tự',
+  'contactValue.error.addressText.invalid':
+    'Địa chỉ phải là văn bản thuần, không chứa ký tự điều khiển hoặc dấu < >',
   'contactOwnership.gogo': 'Dữ liệu GoGo (có nguồn độc lập)',
   'contactOwnership.google': 'Từ Google (dữ liệu cũ)',
   'contactOwnership.unknown': 'Chưa rõ nguồn — không phải GoGo xác minh',
@@ -2485,6 +2496,8 @@ export const vi = {
   'error.FILE_TOO_LARGE': 'Ảnh vượt quá dung lượng tối đa.',
   'error.UNSUPPORTED_CONTENT_TYPE':
     'Định dạng ảnh không được hỗ trợ. Dùng JPEG, PNG, WebP hoặc HEIC.',
+  'error.CONTACT_EVIDENCE_REQUIRED':
+    'Địa chỉ / điện thoại / website đã lưu của dòng này chưa đủ nguồn theo quy định hiện hành. Dòng đã chuyển sang lỗi kiểm tra — sửa sheet rồi tải lên lại.',
   'error.UPLOAD_NOT_CONFIGURED': 'Môi trường này chưa cấu hình kho lưu trữ ảnh.',
 
   'nav.banners': 'Banner',

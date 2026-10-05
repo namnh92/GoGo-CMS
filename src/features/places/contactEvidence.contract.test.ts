@@ -146,7 +146,6 @@ describe('MSW mirror of the GoGo-BE#280 transport rule (Astra accept/refuse tabl
         },
       },
       null,
-      undefined,
       NOW,
     ).issues.find((issue) => issue.field === 'provenance.phone.sourceReference')?.code
 

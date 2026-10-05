@@ -5,6 +5,7 @@ import type { ColumnDef } from '@tanstack/react-table'
 import { useI18n, useT } from '@/shared/i18n/i18n'
 import type { MessageKey } from '@/shared/i18n/vi'
 import { queryKeys } from '@/shared/api/queryKeys'
+import { ApiError } from '@/shared/api/errors'
 import { useSession } from '@/shared/auth/session'
 import { useOnline } from '@/shared/ui/useOnline'
 import { formatNumber, formatRelative } from '@/shared/format'
@@ -178,6 +179,18 @@ export default function ImportJobScreen() {
     void queryClient.invalidateQueries({ queryKey: queryKeys.imports.detail(jobId) })
     void queryClient.invalidateQueries({ queryKey: ['imports', 'rows', jobId] })
   }
+  /**
+   * GoGo-BE#280 — a confirm or merge refused `409 CONTACT_EVIDENCE_REQUIRED`
+   * has already moved the row to `validation_failed` and refreshed the job's
+   * counters on the server, so the table is reloaded to show it.
+   */
+  const rowDecisionFailed = (error: unknown) => {
+    toast.error(describeError(error))
+    if (error instanceof ApiError && error.code === 'CONTACT_EVIDENCE_REQUIRED') {
+      setActiveRow(null)
+      invalidate()
+    }
+  }
 
   const start = useMutation({
     mutationFn: () => startImport(jobId),
@@ -205,7 +218,7 @@ export default function ImportJobScreen() {
       setActiveRow(null)
       invalidate()
     },
-    onError: (error) => toast.error(describeError(error)),
+    onError: rowDecisionFailed,
   })
   const skip = useMutation({
     mutationFn: (rowId: string) => skipImportRow(jobId, rowId),
@@ -222,7 +235,7 @@ export default function ImportJobScreen() {
       toast.success(t('jobDetail.mergeRow'))
       invalidate()
     },
-    onError: (error) => toast.error(describeError(error)),
+    onError: rowDecisionFailed,
   })
   const publish = useMutation({
     mutationFn: () => publishImport(jobId),

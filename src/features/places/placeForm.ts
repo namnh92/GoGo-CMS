@@ -14,6 +14,8 @@ import {
   EMPTY_EVIDENCE,
   evidenceIssues,
   evidenceTarget,
+  isContactField,
+  useContactValueError,
   toWireEvidence,
   type ContactField,
   type ContactProvenanceWire,
@@ -687,11 +689,15 @@ export function diffAgainstServer(
 export function usePlaceFieldError(): (field: string, issue: FieldIssue) => string {
   const t = useT()
   const label = useLabel()
+  const contactValueError = useContactValueError()
   return useCallback(
     (field: string, issue: FieldIssue) => {
       // A message our own schema authored is an i18n key.
       const authored = label(issue.message, '')
       if (authored) return authored
+      // Sol F-04 — GoGo-BE's contact value codes, in the console's words.
+      const contact = contactValueError(field, issue)
+      if (contact) return contact
 
       const limit = placeFieldLimit(field)
       switch (issue.code) {
@@ -720,11 +726,14 @@ export function usePlaceFieldError(): (field: string, issue: FieldIssue) => stri
         default:
           break
       }
+      // A contact code this console has no sentence for reads as the generic
+      // refusal in the UI language, not as GoGo-BE's Vietnamese text (F-04).
+      if (isContactField(field)) return t('placeEditor.error.invalid')
       // A code the client has never seen still says something true: the raw
       // server text, which is better than a blank line under the field.
       return issue.message || t('placeEditor.error.invalid')
     },
-    [t, label],
+    [t, label, contactValueError],
   )
 }
 

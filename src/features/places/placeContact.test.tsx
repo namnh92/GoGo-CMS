@@ -168,7 +168,8 @@ describe('place address and contact (CMS-044)', () => {
     await giveEvidence(user, 'Điện thoại')
     await save(user)
 
-    const message = await screen.findByText('Thiếu mã quốc gia hoặc số 0 đầu')
+    // The console's own sentence for `no_country` (Sol F-04), not the server text.
+    const message = await screen.findByText(/^Thiếu mã quốc gia hoặc số 0 đầu \(ví dụ/)
     expect(phone).toHaveAttribute('aria-invalid', 'true')
     expect(phone.getAttribute('aria-describedby')).toContain(message.id)
     // What was typed survives a rejection.
@@ -186,7 +187,9 @@ describe('place address and contact (CMS-044)', () => {
     await giveEvidence(user, 'Website')
     await save(user)
 
-    const message = await screen.findByText('Website phải là địa chỉ http hoặc https hợp lệ')
+    const message = await screen.findByText(
+      'Website phải là địa chỉ http hoặc https công khai hợp lệ',
+    )
     expect(website).toHaveAttribute('aria-invalid', 'true')
     expect(website.getAttribute('aria-describedby')).toContain(message.id)
   })

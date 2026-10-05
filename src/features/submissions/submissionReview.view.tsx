@@ -18,6 +18,7 @@ import { ContactEvidenceFields } from '@/features/places/contactEvidence.view'
 import {
   emptyEvidenceDrafts,
   evidenceTarget,
+  useContactValueError,
   useEvidenceError,
   type ContactField,
   type EvidenceDrafts,
@@ -100,7 +101,14 @@ export function SubmissionReviewDrawer({
   const [baseline, setBaseline] = useState<ReviewForm>(EMPTY_REVIEW_FORM)
   /** GoGo-BE#280 — the source behind each contact value in the draft. */
   const [evidence, setEvidence] = useState<EvidenceDrafts>(emptyEvidenceDrafts)
-  const [evidenceBaseline, setEvidenceBaseline] = useState('')
+  /*
+   * Sol F-03 — the baseline is the signature of the same empty drafts the
+   * boxes start from, so nothing reads as "unsaved" while the submission is
+   * still loading or failed to load.
+   */
+  const [evidenceBaseline, setEvidenceBaseline] = useState(() =>
+    evidenceSignature(emptyEvidenceDrafts()),
+  )
   /** What the last save or approval refused, field by field. */
   const [fieldErrors, setFieldErrors] = useState<FieldError[]>([])
   const [taxonomyIds, setTaxonomyIds] = useState<string[]>([])
@@ -155,9 +163,16 @@ export function SubmissionReviewDrawer({
   const dirty = dirtyFields.length > 0 || taxonomyDirty || evidenceDirty
 
   const describeEvidence = useEvidenceError()
-  const errorAt = (path: string) => {
+  const contactValueError = useContactValueError()
+  /**
+   * A refusal of a contact value (`phone` `no_country`, …) in the console's
+   * words (Sol F-04); a code with no sentence reads as the generic refusal in
+   * the UI language, never as GoGo-BE's Vietnamese text.
+   */
+  const errorAt = (path: ContactField) => {
     const issue = fieldErrors.find((error) => error.field === path)
-    return issue ? describeEvidence(issue) : undefined
+    if (!issue) return undefined
+    return contactValueError(path, issue) ?? t('placeEditor.error.invalid')
   }
   /** An evidence refusal lands on its box; `provenance.phone` on the first. */
   const evidenceErrorAt = (field: ContactField, property: string) => {

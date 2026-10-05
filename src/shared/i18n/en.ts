@@ -1271,6 +1271,17 @@ export const en: Partial<Record<MessageKey, string>> = {
   'contactEvidence.error.value_missing': 'Source given without a value',
   'contactEvidence.error.unknown':
     "This field's source belongs in the source boxes below (type, reference, time) — reload the page and try again",
+  'contactValue.error.phone.invalid': 'Invalid phone number',
+  'contactValue.error.phone.too_long': 'A phone number is at most 40 characters',
+  'contactValue.error.phone.no_country':
+    'Add a country code or a leading 0 (e.g. 028 3822 9999 or +84 28 3822 9999)',
+  'contactValue.error.website.invalid': 'The website must be a valid public http or https address',
+  'contactValue.error.website.credentials': 'The website must not contain a username or password',
+  'contactValue.error.website.too_long': 'A website is at most 500 characters',
+  'contactValue.error.addressText.blank': 'The address is empty',
+  'contactValue.error.addressText.too_long': 'An address is at most 400 characters',
+  'contactValue.error.addressText.invalid':
+    'The address must be plain text, with no control characters or < >',
   'contactOwnership.gogo': 'GoGo data (independent source)',
   'contactOwnership.google': 'From Google (legacy)',
   'contactOwnership.unknown': 'Source unknown — not GoGo-verified',
@@ -1789,6 +1800,8 @@ export const en: Partial<Record<MessageKey, string>> = {
   'error.PLACE_MEDIA_NOT_FOUND': 'No such photo on this place.',
   'error.FILE_TOO_LARGE': 'The file is over the size ceiling.',
   'error.UNSUPPORTED_CONTENT_TYPE': 'Unsupported image format. Use JPEG, PNG, WebP or HEIC.',
+  'error.CONTACT_EVIDENCE_REQUIRED':
+    "This row's stored address / phone / website lack the evidence today's rules require. The row is now a validation failure — correct the sheet and upload it again.",
   'error.UPLOAD_NOT_CONFIGURED': 'Object storage is not configured in this environment.',
 
   'banners.title': 'Home banners',
