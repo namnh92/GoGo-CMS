@@ -7,6 +7,12 @@
   // otherwise never exist on the build machine.
   "build": { "command": "pnpm build" },
   "compatibility_date": "2026-08-26",
+  // Cloudflare Access guards the custom domain only (GoGo-Infra
+  // cloudflare-cms-hosting). Left unset, `wrangler deploy` turns on
+  // *.workers.dev and preview URLs, which serve the same admin console at a
+  // hostname Access never sees.
+  "workers_dev": false,
+  "preview_urls": false,
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
