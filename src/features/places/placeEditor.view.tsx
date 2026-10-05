@@ -350,15 +350,13 @@ export default function PlaceEditorScreen() {
       baseline: PlaceEditBaseline
     }) => updatePlace(id, toPlaceEditBody(values, taxonomyIds, baseline)),
     onSuccess: (result, { values: sent, baseline }) => {
-      // The evidence went with the assertion it was given for (F-07); the next
-      // code change asks again rather than reusing it.
-      const values = { ...sent, sourceReferences: {} }
+      // Keep exactly what was typed, but stop calling it unsaved. Evidence went
+      // with the write it was given for — code references (F-07) and contact
+      // provenance (GoGo-BE#280) alike; the next change asks again.
+      const values = { ...sent, sourceReferences: {}, evidence: emptyEvidenceDrafts() }
       setIdentityError(null)
       setConflict(null)
       setIdentitySavedAt(new Date().toISOString())
-      // Keep exactly what was typed, but stop calling it unsaved. The evidence
-      // was for this write; the next change to a contact asks again.
-      values = { ...values, evidence: emptyEvidenceDrafts() }
       reset(values)
       setTaxonomyBaseline(taxonomySignature(taxonomyIds))
       /*

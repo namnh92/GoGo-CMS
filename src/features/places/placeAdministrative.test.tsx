@@ -9,6 +9,7 @@ import { places } from '@/shared/test/fixtures'
 import PlaceEditorScreen from './placeEditor.view'
 import PlaceCreateScreen from './placeCreate.view'
 import { fillSources, SOURCE_LABEL } from './placeCreate.testkit'
+import { giveEvidence } from './contactEvidence.testkit'
 
 /**
  * ADM-106 — the place forms speak the two administrative levels that exist.
@@ -164,6 +165,8 @@ describe('code evidence on an edit', () => {
     expect(screen.queryByLabelText(SOURCE_LABEL.provinceCode)).not.toBeInTheDocument()
     await userEvent.clear(phone)
     await userEvent.type(phone, '0283822999')
+    // GoGo-BE#280 — a contact change carries its own evidence (provenance).
+    await giveEvidence(userEvent.setup(), 'Điện thoại')
     await save()
 
     await waitFor(() => expect(sent).toHaveLength(1))
@@ -221,6 +224,8 @@ describe('code evidence on an edit', () => {
     const phone = await screen.findByLabelText('Điện thoại')
     await userEvent.clear(phone)
     await userEvent.type(phone, '0283822999')
+    // GoGo-BE#280 — a contact change carries its own evidence (provenance).
+    await giveEvidence(userEvent.setup(), 'Điện thoại')
     await save()
 
     // No code was changed, so no source box exists to carry it.

@@ -30,6 +30,7 @@ const stored: PlaceIdentityForm = {
   district: '',
   provinceCode: '',
   communeCode: '',
+  sourceReferences: {},
 }
 
 const baseline: PlaceEditBaseline = { values: stored, taxonomyIds: [], updatedAt: LOADED }

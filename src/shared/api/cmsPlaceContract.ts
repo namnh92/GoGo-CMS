@@ -412,6 +412,69 @@ export function mockContactWriteIssues(
   return { issues, writes }
 }
 
+/**
+ * GoGo-BE#440 × #280 (alpha.66) — the `sourceReferences` keys each route
+ * accepts, exactly as the contract's `propertyNames` enums list them. The two
+ * sets and the contact provenance keys are disjoint: `addressText`, `phone`
+ * and `website` carry their evidence in `provenance.<field>`, and a
+ * `sourceReferences` key for one of them is refused with `code: unknown`.
+ */
+export const CREATE_SOURCE_REFERENCE_KEYS = [
+  'name',
+  'description',
+  'areaKey',
+  'city',
+  'district',
+  'geom',
+  'provinceCode',
+  'communeCode',
+  'taxonomyIds',
+] as const
+export const EDIT_SOURCE_REFERENCE_KEYS = ['provinceCode', 'communeCode'] as const
+
+export type CreateSourceReferenceKey = (typeof CREATE_SOURCE_REFERENCE_KEYS)[number]
+export type EditSourceReferenceKey = (typeof EDIT_SOURCE_REFERENCE_KEYS)[number]
+
+/**
+ * GoGo-BE `assertSourceReferences`, mirrored for the mock: one issue per key,
+ * `required | unused | unknown | too_long`. `supplied` is the keys whose fact
+ * the body carries non-null; `accepted` is the route's key set. A contact key
+ * is `unknown` and its message names `provenance.<field>`, as the server's does.
+ */
+export function mockSourceReferenceIssues(
+  refs: Record<string, unknown>,
+  supplied: readonly string[],
+  accepted: readonly string[],
+): { field: string; code: string; message: string }[] {
+  const issues: { key: string; code: string; message: string }[] = []
+  for (const key of supplied) {
+    const value = refs[key]
+    if (typeof value !== 'string' || value.trim() === '')
+      issues.push({ key, code: 'required', message: 'required' })
+  }
+  for (const key of Object.keys(refs)) {
+    if (supplied.includes(key)) continue
+    if (!accepted.includes(key))
+      issues.push({
+        key,
+        code: 'unknown',
+        message: (CONTACT_WIRE_FIELDS as readonly string[]).includes(key)
+          ? `use provenance.${key} for this field's evidence`
+          : 'unknown',
+      })
+    else issues.push({ key, code: 'unused', message: 'unused' })
+  }
+  for (const [key, value] of Object.entries(refs)) {
+    if (typeof value === 'string' && value.trim().length > 500)
+      issues.push({ key, code: 'too_long', message: 'too_long' })
+  }
+  return issues.map(({ key, code, message }) => ({
+    field: `sourceReferences.${key}`,
+    code,
+    message,
+  }))
+}
+
 function buildPlaceEditSchema(taxonomyId: z.ZodType<string>) {
   return z.object({
     name: z.string().trim().min(L.name.min).max(L.name.max).optional(),
@@ -445,6 +508,12 @@ function buildPlaceEditSchema(taxonomyId: z.ZodType<string>) {
     taxonomyIds: z.array(taxonomyId).max(L.taxonomyIds.max).optional(),
     /** GoGo-BE#280 — evidence for the contact values the body writes. */
     provenance: contactProvenanceSchema.optional(),
+    /**
+     * GoGo-BE#440 F-07 — evidence for the codes; key rules are
+     * `mockSourceReferenceIssues` against `EDIT_SOURCE_REFERENCE_KEYS`, so a
+     * stray key is `SOURCE_REFERENCE_INVALID`, not a schema failure.
+     */
+    sourceReferences: z.record(z.string(), z.unknown()).optional(),
     /** Optimistic concurrency — the `updatedAt` the form was loaded from. */
     expectedUpdatedAt: z.string().datetime({ offset: true }).optional(),
   })

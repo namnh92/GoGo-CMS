@@ -10,6 +10,10 @@ import {
   moderationReasonMissing,
   toFieldErrors,
   mockContactWriteIssues,
+  mockSourceReferenceIssues,
+  CREATE_SOURCE_REFERENCE_KEYS,
+  EDIT_SOURCE_REFERENCE_KEYS,
+  contactProvenanceSchema,
 } from '@/shared/api/cmsPlaceContract'
 import { ALLOWED_ACTIONS, ALLOWED_TRIGGERS } from '@/features/safety/conditions'
 import type { ImportRow } from '@/shared/api/contracts-import'
@@ -1597,49 +1601,43 @@ export const handlers = [
     if (Array.isArray(derived) && derived.length > 0)
       return refuse('GOOGLE_CONTENT_NOT_PERSISTABLE')
     const refs = (body.sourceReferences ?? {}) as Record<string, unknown>
+    /*
+     * GoGo-BE#672 (alpha.66) — address, phone and website are facts but not
+     * `sourceReferences` keys: their evidence is `provenance.<field>`, and a
+     * reference key for one is `unknown`.
+     */
     const supplied = [
       'name',
       'description',
-      'addressText',
       'areaKey',
       'city',
       'district',
-      'phone',
-      'website',
       'provinceCode',
       'communeCode',
     ]
       .filter((key) => body[key] !== undefined && body[key] !== null)
       .concat(body.lat !== undefined && body.lng !== undefined ? ['geom'] : [])
       .concat(Array.isArray(body.taxonomyIds) && body.taxonomyIds.length > 0 ? ['taxonomyIds'] : [])
-    const known = [
-      ...supplied,
-      'name',
-      'description',
-      'addressText',
-      'areaKey',
-      'city',
-      'district',
-      'phone',
-      'website',
-      'geom',
-      'provinceCode',
-      'communeCode',
-      'taxonomyIds',
-    ]
     // alpha.62 per-key codes: required | unused | unknown | too_long.
-    const sourceIssues = [
-      ...supplied
-        .filter((key) => typeof refs[key] !== 'string' || !String(refs[key]).trim())
-        .map((key) => ({ key, code: 'required' })),
-      ...Object.keys(refs)
-        .filter((key) => !supplied.includes(key))
-        .map((key) => ({ key, code: known.includes(key) ? 'unused' : 'unknown' })),
-      ...Object.entries(refs)
-        .filter(([, value]) => typeof value === 'string' && value.trim().length > 500)
-        .map(([key]) => ({ key, code: 'too_long' })),
-    ].map(({ key, code }) => ({ field: `sourceReferences.${key}`, code, message: code }))
+    const sourceIssues = mockSourceReferenceIssues(refs, supplied, CREATE_SOURCE_REFERENCE_KEYS)
     if (sourceIssues.length > 0) return refuse('SOURCE_REFERENCE_INVALID', sourceIssues)
+    /*
+     * GoGo-BE#672 `planContactWrite(input, null)` — a contact value sent on a
+     * create needs its `provenance` entry; an entry needs a value; `null`
+     * takes none. Every problem is `400 VALIDATION_FAILED`.
+     */
+    const provenance = contactProvenanceSchema.safeParse(body.provenance ?? {})
+    if (!provenance.success) return validationEnvelope(provenance.error.issues)
+    const contact = mockContactWriteIssues(
+      {
+        addressText: body.addressText as string | null | undefined,
+        phone: body.phone as string | null | undefined,
+        website: body.website as string | null | undefined,
+        provenance: provenance.data,
+      },
+      null,
+    )
+    if (contact.issues.length > 0) return refuse('VALIDATION_FAILED', contact.issues)
     const created = {
       ...db.places[0]!,
       id: `created-${db.places.length + 1}`,
@@ -1752,7 +1750,28 @@ export const handlers = [
     if (!place) return envelope(404, 'NOT_FOUND', 'place not found')
     const parsed = cmsPlaceEditMockSchema.safeParse(await request.json())
     if (!parsed.success) return validationEnvelope(parsed.error.issues)
-    const { expectedUpdatedAt, ...input } = parsed.data
+    const { expectedUpdatedAt, sourceReferences, ...input } = parsed.data
+    /*
+     * GoGo-BE#440 F-07 / #672 — an edit takes references for the two codes
+     * only; `sourceReferences.phone` and friends are `unknown` (contact
+     * evidence is `provenance`).
+     */
+    const editRefIssues = mockSourceReferenceIssues(
+      sourceReferences ?? {},
+      EDIT_SOURCE_REFERENCE_KEYS.filter((key) => typeof input[key] === 'string'),
+      EDIT_SOURCE_REFERENCE_KEYS,
+    )
+    if (editRefIssues.length > 0)
+      return HttpResponse.json(
+        {
+          code: 'SOURCE_REFERENCE_INVALID',
+          message: 'SOURCE_REFERENCE_INVALID',
+          field_errors: editRefIssues,
+          request_id: 'mock-source-reference-invalid',
+          retryable: false,
+        },
+        { status: 400 },
+      )
 
     // Optimistic concurrency, byte for byte: the code, and the *current*
     // `updatedAt` in the first field error, are what the console diffs against.

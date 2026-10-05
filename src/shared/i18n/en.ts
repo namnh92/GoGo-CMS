@@ -1166,9 +1166,6 @@ export const en: Partial<Record<MessageKey, string>> = {
   'placeCreate.source.hint': 'E.g. visited on 2 Oct, phoned the venue, menu on site.',
   'placeCreate.source.name': 'Source for the name',
   'placeCreate.source.geom': 'Source for the coordinates',
-  'placeCreate.source.addressText': 'Source for the address',
-  'placeCreate.source.phone': 'Source for the phone number',
-  'placeCreate.source.website': 'Source for the website',
   'placeCreate.source.description': 'Source for the description',
   'placeCreate.source.tooLong': 'A source is at most 500 characters.',
   'placeCreate.link.attached':
@@ -1272,6 +1269,8 @@ export const en: Partial<Record<MessageKey, string>> = {
   'contactEvidence.error.invalid': 'Invalid value',
   'contactEvidence.error.not_allowed': 'A cleared value takes no source',
   'contactEvidence.error.value_missing': 'Source given without a value',
+  'contactEvidence.error.unknown':
+    "This field's source belongs in the source boxes below (type, reference, time) — reload the page and try again",
   'contactOwnership.gogo': 'GoGo data (independent source)',
   'contactOwnership.google': 'From Google (legacy)',
   'contactOwnership.unknown': 'Source unknown — not GoGo-verified',

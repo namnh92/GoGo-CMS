@@ -8,7 +8,7 @@ import { PageBody, PageHeader } from '@/app/PageHeader'
 import { newIdempotencyKey } from '@/shared/api/client'
 import { placeStatusSchema } from '@/shared/api/contracts'
 import { toApiError, type ApiError, type FieldError } from '@/shared/api/errors'
-import { useT } from '@/shared/i18n/i18n'
+import { useLabel, useT } from '@/shared/i18n/i18n'
 import { useSession } from '@/shared/auth/session'
 import { Button } from '@/shared/ui/Button'
 import { Card, CardBody } from '@/shared/ui/Card'
@@ -25,6 +25,14 @@ import { queryKeys } from '@/shared/api/queryKeys'
 import { AdministrativeUnitCombobox } from '@/features/administrative/unitCombobox'
 import { PlaceCreateLinkPanel, type AppliedResolution } from './placeCreateLink.view'
 import { styles } from './placeCreate.style'
+import { ContactEvidenceFields } from './contactEvidence.view'
+import {
+  emptyEvidenceDrafts,
+  isContactField,
+  useEvidenceError,
+  type ContactField,
+  type EvidenceProperty,
+} from './contactEvidence'
 import {
   isCreateSourceKey,
   numberFieldRegister,
@@ -61,6 +69,10 @@ import {
  * create is one idempotent attempt: the key is reused for as long as the body
  * is the same, so a retry after a lost response replays the first place rather
  * than creating a second.
+ *
+ * GoGo-BE#672 (alpha.66) — address, phone and website are the exception: their
+ * evidence is structured (`provenance.<field>`: source type, reference, when
+ * collected) and is asked for by the same evidence boxes the place editor uses.
  */
 export default function PlaceCreateScreen() {
   const t = useT()
@@ -71,6 +83,8 @@ export default function PlaceCreateScreen() {
   const online = useOnline()
   const describeError = useErrorMessage()
   const fieldError = usePlaceFieldError()
+  const describeEvidence = useEvidenceError()
+  const label = useLabel()
 
   /** Candidates from a 409, kept so the editor can decide rather than retry blind. */
   const [duplicates, setDuplicates] = useState<FieldError[] | null>(null)
@@ -108,7 +122,12 @@ export default function PlaceCreateScreen() {
 
   const form = useForm<PlaceCreateForm>({
     resolver: zodResolver(placeCreateSchema),
-    defaultValues: { name: '', categoryId: '', sourceReferences: {} },
+    defaultValues: {
+      name: '',
+      categoryId: '',
+      sourceReferences: {},
+      evidence: emptyEvidenceDrafts(),
+    },
   })
 
   /**
@@ -218,7 +237,15 @@ export default function PlaceCreateScreen() {
         const key = issue.field.startsWith('sourceReferences.')
           ? issue.field.slice('sourceReferences.'.length)
           : null
-        if (key !== null && isCreateSourceKey(key)) {
+        /*
+         * GoGo-BE#672 — a contact's evidence is `provenance`, and a
+         * `sourceReferences` key for one is `unknown`. Only a console bug sends
+         * it, but the place to say so is that contact's evidence box.
+         */
+        if (key !== null && isContactField(key) && issue.code === 'unknown') {
+          form.setError(`evidence.${key}.sourceType`, { type: 'unknown', message: '' })
+          sourceIssues.push(issue)
+        } else if (key !== null && isCreateSourceKey(key)) {
           // alpha.62 names what is wrong per key; `unused` / `unknown` are a
           // console bug, not the editor's, and keep the generic sentence.
           const message =
@@ -234,9 +261,15 @@ export default function PlaceCreateScreen() {
 
       // Field-level rejections land on the boxes that caused them; anything the
       // form cannot point at is shown whole rather than dropped.
+      // `provenance.<field>[.<prop>]` (GoGo-BE#672) lands on the evidence box
+      // it names, in the evidence vocabulary; the rest on its fact's box.
       const { mapped, unmapped } = splitFieldErrors(rest)
       for (const issue of mapped) {
-        form.setError(issue.field, { message: fieldError(issue.field, issue) })
+        if (issue.field.startsWith('evidence.')) {
+          form.setError(issue.field, { type: issue.code, message: issue.message })
+        } else {
+          form.setError(issue.field, { message: fieldError(issue.field, issue) })
+        }
       }
       if (mapped.length + sourceIssues.length === 0 || unmapped.length > 0) {
         setServerError(apiError)
@@ -271,6 +304,17 @@ export default function PlaceCreateScreen() {
       code: String(issue.type ?? ''),
       message: String(issue.message ?? ''),
     })
+  }
+
+  /**
+   * GoGo-BE#672 — an evidence box's refusal: a key the schema authored, or a
+   * server code in the evidence vocabulary (`required`, `transport_only`, …).
+   */
+  const evidenceError = (field: ContactField, property: EvidenceProperty) => {
+    const issue = form.formState.errors.evidence?.[field]?.[property]
+    if (!issue) return undefined
+    const message = String(issue.message ?? '')
+    return label(message, '') || describeEvidence({ code: String(issue.type ?? ''), message })
   }
 
   const errorFor = (field: PlaceIdentityField): string | undefined => {
@@ -323,6 +367,19 @@ export default function PlaceCreateScreen() {
       hint={hint}
       error={sourceError(key)}
       {...form.register(`sourceReferences.${key}`)}
+    />
+  )
+
+  /**
+   * The structured evidence for one contact value — the same component the
+   * place editor renders, shown once there is a value to prove.
+   */
+  const contactEvidence = (field: ContactField) => (
+    <ContactEvidenceFields
+      field={field}
+      idPrefix="place-create"
+      bind={(property) => form.register(`evidence.${field}.${property}`)}
+      error={(property) => evidenceError(field, property)}
     />
   )
 
@@ -432,7 +489,7 @@ export default function PlaceCreateScreen() {
                   error={errorFor('addressText')}
                   {...form.register('addressText')}
                 />
-                {addressText?.trim() ? sourceInput('addressText') : null}
+                {addressText?.trim() ? contactEvidence('addressText') : null}
 
                 {/*
                   GoGo-CMS#179 — prefilled from what the provider's types imply,
@@ -521,8 +578,8 @@ export default function PlaceCreateScreen() {
                     {...form.register('website')}
                   />
                 </div>
-                {phone?.trim() ? sourceInput('phone') : null}
-                {website?.trim() ? sourceInput('website') : null}
+                {phone?.trim() ? contactEvidence('phone') : null}
+                {website?.trim() ? contactEvidence('website') : null}
 
                 <TextInput
                   label={t('placeEditor.avgVisit')}

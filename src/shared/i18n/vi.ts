@@ -1160,9 +1160,6 @@ export const vi = {
   'placeCreate.source.hint': 'Ví dụ: đến tận nơi ngày 02/10, gọi điện cho quán, thực đơn tại quán.',
   'placeCreate.source.name': 'Nguồn của tên',
   'placeCreate.source.geom': 'Nguồn của toạ độ',
-  'placeCreate.source.addressText': 'Nguồn của địa chỉ',
-  'placeCreate.source.phone': 'Nguồn của số điện thoại',
-  'placeCreate.source.website': 'Nguồn của website',
   'placeCreate.source.description': 'Nguồn của mô tả',
   'placeCreate.source.tooLong': 'Nguồn tối đa 500 ký tự.',
   'placeCreate.link.attached': 'Đang gắn với bản ghi Google “{name}” ({id}). Đổi link là bỏ gắn.',
@@ -1315,6 +1312,8 @@ export const vi = {
   'contactEvidence.error.invalid': 'Giá trị không hợp lệ',
   'contactEvidence.error.not_allowed': 'Xoá giá trị thì không kèm nguồn',
   'contactEvidence.error.value_missing': 'Có nguồn nhưng thiếu giá trị',
+  'contactEvidence.error.unknown':
+    'Nguồn của trường này phải ghi trong ô nguồn bên dưới (loại nguồn, tham chiếu, thời điểm) — tải lại trang rồi thử lại',
   'contactOwnership.gogo': 'Dữ liệu GoGo (có nguồn độc lập)',
   'contactOwnership.google': 'Từ Google (dữ liệu cũ)',
   'contactOwnership.unknown': 'Chưa rõ nguồn — không phải GoGo xác minh',
