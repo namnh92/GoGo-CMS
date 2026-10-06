@@ -2516,7 +2516,7 @@ export const en: Partial<Record<MessageKey, string>> = {
   'privacy.error.notHeld': 'This request has no legal hold.',
   'privacy.error.holdFields': 'Reason and legal basis each need at least 3 characters.',
 
-  // GoGo-BE#256 / ADR-0032 — secure export facts (never data).
+  // GoGo-BE#256 / ADR-0033 — secure export facts (never data).
   'privacy.export.title': 'Secure export',
   'privacy.export.status.pending': 'Waiting to be built',
   'privacy.export.status.generating': 'Being built',

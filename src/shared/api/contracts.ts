@@ -2578,7 +2578,7 @@ export const privacyDeliveryMethodSchema = z.enum(['in_app', 'secure_download', 
 export type PrivacyDeliveryMethod = z.infer<typeof privacyDeliveryMethodSchema>
 
 /**
- * GoGo-BE#256 / ADR-0032 — a secure export's state, as the CMS sees it. Facts
+ * GoGo-BE#256 / ADR-0033 — a secure export's state, as the CMS sees it. Facts
  * only: never the data, a key or an object location. The holder redeems it
  * from their own session; `ready` expires 24 h after `readyAt`.
  * `failureCode` / `revokeReason` / `transferOutcome` are extensible enums in
@@ -2615,7 +2615,7 @@ export function isLiveExport(state: PrivacyExportAdminStatus | null | undefined)
 }
 
 /**
- * `202` from `POST /cms/users/{id}/export` (alpha.67). Metadata only; the
+ * `202` from `POST /cms/users/{id}/export` (alpha.69). Metadata only; the
  * export opens its own linked privacy request.
  */
 export const cmsUserExportResultSchema = z.object({
@@ -2682,7 +2682,7 @@ export type PrivacyRequestPage = z.infer<typeof privacyRequestPageSchema>
 
 /**
  * `POST /cms/privacy-requests/{id}/execute`: `201 { request }` for a delete,
- * `202 { request, export }` for an export (alpha.67). There is no data key —
+ * `202 { request, export }` for an export (alpha.69). There is no data key —
  * staff never receive the export, and anything else the body carries is
  * stripped here before a component can see it.
  */

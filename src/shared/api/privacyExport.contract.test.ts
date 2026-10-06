@@ -3,7 +3,7 @@ import * as contracts from './contracts'
 import { privacyRequests } from '@/shared/test/fixtures'
 
 /*
- * GoGo-BE#256 / ADR-0032 (alpha.67). The two CMS export routes answer `202`
+ * GoGo-BE#256 / ADR-0033 (alpha.69). The two CMS export routes answer `202`
  * metadata. The client schemas keep the export facts and drop anything else —
  * a stray `data` from an old or buggy server never reaches a component.
  */
@@ -18,7 +18,7 @@ const exportFacts = {
   transferOutcome: 'completed',
 }
 
-describe('privacy export contract (alpha.67)', () => {
+describe('privacy export contract (alpha.69)', () => {
   it('execute 202: keeps `export`, drops any `data`', () => {
     const parsed = contracts.privacyExecuteResultSchema.parse({
       request: { ...privacyRequests[0]!, status: 'in_progress' },

@@ -20,7 +20,7 @@ export type UserAction = 'suspend' | 'ban' | 'reactivate' | 'delete' | 'export'
  * reason. Delete additionally requires typing the display name — it runs the
  * same erasure as the consumer flow and has no undo.
  *
- * Export (GoGo-BE#256, ADR-0032) issues a secure export for the account holder
+ * Export (GoGo-BE#256, ADR-0033) issues a secure export for the account holder
  * and answers metadata only: the dialog stays open on the export's state
  * facts. No file is built and no data is shown — the console receives none.
  */

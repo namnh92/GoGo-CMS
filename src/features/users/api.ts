@@ -83,7 +83,7 @@ export function deleteAppUser(id: string, reason: string): Promise<{ deleted: bo
 }
 
 /**
- * Subject-access export through support (GoGo-BE#256, ADR-0032): issues a
+ * Subject-access export through support (GoGo-BE#256, ADR-0033): issues a
  * secure export the account holder redeems from their own signed-in session,
  * and opens its own linked privacy request. `202` metadata only — staff never
  * receive or forward the data. Rate limited per actor; one active export per

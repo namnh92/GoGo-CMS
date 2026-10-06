@@ -77,7 +77,7 @@ export function acknowledgePrivacyRequest(id: string): Promise<PrivacyRequest> {
  * Runs the export or delete **for this request**. Same user is not same
  * request: only the executed one becomes `completed`. A delete needs
  * `super_admin` and closes at once; a correction cannot be executed at all.
- * An export (alpha.67) issues a secure export for the holder and answers
+ * An export (alpha.69) issues a secure export for the holder and answers
  * `202 { request, export }` — the request stays `in_progress` until the export
  * is available, and no data ever reaches the console.
  */

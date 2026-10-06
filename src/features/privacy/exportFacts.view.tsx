@@ -15,7 +15,7 @@ const TONE: Record<PrivacyExportAdminStatus['status'], Tone> = {
 }
 
 /**
- * GoGo-BE#256 / ADR-0032 — the state of one secure export, from the facts the
+ * GoGo-BE#256 / ADR-0033 — the state of one secure export, from the facts the
  * API returns. Never data: the console has none to show. Shared by the direct
  * user export result and the privacy-request detail, so an export reads the
  * same wherever staff meet it. A fact the server did not send is omitted.

@@ -3213,7 +3213,7 @@ export const vi = {
   'privacy.error.notHeld': 'Yêu cầu này không có legal hold nào.',
   'privacy.error.holdFields': 'Lý do và căn cứ pháp lý đều cần tối thiểu 3 ký tự.',
 
-  // GoGo-BE#256 / ADR-0032 — secure export facts (never data).
+  // GoGo-BE#256 / ADR-0033 — secure export facts (never data).
   'privacy.export.title': 'Bản xuất bảo mật',
   'privacy.export.status.pending': 'Đang chờ tạo',
   'privacy.export.status.generating': 'Đang tạo',

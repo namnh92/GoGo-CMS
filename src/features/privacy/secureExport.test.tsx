@@ -12,7 +12,7 @@ import PrivacyListScreen from './privacyList.view'
 import { markPrivacyDelivered } from './api'
 
 /*
- * GoGo-BE#256 / ADR-0032 (contract alpha.67): a CMS export is issued for the
+ * GoGo-BE#256 / ADR-0033 (contract alpha.69): a CMS export is issued for the
  * account holder to redeem from their own session. Staff get `202` metadata,
  * never the data — so the console must never download or render a payload,
  * and must show the export's state facts instead.
@@ -195,7 +195,7 @@ describe('secure export — privacy request execute (GoGo-BE#256)', () => {
     const table = await screen.findByRole('table')
     await user.click(within(table).getByText(executable.subject.userId!))
     const drawer = await screen.findByRole('dialog')
-    // Matched by verb so the pre-alpha.67 console is exercised too.
+    // Matched by verb so the pre-alpha.69 console is exercised too.
     await user.click(await within(drawer).findByRole('button', { name: /xuất/ }))
 
     await waitFor(() =>
@@ -298,7 +298,7 @@ describe('secure export — privacy request execute (GoGo-BE#256)', () => {
   })
 })
 
-describe('the default mock mirrors alpha.67 (dev server parity)', () => {
+describe('the default mock mirrors alpha.69 (dev server parity)', () => {
   it('direct export: 202 metadata, then EXPORT_ALREADY_ACTIVE for the same account', async () => {
     signInAs('ops_admin')
     const first = await exportAppUser('11111111-0000-4000-8000-000000000001', 'SUP-2001 lý do')

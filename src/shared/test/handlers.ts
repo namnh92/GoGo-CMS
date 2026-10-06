@@ -3253,7 +3253,7 @@ export const handlers = [
     if (row.status === 'deleted') {
       return envelope(409, 'SUBJECT_CANNOT_SIGN_IN', 'the account must be able to sign in')
     }
-    // GoGo-BE#256 / ADR-0032 (alpha.67): metadata only, never data. The export
+    // GoGo-BE#256 / ADR-0033 (alpha.69): metadata only, never data. The export
     // opens its own linked privacy request; one active export per account.
     const live = db.privacy.find(
       (item) => item.subject.userId === row.id && mockLiveExport(item.secureExport),
@@ -3391,7 +3391,7 @@ export const handlers = [
       return envelope(403, 'ROLE_DENIED', 'a delete request needs super_admin')
     }
     if (row.type === 'export') {
-      // GoGo-BE#256 / ADR-0032 (alpha.67): no payload. The request moves to
+      // GoGo-BE#256 / ADR-0033 (alpha.69): no payload. The request moves to
       // `in_progress` and closes when the export is available; delivery is
       // the server's to record.
       if (row.deliveryMethod) {
