@@ -3034,7 +3034,7 @@ export const vi = {
   'users.actionHint.delete':
     'Chạy đúng luồng xoá của người dùng tự phục vụ: PII xoá trắng, phiên thu hồi, nội dung ẩn danh, địa chỉ giải phóng.',
   'users.actionHint.export':
-    'Cùng payload với người dùng tự xuất; điểm khác là dòng audit — nhân viên đọc dữ liệu của một người là một sự kiện. Có giới hạn tần suất.',
+    'Phát hành một bản xuất mã hoá cho chủ tài khoản tự tải từ phiên đăng nhập của họ, kèm một yêu cầu riêng tư trong sổ. Nhân viên không nhận dữ liệu. Có giới hạn tần suất; mỗi tài khoản chỉ có một bản xuất đang hiệu lực.',
   'users.deleteWarn': 'Không đảo ngược được. Tài khoản này thuộc về một người khác.',
   'users.deleteConfirmLabel': 'Gõ đúng tên hiển thị ({name}) để xác nhận',
   'users.deleteConfirmMismatch': 'Tên xác nhận chưa khớp tên hiển thị.',
@@ -3045,7 +3045,7 @@ export const vi = {
   'users.done.ban': 'Đã cấm tài khoản.',
   'users.done.reactivate': 'Đã gỡ hạn chế.',
   'users.done.delete': 'Đã xoá và ẩn danh tài khoản.',
-  'users.done.export': 'Đã tải bản xuất dữ liệu.',
+  'users.done.export': 'Đã phát hành bản xuất bảo mật.',
   'users.error.deleted': 'Tài khoản đã xoá — trạng thái cuối, không đổi được nữa.',
   'users.error.exportRate': 'Vượt giới hạn xuất dữ liệu. Chờ ít phút rồi thử lại.',
 
@@ -3172,7 +3172,7 @@ export const vi = {
   'privacy.delivery.other': 'Khác',
 
   'privacy.action.acknowledge': 'Xác nhận đã nhận',
-  'privacy.action.execute.export': 'Chạy xuất dữ liệu & đóng',
+  'privacy.action.execute.export': 'Phát hành bản xuất bảo mật',
   'privacy.action.execute.delete': 'Chạy xoá dữ liệu & đóng',
   'privacy.action.execute.correction': 'Chạy',
   'privacy.action.close': 'Đóng không thực thi',
@@ -3212,6 +3212,51 @@ export const vi = {
   'privacy.error.alreadyHeld': 'Yêu cầu này đang có legal hold.',
   'privacy.error.notHeld': 'Yêu cầu này không có legal hold nào.',
   'privacy.error.holdFields': 'Lý do và căn cứ pháp lý đều cần tối thiểu 3 ký tự.',
+
+  // GoGo-BE#256 / ADR-0032 — secure export facts (never data).
+  'privacy.export.title': 'Bản xuất bảo mật',
+  'privacy.export.status.pending': 'Đang chờ tạo',
+  'privacy.export.status.generating': 'Đang tạo',
+  'privacy.export.status.ready': 'Sẵn sàng để chủ tài khoản tải',
+  'privacy.export.status.consumed': 'Chủ tài khoản đã tải',
+  'privacy.export.status.expired': 'Đã hết hạn',
+  'privacy.export.status.revoked': 'Đã thu hồi',
+  'privacy.export.status.failed': 'Tạo thất bại',
+  'privacy.export.initiatedBy': 'Khởi tạo bởi',
+  'privacy.export.initiatedBy.self': 'Chủ tài khoản',
+  'privacy.export.initiatedBy.support': 'Hỗ trợ',
+  'privacy.export.createdAt': 'Tạo lúc',
+  'privacy.export.readyAt': 'Sẵn sàng lúc',
+  'privacy.export.expiresAt': 'Hết hạn lúc',
+  'privacy.export.consumedAt': 'Bắt đầu tải lúc',
+  'privacy.export.transferCompletedAt': 'Tải xong lúc',
+  'privacy.export.cleanedAt': 'Đã xoá khỏi kho lúc',
+  'privacy.export.transferOutcome': 'Kết quả tải',
+  'privacy.export.transferOutcome.completed': 'Hoàn tất',
+  'privacy.export.transferOutcome.aborted': 'Bị ngắt giữa chừng',
+  'privacy.export.failureCode': 'Mã lỗi',
+  'privacy.export.revokeReason': 'Lý do thu hồi',
+  'privacy.export.revokeReason.password_changed': 'Đổi mật khẩu',
+  'privacy.export.revokeReason.account_deleted': 'Tài khoản đã xoá',
+  'privacy.export.revokeReason.epoch_mismatch': 'Thông tin đăng nhập đã đổi',
+  'privacy.export.staffNote':
+    'Nhân viên không nhận và không chuyển tiếp dữ liệu. Chủ tài khoản tự tải một lần từ phiên đăng nhập của mình và được báo trong ứng dụng.',
+  'privacy.delivery.serverOwned':
+    'Yêu cầu này giao qua bản xuất bảo mật — việc bàn giao do server ghi khi chủ tài khoản tải xong, không ghi tay.',
+  'privacy.done.executeExport':
+    'Đã phát hành bản xuất bảo mật. Yêu cầu đóng khi bản xuất sẵn sàng.',
+  'error.EXPORT_UNAVAILABLE':
+    'Môi trường này chưa cấu hình xuất dữ liệu bảo mật. Yêu cầu chưa bị thay đổi.',
+  'error.SUBJECT_CANNOT_SIGN_IN':
+    'Chủ tài khoản hiện không đăng nhập được. Cần khôi phục tài khoản trước, vì chỉ họ mới tải được bản xuất.',
+  'error.EXPORT_ALREADY_ACTIVE':
+    'Tài khoản này đang có một bản xuất chưa dùng. Chờ bản đó được tải hoặc hết hạn.',
+  'error.ALREADY_DELIVERED':
+    'Yêu cầu đã được ghi nhận bàn giao thủ công, nên không phát hành bản xuất bảo mật đè lên.',
+  'error.DELIVERY_SERVER_OWNED':
+    'Yêu cầu này giao qua bản xuất bảo mật — việc bàn giao do server ghi, không ghi tay được.',
+  'error.SECURE_DELIVERY_NOT_ASSERTABLE':
+    'Không ghi tay được "Link tải bảo mật" — server tự ghi khi chủ tài khoản tải xong.',
 
   'users.openPrivacyWarn':
     'Người dùng này đang có {count} yêu cầu riêng tư mở. Xoá trực tiếp ở đây KHÔNG cập nhật sổ yêu cầu — hãy mở yêu cầu tương ứng và chạy từ đó.',

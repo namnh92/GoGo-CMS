@@ -5,8 +5,10 @@ import {
   cmsAppUserPageSchema,
   cmsPlanPageSchema,
   cmsRoomPageSchema,
+  cmsUserExportResultSchema,
   cmsUserStatusResultSchema,
   type AppUserStatus,
+  type CmsUserExportResult,
   type CmsAppUserDetail,
   type CmsAppUserPage,
   type CmsPlanPage,
@@ -81,11 +83,17 @@ export function deleteAppUser(id: string, reason: string): Promise<{ deleted: bo
 }
 
 /**
- * Subject-access export through support — same payload as `/me/export`; the
- * audit entry is the point. Rate limited per actor.
+ * Subject-access export through support (GoGo-BE#256, ADR-0032): issues a
+ * secure export the account holder redeems from their own signed-in session,
+ * and opens its own linked privacy request. `202` metadata only — staff never
+ * receive or forward the data. Rate limited per actor; one active export per
+ * account.
  */
-export function exportAppUser(id: string, reason: string): Promise<Record<string, unknown>> {
-  return apiFetch(`/cms/users/${id}/export`, { method: 'POST', body: { reason } })
+export function exportAppUser(id: string, reason: string): Promise<CmsUserExportResult> {
+  return apiFetchParsed(cmsUserExportResultSchema, `/cms/users/${id}/export`, {
+    method: 'POST',
+    body: { reason },
+  })
 }
 
 export function fetchRooms(

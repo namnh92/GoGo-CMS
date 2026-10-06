@@ -13,6 +13,7 @@ import { Drawer, Modal } from '@/shared/ui/Overlay'
 import { AsyncBoundary, EmptyState, useErrorMessage } from '@/shared/ui/State'
 import { useToast } from '@/shared/ui/Toast'
 import {
+  isLiveExport,
   privacyDeliveryMethodSchema,
   type PrivacyDeliveryMethod,
   type PrivacyRequest,
@@ -28,9 +29,19 @@ import {
   releasePrivacyRetention,
 } from './api'
 import { SlaBadge } from './slaBadge'
+import { ExportFacts } from './exportFacts.view'
 import { styles } from './privacy.style'
 
 type Dialog = 'close' | 'delivered' | 'hold' | 'release'
+
+/**
+ * What an operator may record by hand. `secure_download` is the server's to
+ * record (`400 SECURE_DELIVERY_NOT_ASSERTABLE`, GoGo-BE#256), so it is never
+ * offered.
+ */
+const MANUAL_DELIVERY: PrivacyDeliveryMethod[] = privacyDeliveryMethodSchema.options.filter(
+  (value) => value !== 'secure_download',
+)
 
 const CLOSE_OUTCOMES: Exclude<PrivacyRequestOutcome, 'completed'>[] = [
   'no_account_found',
@@ -42,9 +53,12 @@ const CLOSE_OUTCOMES: Exclude<PrivacyRequestOutcome, 'completed'>[] = [
 /**
  * One request in the ledger.
  *
- * Every action here is the server's: `execute` runs the erasure or export for
- * **this** request and closes it, `close` ends it unfulfilled with a real
- * outcome, `delivered` records metadata only. Failures the contract names —
+ * Every action here is the server's: `execute` runs the erasure for **this**
+ * request and closes it, or issues a secure export the holder redeems from
+ * their own session (GoGo-BE#256 — `202` metadata, never data; the request
+ * closes when the export is ready). `close` ends it unfulfilled with a real
+ * outcome, `delivered` records metadata only, and only for a request with no
+ * secure export — that delivery is the server's to record. Failures the contract names —
  * `ROLE_DENIED`, `NOT_EXECUTABLE`, `IDENTITY_NOT_MATCHED`, `ALREADY_CLOSED` —
  * render as their own explanations rather than a generic error.
  */
@@ -70,7 +84,7 @@ export function PrivacyDetailDrawer({
   const [outcome, setOutcome] =
     useState<Exclude<PrivacyRequestOutcome, 'completed'>>('no_account_found')
   const [note, setNote] = useState('')
-  const [delivery, setDelivery] = useState<PrivacyDeliveryMethod>('secure_download')
+  const [delivery, setDelivery] = useState<PrivacyDeliveryMethod>(MANUAL_DELIVERY[0]!)
   const [holdReason, setHoldReason] = useState('')
   const [legalBasis, setLegalBasis] = useState('')
   const [reviewAt, setReviewAt] = useState('')
@@ -125,20 +139,17 @@ export function PrivacyDetailDrawer({
       return releasePrivacyRetention(detail.id, holdReason.trim())
     },
     onSuccess: (result, action) => {
-      if (action === 'execute' && 'data' in result && result.data) {
-        // The export payload reaches the operator and nowhere else; the ledger
-        // records only that it happened.
-        const blob = new Blob([JSON.stringify(result.data, null, 2)], {
-          type: 'application/json',
+      if (action === 'execute' && 'request' in result && result.export) {
+        // Metadata only: the export's state facts, shown until the refetch
+        // brings the request's own `secureExport`.
+        queryClient.setQueryData(queryKeys.privacy.detail(detail.id), {
+          ...result.request,
+          secureExport: result.export,
         })
-        const url = URL.createObjectURL(blob)
-        const anchor = document.createElement('a')
-        anchor.href = url
-        anchor.download = `gogo-privacy-export-${detail.id}.json`
-        anchor.click()
-        URL.revokeObjectURL(url)
+        toast.success(t('privacy.done.executeExport'))
+      } else {
+        toast.success(t(`privacy.done.${action}` as const))
       }
-      toast.success(t(`privacy.done.${action}` as const))
       setDialog(null)
       setError(null)
       invalidate()
@@ -149,6 +160,13 @@ export function PrivacyDetailDrawer({
 
   const closed = detail.status === 'closed'
   const held = Boolean(detail.retentionHold)
+  // A request backed by a secure export: its delivery fields are the server's.
+  const serverOwned =
+    detail.type === 'export' &&
+    (Boolean(detail.secureExport) || detail.deliveryMethod === 'secure_download')
+  // An export still being produced or held is not issued twice
+  // (`409 EXPORT_ALREADY_ACTIVE`).
+  const exportLive = detail.type === 'export' && isLiveExport(detail.secureExport)
 
   return (
     <Drawer open onClose={onClose} title={t('privacy.detailTitle')} width="md">
@@ -218,6 +236,13 @@ export function PrivacyDetailDrawer({
               ) : null}
             </div>
 
+            {detail.secureExport ? (
+              <div className={styles.section}>
+                <ExportFacts facts={detail.secureExport} />
+                <p className={`${styles.muted} mt-2`}>{t('privacy.delivery.serverOwned')}</p>
+              </div>
+            ) : null}
+
             {detail.retentionHold ? (
               <div className={styles.section}>
                 <p className={styles.label}>{t('privacy.hold.title')}</p>
@@ -256,7 +281,7 @@ export function PrivacyDetailDrawer({
                       {t('privacy.action.acknowledge')}
                     </Button>
                   ) : null}
-                  {!closed && detail.type !== 'correction' ? (
+                  {!closed && detail.type !== 'correction' && !exportLive ? (
                     <Button
                       variant="danger"
                       disabled={!online}
@@ -280,7 +305,10 @@ export function PrivacyDetailDrawer({
                       {t('privacy.action.close')}
                     </Button>
                   ) : null}
-                  {detail.type === 'export' && detail.executedAt && !detail.deliveredAt ? (
+                  {detail.type === 'export' &&
+                  detail.executedAt &&
+                  !detail.deliveredAt &&
+                  !serverOwned ? (
                     <Button
                       variant="secondary"
                       disabled={!online}
@@ -385,7 +413,7 @@ export function PrivacyDetailDrawer({
                   value={delivery}
                   onChange={(event) => setDelivery(event.target.value as PrivacyDeliveryMethod)}
                 >
-                  {privacyDeliveryMethodSchema.options.map((value) => (
+                  {MANUAL_DELIVERY.map((value) => (
                     <option key={value} value={value}>
                       {t(`privacy.delivery.${value}` as const)}
                     </option>
