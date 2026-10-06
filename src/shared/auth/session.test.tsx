@@ -321,6 +321,9 @@ describe('staff session', () => {
     const { result } = renderHook(() => useSession(), { wrapper })
     await signIn(result)
 
+    // The logout handler is held until released; the exchange handler is not.
+    // So if the exchange were dispatched before the revoke settled it would be
+    // recorded first — the final order is the proof, with no timing in it.
     const order: string[] = []
     let releaseLogout!: () => void
     const logoutGate = new Promise<void>((resolve) => {
@@ -341,22 +344,25 @@ describe('staff session', () => {
       }),
     )
 
-    let signedInAgain!: Promise<unknown>
-    await act(async () => {
-      result.current.logout()
-      signedInAgain = result.current.signInWithAccess()
-      await new Promise((resolve) => setTimeout(resolve, 50))
-    })
-    // Still waiting on the revoke: the exchange has not reached the server.
-    expect(order).toEqual([])
-
-    await act(async () => {
+    try {
+      let signedInAgain!: Promise<unknown>
+      await act(async () => {
+        result.current.logout()
+        signedInAgain = result.current.signInWithAccess()
+      })
+      await act(async () => {
+        releaseLogout()
+        await signedInAgain
+      })
+      expect(order).toEqual(['logout', 'exchange'])
+      expect(result.current.session?.role).toBe('super_admin')
+      expect(getAccessToken()).toBe('sso-token')
+    } finally {
+      // Whatever happened above, the module-global pending revoke must not
+      // leak into the next test.
       releaseLogout()
-      await signedInAgain
-    })
-    expect(order).toEqual(['logout', 'exchange'])
-    expect(result.current.session?.role).toBe('super_admin')
-    expect(getAccessToken()).toBe('sso-token')
+      await logoutGate
+    }
   })
 
   it('advances the session epoch on a single sign-on, so a stale answer is ignored', async () => {
@@ -378,19 +384,21 @@ describe('staff session', () => {
     await act(async () => {
       await result.current.login({ email: 'temp.one@gogo.vn', password: 'pw', totp: '123456' })
     })
-    const staleEpoch = result.current.currentEpoch()
-
     await act(async () => {
       result.current.logout()
     })
+    // Sign-out already moved the epoch. The sign-in must move it again, so
+    // the comparison is against the number *after* the sign-out.
+    const afterLogout = result.current.currentEpoch()
+
     await act(async () => {
       await result.current.signInWithAccess()
     })
-    expect(result.current.currentEpoch()).not.toBe(staleEpoch)
+    expect(result.current.currentEpoch()).not.toBe(afterLogout)
     expect(result.current.session?.mustChangePassword).toBe(true)
 
-    // The first operator's password-change answer finally lands: not ours.
-    act(() => result.current.passwordChanged(staleEpoch))
+    // An answer carrying the post-logout number belongs to no session: ignored.
+    act(() => result.current.passwordChanged(afterLogout))
     expect(result.current.session?.mustChangePassword).toBe(true)
 
     // Our own answer clears it.
