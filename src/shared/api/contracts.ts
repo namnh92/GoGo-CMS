@@ -2577,6 +2577,53 @@ export type PrivacySla = z.infer<typeof privacySlaSchema>
 export const privacyDeliveryMethodSchema = z.enum(['in_app', 'secure_download', 'other'])
 export type PrivacyDeliveryMethod = z.infer<typeof privacyDeliveryMethodSchema>
 
+/**
+ * GoGo-BE#256 / ADR-0033 — a secure export's state, as the CMS sees it. Facts
+ * only: never the data, a key or an object location. The holder redeems it
+ * from their own session; `ready` expires 24 h after `readyAt`.
+ * `failureCode` / `revokeReason` / `transferOutcome` are extensible enums in
+ * the contract, so an unknown value is kept as a fact rather than refused.
+ */
+export const privacyExportStatusValues = [
+  'pending',
+  'generating',
+  'ready',
+  'consumed',
+  'expired',
+  'revoked',
+  'failed',
+] as const
+export const privacyExportAdminStatusSchema = z.object({
+  id: z.string(),
+  status: z.enum(privacyExportStatusValues),
+  initiatedBy: z.enum(['self', 'support']),
+  createdAt: z.string(),
+  readyAt: z.string().nullish(),
+  expiresAt: z.string().nullish(),
+  consumedAt: z.string().nullish(),
+  failureCode: z.string().nullish(),
+  revokeReason: z.string().nullish(),
+  transferCompletedAt: z.string().nullish(),
+  transferOutcome: z.string().nullish(),
+  cleanedAt: z.string().nullish(),
+})
+export type PrivacyExportAdminStatus = z.infer<typeof privacyExportAdminStatusSchema>
+
+/** An export the server is still producing or holding for the holder. */
+export function isLiveExport(state: PrivacyExportAdminStatus | null | undefined): boolean {
+  return state?.status === 'pending' || state?.status === 'generating' || state?.status === 'ready'
+}
+
+/**
+ * `202` from `POST /cms/users/{id}/export` (alpha.69). Metadata only; the
+ * export opens its own linked privacy request.
+ */
+export const cmsUserExportResultSchema = z.object({
+  privacyRequestId: z.string(),
+  export: privacyExportAdminStatusSchema,
+})
+export type CmsUserExportResult = z.infer<typeof cmsUserExportResultSchema>
+
 export const privacyRequestSchema = z.object({
   id: z.string(),
   type: privacyRequestTypeSchema,
@@ -2601,7 +2648,10 @@ export const privacyRequestSchema = z.object({
   completedAt: z.string().nullish(),
   closedAt: z.string().nullish(),
   deliveryMethod: privacyDeliveryMethodSchema.nullish(),
+  /** For `secure_download`, the server-observed end of the holder's download. */
   deliveredAt: z.string().nullish(),
+  /** The latest secure export issued for this request (detail view only). */
+  secureExport: privacyExportAdminStatusSchema.nullish(),
   /** Stamped at closure; the retention job deletes the row then, unless held. */
   retentionAt: z.string().nullish(),
   retentionHold: z
@@ -2630,11 +2680,28 @@ export const privacyRequestPageSchema = z.object({
 })
 export type PrivacyRequestPage = z.infer<typeof privacyRequestPageSchema>
 
-export const privacyExecuteResultSchema = z.object({
-  request: privacyRequestSchema,
-  /** Present for an export — the same payload `/me/export` returns. */
-  data: z.record(z.string(), z.unknown()).nullish(),
+/**
+ * `POST /cms/privacy-requests/{id}/execute`: `201 { request }` for a delete,
+ * `202 { request, export }` for an export (alpha.69). There is no data key —
+ * staff never receive the export, and anything else the body carries is
+ * stripped here before a component can see it.
+ */
+export const privacyExportExecuteResultSchema = z.object({
+  request: privacyRequestSchema.extend({ type: z.literal('export') }),
+  export: privacyExportAdminStatusSchema,
 })
+export const privacyDeleteExecuteResultSchema = z.object({
+  request: privacyRequestSchema.extend({ type: z.literal('delete') }),
+})
+/**
+ * Two shapes, chosen by the request's own type (Sol F-02): an export answer
+ * without its metadata fails to parse (`CONTRACT_MISMATCH`) instead of
+ * reporting a success with nothing to show; a correction is never an answer.
+ */
+export const privacyExecuteResultSchema = z.union([
+  privacyExportExecuteResultSchema,
+  privacyDeleteExecuteResultSchema,
+])
 export type PrivacyExecuteResult = z.infer<typeof privacyExecuteResultSchema>
 
 /**

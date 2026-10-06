@@ -74,9 +74,12 @@ export function acknowledgePrivacyRequest(id: string): Promise<PrivacyRequest> {
 }
 
 /**
- * Runs the export or delete **for this request** and closes it. Same user is
- * not same request: only the executed one becomes `completed`. A delete needs
- * `super_admin`; a correction cannot be executed at all.
+ * Runs the export or delete **for this request**. Same user is not same
+ * request: only the executed one becomes `completed`. A delete needs
+ * `super_admin` and closes at once; a correction cannot be executed at all.
+ * An export (alpha.69) issues a secure export for the holder and answers
+ * `202 { request, export }` — the request stays `in_progress` until the export
+ * is available, and no data ever reaches the console.
  */
 export function executePrivacyRequest(id: string): Promise<PrivacyExecuteResult> {
   return apiFetchParsed(privacyExecuteResultSchema, `/cms/privacy-requests/${id}/execute`, {
@@ -98,7 +101,12 @@ export function closePrivacyRequest(
   })
 }
 
-/** Metadata only — never the bytes, never a signed URL. */
+/**
+ * Metadata only — never the bytes, never a signed URL. Only for a request with
+ * no secure export: `secure_download` is recorded by the server itself
+ * (`400 SECURE_DELIVERY_NOT_ASSERTABLE`), and a request backed by a secure
+ * export accepts no manual method (`409 DELIVERY_SERVER_OWNED`).
+ */
 export function markPrivacyDelivered(
   id: string,
   deliveryMethod: PrivacyDeliveryMethod,

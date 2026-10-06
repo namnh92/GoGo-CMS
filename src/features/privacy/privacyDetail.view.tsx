@@ -13,6 +13,7 @@ import { Drawer, Modal } from '@/shared/ui/Overlay'
 import { AsyncBoundary, EmptyState, useErrorMessage } from '@/shared/ui/State'
 import { useToast } from '@/shared/ui/Toast'
 import {
+  isLiveExport,
   privacyDeliveryMethodSchema,
   type PrivacyDeliveryMethod,
   type PrivacyRequest,
@@ -28,9 +29,19 @@ import {
   releasePrivacyRetention,
 } from './api'
 import { SlaBadge } from './slaBadge'
+import { ExportFacts } from './exportFacts.view'
 import { styles } from './privacy.style'
 
 type Dialog = 'close' | 'delivered' | 'hold' | 'release'
+
+/**
+ * What an operator may record by hand. `secure_download` is the server's to
+ * record (`400 SECURE_DELIVERY_NOT_ASSERTABLE`, GoGo-BE#256), so it is never
+ * offered.
+ */
+const MANUAL_DELIVERY: PrivacyDeliveryMethod[] = privacyDeliveryMethodSchema.options.filter(
+  (value) => value !== 'secure_download',
+)
 
 const CLOSE_OUTCOMES: Exclude<PrivacyRequestOutcome, 'completed'>[] = [
   'no_account_found',
@@ -42,9 +53,12 @@ const CLOSE_OUTCOMES: Exclude<PrivacyRequestOutcome, 'completed'>[] = [
 /**
  * One request in the ledger.
  *
- * Every action here is the server's: `execute` runs the erasure or export for
- * **this** request and closes it, `close` ends it unfulfilled with a real
- * outcome, `delivered` records metadata only. Failures the contract names —
+ * Every action here is the server's: `execute` runs the erasure for **this**
+ * request and closes it, or issues a secure export the holder redeems from
+ * their own session (GoGo-BE#256 — `202` metadata, never data; the request
+ * closes when the export is ready). `close` ends it unfulfilled with a real
+ * outcome, `delivered` records metadata only, and only for a request with no
+ * secure export — that delivery is the server's to record. Failures the contract names —
  * `ROLE_DENIED`, `NOT_EXECUTABLE`, `IDENTITY_NOT_MATCHED`, `ALREADY_CLOSED` —
  * render as their own explanations rather than a generic error.
  */
@@ -70,7 +84,7 @@ export function PrivacyDetailDrawer({
   const [outcome, setOutcome] =
     useState<Exclude<PrivacyRequestOutcome, 'completed'>>('no_account_found')
   const [note, setNote] = useState('')
-  const [delivery, setDelivery] = useState<PrivacyDeliveryMethod>('secure_download')
+  const [delivery, setDelivery] = useState<PrivacyDeliveryMethod>(MANUAL_DELIVERY[0]!)
   const [holdReason, setHoldReason] = useState('')
   const [legalBasis, setLegalBasis] = useState('')
   const [reviewAt, setReviewAt] = useState('')
@@ -79,7 +93,10 @@ export function PrivacyDetailDrawer({
   const query = useQuery({
     queryKey: queryKeys.privacy.detail(request.id),
     queryFn: ({ signal }) => fetchPrivacyRequest(request.id, signal),
-    initialData: request,
+    // Placeholder, not initial data (Sol F-01): the list row lacks the
+    // detail-only facts (`secureExport`), so it may draw the header while the
+    // detail loads, but never the actions.
+    placeholderData: request,
     staleTime: 15_000,
   })
   const detail = query.data ?? request
@@ -125,20 +142,17 @@ export function PrivacyDetailDrawer({
       return releasePrivacyRetention(detail.id, holdReason.trim())
     },
     onSuccess: (result, action) => {
-      if (action === 'execute' && 'data' in result && result.data) {
-        // The export payload reaches the operator and nowhere else; the ledger
-        // records only that it happened.
-        const blob = new Blob([JSON.stringify(result.data, null, 2)], {
-          type: 'application/json',
+      if (action === 'execute' && 'export' in result) {
+        // Metadata only: the export's state facts, shown until the refetch
+        // brings the request's own `secureExport`.
+        queryClient.setQueryData(queryKeys.privacy.detail(detail.id), {
+          ...result.request,
+          secureExport: result.export,
         })
-        const url = URL.createObjectURL(blob)
-        const anchor = document.createElement('a')
-        anchor.href = url
-        anchor.download = `gogo-privacy-export-${detail.id}.json`
-        anchor.click()
-        URL.revokeObjectURL(url)
+        toast.success(t('privacy.done.executeExport'))
+      } else {
+        toast.success(t(`privacy.done.${action}` as const))
       }
-      toast.success(t(`privacy.done.${action}` as const))
       setDialog(null)
       setError(null)
       invalidate()
@@ -149,6 +163,18 @@ export function PrivacyDetailDrawer({
 
   const closed = detail.status === 'closed'
   const held = Boolean(detail.retentionHold)
+  // A request backed by a secure export: its delivery fields are the server's.
+  const serverOwned =
+    detail.type === 'export' &&
+    (Boolean(detail.secureExport) || detail.deliveryMethod === 'secure_download')
+  // An export still being produced or held is not issued twice
+  // (`409 EXPORT_ALREADY_ACTIVE`).
+  const exportLive = detail.type === 'export' && isLiveExport(detail.secureExport)
+  // An export already executed for this request is not issued again: either
+  // its secure export is still live, or the server owns what happens next.
+  const exportIssued = detail.type === 'export' && Boolean(detail.executedAt)
+  // Actions render only from the request's own detail, never the list row.
+  const detailLoaded = query.isSuccess && !query.isPlaceholderData
 
   return (
     <Drawer open onClose={onClose} title={t('privacy.detailTitle')} width="md">
@@ -218,6 +244,13 @@ export function PrivacyDetailDrawer({
               ) : null}
             </div>
 
+            {detail.secureExport ? (
+              <div className={styles.section}>
+                <ExportFacts facts={detail.secureExport} />
+                <p className={`${styles.muted} mt-2`}>{t('privacy.delivery.serverOwned')}</p>
+              </div>
+            ) : null}
+
             {detail.retentionHold ? (
               <div className={styles.section}>
                 <p className={styles.label}>{t('privacy.hold.title')}</p>
@@ -245,69 +278,78 @@ export function PrivacyDetailDrawer({
             {canManage ? (
               <div className={styles.section}>
                 <p className={styles.label}>{t('privacy.actions')}</p>
-                <div className={styles.actionCol}>
-                  {detail.status === 'open' ? (
-                    <Button
-                      variant="secondary"
-                      disabled={!online}
-                      loading={run.isPending && run.variables === 'acknowledge'}
-                      onClick={() => run.mutate('acknowledge')}
-                    >
-                      {t('privacy.action.acknowledge')}
-                    </Button>
-                  ) : null}
-                  {!closed && detail.type !== 'correction' ? (
-                    <Button
-                      variant="danger"
-                      disabled={!online}
-                      loading={run.isPending && run.variables === 'execute'}
-                      onClick={() => run.mutate('execute')}
-                    >
-                      {t(`privacy.action.execute.${detail.type}` as const)}
-                    </Button>
-                  ) : null}
-                  {!closed && detail.type === 'correction' ? (
-                    // Correction is worked by hand; the contract refuses
-                    // execute outright, so no button pretends otherwise.
-                    <p className={styles.muted}>{t('privacy.correctionManual')}</p>
-                  ) : null}
-                  {!closed ? (
-                    <Button
-                      variant="secondary"
-                      disabled={!online}
-                      onClick={() => setDialog('close')}
-                    >
-                      {t('privacy.action.close')}
-                    </Button>
-                  ) : null}
-                  {detail.type === 'export' && detail.executedAt && !detail.deliveredAt ? (
-                    <Button
-                      variant="secondary"
-                      disabled={!online}
-                      onClick={() => setDialog('delivered')}
-                    >
-                      {t('privacy.action.delivered')}
-                    </Button>
-                  ) : null}
-                  {canHold && closed && !held ? (
-                    <Button
-                      variant="secondary"
-                      disabled={!online}
-                      onClick={() => setDialog('hold')}
-                    >
-                      {t('privacy.action.hold')}
-                    </Button>
-                  ) : null}
-                  {canHold && held ? (
-                    <Button
-                      variant="secondary"
-                      disabled={!online}
-                      onClick={() => setDialog('release')}
-                    >
-                      {t('privacy.action.release')}
-                    </Button>
-                  ) : null}
-                </div>
+                {detailLoaded ? (
+                  <div className={styles.actionCol}>
+                    {detail.status === 'open' ? (
+                      <Button
+                        variant="secondary"
+                        disabled={!online}
+                        loading={run.isPending && run.variables === 'acknowledge'}
+                        onClick={() => run.mutate('acknowledge')}
+                      >
+                        {t('privacy.action.acknowledge')}
+                      </Button>
+                    ) : null}
+                    {!closed && detail.type !== 'correction' && !exportLive && !exportIssued ? (
+                      <Button
+                        variant="danger"
+                        disabled={!online}
+                        loading={run.isPending && run.variables === 'execute'}
+                        onClick={() => run.mutate('execute')}
+                      >
+                        {t(`privacy.action.execute.${detail.type}` as const)}
+                      </Button>
+                    ) : null}
+                    {!closed && detail.type === 'correction' ? (
+                      // Correction is worked by hand; the contract refuses
+                      // execute outright, so no button pretends otherwise.
+                      <p className={styles.muted}>{t('privacy.correctionManual')}</p>
+                    ) : null}
+                    {!closed ? (
+                      <Button
+                        variant="secondary"
+                        disabled={!online}
+                        onClick={() => setDialog('close')}
+                      >
+                        {t('privacy.action.close')}
+                      </Button>
+                    ) : null}
+                    {detail.type === 'export' &&
+                    detail.executedAt &&
+                    !detail.deliveredAt &&
+                    !serverOwned ? (
+                      <Button
+                        variant="secondary"
+                        disabled={!online}
+                        onClick={() => setDialog('delivered')}
+                      >
+                        {t('privacy.action.delivered')}
+                      </Button>
+                    ) : null}
+                    {canHold && closed && !held ? (
+                      <Button
+                        variant="secondary"
+                        disabled={!online}
+                        onClick={() => setDialog('hold')}
+                      >
+                        {t('privacy.action.hold')}
+                      </Button>
+                    ) : null}
+                    {canHold && held ? (
+                      <Button
+                        variant="secondary"
+                        disabled={!online}
+                        onClick={() => setDialog('release')}
+                      >
+                        {t('privacy.action.release')}
+                      </Button>
+                    ) : null}
+                  </div>
+                ) : (
+                  <p role="status" className={`${styles.muted} mt-2`}>
+                    {t('privacy.actionsLoading')}
+                  </p>
+                )}
                 {error && !dialog ? (
                   <p role="alert" className={`${styles.dialogError} mt-2`}>
                     <span aria-hidden="true">⚠</span>
@@ -385,7 +427,7 @@ export function PrivacyDetailDrawer({
                   value={delivery}
                   onChange={(event) => setDelivery(event.target.value as PrivacyDeliveryMethod)}
                 >
-                  {privacyDeliveryMethodSchema.options.map((value) => (
+                  {MANUAL_DELIVERY.map((value) => (
                     <option key={value} value={value}>
                       {t(`privacy.delivery.${value}` as const)}
                     </option>

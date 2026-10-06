@@ -2335,7 +2335,7 @@ export const en: Partial<Record<MessageKey, string>> = {
   'users.actionHint.delete':
     'Runs the same erasure as the self-service flow: PII nulled, sessions revoked, content pseudonymized, address freed.',
   'users.actionHint.export':
-    'Same payload as the self-service export; the audit entry is the point — staff reading a person\u2019s data is an event. Rate limited.',
+    'Issues an encrypted export the account holder downloads from their own signed-in session, with its own privacy request in the ledger. Staff never receive the data. Rate limited; one active export per account.',
   'users.deleteWarn': 'Irreversible. This account belongs to someone else.',
   'users.deleteConfirmLabel': 'Type the display name ({name}) to confirm',
   'users.deleteConfirmMismatch': 'The confirmation does not match the display name.',
@@ -2346,7 +2346,7 @@ export const en: Partial<Record<MessageKey, string>> = {
   'users.done.ban': 'Account banned.',
   'users.done.reactivate': 'Restriction lifted.',
   'users.done.delete': 'Account erased and anonymized.',
-  'users.done.export': 'Export downloaded.',
+  'users.done.export': 'Secure export issued.',
   'users.error.deleted': 'The account is deleted — a terminal state; its status cannot change.',
   'users.error.exportRate': 'Export rate limit hit. Wait a few minutes.',
 
@@ -2417,6 +2417,7 @@ export const en: Partial<Record<MessageKey, string>> = {
   'privacy.ledgerNote':
     'This is the ledger, not the audit log: the audit log says who did what; this says what was received, where it stands, what the deadline is and how it ended. SLA is computed server-side from the stored dates — this screen renders it and never recomputes the rule.',
   'privacy.actions': 'Actions',
+  'privacy.actionsLoading': 'Loading the request — actions appear once it has loaded.',
   'privacy.ackDue': 'Acknowledge by',
   'privacy.fulfillmentDue': 'Fulfil by',
   'privacy.extended': 'extended',
@@ -2474,7 +2475,7 @@ export const en: Partial<Record<MessageKey, string>> = {
   'privacy.delivery.other': 'Other',
 
   'privacy.action.acknowledge': 'Acknowledge receipt',
-  'privacy.action.execute.export': 'Run export & close',
+  'privacy.action.execute.export': 'Issue secure export',
   'privacy.action.execute.delete': 'Run deletion & close',
   'privacy.action.execute.correction': 'Run',
   'privacy.action.close': 'Close without executing',
@@ -2515,6 +2516,51 @@ export const en: Partial<Record<MessageKey, string>> = {
   'privacy.error.alreadyHeld': 'This request already has a legal hold.',
   'privacy.error.notHeld': 'This request has no legal hold.',
   'privacy.error.holdFields': 'Reason and legal basis each need at least 3 characters.',
+
+  // GoGo-BE#256 / ADR-0033 — secure export facts (never data).
+  'privacy.export.title': 'Secure export',
+  'privacy.export.status.pending': 'Waiting to be built',
+  'privacy.export.status.generating': 'Being built',
+  'privacy.export.status.ready': 'Ready for the account holder',
+  'privacy.export.status.consumed': 'Downloaded by the account holder',
+  'privacy.export.status.expired': 'Expired',
+  'privacy.export.status.revoked': 'Revoked',
+  'privacy.export.status.failed': 'Failed',
+  'privacy.export.initiatedBy': 'Started by',
+  'privacy.export.initiatedBy.self': 'Account holder',
+  'privacy.export.initiatedBy.support': 'Support',
+  'privacy.export.createdAt': 'Created',
+  'privacy.export.readyAt': 'Ready',
+  'privacy.export.expiresAt': 'Expires',
+  'privacy.export.consumedAt': 'Download started',
+  'privacy.export.transferCompletedAt': 'Download finished',
+  'privacy.export.cleanedAt': 'Removed from storage',
+  'privacy.export.transferOutcome': 'Download result',
+  'privacy.export.transferOutcome.completed': 'Completed',
+  'privacy.export.transferOutcome.aborted': 'Interrupted',
+  'privacy.export.failureCode': 'Error code',
+  'privacy.export.revokeReason': 'Revoked because',
+  'privacy.export.revokeReason.password_changed': 'Password changed',
+  'privacy.export.revokeReason.account_deleted': 'Account deleted',
+  'privacy.export.revokeReason.epoch_mismatch': 'Sign-in credentials changed',
+  'privacy.export.staffNote':
+    'Staff never receive or forward the data. The account holder downloads it once from their own signed-in session and is notified in the app.',
+  'privacy.delivery.serverOwned':
+    'This request is delivered by secure export — the server records delivery when the holder finishes the download; it is not recorded by hand.',
+  'privacy.done.executeExport':
+    'Secure export issued. The request closes when the export is ready.',
+  'error.EXPORT_UNAVAILABLE':
+    'Secure export is not configured in this environment. The request was not changed.',
+  'error.SUBJECT_CANNOT_SIGN_IN':
+    'The account holder cannot sign in right now. Recover the account first — only they can download the export.',
+  'error.EXPORT_ALREADY_ACTIVE':
+    'This account already has an unused export. Wait until it is downloaded or expires.',
+  'error.ALREADY_DELIVERED':
+    'A manual delivery is already recorded for this request, so no secure export is issued over it.',
+  'error.DELIVERY_SERVER_OWNED':
+    'This request is delivered by secure export — the server records delivery; it cannot be recorded by hand.',
+  'error.SECURE_DELIVERY_NOT_ASSERTABLE':
+    '"Secure download" cannot be recorded by hand — the server records it when the holder finishes the download.',
 
   'users.openPrivacyWarn':
     'This user has {count} open privacy request(s). Deleting directly here does NOT update the ledger — open the matching request and run it from there.',

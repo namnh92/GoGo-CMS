@@ -266,6 +266,20 @@ function fieldEnvelope(code: string, field: string, fieldCode: string, message: 
   )
 }
 
+/** GoGo-BE#256 — a freshly issued secure export, as the CMS sees it. */
+function mockIssueExport(now: string) {
+  return {
+    id: crypto.randomUUID(),
+    status: 'pending' as const,
+    initiatedBy: 'support' as const,
+    createdAt: now,
+  }
+}
+
+function mockLiveExport(state: { status: string } | null | undefined): boolean {
+  return state?.status === 'pending' || state?.status === 'generating' || state?.status === 'ready'
+}
+
 function envelope(status: number, code: string, message: string) {
   return HttpResponse.json(
     {
@@ -3236,11 +3250,47 @@ export const handlers = [
     if (!body.reason || body.reason.trim().length < 3) {
       return envelope(400, 'BAD_REQUEST', 'reason required')
     }
-    // Same payload as /me/export; the audit entry is the point.
-    return HttpResponse.json(
-      { profile: { displayName: row.displayName, email: row.email }, reviews: [], savedPlaces: [] },
-      { status: 201 },
+    if (row.status === 'deleted') {
+      return envelope(409, 'SUBJECT_CANNOT_SIGN_IN', 'the account must be able to sign in')
+    }
+    // GoGo-BE#256 / ADR-0033 (alpha.69): metadata only, never data. The export
+    // opens its own linked privacy request; one active export per account.
+    const live = db.privacy.find(
+      (item) => item.subject.userId === row.id && mockLiveExport(item.secureExport),
     )
+    if (live) return envelope(409, 'EXPORT_ALREADY_ACTIVE', 'one active export per account')
+    const now = new Date().toISOString()
+    const secureExport = mockIssueExport(now)
+    const linked = {
+      ...db.privacy[0]!,
+      id: `66666666-0000-4000-8000-00000000${String(db.privacy.length + 10).padStart(4, '0')}`,
+      type: 'export' as const,
+      source: 'cms' as const,
+      status: 'in_progress' as const,
+      outcome: null,
+      subject: {
+        subjectType: 'user' as const,
+        userId: row.id,
+        contactEmail: null,
+        externalReference: null,
+        identityStatus: 'matched' as const,
+      },
+      receivedAt: now,
+      acknowledgedAt: now,
+      executedAt: now,
+      completedAt: null,
+      closedAt: null,
+      deliveryMethod: null,
+      deliveredAt: null,
+      secureExport,
+      retentionAt: null,
+      retentionHold: null,
+      ticketReference: null,
+      operatorNote: null,
+      sla: 'ON_TRACK' as const,
+    }
+    db.privacy.unshift(linked)
+    return HttpResponse.json({ privacyRequestId: linked.id, export: secureExport }, { status: 202 })
   }),
 
   http.get(`${BASE}/cms/rooms`, ({ request }) => {
@@ -3340,17 +3390,33 @@ export const handlers = [
     if (row.type === 'delete' && role !== 'super_admin') {
       return envelope(403, 'ROLE_DENIED', 'a delete request needs super_admin')
     }
+    if (row.type === 'export') {
+      // GoGo-BE#256 / ADR-0033 (alpha.69): no payload. The request moves to
+      // `in_progress` and closes when the export is available; delivery is
+      // the server's to record.
+      if (row.deliveryMethod) {
+        return envelope(409, 'ALREADY_DELIVERED', 'a manual delivery is already recorded')
+      }
+      if (mockLiveExport(row.secureExport)) {
+        return envelope(409, 'EXPORT_ALREADY_ACTIVE', 'one active export per account')
+      }
+      const now = new Date().toISOString()
+      const secureExport = mockIssueExport(now)
+      row.status = 'in_progress'
+      row.executedAt = now
+      row.secureExport = secureExport
+      // `secureExport` is a detail-view field; the execute answer carries `export`.
+      return HttpResponse.json(
+        { request: { ...row, secureExport: undefined }, export: secureExport },
+        { status: 202 },
+      )
+    }
     row.status = 'closed'
     row.outcome = 'completed'
     row.executedAt = new Date().toISOString()
     row.completedAt = row.executedAt
     row.closedAt = row.executedAt
-    return HttpResponse.json(
-      row.type === 'export'
-        ? { request: row, data: { profile: {}, reviews: [], savedPlaces: [] } }
-        : { request: row },
-      { status: 201 },
-    )
+    return HttpResponse.json({ request: row }, { status: 201 })
   }),
 
   http.post(`${BASE}/cms/privacy-requests/:id/close`, async ({ params, request }) => {
@@ -3370,7 +3436,14 @@ export const handlers = [
     if (!row) return envelope(404, 'NOT_FOUND', 'privacy request not found')
     if (row.type !== 'export') return envelope(409, 'NOT_AN_EXPORT', 'not an export')
     const body = (await request.json()) as { deliveryMethod?: string }
-    row.deliveryMethod = (body.deliveryMethod as 'secure_download') ?? 'secure_download'
+    // GoGo-BE#256: the server records secure delivery itself.
+    if (body.deliveryMethod === 'secure_download') {
+      return envelope(400, 'SECURE_DELIVERY_NOT_ASSERTABLE', 'recorded by the server')
+    }
+    if (row.secureExport) {
+      return envelope(409, 'DELIVERY_SERVER_OWNED', "delivery of a secure export is the server's")
+    }
+    row.deliveryMethod = (body.deliveryMethod as 'in_app' | 'other') ?? 'other'
     row.deliveredAt = new Date().toISOString()
     return HttpResponse.json(row, { status: 201 })
   }),
