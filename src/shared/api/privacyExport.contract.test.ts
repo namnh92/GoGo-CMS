@@ -54,3 +54,44 @@ describe('privacy export contract (alpha.69)', () => {
     expect((parsed.secureExport as { failureCode?: string }).failureCode).toBe('brand_new_code')
   })
 })
+
+/*
+ * Sol F-02 @b75da0c — the delete (201) and export (202) answers are distinct
+ * shapes. An export answer without its `export` metadata is a contract
+ * mismatch, never a quiet success with nothing to show.
+ */
+describe('execute result shapes stay distinct (F-02)', () => {
+  const exportRow = { ...privacyRequests[0]!, type: 'export', status: 'in_progress' }
+  const deleteRow = privacyRequests[1]!
+
+  it('refuses an export answer with no `export` metadata', () => {
+    expect(contracts.privacyExecuteResultSchema.safeParse({ request: exportRow }).success).toBe(
+      false,
+    )
+  })
+
+  it('refuses an export answer whose `export` is not export facts', () => {
+    expect(
+      contracts.privacyExecuteResultSchema.safeParse({ request: exportRow, export: { id: 'x' } })
+        .success,
+    ).toBe(false)
+  })
+
+  it('refuses a correction request as an execute answer — it cannot be executed', () => {
+    expect(
+      contracts.privacyExecuteResultSchema.safeParse({
+        request: { ...deleteRow, type: 'correction' },
+      }).success,
+    ).toBe(false)
+  })
+
+  it('still accepts the delete answer and the export answer', () => {
+    expect(contracts.privacyExecuteResultSchema.safeParse({ request: deleteRow }).success).toBe(
+      true,
+    )
+    expect(
+      contracts.privacyExecuteResultSchema.safeParse({ request: exportRow, export: exportFacts })
+        .success,
+    ).toBe(true)
+  })
+})

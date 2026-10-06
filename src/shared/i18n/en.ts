@@ -2417,6 +2417,7 @@ export const en: Partial<Record<MessageKey, string>> = {
   'privacy.ledgerNote':
     'This is the ledger, not the audit log: the audit log says who did what; this says what was received, where it stands, what the deadline is and how it ended. SLA is computed server-side from the stored dates — this screen renders it and never recomputes the rule.',
   'privacy.actions': 'Actions',
+  'privacy.actionsLoading': 'Loading the request — actions appear once it has loaded.',
   'privacy.ackDue': 'Acknowledge by',
   'privacy.fulfillmentDue': 'Fulfil by',
   'privacy.extended': 'extended',

@@ -93,7 +93,10 @@ export function PrivacyDetailDrawer({
   const query = useQuery({
     queryKey: queryKeys.privacy.detail(request.id),
     queryFn: ({ signal }) => fetchPrivacyRequest(request.id, signal),
-    initialData: request,
+    // Placeholder, not initial data (Sol F-01): the list row lacks the
+    // detail-only facts (`secureExport`), so it may draw the header while the
+    // detail loads, but never the actions.
+    placeholderData: request,
     staleTime: 15_000,
   })
   const detail = query.data ?? request
@@ -139,7 +142,7 @@ export function PrivacyDetailDrawer({
       return releasePrivacyRetention(detail.id, holdReason.trim())
     },
     onSuccess: (result, action) => {
-      if (action === 'execute' && 'request' in result && result.export) {
+      if (action === 'execute' && 'export' in result) {
         // Metadata only: the export's state facts, shown until the refetch
         // brings the request's own `secureExport`.
         queryClient.setQueryData(queryKeys.privacy.detail(detail.id), {
@@ -167,6 +170,11 @@ export function PrivacyDetailDrawer({
   // An export still being produced or held is not issued twice
   // (`409 EXPORT_ALREADY_ACTIVE`).
   const exportLive = detail.type === 'export' && isLiveExport(detail.secureExport)
+  // An export already executed for this request is not issued again: either
+  // its secure export is still live, or the server owns what happens next.
+  const exportIssued = detail.type === 'export' && Boolean(detail.executedAt)
+  // Actions render only from the request's own detail, never the list row.
+  const detailLoaded = query.isSuccess && !query.isPlaceholderData
 
   return (
     <Drawer open onClose={onClose} title={t('privacy.detailTitle')} width="md">
@@ -270,72 +278,78 @@ export function PrivacyDetailDrawer({
             {canManage ? (
               <div className={styles.section}>
                 <p className={styles.label}>{t('privacy.actions')}</p>
-                <div className={styles.actionCol}>
-                  {detail.status === 'open' ? (
-                    <Button
-                      variant="secondary"
-                      disabled={!online}
-                      loading={run.isPending && run.variables === 'acknowledge'}
-                      onClick={() => run.mutate('acknowledge')}
-                    >
-                      {t('privacy.action.acknowledge')}
-                    </Button>
-                  ) : null}
-                  {!closed && detail.type !== 'correction' && !exportLive ? (
-                    <Button
-                      variant="danger"
-                      disabled={!online}
-                      loading={run.isPending && run.variables === 'execute'}
-                      onClick={() => run.mutate('execute')}
-                    >
-                      {t(`privacy.action.execute.${detail.type}` as const)}
-                    </Button>
-                  ) : null}
-                  {!closed && detail.type === 'correction' ? (
-                    // Correction is worked by hand; the contract refuses
-                    // execute outright, so no button pretends otherwise.
-                    <p className={styles.muted}>{t('privacy.correctionManual')}</p>
-                  ) : null}
-                  {!closed ? (
-                    <Button
-                      variant="secondary"
-                      disabled={!online}
-                      onClick={() => setDialog('close')}
-                    >
-                      {t('privacy.action.close')}
-                    </Button>
-                  ) : null}
-                  {detail.type === 'export' &&
-                  detail.executedAt &&
-                  !detail.deliveredAt &&
-                  !serverOwned ? (
-                    <Button
-                      variant="secondary"
-                      disabled={!online}
-                      onClick={() => setDialog('delivered')}
-                    >
-                      {t('privacy.action.delivered')}
-                    </Button>
-                  ) : null}
-                  {canHold && closed && !held ? (
-                    <Button
-                      variant="secondary"
-                      disabled={!online}
-                      onClick={() => setDialog('hold')}
-                    >
-                      {t('privacy.action.hold')}
-                    </Button>
-                  ) : null}
-                  {canHold && held ? (
-                    <Button
-                      variant="secondary"
-                      disabled={!online}
-                      onClick={() => setDialog('release')}
-                    >
-                      {t('privacy.action.release')}
-                    </Button>
-                  ) : null}
-                </div>
+                {detailLoaded ? (
+                  <div className={styles.actionCol}>
+                    {detail.status === 'open' ? (
+                      <Button
+                        variant="secondary"
+                        disabled={!online}
+                        loading={run.isPending && run.variables === 'acknowledge'}
+                        onClick={() => run.mutate('acknowledge')}
+                      >
+                        {t('privacy.action.acknowledge')}
+                      </Button>
+                    ) : null}
+                    {!closed && detail.type !== 'correction' && !exportLive && !exportIssued ? (
+                      <Button
+                        variant="danger"
+                        disabled={!online}
+                        loading={run.isPending && run.variables === 'execute'}
+                        onClick={() => run.mutate('execute')}
+                      >
+                        {t(`privacy.action.execute.${detail.type}` as const)}
+                      </Button>
+                    ) : null}
+                    {!closed && detail.type === 'correction' ? (
+                      // Correction is worked by hand; the contract refuses
+                      // execute outright, so no button pretends otherwise.
+                      <p className={styles.muted}>{t('privacy.correctionManual')}</p>
+                    ) : null}
+                    {!closed ? (
+                      <Button
+                        variant="secondary"
+                        disabled={!online}
+                        onClick={() => setDialog('close')}
+                      >
+                        {t('privacy.action.close')}
+                      </Button>
+                    ) : null}
+                    {detail.type === 'export' &&
+                    detail.executedAt &&
+                    !detail.deliveredAt &&
+                    !serverOwned ? (
+                      <Button
+                        variant="secondary"
+                        disabled={!online}
+                        onClick={() => setDialog('delivered')}
+                      >
+                        {t('privacy.action.delivered')}
+                      </Button>
+                    ) : null}
+                    {canHold && closed && !held ? (
+                      <Button
+                        variant="secondary"
+                        disabled={!online}
+                        onClick={() => setDialog('hold')}
+                      >
+                        {t('privacy.action.hold')}
+                      </Button>
+                    ) : null}
+                    {canHold && held ? (
+                      <Button
+                        variant="secondary"
+                        disabled={!online}
+                        onClick={() => setDialog('release')}
+                      >
+                        {t('privacy.action.release')}
+                      </Button>
+                    ) : null}
+                  </div>
+                ) : (
+                  <p role="status" className={`${styles.muted} mt-2`}>
+                    {t('privacy.actionsLoading')}
+                  </p>
+                )}
                 {error && !dialog ? (
                   <p role="alert" className={`${styles.dialogError} mt-2`}>
                     <span aria-hidden="true">⚠</span>

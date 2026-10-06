@@ -2686,10 +2686,22 @@ export type PrivacyRequestPage = z.infer<typeof privacyRequestPageSchema>
  * staff never receive the export, and anything else the body carries is
  * stripped here before a component can see it.
  */
-export const privacyExecuteResultSchema = z.object({
-  request: privacyRequestSchema,
-  export: privacyExportAdminStatusSchema.optional(),
+export const privacyExportExecuteResultSchema = z.object({
+  request: privacyRequestSchema.extend({ type: z.literal('export') }),
+  export: privacyExportAdminStatusSchema,
 })
+export const privacyDeleteExecuteResultSchema = z.object({
+  request: privacyRequestSchema.extend({ type: z.literal('delete') }),
+})
+/**
+ * Two shapes, chosen by the request's own type (Sol F-02): an export answer
+ * without its metadata fails to parse (`CONTRACT_MISMATCH`) instead of
+ * reporting a success with nothing to show; a correction is never an answer.
+ */
+export const privacyExecuteResultSchema = z.union([
+  privacyExportExecuteResultSchema,
+  privacyDeleteExecuteResultSchema,
+])
 export type PrivacyExecuteResult = z.infer<typeof privacyExecuteResultSchema>
 
 /**

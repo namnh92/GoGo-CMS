@@ -318,3 +318,98 @@ describe('the default mock mirrors alpha.69 (dev server parity)', () => {
     expect(recorded.deliveryMethod).toBe('in_app')
   })
 })
+
+/*
+ * Sol F-01 @b75da0c — the list DTO carries no `secureExport`, so actions drawn
+ * from the list row would offer execute / manual delivery the server refuses.
+ * Actions render only from the loaded detail.
+ */
+describe('actions come from the loaded detail, never the list row (F-01)', () => {
+  const listRow = {
+    ...executable,
+    status: 'in_progress',
+    executedAt: NOW,
+  } as PrivacyRequest
+  const detailRow = { ...listRow, secureExport: readyExport } as PrivacyRequest
+
+  function serveSlowDetail(detail: PrivacyRequest) {
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    server.use(
+      http.get('*/cms/privacy-requests', () =>
+        HttpResponse.json({ items: [listRow], nextCursor: null, totalCount: 1 }),
+      ),
+      http.get('*/cms/privacy-requests/:id', async () => {
+        await gate
+        return HttpResponse.json(detail)
+      }),
+    )
+    return () => release()
+  }
+
+  it('offers neither execute nor manual delivery before the detail has loaded', async () => {
+    signInAs('ops_admin')
+    const release = serveSlowDetail(detailRow)
+    const user = userEvent.setup()
+    renderWithProviders(<PrivacyListScreen />)
+
+    const table = await screen.findByRole('table')
+    await user.click(within(table).getByText(executable.subject.userId!))
+    const drawer = await screen.findByRole('dialog')
+
+    expect(within(drawer).queryByRole('button', { name: /xuất/ })).not.toBeInTheDocument()
+    expect(
+      within(drawer).queryByRole('button', { name: 'Ghi nhận đã bàn giao' }),
+    ).not.toBeInTheDocument()
+
+    release()
+    expect(await within(drawer).findByText('Sẵn sàng để chủ tài khoản tải')).toBeInTheDocument()
+    expect(within(drawer).queryByRole('button', { name: /xuất/ })).not.toBeInTheDocument()
+    expect(
+      within(drawer).queryByRole('button', { name: 'Ghi nhận đã bàn giao' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('an executed export with no secure export in its detail is not executed again', async () => {
+    signInAs('ops_admin')
+    const release = serveSlowDetail(listRow)
+    const user = userEvent.setup()
+    renderWithProviders(<PrivacyListScreen />)
+
+    const table = await screen.findByRole('table')
+    await user.click(within(table).getByText(executable.subject.userId!))
+    const drawer = await screen.findByRole('dialog')
+    release()
+
+    // Loaded: close is offered, so the action list rendered from the detail.
+    expect(
+      await within(drawer).findByRole('button', { name: 'Đóng không thực thi' }),
+    ).toBeInTheDocument()
+    expect(within(drawer).queryByRole('button', { name: /xuất/ })).not.toBeInTheDocument()
+  })
+})
+
+describe('an export answer without metadata is a contract mismatch (F-02)', () => {
+  it('shows the mismatch instead of reporting success', async () => {
+    signInAs('ops_admin')
+    serveLedger(() => [executable])
+    server.use(
+      http.post('*/cms/privacy-requests/:id/execute', () =>
+        HttpResponse.json(
+          { request: { ...executable, status: 'in_progress', executedAt: NOW } },
+          { status: 202 },
+        ),
+      ),
+    )
+    const user = userEvent.setup()
+    renderWithProviders(<PrivacyListScreen />)
+
+    const table = await screen.findByRole('table')
+    await user.click(within(table).getByText(executable.subject.userId!))
+    const drawer = await screen.findByRole('dialog')
+    await user.click(await within(drawer).findByRole('button', { name: /xuất/ }))
+
+    expect(await within(drawer).findByText(/did not match the expected shape/)).toBeInTheDocument()
+    expect(screen.queryByText(/Đã phát hành bản xuất bảo mật/)).not.toBeInTheDocument()
+  })
+})

@@ -3115,6 +3115,7 @@ export const vi = {
   'privacy.ledgerNote':
     'Đây là sổ cái, không phải nhật ký kiểm toán: audit ghi ai làm gì, sổ này ghi đã nhận gì, đang ở đâu, hạn là bao giờ và kết thúc ra sao. Mốc SLA do server tính từ ngày đã lưu — màn này chỉ hiển thị, không tính lại luật.',
   'privacy.actions': 'Thao tác',
+  'privacy.actionsLoading': 'Đang tải chi tiết yêu cầu — thao tác hiện khi tải xong.',
   'privacy.ackDue': 'Hạn xác nhận',
   'privacy.fulfillmentDue': 'Hạn xử lý',
   'privacy.extended': 'đã gia hạn',
