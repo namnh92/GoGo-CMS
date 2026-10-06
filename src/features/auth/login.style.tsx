@@ -40,6 +40,13 @@ export const styles = {
   otpCompat: 'mt-4 text-center text-xs text-text-subtle',
   backButton: 'w-full py-1 text-center text-xs text-text-subtle hover:text-text',
 
+  /* Single sign-on (GoGo-BE#679): the button, then what it does, then the way
+     back to identity selection when Access vouched for the wrong person. */
+  ssoBlock: 'mb-6 flex flex-col gap-3',
+  ssoHint: 'text-xs text-text-muted',
+  ssoLink: 'font-semibold text-coral-deep underline underline-offset-2',
+  ssoDivider: 'mt-2 border-t border-line pt-4 text-xs text-text-subtle',
+
   alert:
     'flex items-start gap-2 rounded-compact border border-amber/40 bg-amber-soft px-3 py-2 text-xs text-text',
   alertDanger:

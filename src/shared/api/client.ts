@@ -41,6 +41,13 @@ const REFRESH_PATH = '/cms/auth/refresh'
  */
 const LOGIN_PATH = '/cms/auth/login'
 
+/**
+ * GoGo-BE#679 — the single sign-on exchange is a sign-in too. Its 401s
+ * (`ACCESS_ASSERTION_MISSING`, `ACCESS_ASSERTION_INVALID`) say the Access
+ * assertion is absent or stale, not that a GoGo session died.
+ */
+const ACCESS_EXCHANGE_PATH = '/cms/auth/access-exchange'
+
 function readCookie(name: string): string | null {
   const prefix = `${name}=`
   for (const part of document.cookie.split('; ')) {
@@ -204,7 +211,7 @@ export async function apiFetch<T = unknown>(
      * there. Dropping straight to the login screen would throw away work an
      * editor had open.
      */
-    if (path === LOGIN_PATH) throw await readError(response)
+    if (path === LOGIN_PATH || path === ACCESS_EXCHANGE_PATH) throw await readError(response)
     if (allowRefresh && path !== REFRESH_PATH && (await refreshSession())) {
       return apiFetch<T>(path, options, false)
     }

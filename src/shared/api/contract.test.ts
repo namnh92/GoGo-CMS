@@ -25,7 +25,7 @@ const drift = read('scripts/check-openapi-drift.mjs')
 const generated = read('src/shared/api/schema.d.ts')
 const administrativeContracts = read('src/shared/api/contracts-administrative.ts')
 
-const EXPECTED = '1.0.0-alpha.66'
+const EXPECTED = '1.0.0-alpha.67'
 
 /**
  * The vendored file byte for byte, as GoGo-BE published it.
@@ -35,10 +35,10 @@ const EXPECTED = '1.0.0-alpha.66'
  * hand-edited, and this is what makes that visible rather than invisible. A
  * legitimate re-vendor updates the version above and this digest together.
  */
-const SPEC_SHA256 = 'f508ce080f0237e363444d88080de8674dc8813d7aec3ba0e93ce2ba59b4e11e'
+const SPEC_SHA256 = 'c9e5e0e94c65b6db7eba7d86183e9704fa498b5400d6a0b698cc5e0b4e8dd6d3'
 
 /** `pnpm api:routes` on GoGo-BE reports the same number against the real router. */
-const SERVED_OPERATIONS = 266
+const SERVED_OPERATIONS = 267
 
 describe('the vendored OpenAPI contract', () => {
   it(`declares ${EXPECTED}, and the drift gate expects the same`, () => {

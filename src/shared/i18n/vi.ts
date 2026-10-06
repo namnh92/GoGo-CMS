@@ -1060,6 +1060,26 @@ export const vi = {
   'auth.mfaRequired': 'Tài khoản này bắt buộc mã xác thực. Nhập mã 6 số để tiếp tục.',
   'auth.mfaSetupRequired':
     'Tài khoản chưa bật MFA. Liên hệ quản trị tối cao để thiết lập trước khi đăng nhập.',
+  'auth.sso.button': 'Đăng nhập qua Cloudflare Access',
+  'auth.sso.hint': 'Dùng tài khoản bạn vừa xác thực ở Cloudflare Access, không cần mật khẩu GoGo.',
+  'auth.sso.orPassword': 'Hoặc đăng nhập bằng mật khẩu',
+  'auth.sso.loading': 'Đang kiểm tra cách đăng nhập',
+  'auth.sso.methodsError': 'Không lấy được danh sách cách đăng nhập. Kiểm tra kết nối rồi thử lại.',
+  'auth.sso.reload': 'Tải lại trang',
+  'auth.sso.retry': 'Thử lại',
+  'auth.sso.noMethod': 'Môi trường này chưa cấu hình cách đăng nhập nào. Báo cho người vận hành.',
+  'auth.sso.adminOnly':
+    'Cloudflare Access đã xác thực bạn, nhưng địa chỉ này không có tài khoản quản trị đang hoạt động.',
+  'auth.sso.switchIdentity': 'Đăng nhập bằng danh tính khác',
+  'auth.sso.missing': 'Phải mở CMS qua địa chỉ có Cloudflare Access mới đăng nhập được.',
+  'auth.sso.missingLocal':
+    'Request không mang assertion của Access. Ở máy local, chạy `cloudflared access login` rồi khởi động dev server với CF_ACCESS_TOKEN.',
+  'auth.sso.invalid': 'Phiên Cloudflare Access đã hết hạn. Tải lại trang để xác thực lại.',
+  'auth.sso.unavailable':
+    'Tạm thời không kết nối được nhà cung cấp danh tính. Thử lại sau ít phút.',
+  'auth.sso.changed': 'Cách đăng nhập của môi trường này vừa thay đổi. Màn hình đã được cập nhật.',
+  'auth.sso.passwordDisabled':
+    'Đăng nhập bằng mật khẩu đã tắt ở môi trường này. Hãy dùng Cloudflare Access.',
   'auth.badCredentials': 'Email hoặc mật khẩu không đúng.',
   'auth.rateLimited': 'Bạn đã thử quá nhiều lần. Chờ ít phút rồi thử lại.',
   'auth.sessionExpired': 'Phiên làm việc đã hết hạn. Đăng nhập lại để tiếp tục.',

@@ -1080,6 +1080,29 @@ export const en: Partial<Record<MessageKey, string>> = {
   'auth.submitting': 'Signing in…',
   'auth.mfaRequired': 'This account requires a code. Enter the 6 digits to continue.',
   'auth.mfaSetupRequired': 'MFA is not enrolled. Ask a super admin to set it up before signing in.',
+  'auth.sso.button': 'Sign in with Cloudflare Access',
+  'auth.sso.hint': 'Uses the identity you just verified with Cloudflare Access — no GoGo password.',
+  'auth.sso.orPassword': 'Or sign in with a password',
+  'auth.sso.loading': 'Checking sign-in methods',
+  'auth.sso.methodsError':
+    'Could not load the sign-in methods. Check your connection and try again.',
+  'auth.sso.reload': 'Reload the page',
+  'auth.sso.retry': 'Try again',
+  'auth.sso.noMethod': 'No sign-in method is configured for this environment. Tell the operator.',
+  'auth.sso.adminOnly':
+    'Cloudflare Access verified you, but this address has no active staff account.',
+  'auth.sso.switchIdentity': 'Sign in as someone else',
+  'auth.sso.missing': 'Open the CMS through its Cloudflare Access address to sign in.',
+  'auth.sso.missingLocal':
+    'The request carries no Access assertion. Locally, run `cloudflared access login` and start the dev server with CF_ACCESS_TOKEN.',
+  'auth.sso.invalid':
+    'Your Cloudflare Access session has expired. Reload the page to verify again.',
+  'auth.sso.unavailable':
+    'The identity provider cannot be reached right now. Try again in a few minutes.',
+  'auth.sso.changed':
+    'Sign-in methods for this environment just changed. The screen has been updated.',
+  'auth.sso.passwordDisabled':
+    'Password sign-in is turned off in this environment. Use Cloudflare Access.',
   'auth.badCredentials': 'Wrong email or password.',
   'auth.rateLimited': 'Too many attempts. Wait a few minutes and try again.',
   'auth.sessionExpired': 'Your session expired. Sign in again to continue.',
