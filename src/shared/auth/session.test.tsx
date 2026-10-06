@@ -313,6 +313,92 @@ describe('staff session', () => {
   })
 
   /*
+   * GoGo-BE#679 — the single sign-on door adopts a session through the same
+   * path as the password door, so both of its invariants hold there too
+   * (GoGo-CMS#232 review F-02).
+   */
+  it('makes a single sign-on wait for the previous revoke to finish', async () => {
+    const { result } = renderHook(() => useSession(), { wrapper })
+    await signIn(result)
+
+    const order: string[] = []
+    let releaseLogout!: () => void
+    const logoutGate = new Promise<void>((resolve) => {
+      releaseLogout = resolve
+    })
+    server.use(
+      http.post('*/v1/cms/auth/logout', async () => {
+        await logoutGate
+        order.push('logout')
+        return new HttpResponse(null, { status: 204 })
+      }),
+      http.post('*/v1/cms/auth/access-exchange', () => {
+        order.push('exchange')
+        return HttpResponse.json(
+          { accessToken: 'sso-token', role: 'super_admin', displayName: 'owner' },
+          { status: 201 },
+        )
+      }),
+    )
+
+    let signedInAgain!: Promise<unknown>
+    await act(async () => {
+      result.current.logout()
+      signedInAgain = result.current.signInWithAccess()
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    })
+    // Still waiting on the revoke: the exchange has not reached the server.
+    expect(order).toEqual([])
+
+    await act(async () => {
+      releaseLogout()
+      await signedInAgain
+    })
+    expect(order).toEqual(['logout', 'exchange'])
+    expect(result.current.session?.role).toBe('super_admin')
+    expect(getAccessToken()).toBe('sso-token')
+  })
+
+  it('advances the session epoch on a single sign-on, so a stale answer is ignored', async () => {
+    const { result } = renderHook(() => useSession(), { wrapper })
+    server.use(
+      http.post('*/v1/cms/auth/access-exchange', () =>
+        HttpResponse.json(
+          {
+            accessToken: 'sso-token',
+            role: 'ops_admin',
+            displayName: 'temp.sso',
+            mustChangePassword: true,
+          },
+          { status: 201 },
+        ),
+      ),
+    )
+
+    await act(async () => {
+      await result.current.login({ email: 'temp.one@gogo.vn', password: 'pw', totp: '123456' })
+    })
+    const staleEpoch = result.current.currentEpoch()
+
+    await act(async () => {
+      result.current.logout()
+    })
+    await act(async () => {
+      await result.current.signInWithAccess()
+    })
+    expect(result.current.currentEpoch()).not.toBe(staleEpoch)
+    expect(result.current.session?.mustChangePassword).toBe(true)
+
+    // The first operator's password-change answer finally lands: not ours.
+    act(() => result.current.passwordChanged(staleEpoch))
+    expect(result.current.session?.mustChangePassword).toBe(true)
+
+    // Our own answer clears it.
+    act(() => result.current.passwordChanged(result.current.currentEpoch()))
+    expect(result.current.session?.mustChangePassword).toBe(false)
+  })
+
+  /*
    * #101 review F-01. A password-change answer can outlive the session that
    * asked for it; discharging the obligation then discharges someone else's.
    */

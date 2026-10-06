@@ -15,9 +15,16 @@ export const authMethodsSchema = z.object({
   accessSso: z.boolean(),
 })
 
-/** Fails to compile unless the zod shape and the generated type are the same. */
-type Exact<A extends B, B extends C, C = A> = A
-export type AuthMethodsBinding = Exact<z.infer<typeof authMethodsSchema>, AuthMethods>
+/**
+ * Fails to compile unless the zod shape and the generated type are the same
+ * type — the same keys with the same value types. Mutual assignability is not
+ * enough: it still admits a generated type that gained an optional field
+ * (review F-03). The conditional-generic form below does not.
+ */
+type Equal<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false
+const authMethodsMatchesContract: Equal<z.infer<typeof authMethodsSchema>, AuthMethods> = true
+void authMethodsMatchesContract
 
 /**
  * An API older than GoGo-BE#679 has no `methods` route and only one door: the
