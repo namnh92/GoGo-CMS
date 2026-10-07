@@ -23,6 +23,7 @@ import {
 } from '@/shared/api/contracts'
 import { fetchAdmins, type AdminListFilters } from './api'
 import { AdminActionDialog, type AdminAction } from './adminActions.view'
+import { SsoConfirmCard } from './ssoConfirm.view'
 import { styles } from './adminList.style'
 
 const PAGE_SIZE = 25
@@ -265,6 +266,7 @@ export default function AdminListScreen() {
         }
       />
       <PageBody>
+        {session?.role === 'super_admin' ? <SsoConfirmCard /> : null}
         <Card>
           <div className={styles.filterBar}>
             <SearchInput

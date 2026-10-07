@@ -13,6 +13,12 @@ export type AuthMethods = Schemas['CmsAuthMethods']
 export const authMethodsSchema = z.object({
   password: z.boolean(),
   accessSso: z.boolean(),
+  /**
+   * GoGo-BE#687 (alpha.70+): the super admin signs in through Access only;
+   * `password` still describes every other role. Absent from an older API,
+   * which reads as false.
+   */
+  superAdminSsoOnly: z.boolean().optional(),
 })
 
 /**

@@ -130,3 +130,21 @@ export function changeOwnPassword(input: {
 }): Promise<unknown> {
   return apiFetch('/cms/auth/change-password', { method: 'POST', body: input })
 }
+
+export const ssoConfirmationSchema = z.object({
+  confirmed: z.literal(true),
+  email: z.string(),
+  alreadyConfirmed: z.boolean(),
+})
+export type SsoConfirmation = z.infer<typeof ssoConfirmationSchema>
+
+/**
+ * GoGo-BE#687 — the super admin records, from a session Cloudflare Access
+ * opened, that Access works for its current address. Only after this does the
+ * deploy-time sync remove the super admin's password. Idempotent.
+ */
+export function confirmSuperAdminSso(): Promise<SsoConfirmation> {
+  return apiFetchParsed(ssoConfirmationSchema, '/cms/auth/super-admin/confirm-sso', {
+    method: 'POST',
+  })
+}

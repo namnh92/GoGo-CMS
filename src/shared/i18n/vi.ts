@@ -1078,6 +1078,20 @@ export const vi = {
   'auth.sso.unavailable':
     'Tạm thời không kết nối được nhà cung cấp danh tính. Thử lại sau ít phút.',
   'auth.sso.changed': 'Cách đăng nhập của môi trường này vừa thay đổi. Màn hình đã được cập nhật.',
+  'admins.ssoConfirm.title': 'Xác nhận đăng nhập qua Cloudflare Access',
+  'admins.ssoConfirm.hint':
+    'Bấm khi bạn đang trong phiên mở bằng Cloudflare Access. Sau khi xác nhận, lần deploy kế tiếp mới gỡ mật khẩu của tài khoản quản trị tối cao.',
+  'admins.ssoConfirm.action': 'Xác nhận',
+  'admins.ssoConfirm.done': 'Đã xác nhận Cloudflare Access cho {email}.',
+  'admins.ssoConfirm.already': 'Đã xác nhận trước đó cho {email}.',
+  'admins.ssoConfirm.needAccess':
+    'Phiên này mở bằng mật khẩu. Đăng nhập lại qua Cloudflare Access rồi bấm xác nhận.',
+  'admins.ssoConfirm.unsupported':
+    'API của môi trường này chưa hỗ trợ bước xác nhận. Báo cho người vận hành.',
+  'auth.sso.superAdminOnly':
+    'Tài khoản quản trị tối cao chỉ đăng nhập qua Cloudflare Access. Dùng nút phía trên.',
+  'auth.sso.superAdminHint':
+    'Quản trị tối cao đăng nhập qua Cloudflare Access. Các vai trò khác vẫn dùng được mật khẩu.',
   'auth.sso.passwordDisabled':
     'Đăng nhập bằng mật khẩu đã tắt ở môi trường này. Hãy dùng Cloudflare Access.',
   'auth.badCredentials': 'Email hoặc mật khẩu không đúng.',

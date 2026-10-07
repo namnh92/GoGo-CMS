@@ -145,6 +145,16 @@ export default function LoginScreen() {
         setFormError(t('auth.mfaSetupRequired'))
         return
       }
+      if (error.code === 'SUPER_ADMIN_SSO_ONLY') {
+        // GoGo-BE#687 — this account is the super admin, which signs in only
+        // through Access. Said beside the single sign-on button, which is the
+        // way in; the password form stays for the other roles.
+        setStep('credentials')
+        setValue('totp', '')
+        setSsoError({ message: t('auth.sso.superAdminOnly') })
+        void methods.refetch()
+        return
+      }
       if (error.code === 'PASSWORD_LOGIN_DISABLED') {
         // Back to the first step with the code cleared: the MFA step belongs
         // to a door that no longer exists (review F-01).
@@ -415,6 +425,9 @@ export default function LoginScreen() {
                     {ssoPending ? t('auth.submitting') : t('auth.sso.button')}
                   </Button>
                   <p className={styles.ssoHint}>{t('auth.sso.hint')}</p>
+                  {methods.data?.superAdminSsoOnly ? (
+                    <p className={styles.ssoHint}>{t('auth.sso.superAdminHint')}</p>
+                  ) : null}
                   {ssoError ? (
                     <div role="alert" className={styles.alertDanger}>
                       <span aria-hidden="true">⚠</span>
