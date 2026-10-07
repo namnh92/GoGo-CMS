@@ -7,6 +7,8 @@ import { Button } from '@/shared/ui/Button'
 import { Select, TextArea } from '@/shared/ui/Field'
 import { Modal } from '@/shared/ui/Overlay'
 import { useToast } from '@/shared/ui/Toast'
+import { markSuperAdminSsoOnly } from '@/features/auth/useAuthMethods'
+import { useSuperAdminPasswordGate } from '@/features/auth/useSuperAdminPasswordGate'
 import {
   adminAssignableRoleSchema,
   type AdminAssignableRole,
@@ -67,6 +69,18 @@ export function AdminActionDialog({
    * rotating this account's password is the supported path (ADR-0018).
    */
   const refused = isSuperAdmin && (action === 'edit' || action === 'suspend')
+  /**
+   * GoGo-BE#687 — with the switch on the super admin has no password, and a
+   * reset of it answers `403 SUPER_ADMIN_SSO_ONLY`. The list does not open
+   * this dialog then, and a refusal that arrives under an open one (the switch
+   * flipped meanwhile) closes it here too: the submit goes unavailable at
+   * once, and the refusal is written into the shared `methods` answer so the
+   * list's button follows without waiting for the re-read (review F-01,
+   * round 2).
+   */
+  const superAdminPassword = useSuperAdminPasswordGate(isSuperAdmin && action === 'reset')
+  const [refusedSsoOnly, setRefusedSsoOnly] = useState(false)
+  const noPassword = refusedSsoOnly || superAdminPassword.state === 'ssoOnly'
   const [error, setError] = useState<string | null>(null)
   const [tempPassword, setTempPassword] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
@@ -105,12 +119,18 @@ export function AdminActionDialog({
       toast.success(t(`admins.done.${action}` as const))
       onClose()
     },
-    onError: (cause) => setError(describeRefusal(cause)),
+    onError: (cause) => {
+      if (cause instanceof ApiError && cause.code === 'SUPER_ADMIN_SSO_ONLY') {
+        setRefusedSsoOnly(true)
+        markSuperAdminSsoOnly(queryClient)
+      }
+      setError(describeRefusal(cause))
+    },
   })
 
   const submit = () => {
     setError(null)
-    if (refused) return
+    if (refused || noPassword) return
     if (reason.trim().length < 3) {
       setError(t('admins.reasonRequired'))
       return
@@ -160,7 +180,8 @@ export function AdminActionDialog({
           <Button
             variant={action === 'suspend' || action === 'reset' ? 'danger' : 'primary'}
             loading={mutation.isPending}
-            disabled={refused}
+            disabled={refused || noPassword}
+            title={noPassword ? t('admins.superAdminNoPassword') : undefined}
             onClick={submit}
           >
             {t(`admins.action.${action}` as const)}
@@ -183,6 +204,15 @@ export function AdminActionDialog({
           <p role="alert" className={styles.dialogError}>
             <span aria-hidden="true">⚠</span>
             {t('admins.superAdminLocked')}
+          </p>
+        ) : null}
+
+        {noPassword && !error ? (
+          // Reached with the fact already known (never from the list, which
+          // does not open this then): said before any submit, not after one.
+          <p role="alert" className={styles.dialogError}>
+            <span aria-hidden="true">⚠</span>
+            {t('admins.superAdminNoPassword')}
           </p>
         ) : null}
 
