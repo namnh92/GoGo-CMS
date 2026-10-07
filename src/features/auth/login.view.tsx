@@ -113,6 +113,9 @@ export default function LoginScreen() {
 
   const onSubmit = handleSubmit(async (values) => {
     setFormError(null)
+    // An alert left by an earlier attempt (e.g. SUPER_ADMIN_SSO_ONLY for the
+    // super admin's address) is about that attempt, not this one (review F-05).
+    setSsoError(null)
     try {
       const session = await login({
         email: values.email,

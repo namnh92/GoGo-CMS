@@ -167,4 +167,40 @@ describe('ChangePasswordScreen (CMS-032)', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/phải khác/)
   })
+
+  it('has no form for the super admin once Access-only, and says why (review F-01)', async () => {
+    server.use(
+      http.get('/v1/cms/auth/methods', () =>
+        HttpResponse.json({ password: true, accessSso: true, superAdminSsoOnly: true }),
+      ),
+    )
+    signInAs('super_admin')
+    renderWithProviders(<ChangePasswordScreen />)
+    expect(await screen.findByText(/không có mật khẩu; không có gì để đổi/)).toBeInTheDocument()
+    expect(screen.queryByLabelText(/Mật khẩu hiện tại/)).not.toBeInTheDocument()
+  })
+
+  it('maps a SUPER_ADMIN_SSO_ONLY refusal that races the form', async () => {
+    server.use(
+      http.post('/v1/cms/auth/change-password', () =>
+        HttpResponse.json(
+          {
+            code: 'SUPER_ADMIN_SSO_ONLY',
+            message: 'x',
+            field_errors: [],
+            request_id: 'r',
+            retryable: false,
+          },
+          { status: 403 },
+        ),
+      ),
+    )
+    signInAs('super_admin')
+    const user = userEvent.setup()
+    renderWithProviders(<ChangePasswordScreen />)
+    await screen.findByLabelText(/Mật khẩu hiện tại/)
+    await fill(user)
+    await submit(user)
+    expect(await screen.findByRole('alert')).toHaveTextContent('không có mật khẩu')
+  })
 })

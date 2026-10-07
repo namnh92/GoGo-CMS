@@ -517,4 +517,31 @@ describe('super admin through Access only (GoGo-BE#687)', () => {
     // The form stays: other roles still use it.
     expect(screen.getByLabelText(/Mật khẩu/)).toBeInTheDocument()
   })
+  it('drops the super admin warning when another account then signs in with a password (review F-05)', async () => {
+    let refuse = true
+    server.use(
+      http.get('/v1/cms/auth/methods', () =>
+        HttpResponse.json({ password: true, accessSso: true, superAdminSsoOnly: true }),
+      ),
+      http.post('/v1/cms/auth/login', () =>
+        refuse ? envelope(403, 'SUPER_ADMIN_SSO_ONLY') : envelope(401, 'INVALID_CREDENTIALS'),
+      ),
+    )
+    const user = userEvent.setup()
+    renderWithProviders(app(), { route: '/login' })
+    const email = await screen.findByLabelText(/Email công việc/)
+    await user.type(email, 'boss@gogo.vn')
+    await user.type(screen.getByLabelText(/Mật khẩu/), 'correct-horse-battery')
+    await user.click(screen.getByRole('button', { name: 'Tiếp tục' }))
+    await screen.findByText(/Tài khoản quản trị tối cao chỉ đăng nhập qua Cloudflare Access/)
+
+    refuse = false
+    await user.clear(email)
+    await user.type(email, 'editor@gogo.vn')
+    await user.click(screen.getByRole('button', { name: 'Tiếp tục' }))
+    expect(await screen.findByText('Email hoặc mật khẩu không đúng.')).toBeInTheDocument()
+    expect(
+      screen.queryByText(/Tài khoản quản trị tối cao chỉ đăng nhập qua Cloudflare Access/),
+    ).not.toBeInTheDocument()
+  })
 })

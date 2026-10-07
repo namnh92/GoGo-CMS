@@ -1109,6 +1109,12 @@ export const en: Partial<Record<MessageKey, string>> = {
   'admins.ssoConfirm.already': 'Already confirmed for {email}.',
   'admins.ssoConfirm.needAccess':
     'This session was opened by password. Sign in again through Cloudflare Access, then confirm.',
+  'admins.ssoConfirm.notSuperAdmin':
+    'Only the super admin can confirm, and only from a live session.',
+  'admins.superAdminNoPassword':
+    'The super admin signs in through Cloudflare Access only and has no password to reset or change.',
+  'account.password.superAdminSsoOnly':
+    'The super admin signs in through Cloudflare Access and has no password; there is nothing to change here.',
   'admins.ssoConfirm.unsupported':
     'This environment’s API does not support the confirmation yet. Tell the operator.',
   'auth.sso.superAdminOnly':

@@ -79,6 +79,7 @@ export function AdminActionDialog({
       if (cause.code === 'SELF_SUSPEND') return t('admins.error.selfSuspend')
       if (cause.code === 'LAST_SUPER_ADMIN') return t('admins.error.lastSuperAdmin')
       if (cause.code === 'SUPER_ADMIN_SINGLETON') return t('admins.error.superAdminSingleton')
+      if (cause.code === 'SUPER_ADMIN_SSO_ONLY') return t('admins.superAdminNoPassword')
       return cause.message
     }
     return t('error.UNKNOWN')

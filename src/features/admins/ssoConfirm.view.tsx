@@ -15,12 +15,18 @@ import { styles } from './ssoConfirm.style'
 export function SsoConfirmCard() {
   const t = useT()
   const mutation = useMutation({ mutationFn: confirmSuperAdminSso })
+  // An API older than alpha.71 has no such route: the button would only ever
+  // call it again (review F-04). Terminal, so the control goes unavailable.
+  const unsupported = mutation.error instanceof ApiError && mutation.error.status === 404
 
   const errorText = (() => {
     const error = mutation.error
     if (!error) return null
     if (!(error instanceof ApiError)) return t('error.UNKNOWN')
     if (error.code === 'ACCESS_SESSION_REQUIRED') return t('admins.ssoConfirm.needAccess')
+    // The contract's two "not the super admin" refusals (review F-03).
+    if (error.code === 'ROLE_DENIED' || error.code === 'ADMIN_ONLY')
+      return t('admins.ssoConfirm.notSuperAdmin')
     if (error.status === 404) return t('admins.ssoConfirm.unsupported')
     if (error.status === 429) return t('auth.rateLimited')
     return error.message
@@ -54,7 +60,7 @@ export function SsoConfirmCard() {
           variant="secondary"
           size="sm"
           loading={mutation.isPending}
-          disabled={mutation.isPending}
+          disabled={mutation.isPending || unsupported}
           onClick={() => mutation.mutate()}
         >
           {t('admins.ssoConfirm.action')}

@@ -24,6 +24,7 @@ import {
 import { fetchAdmins, type AdminListFilters } from './api'
 import { AdminActionDialog, type AdminAction } from './adminActions.view'
 import { SsoConfirmCard } from './ssoConfirm.view'
+import { useAuthMethods } from '@/features/auth/useAuthMethods'
 import { styles } from './adminList.style'
 
 const PAGE_SIZE = 25
@@ -48,6 +49,10 @@ export default function AdminListScreen() {
   // courtesy, the API is the control.
   const canRead = can('admin.read')
   const canCreate = can('admin.create')
+  // GoGo-BE#687 — with the switch on the super admin has no password, and the
+  // API refuses a reset of it with SUPER_ADMIN_SSO_ONLY (review F-01).
+  const methods = useAuthMethods()
+  const superAdminSsoOnly = methods.data?.superAdminSsoOnly === true
 
   const filters: AdminListFilters = {
     q: q || undefined,
@@ -216,6 +221,8 @@ export default function AdminListScreen() {
               <Button
                 size="sm"
                 variant="ghost"
+                disabled={locked && superAdminSsoOnly}
+                title={locked && superAdminSsoOnly ? t('admins.superAdminNoPassword') : undefined}
                 onClick={() => setDialog({ action: 'reset', admin: row.original })}
               >
                 {t('admins.action.reset')}
@@ -226,7 +233,7 @@ export default function AdminListScreen() {
         enableSorting: false,
       },
     ],
-    [t, locale, session?.displayName, canCreate],
+    [t, locale, session?.displayName, canCreate, superAdminSsoOnly],
   )
 
   if (!canRead) {

@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import userEvent from '@testing-library/user-event'
 import { screen, waitFor, within } from '@testing-library/react'
+import { http, HttpResponse } from 'msw'
+import { server } from '@/shared/test/server'
 import { renderWithProviders, signInAs } from '@/shared/test/render'
 import { AppShell } from './AppShell'
 
@@ -128,5 +130,30 @@ describe('grouped navigation (CMS-017)', () => {
         'false',
       ),
     )
+  })
+})
+
+describe('sidebar password control (GoGo-BE#687, review F-01)', () => {
+  it('is unavailable to the super admin once Access-only, with the reason', async () => {
+    server.use(
+      http.get('/v1/cms/auth/methods', () =>
+        HttpResponse.json({ password: true, accessSso: true, superAdminSsoOnly: true }),
+      ),
+    )
+    signInAs('super_admin')
+    renderWithProviders(<AppShell />)
+    const control = await screen.findByRole('button', { name: /không có mật khẩu/ })
+    expect(control).toBeDisabled()
+  })
+
+  it('stays available to other roles', async () => {
+    server.use(
+      http.get('/v1/cms/auth/methods', () =>
+        HttpResponse.json({ password: true, accessSso: true, superAdminSsoOnly: true }),
+      ),
+    )
+    signInAs('editor')
+    renderWithProviders(<AppShell />)
+    expect(await screen.findByRole('button', { name: 'Đổi mật khẩu' })).toBeEnabled()
   })
 })

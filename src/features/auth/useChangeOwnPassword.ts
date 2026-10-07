@@ -57,7 +57,10 @@ export function useChangeOwnPassword() {
       await changeOwnPassword({ currentPassword, newPassword })
       return true
     } catch (cause) {
-      if (cause instanceof ApiError && cause.code === 'PASSWORD_UNCHANGED') {
+      if (cause instanceof ApiError && cause.code === 'SUPER_ADMIN_SSO_ONLY') {
+        // The switch turned on while the form was open (review F-01).
+        setError(t('account.password.superAdminSsoOnly'))
+      } else if (cause instanceof ApiError && cause.code === 'PASSWORD_UNCHANGED') {
         setError(t('auth.change.unchanged'))
       } else if (cause instanceof ApiError && cause.status === 429) {
         // Five per five minutes per actor. Distinct from a wrong password:

@@ -8,6 +8,7 @@ import { useToast } from '@/shared/ui/Toast'
 import { CheckIcon } from '@/shared/ui/icons'
 import { useSession } from '@/shared/auth/session'
 import { useChangeOwnPassword } from './useChangeOwnPassword'
+import { useAuthMethods } from './useAuthMethods'
 import { styles } from './changePassword.style'
 
 /**
@@ -126,6 +127,12 @@ function ChangePasswordForm() {
 
 export default function ChangePasswordScreen() {
   const t = useT()
+  const { session } = useSession()
+  const methods = useAuthMethods()
+  // GoGo-BE#687 — the super admin has no password once the switch is on; the
+  // API refuses a change with SUPER_ADMIN_SSO_ONLY, so the form would be a dead
+  // control (review F-01). Said in words instead.
+  const noPassword = session?.role === 'super_admin' && methods.data?.superAdminSsoOnly === true
   return (
     <>
       <PageHeader
@@ -137,7 +144,14 @@ export default function ChangePasswordScreen() {
         <Card className={styles.panel}>
           <CardHeader title={t('account.password.title')} hint={t('account.password.subtitle')} />
           <CardBody>
-            <ChangePasswordForm />
+            {noPassword ? (
+              <p role="status" className={styles.note}>
+                <span aria-hidden="true">ℹ</span>
+                <span>{t('account.password.superAdminSsoOnly')}</span>
+              </p>
+            ) : (
+              <ChangePasswordForm />
+            )}
           </CardBody>
         </Card>
       </PageBody>

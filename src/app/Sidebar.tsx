@@ -8,6 +8,7 @@ import { ChevronRightIcon, LockIcon, LogoMark, LogoutIcon } from '@/shared/ui/ic
 import { IconButton } from '@/shared/ui/Button'
 import { EnvBadge } from '@/shared/ui/EnvBadge'
 import { fetchModerationCounts } from '@/features/moderation/api'
+import { useAuthMethods } from '@/features/auth/useAuthMethods'
 import { queryKeys } from '@/shared/api/queryKeys'
 import { cn } from '@/shared/ui/cn'
 
@@ -47,6 +48,9 @@ export function Sidebar() {
   const t = useT()
   const { pathname } = useLocation()
   const { session, can, logout } = useSession()
+  const methods = useAuthMethods()
+  // GoGo-BE#687 — no password to change for the super admin once Access-only.
+  const noPassword = session?.role === 'super_admin' && methods.data?.superAdminSsoOnly === true
   const navigate = useNavigate()
   const regionPrefix = useId()
 
@@ -219,8 +223,10 @@ export function Sidebar() {
           </p>
         </div>
         <IconButton
-          label={t('app.changePassword')}
+          label={noPassword ? t('admins.superAdminNoPassword') : t('app.changePassword')}
           className="h-9 w-9"
+          disabled={noPassword}
+          title={noPassword ? t('admins.superAdminNoPassword') : undefined}
           onClick={() => navigate('/account/password')}
         >
           <LockIcon size={15} />
