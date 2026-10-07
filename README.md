@@ -37,7 +37,7 @@ GoGo-CMS/
 ├── src/
 │   ├── app/                    # Shell, sidebar, page header, routing, providers, gates
 │   ├── features/
-│   │   ├── auth/               # login.view + TOTP, xử lý MFA_REQUIRED
+│   │   ├── auth/               # login.view (một bước), xử lý ACCESS_ASSERTION_REQUIRED
 │   │   ├── ops/                # dashboard.view — KPI, provider health, alert
 │   │   ├── places/             # placeList / placeEditor / duplicateQueue / areaCombobox + status
 │   │   ├── imports/            # importList / importWizard / jobDetail / candidateDrawer
@@ -83,7 +83,7 @@ Bắt buộc: WCAG 2.2 AA trên mọi luồng chính, thao tác bàn phím đầ
 
 ## Bảo mật
 
-- Production **bắt buộc SSO/MFA** và session timeout ngắn hơn app consumer (security rule của workspace). Hiện BE đã có TOTP; SSO còn chờ chốt IdP — theo dõi ở [GoGo-BE#62](https://github.com/namnh92/GoGo-BE/issues/62).
+- Production **bắt buộc SSO/MFA** và session timeout ngắn hơn app consumer (security rule của workspace). Từ GoGo-BE#687 D-4 (alpha.72) không còn TOTP: yếu tố thứ hai là Cloudflare Access xác nhận đúng email của tài khoản, đi kèm chính request đăng nhập.
 - Session lưu trong secure `HttpOnly` cookie; không để token nhạy cảm trong `localStorage` khi cookie dùng được.
 - Không log token, secret, payload đầy đủ hay PII.
 - Upload file import: người vận hành **tự đảm bảo file sạch trước khi upload** — quyết định đã ghi nhận ở `docs/threat-model.md` của GoGo-BE. Backend parse trong tiến trình, không execute và không serve lại file.
@@ -94,7 +94,7 @@ Bắt buộc: WCAG 2.2 AA trên mọi luồng chính, thao tác bàn phím đầ
 
 | Nhóm            | Endpoint chính                                                                                                                                                                         |
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Auth            | `POST /cms/auth/login` · `POST /cms/auth/refresh` · `POST /cms/auth/totp/setup\|confirm` · `POST /cms/auth/admins`                                                                     |
+| Auth            | `POST /cms/auth/login` · `POST /cms/auth/refresh` · `POST /cms/auth/access-exchange` · `POST /cms/auth/admins`                                                                         |
 | Places          | `GET /cms/places` · `GET/PATCH /cms/places/{id}` · `PATCH .../status` · `PUT .../hours` · `POST .../prices` · `POST .../verify-freshness` · `GET /cms/places/stale` · `GET /cms/areas` |
 | Duplicates      | `GET /cms/places/duplicates` · `POST /cms/places/{id}/merge`                                                                                                                           |
 | Bulk import     | `POST /cms/place-imports` (multipart) · `POST .../google-sheet` · `GET /cms/place-imports` · `GET .../{jobId}` · `GET .../{jobId}/rows` · `POST .../start                              | cancel | retry | publish`·`POST .../rows/{rowId}/confirm-candidate | merge | skip`·`GET .../{jobId}/error-report` |
@@ -151,8 +151,8 @@ pnpm dev                       # http://localhost:5174
 
 **Không cần GoGo-BE để dựng UI.** Với `VITE_USE_MOCK=true`, MSW phục vụ toàn bộ
 `/v1/cms/*` từ `src/shared/test/handlers.ts` — kể cả các nhánh lỗi thật:
-`MFA_REQUIRED`, `SELF_APPROVAL`, `CANDIDATE_NOT_LISTED`,
-`paused_provider_quota`. Đăng nhập dev: mật khẩu bất kỳ + mã 6 số bất kỳ; vai
+`ACCESS_ASSERTION_REQUIRED`, `SELF_APPROVAL`, `CANDIDATE_NOT_LISTED`,
+`paused_provider_quota`. Đăng nhập dev: mật khẩu bất kỳ (email có `noaccess` giả lập Access chưa xác nhận); vai
 trò suy ra từ phần local của email — `editor@…`, `moderator@…`, `ops@…`, còn
 lại là `super_admin`.
 
@@ -249,7 +249,7 @@ Backend cho toàn bộ nhóm này **đã xong và đang chạy** (GoGo-BE `devel
 
 | Route             | Màn                                                                                                                                                                                            | WBS                                                  |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| `/login`          | Đăng nhập + TOTP, xử lý `MFA_REQUIRED` / `MFA_SETUP_REQUIRED`                                                                                                                                  | CMS-001                                              |
+| `/login`          | Đăng nhập một bước, xử lý `ACCESS_ASSERTION_REQUIRED`                                                                                                                                          | CMS-001                                              |
 | `/`               | Dashboard vận hành: KPI, xu hướng, provider health, activity, alert                                                                                                                            | CMS-010                                              |
 | `/places`         | Danh sách catalog: tab trạng thái + `Cần xác minh lại` + `Trùng lặp`, lọc, bulk action                                                                                                         | CMS-002, CMS-003, CMS-004                            |
 | `/places/:id`     | Editor: định danh, khu vực khám phá, địa chỉ hành chính + liên hệ, phân loại, toạ độ, giờ mở cửa theo nhóm ngày, giá, ảnh, nguồn, provenance từng trường, checklist trước xuất bản, audit diff | CMS-002, CMS-003, CMS-044, CMS-045, CMS-046, CMS-048 |
@@ -363,4 +363,4 @@ nói thẳng rằng thao tác được ghi audit kèm vai/IP/request id và bắ
 
 ### Chưa dựng UI
 
-- SSO chờ IdP ([GoGo-BE#62](https://github.com/namnh92/GoGo-BE/issues/62)); hiện chỉ mật khẩu + TOTP.
+- Đăng nhập: Cloudflare Access (SSO) hoặc mật khẩu kèm assertion Access cùng email (GoGo-BE#687); không còn TOTP.

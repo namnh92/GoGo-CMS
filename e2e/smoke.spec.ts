@@ -47,10 +47,8 @@ const SCREENS: [string, RegExp][] = [
 test('every screen renders for a super admin with no console error', async ({ page }) => {
   const problems: string[] = []
 
-  // Listeners attach after sign-in: the stepped flow (CMS-034) answers the
-  // first credentials POST with 401 MFA_REQUIRED by design, and the browser
-  // logs every 401 as a console error. That 401 is the contract working, not
-  // a defect — the screens after it still must produce none.
+  // Listeners attach after sign-in: the sign-in exchange is not this test's
+  // subject. The screens after it must produce no console error.
   await signIn(page, 'boss@gogo.vn')
   page.on('console', (message) => {
     if (message.type() === 'error') problems.push(`console: ${message.text()}`)

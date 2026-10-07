@@ -1050,16 +1050,12 @@ export const vi = {
   'action.saving': 'Đang lưu…',
 
   'auth.title': 'Đăng nhập CMS',
-  'auth.subtitle': 'Tài khoản nội bộ GoGo. Môi trường production bắt buộc MFA.',
+  'auth.subtitle':
+    'Tài khoản nội bộ GoGo. Đăng nhập qua Cloudflare Access bằng đúng email của tài khoản.',
   'auth.email': 'Email công việc',
   'auth.password': 'Mật khẩu',
-  'auth.totp': 'Mã xác thực 6 số',
-  'auth.totpHint': 'Mở ứng dụng xác thực và nhập mã hiện tại.',
   'auth.submit': 'Đăng nhập',
   'auth.submitting': 'Đang đăng nhập…',
-  'auth.mfaRequired': 'Tài khoản này bắt buộc mã xác thực. Nhập mã 6 số để tiếp tục.',
-  'auth.mfaSetupRequired':
-    'Tài khoản chưa bật MFA. Liên hệ quản trị tối cao để thiết lập trước khi đăng nhập.',
   'auth.sso.button': 'Đăng nhập qua Cloudflare Access',
   'auth.sso.hint': 'Dùng tài khoản bạn vừa xác thực ở Cloudflare Access, không cần mật khẩu GoGo.',
   'auth.sso.orPassword': 'Hoặc đăng nhập bằng mật khẩu',
@@ -1106,6 +1102,8 @@ export const vi = {
   'auth.sso.passwordDisabled':
     'Đăng nhập bằng mật khẩu đã tắt ở môi trường này. Hãy dùng Cloudflare Access.',
   'auth.badCredentials': 'Email hoặc mật khẩu không đúng.',
+  'auth.accessAssertionRequired':
+    'Cloudflare Access chưa xác nhận email này cho lần đăng nhập. Mở bảng điều khiển qua Access bằng đúng email của tài khoản rồi thử lại.',
   'auth.rateLimited': 'Bạn đã thử quá nhiều lần. Chờ ít phút rồi thử lại.',
   'auth.sessionExpired': 'Phiên làm việc đã hết hạn. Đăng nhập lại để tiếp tục.',
   'auth.securityNote': 'Phiên lưu trong cookie HttpOnly; CMS không giữ token trong localStorage.',
@@ -2788,15 +2786,11 @@ export const vi = {
   'auth.bullet.rbac': 'Phân quyền RBAC và nhật ký kiểm toán',
   'auth.brandFoot': 'cms-dev.gogo.id.vn · môi trường {env}',
   'auth.continue': 'Tiếp tục',
-  'auth.verifySubmit': 'Xác thực & đăng nhập',
-  'auth.mfaTitle': 'Xác thực hai lớp',
-  'auth.mfaSubtitle': 'Nhập mã 6 số từ ứng dụng xác thực của bạn.',
-  'auth.backToCredentials': 'Quay lại nhập mật khẩu',
   'auth.showPassword': 'Hiện mật khẩu',
   'auth.hidePassword': 'Ẩn mật khẩu',
-  'auth.totpApps': 'Tương thích Google Authenticator, Microsoft Authenticator, 1Password, Authy.',
   'auth.envNoteDev': 'môi trường thử nghiệm, dữ liệu seed dùng chung.',
-  'auth.envNoteProduction': 'mọi tài khoản bắt buộc MFA; thao tác được kiểm toán.',
+  'auth.envNoteProduction':
+    'mọi tài khoản đi qua Cloudflare Access (MFA ở Access); thao tác được kiểm toán.',
 
   'dashboard.satelliteError': 'Không tải được phần này. Các phần khác không bị ảnh hưởng.',
   'dashboard.queues.title': 'Hàng chờ kiểm duyệt',
@@ -2952,11 +2946,8 @@ export const vi = {
   'account.password.doneHint':
     'Mật khẩu mới có hiệu lực ngay. Bạn vẫn đang đăng nhập ở tab này; mọi phiên khác đã bị thu hồi và phải đăng nhập lại bằng mật khẩu mới.',
 
-  'admins.col.mfa': 'MFA',
   'admins.col.obligation': 'Nghĩa vụ',
   'admins.col.actions': 'Thao tác',
-  'admins.mfa.on': 'Đã bật MFA',
-  'admins.mfa.off': 'Chưa có MFA',
   'admins.owesPassword': 'Nợ đổi mật khẩu',
   'admins.action.edit': 'Đổi vai',
   'admins.action.suspend': 'Đình chỉ',

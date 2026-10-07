@@ -1071,15 +1071,12 @@ export const en: Partial<Record<MessageKey, string>> = {
   'action.saving': 'Saving…',
 
   'auth.title': 'CMS sign in',
-  'auth.subtitle': 'GoGo staff account. MFA is mandatory in production.',
+  'auth.subtitle':
+    'GoGo staff account. Sign in through Cloudflare Access with the account’s own email.',
   'auth.email': 'Work email',
   'auth.password': 'Password',
-  'auth.totp': '6-digit code',
-  'auth.totpHint': 'Open your authenticator app and enter the current code.',
   'auth.submit': 'Sign in',
   'auth.submitting': 'Signing in…',
-  'auth.mfaRequired': 'This account requires a code. Enter the 6 digits to continue.',
-  'auth.mfaSetupRequired': 'MFA is not enrolled. Ask a super admin to set it up before signing in.',
   'auth.sso.button': 'Sign in with Cloudflare Access',
   'auth.sso.hint': 'Uses the identity you just verified with Cloudflare Access — no GoGo password.',
   'auth.sso.orPassword': 'Or sign in with a password',
@@ -1129,6 +1126,8 @@ export const en: Partial<Record<MessageKey, string>> = {
   'auth.sso.passwordDisabled':
     'Password sign-in is turned off in this environment. Use Cloudflare Access.',
   'auth.badCredentials': 'Wrong email or password.',
+  'auth.accessAssertionRequired':
+    'Cloudflare Access has not admitted this email for this sign-in. Open the console through Access with the account’s own email and try again.',
   'auth.rateLimited': 'Too many attempts. Wait a few minutes and try again.',
   'auth.sessionExpired': 'Your session expired. Sign in again to continue.',
   'auth.securityNote':
@@ -2087,15 +2086,11 @@ export const en: Partial<Record<MessageKey, string>> = {
   'auth.bullet.rbac': 'RBAC & audit logs',
   'auth.brandFoot': 'cms-dev.gogo.id.vn · {env} environment',
   'auth.continue': 'Continue',
-  'auth.verifySubmit': 'Verify & sign in',
-  'auth.mfaTitle': 'Two-factor authentication',
-  'auth.mfaSubtitle': 'Enter the 6-digit code from your authenticator app.',
-  'auth.backToCredentials': 'Back to password',
   'auth.showPassword': 'Show password',
   'auth.hidePassword': 'Hide password',
-  'auth.totpApps': 'Works with Google Authenticator, Microsoft Authenticator, 1Password, Authy.',
   'auth.envNoteDev': 'test environment with shared seed data.',
-  'auth.envNoteProduction': 'MFA is mandatory for every account; actions are audited.',
+  'auth.envNoteProduction':
+    'every account goes through Cloudflare Access (MFA at Access); actions are audited.',
 
   'dashboard.satelliteError': 'This section failed to load. Other sections are unaffected.',
   'dashboard.queues.title': 'Moderation queues',
@@ -2252,11 +2247,8 @@ export const en: Partial<Record<MessageKey, string>> = {
   'account.password.doneHint':
     'The new password is live. You are still signed in here; every other session has been revoked and must sign in again with the new password.',
 
-  'admins.col.mfa': 'MFA',
   'admins.col.obligation': 'Obligation',
   'admins.col.actions': 'Actions',
-  'admins.mfa.on': 'MFA on',
-  'admins.mfa.off': 'No MFA',
   'admins.owesPassword': 'Owes password change',
   'admins.action.edit': 'Change role',
   'admins.action.suspend': 'Suspend',

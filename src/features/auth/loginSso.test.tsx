@@ -445,17 +445,14 @@ describe('sign-in matrix, remaining cells (GoGo-CMS#232 review)', () => {
   })
 
   /*
-   * Review F-01: the door closes between the MFA challenge and the code. The
-   * screen goes back to the first step, the code is dropped, and no password
-   * or code field is left behind.
+   * The door closes under an open form: the submit answers
+   * PASSWORD_LOGIN_DISABLED, the form goes, single sign-on stays.
    */
-  it('leaves the MFA step when the password door closes under it', async () => {
+  it('drops the password form when the door closes under it', async () => {
     let password = true
     server.use(
       http.get('/v1/cms/auth/methods', () => HttpResponse.json({ password, accessSso: true })),
-      http.post('/v1/cms/auth/login', async ({ request }) => {
-        const body = (await request.json()) as { totp?: string }
-        if (!body.totp) return envelope(401, 'MFA_REQUIRED')
+      http.post('/v1/cms/auth/login', () => {
         password = false
         return envelope(403, 'PASSWORD_LOGIN_DISABLED')
       }),
@@ -466,13 +463,8 @@ describe('sign-in matrix, remaining cells (GoGo-CMS#232 review)', () => {
     await user.type(await screen.findByLabelText(/Email công việc/), 'ops@gogo.vn')
     await user.type(screen.getByLabelText(/Mật khẩu/), 'correct-horse-battery')
     await user.click(screen.getByRole('button', { name: 'Tiếp tục' }))
-    await screen.findByRole('heading', { name: 'Xác thực hai lớp' })
-    await user.type(screen.getByLabelText(/Mã xác thực/), '123456')
-    await user.click(screen.getByRole('button', { name: 'Xác thực & đăng nhập' }))
 
-    await waitFor(() => expect(screen.queryByLabelText(/Mã xác thực/)).not.toBeInTheDocument())
-    expect(screen.queryByLabelText(/Mật khẩu/)).not.toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Xác thực hai lớp' })).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByLabelText(/Mật khẩu/)).not.toBeInTheDocument())
     expect(await ssoButton()).toBeInTheDocument()
   })
 })

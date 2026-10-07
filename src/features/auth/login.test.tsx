@@ -7,37 +7,47 @@ import { renderWithProviders } from '@/shared/test/render'
 import LoginScreen from './login.view'
 
 describe('CMS sign-in (CMS-034, stepped)', () => {
-  it('moves to the MFA step when the API answers MFA_REQUIRED', async () => {
+  it('signs in with one credentials step — there is no code step any more (GoGo-BE#687 D-4)', async () => {
     const user = userEvent.setup()
     renderWithProviders(<LoginScreen />)
     // The form renders once the API has said the password door is open.
     await screen.findByLabelText(/Email công việc/)
+    expect(screen.queryByLabelText(/Mã xác thực/)).not.toBeInTheDocument()
 
+    let sent: Record<string, unknown> | undefined
+    server.use(
+      http.post('/v1/cms/auth/login', async ({ request }) => {
+        sent = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json(
+          { accessToken: 't', role: 'ops_admin', displayName: 'ops', expiresIn: 900 },
+          { status: 201 },
+        )
+      }),
+    )
     await user.type(screen.getByLabelText(/Email công việc/), 'ops@gogo.vn')
     await user.type(screen.getByLabelText(/Mật khẩu/), 'correct-horse-battery')
     await user.click(screen.getByRole('button', { name: 'Tiếp tục' }))
 
-    // The password checked out, so the step — not an inline error — changes.
-    expect(await screen.findByRole('heading', { name: 'Xác thực hai lớp' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Xác thực & đăng nhập' })).toBeInTheDocument()
-    // The code field gets focus: the whole step exists for it.
-    expect(screen.getByLabelText(/Mã xác thực/)).toHaveFocus()
+    await waitFor(() =>
+      expect(sent).toEqual({ email: 'ops@gogo.vn', password: 'correct-horse-battery' }),
+    )
+    expect(screen.queryByRole('heading', { name: 'Xác thực hai lớp' })).not.toBeInTheDocument()
   })
 
-  it('returns to the password step on bad credentials, never trapping behind the code', async () => {
+  it('says Access did not admit the mailbox, not that the password is wrong', async () => {
     const user = userEvent.setup()
     renderWithProviders(<LoginScreen />)
-    // The form renders once the API has said the password door is open.
     await screen.findByLabelText(/Email công việc/)
 
-    await user.type(screen.getByLabelText(/Email công việc/), 'ops@gogo.vn')
+    await user.type(screen.getByLabelText(/Email công việc/), 'noaccess@gogo.vn')
     await user.type(screen.getByLabelText(/Mật khẩu/), 'correct-horse-battery')
     await user.click(screen.getByRole('button', { name: 'Tiếp tục' }))
-    await screen.findByRole('heading', { name: 'Xác thực hai lớp' })
 
-    await user.click(screen.getByRole('button', { name: 'Quay lại nhập mật khẩu' }))
-    expect(screen.getByLabelText(/Mật khẩu/)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Xác thực & đăng nhập' })).not.toBeInTheDocument()
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Cloudflare Access chưa xác nhận email này')
+    expect(alert).not.toHaveTextContent('Email hoặc mật khẩu không đúng')
+    // The form stays, with what was typed.
+    expect(screen.getByLabelText(/Email công việc/)).toHaveValue('noaccess@gogo.vn')
   })
 
   it('toggles password visibility with a labelled control', async () => {
@@ -105,8 +115,6 @@ describe('CMS sign-in (CMS-034, stepped)', () => {
     await user.type(screen.getByLabelText(/Email công việc/), 'temp.ops@gogo.vn')
     await user.type(screen.getByLabelText(/Mật khẩu/), 'temporary-pass-123')
     await user.click(screen.getByRole('button', { name: 'Tiếp tục' }))
-    await user.type(await screen.findByLabelText(/Mã xác thực/), '123456')
-    await user.click(screen.getByRole('button', { name: 'Xác thực & đăng nhập' }))
 
     // Not the console: the obligation screen, server-enforced elsewhere.
     expect(await screen.findByRole('heading', { name: 'Đặt mật khẩu mới' })).toBeInTheDocument()
@@ -144,8 +152,6 @@ describe('CMS sign-in (CMS-034, stepped)', () => {
       await user.type(email, 'temp.ops@gogo.vn')
       await user.type(password, 'temporary-pass-123')
       await user.click(screen.getByRole('button', { name: 'Tiếp tục' }))
-      await user.type(await screen.findByLabelText(/Mã xác thực/), '123456')
-      await user.click(screen.getByRole('button', { name: 'Xác thực & đăng nhập' }))
 
       await screen.findByRole('heading', { name: 'Đặt mật khẩu mới' })
 
@@ -190,8 +196,6 @@ describe('CMS sign-in (CMS-034, stepped)', () => {
     await user.type(screen.getByLabelText(/Email công việc/), 'temp.ops@gogo.vn')
     await user.type(screen.getByLabelText(/Mật khẩu/), 'temporary-pass-123')
     await user.click(screen.getByRole('button', { name: 'Tiếp tục' }))
-    await user.type(await screen.findByLabelText(/Mã xác thực/), '123456')
-    await user.click(screen.getByRole('button', { name: 'Xác thực & đăng nhập' }))
     await screen.findByRole('heading', { name: 'Đặt mật khẩu mới' })
 
     await user.type(screen.getByLabelText(/^Mật khẩu mới/), 'a-brand-new-pass-456')

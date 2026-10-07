@@ -84,7 +84,7 @@ function writeHint(hint: SessionHint | null): void {
 export const SESSION_IDLE_MS = 30 * 60_000
 export const SESSION_WARN_MS = 2 * 60_000
 
-export type LoginInput = { email: string; password: string; totp?: string }
+export type LoginInput = { email: string; password: string }
 
 export type ExpiryReason = 'unauthorized' | 'idle'
 
@@ -327,11 +327,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       if (pendingRevoke) await pendingRevoke
       const raw = await apiFetch<unknown>('/cms/auth/login', {
         method: 'POST',
-        body: {
-          email: input.email,
-          password: input.password,
-          ...(input.totp ? { totp: input.totp } : {}),
-        },
+        body: { email: input.email, password: input.password },
       })
       return adopt(raw)
     },

@@ -57,7 +57,8 @@ export type AdminStatus = z.infer<typeof adminStatusSchema>
 
 /**
  * `email` is here because it is how a staff account is identified. Nothing
- * else about the person is: no phone, no password hash, no TOTP secret, no
+ * else about the person is: no phone, no password hash, no second-factor
+ * material, no
  * session material — the server does not select them, so there is nothing to
  * leak by accident.
  */
@@ -70,11 +71,6 @@ export const cmsAdminSchema = z.object({
   createdAt: z.string(),
   /** Absent on an account that has never signed in. */
   lastLoginAt: z.string().nullish(),
-  /**
-   * #248. Whether a second factor is enrolled — the status, never anything
-   * about the secret. Defaulted for resilience against an older payload.
-   */
-  mfaEnrolled: z.boolean().default(false),
   /** A temporary password is outstanding on this account. */
   mustChangePassword: z.boolean().default(false),
 })

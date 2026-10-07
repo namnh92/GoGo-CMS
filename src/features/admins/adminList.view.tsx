@@ -148,20 +148,6 @@ export default function AdminListScreen() {
         enableSorting: false,
       },
       {
-        id: 'mfa',
-        header: () => t('admins.col.mfa'),
-        cell: ({ row }) => (
-          // Enrollment status only — the point is seeing which accounts are
-          // unprotected, never anything about the secret.
-          <StatusBadge
-            tone={row.original.mfaEnrolled ? 'mint' : 'amber'}
-            shape={row.original.mfaEnrolled ? 'check' : 'alert'}
-            label={row.original.mfaEnrolled ? t('admins.mfa.on') : t('admins.mfa.off')}
-          />
-        ),
-        enableSorting: false,
-      },
-      {
         id: 'obligation',
         header: () => <span className="sr-only">{t('admins.col.obligation')}</span>,
         cell: ({ row }) =>

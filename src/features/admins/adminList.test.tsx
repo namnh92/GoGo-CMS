@@ -27,6 +27,15 @@ describe('AdminListScreen (CMS-021)', () => {
     expect(within(table).getByText('Chưa đăng nhập lần nào')).toBeInTheDocument()
   })
 
+  it('has no MFA column — TOTP is gone, Access carries the second factor (GoGo-BE#687 D-4)', async () => {
+    signInAs('super_admin')
+    renderWithProviders(<AdminListScreen />)
+
+    const table = await screen.findByRole('table')
+    expect(within(table).queryByRole('columnheader', { name: 'MFA' })).not.toBeInTheDocument()
+    expect(within(table).queryByText('Chưa có MFA')).not.toBeInTheDocument()
+  })
+
   it('pushes the role filter to the server', async () => {
     signInAs('super_admin')
     const user = userEvent.setup()
