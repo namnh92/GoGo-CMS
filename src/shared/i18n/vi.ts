@@ -1068,7 +1068,7 @@ export const vi = {
   'auth.sso.adminOnly':
     'Cloudflare Access đã xác thực bạn, nhưng địa chỉ này không có tài khoản quản trị đang hoạt động.',
   'auth.sso.switchIdentity': 'Đăng nhập bằng danh tính khác',
-  'auth.sso.missing': 'Phải mở CMS qua địa chỉ có Cloudflare Access mới đăng nhập được.',
+  'auth.sso.missing': 'Chưa có phiên Cloudflare Access. Tải lại để mở màn đăng nhập của Access.',
   'auth.sso.missingLocal':
     'Request không mang assertion của Access. Ở máy local, chạy `cloudflared access login` rồi khởi động dev server với CF_ACCESS_TOKEN.',
   'auth.sso.invalid': 'Phiên Cloudflare Access đã hết hạn. Tải lại trang để xác thực lại.',

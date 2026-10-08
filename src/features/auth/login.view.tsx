@@ -14,7 +14,7 @@ import { CheckCircleIcon, ClockIcon, EyeIcon, EyeOffIcon, LogoMark } from '@/sha
 import { Skeleton } from '@/shared/ui/State'
 import { useChangeOwnPassword } from './useChangeOwnPassword'
 import { useAuthMethods } from './useAuthMethods'
-import { safeReturnPath, ssoRedirect } from './ssoRedirect'
+import { safeReturnPath, ssoRedirect, ssoStartUrl } from './ssoRedirect'
 import { useSuperAdminPasswordGate } from './useSuperAdminPasswordGate'
 import { SsoConfirmCard } from '@/features/admins/ssoConfirm.view'
 import { styles } from './login.style'
@@ -94,8 +94,10 @@ export default function LoginScreen() {
   const onSsoPath = location.pathname === '/sso'
   const search = new URLSearchParams(location.search)
   const autoStart = onSsoPath && search.get('start') === '1'
+  // Both sources are validated: router state can be set by any in-app link.
   const returnTo =
-    (location.state as { from?: string } | null)?.from ?? safeReturnPath(search.get('from'))
+    safeReturnPath((location.state as { from?: unknown } | null)?.from) ??
+    safeReturnPath(search.get('from'))
 
   const [step, setStep] = useState<Step>('credentials')
   const [formError, setFormError] = useState<string | null>(null)
@@ -191,8 +193,11 @@ export default function LoginScreen() {
       } else if (error.code === 'ADMIN_ONLY') {
         setSsoError({ message: t('auth.sso.adminOnly'), adminOnly: true })
       } else if (error.code === 'ACCESS_ASSERTION_MISSING') {
+        // Rev 6 (review of GoGo-CMS#237, F-02): Access issues the assertion
+        // only on a page load of /sso, so the way out is that page load.
         setSsoError({
           message: import.meta.env.DEV ? t('auth.sso.missingLocal') : t('auth.sso.missing'),
+          reload: true,
         })
       } else if (error.code === 'ACCESS_ASSERTION_INVALID') {
         setSsoError({ message: t('auth.sso.invalid'), reload: true })
@@ -231,9 +236,7 @@ export default function LoginScreen() {
       void startSso()
       return
     }
-    const params = new URLSearchParams({ start: '1' })
-    if (returnTo) params.set('from', returnTo)
-    ssoRedirect(`/sso?${params.toString()}`)
+    ssoRedirect(ssoStartUrl(returnTo))
   }
 
   const submitChangePassword = async (event: React.FormEvent) => {
@@ -445,12 +448,13 @@ export default function LoginScreen() {
                     </div>
                   ) : null}
                   {ssoError?.reload ? (
-                    // Access issues a fresh assertion only on a navigation; a
-                    // second exchange from this page would send the stale one.
+                    // Access issues a fresh assertion only on a page load of
+                    // /sso; a second exchange from here would send the stale
+                    // one, or none.
                     <Button
                       type="button"
                       variant="secondary"
-                      onClick={() => window.location.reload()}
+                      onClick={() => ssoRedirect(ssoStartUrl(returnTo))}
                     >
                       {t('auth.sso.reload')}
                     </Button>

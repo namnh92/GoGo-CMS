@@ -1090,7 +1090,7 @@ export const en: Partial<Record<MessageKey, string>> = {
   'auth.sso.adminOnly':
     'Cloudflare Access verified you, but this address has no active staff account.',
   'auth.sso.switchIdentity': 'Sign in as someone else',
-  'auth.sso.missing': 'Open the CMS through its Cloudflare Access address to sign in.',
+  'auth.sso.missing': 'No Cloudflare Access session yet. Reload to open the Access sign-in.',
   'auth.sso.missingLocal':
     'The request carries no Access assertion. Locally, run `cloudflared access login` and start the dev server with CF_ACCESS_TOKEN.',
   'auth.sso.invalid':
