@@ -199,6 +199,40 @@ describe('AdminListScreen (CMS-021)', () => {
     ).toEqual(['editor', 'moderator', 'ops_admin'])
   })
 
+  it('the reset dialog on the super admin is unavailable while methods is pending (PR #235 r3 F-01)', async () => {
+    server.use(http.get('/v1/cms/auth/methods', () => new Promise<Response>(() => {})))
+    signInAs('super_admin', 'Someone Else')
+    const boss = { ...cmsAdmins.find((a) => a.role === 'super_admin')!, lastLoginAt: undefined }
+    renderWithProviders(<AdminActionDialog action="reset" admin={boss} onClose={() => {}} />)
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByRole('status')).toHaveTextContent(/Đang kiểm tra/)
+    expect(within(dialog).getAllByRole('button', { name: 'Reset mật khẩu' }).at(-1)!).toBeDisabled()
+  })
+
+  it('the reset dialog on the super admin is unavailable when methods fails, with a retry (PR #235 r3 F-01)', async () => {
+    let calls = 0
+    server.use(
+      http.get('/v1/cms/auth/methods', () => {
+        calls += 1
+        return HttpResponse.json(
+          { code: 'INTERNAL', message: 'x', field_errors: [], request_id: 'r', retryable: true },
+          { status: 500 },
+        )
+      }),
+    )
+    signInAs('super_admin', 'Someone Else')
+    const user = userEvent.setup()
+    const boss = { ...cmsAdmins.find((a) => a.role === 'super_admin')!, lastLoginAt: undefined }
+    renderWithProviders(<AdminActionDialog action="reset" admin={boss} onClose={() => {}} />)
+    const dialog = await screen.findByRole('dialog')
+    const alert = await within(dialog).findByRole('alert')
+    expect(alert).toHaveTextContent(/Không đọc được/)
+    expect(within(dialog).getAllByRole('button', { name: 'Reset mật khẩu' }).at(-1)!).toBeDisabled()
+    const before = calls
+    await user.click(within(alert).getByRole('button', { name: 'Thử lại' }))
+    await waitFor(() => expect(calls).toBeGreaterThan(before))
+  })
+
   it('the edit dialog on the super admin explains itself and cannot be submitted', async () => {
     // Rendered directly: the list already refuses to open this, and the dialog
     // must refuse it too — a submit whose only outcome is a 409 is a dead

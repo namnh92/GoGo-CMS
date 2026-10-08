@@ -81,6 +81,18 @@ export function AdminActionDialog({
   const superAdminPassword = useSuperAdminPasswordGate(isSuperAdmin && action === 'reset')
   const [refusedSsoOnly, setRefusedSsoOnly] = useState(false)
   const noPassword = refusedSsoOnly || superAdminPassword.state === 'ssoOnly'
+  // Review of PR #235 (round 3, F-01): a dialog opened while `methods` is
+  // pending, or whose re-read fails under it, is unknown — unavailable, with
+  // the reason and (on failure) the re-read, like the list's row button.
+  const gateBlocked =
+    !noPassword &&
+    (superAdminPassword.state === 'pending' || superAdminPassword.state === 'unknown')
+  const gateReason =
+    superAdminPassword.state === 'pending'
+      ? t('admins.superAdminPasswordPending')
+      : superAdminPassword.state === 'unknown'
+        ? t('admins.superAdminPasswordUnknown')
+        : null
   const [error, setError] = useState<string | null>(null)
   const [tempPassword, setTempPassword] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
@@ -130,7 +142,7 @@ export function AdminActionDialog({
 
   const submit = () => {
     setError(null)
-    if (refused || noPassword) return
+    if (refused || noPassword || gateBlocked) return
     if (reason.trim().length < 3) {
       setError(t('admins.reasonRequired'))
       return
@@ -180,8 +192,14 @@ export function AdminActionDialog({
           <Button
             variant={action === 'suspend' || action === 'reset' ? 'danger' : 'primary'}
             loading={mutation.isPending}
-            disabled={refused || noPassword}
-            title={noPassword ? t('admins.superAdminNoPassword') : undefined}
+            disabled={refused || noPassword || gateBlocked}
+            title={
+              noPassword
+                ? t('admins.superAdminNoPassword')
+                : gateBlocked
+                  ? (gateReason ?? undefined)
+                  : undefined
+            }
             onClick={submit}
           >
             {t(`admins.action.${action}` as const)}
@@ -214,6 +232,27 @@ export function AdminActionDialog({
             <span aria-hidden="true">⚠</span>
             {t('admins.superAdminNoPassword')}
           </p>
+        ) : null}
+
+        {gateBlocked && gateReason ? (
+          <div
+            role={superAdminPassword.state === 'unknown' ? 'alert' : 'status'}
+            className={styles.dialogError}
+          >
+            <span aria-hidden="true">⚠</span>
+            <span>{gateReason}</span>
+            {superAdminPassword.state === 'unknown' ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                loading={superAdminPassword.retrying}
+                disabled={superAdminPassword.retrying}
+                onClick={superAdminPassword.retry}
+              >
+                {t('state.retry')}
+              </Button>
+            ) : null}
+          </div>
         ) : null}
 
         {action === 'edit' && !isSuperAdmin ? (

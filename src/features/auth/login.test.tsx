@@ -54,6 +54,47 @@ describe('CMS sign-in (CMS-034, stepped)', () => {
     expect(password.type).toBe('password')
   })
 
+  it('replaces the forced change with the SSO confirmation when the super admin turns out SSO-only (PR #235 r3 F-02)', async () => {
+    // The switch flips after the sign-in and before the change: the change is
+    // refused and the re-read of `methods` says so.
+    let flipped = false
+    server.use(
+      http.get('/v1/cms/auth/methods', () =>
+        HttpResponse.json({ password: true, accessSso: false, superAdminSsoOnly: flipped }),
+      ),
+      http.post('/v1/cms/auth/change-password', () => {
+        flipped = true
+        return HttpResponse.json(
+          {
+            code: 'SUPER_ADMIN_SSO_ONLY',
+            message: 'x',
+            field_errors: [],
+            request_id: 'r',
+            retryable: false,
+          },
+          { status: 403 },
+        )
+      }),
+    )
+    const user = userEvent.setup()
+    renderWithProviders(<LoginScreen />)
+    await screen.findByLabelText(/Email công việc/)
+    // "temp" owes a change; no role word in the local part → super_admin in the mock.
+    await user.type(screen.getByLabelText(/Email công việc/), 'temp.boss@gogo.vn')
+    await user.type(screen.getByLabelText(/Mật khẩu/), 'temporary-pass-123')
+    await user.click(screen.getByRole('button', { name: 'Tiếp tục' }))
+    await user.type(await screen.findByLabelText(/Mã xác thực/), '123456')
+    await user.click(screen.getByRole('button', { name: 'Xác thực & đăng nhập' }))
+    await screen.findByRole('heading', { name: 'Đặt mật khẩu mới' })
+    await user.type(screen.getByLabelText(/^Mật khẩu mới/), 'a-much-longer-password-2')
+    await user.type(screen.getByLabelText(/Nhập lại mật khẩu mới/), 'a-much-longer-password-2')
+    await user.click(screen.getByRole('button', { name: 'Đổi mật khẩu & vào console' }))
+
+    expect(await screen.findByText(/còn nợ một lần đổi mật khẩu/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Xác nhận' })).toBeInTheDocument()
+    expect(screen.queryByLabelText(/^Mật khẩu mới/)).not.toBeInTheDocument()
+  })
+
   it('routes into the forced change-password step when a temporary password is outstanding', async () => {
     const user = userEvent.setup()
     renderWithProviders(<LoginScreen />)
