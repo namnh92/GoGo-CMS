@@ -5015,15 +5015,15 @@ paths:
         `cms-<env>` send it; scripts use `cloudflared access token`). A request
         without a verified assertion whose `email` equals the account's
         address, case-insensitively, is refused with `401
-        ACCESS_ASSERTION_REQUIRED` before any credential is compared. Every
-        production build requires it; only a non-production build with Access
-        unconfigured (a workstation) accepts a bare password.
+        ACCESS_ASSERTION_REQUIRED` before any credential is compared. There is
+        no exception: an environment without Access configured has no password
+        door (deployed environments refuse to boot that way).
       security: []
       parameters:
         - name: Cf-Access-Jwt-Assertion
           in: header
           required: false
-          description: Set by Cloudflare Access. Required wherever the assertion is required (above).
+          description: Set by Cloudflare Access. Required on every password login, without exception (above).
           schema: { type: string }
       requestBody:
         required: true
@@ -5070,6 +5070,15 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
         '429': { $ref: '#/components/responses/RateLimited' }
+        '503':
+          description: >
+            The identity provider's key set is unreachable while verifying the
+            assertion (`ACCESS_KEYS_UNAVAILABLE`, retryable). Never answered
+            when the password door is closed: `PASSWORD_LOGIN_DISABLED` comes
+            first.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
 
   /cms/auth/methods:
     get:
@@ -5151,8 +5160,8 @@ paths:
             SSO is not configured for this environment
             (`ACCESS_SSO_NOT_CONFIGURED`, not retryable), or the identity
             provider's key set is unreachable (`ACCESS_KEYS_UNAVAILABLE`,
-            retryable). Password + TOTP remains available in both cases where
-            the password door is open (`cmsAuthMethods`).
+            retryable). The password door needs the same assertion
+            (alpha.72), so it is no fallback for either.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
@@ -5186,10 +5195,10 @@ paths:
             INVALID_REFRESH_TOKEN / SESSION_REVOKED / SESSION_EXPIRED.
             `SESSION_REVOKED` also answers a session opened by password once
             the password door is closed; its whole family is revoked
-            (ADR-0032). From alpha.72 it also answers a password family
-            opened without a verified Access assertion (before #687 D-4, or on
-            a workstation) wherever the assertion is required: the family is
-            revoked and the user signs in once more through Access.
+            (ADR-0032). From alpha.72 it also answers every password family
+            opened without a verified Access assertion (one from before
+            #687 D-4), in every environment and without exception: the family
+            is revoked and the user signs in once more, with the assertion.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
@@ -5240,8 +5249,8 @@ paths:
         lower roles.
 
 
-        Never returns the password hash, the TOTP secret (enrolled or pending),
-        or any session material. `email` is returned because it is how a staff
+        Never returns the password hash, any legacy TOTP column, or any session
+        material. `email` is returned because it is how a staff
         account is identified; nothing beyond it is.
       parameters:
         - name: q

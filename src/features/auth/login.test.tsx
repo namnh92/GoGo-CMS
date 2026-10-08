@@ -93,8 +93,6 @@ describe('CMS sign-in (CMS-034, stepped)', () => {
     await user.type(screen.getByLabelText(/Email công việc/), 'temp.boss@gogo.vn')
     await user.type(screen.getByLabelText(/Mật khẩu/), 'temporary-pass-123')
     await user.click(screen.getByRole('button', { name: 'Tiếp tục' }))
-    await user.type(await screen.findByLabelText(/Mã xác thực/), '123456')
-    await user.click(screen.getByRole('button', { name: 'Xác thực & đăng nhập' }))
     await screen.findByRole('heading', { name: 'Đặt mật khẩu mới' })
     await user.type(screen.getByLabelText(/^Mật khẩu mới/), 'a-much-longer-password-2')
     await user.type(screen.getByLabelText(/Nhập lại mật khẩu mới/), 'a-much-longer-password-2')

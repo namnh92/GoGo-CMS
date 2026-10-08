@@ -35,7 +35,7 @@ const EXPECTED = '1.0.0-alpha.72'
  * hand-edited, and this is what makes that visible rather than invisible. A
  * legitimate re-vendor updates the version above and this digest together.
  */
-const SPEC_SHA256 = '25997457128da9e66eeda00bf127a481f0fd355cf2e9c16353172d50e5b60995'
+const SPEC_SHA256 = '0a098a285b70aa67bb6318eee86fa3acc717b9b035eab608aaa48017fdfda80d'
 
 /** `pnpm api:routes` on GoGo-BE reports the same number against the real router. */
 const SERVED_OPERATIONS = 269
