@@ -213,7 +213,7 @@ describe('single sign-on exchange (GoGo-BE#679)', () => {
     methods({ password: true, accessSso: true })
     exchange(() => session())
     renderWithProviders(probedApp(), { route: '/sso?start=1&from=%2Fplaces%3Fq%3Dpho' })
-    expect(await screen.findByTestId('landing')).toHaveTextContent('/places?q=pho')
+    expect((await screen.findByTestId('landing')).textContent).toBe('/places?q=pho')
   })
 
   it.each([
