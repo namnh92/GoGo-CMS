@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import userEvent from '@testing-library/user-event'
 import { screen, waitFor } from '@testing-library/react'
-import { http, HttpResponse } from 'msw'
+import { delay, http, HttpResponse } from 'msw'
 import { server } from '@/shared/test/server'
 import { renderWithProviders, signInAs } from '@/shared/test/render'
 import ChangePasswordScreen from './changePassword.view'
@@ -166,5 +166,157 @@ describe('ChangePasswordScreen (CMS-032)', () => {
     await submit(user)
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/phải khác/)
+  })
+
+  it('has no form for the super admin once Access-only, and says why (review F-01)', async () => {
+    server.use(
+      http.get('/v1/cms/auth/methods', () =>
+        HttpResponse.json({ password: true, accessSso: true, superAdminSsoOnly: true }),
+      ),
+    )
+    signInAs('super_admin')
+    renderWithProviders(<ChangePasswordScreen />)
+    expect(await screen.findByText(/không có mật khẩu; không có gì để đổi/)).toBeInTheDocument()
+    expect(screen.queryByLabelText(/Mật khẩu hiện tại/)).not.toBeInTheDocument()
+  })
+})
+
+/*
+ * Review F-01, round 2. The first fix read `superAdminSsoOnly === true` and so
+ * treated "not answered yet" and "could not answer" as "off": the super admin
+ * got a form while `methods` was pending or failed, and kept it after the
+ * server had already refused with SUPER_ADMIN_SSO_ONLY — a submit that could
+ * only ever 403 again. Unknown now reads as unavailable, and a refusal closes
+ * the form at once.
+ */
+describe('super admin password gate (GoGo-BE#687, review F-01 round 2)', () => {
+  const ssoOnlyRefusal = () =>
+    HttpResponse.json(
+      {
+        code: 'SUPER_ADMIN_SSO_ONLY',
+        message: 'x',
+        field_errors: [],
+        request_id: 'r',
+        retryable: false,
+      },
+      { status: 403 },
+    )
+
+  it('offers the super admin no form while methods is still pending', async () => {
+    server.use(http.get('/v1/cms/auth/methods', async () => await delay('infinite')))
+    signInAs('super_admin')
+    renderWithProviders(<ChangePasswordScreen />)
+
+    expect(await screen.findByRole('status')).toHaveTextContent(/Đang kiểm tra quản trị tối cao/)
+    expect(screen.queryByLabelText(/Mật khẩu hiện tại/)).not.toBeInTheDocument()
+  })
+
+  it('offers the super admin no form when methods failed, says why, and can retry', async () => {
+    let answer: 'fail' | 'off' = 'fail'
+    server.use(
+      http.get('/v1/cms/auth/methods', () =>
+        answer === 'fail'
+          ? HttpResponse.json(
+              { code: 'INTERNAL', message: 'x', request_id: 'r', retryable: true },
+              { status: 500 },
+            )
+          : HttpResponse.json({ password: true, accessSso: true, superAdminSsoOnly: false }),
+      ),
+    )
+    signInAs('super_admin')
+    const user = userEvent.setup()
+    renderWithProviders(<ChangePasswordScreen />)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Không đọc được cách đăng nhập/)
+    expect(screen.queryByLabelText(/Mật khẩu hiện tại/)).not.toBeInTheDocument()
+
+    // The re-read is the way out: a good answer that says "off" brings the form.
+    answer = 'off'
+    await user.click(screen.getByRole('button', { name: 'Thử lại' }))
+    expect(await screen.findByLabelText(/Mật khẩu hiện tại/)).toBeInTheDocument()
+  })
+
+  it('keeps the form for every other role whatever methods says', async () => {
+    server.use(
+      http.get('/v1/cms/auth/methods', () =>
+        HttpResponse.json(
+          { code: 'INTERNAL', message: 'x', request_id: 'r', retryable: true },
+          { status: 500 },
+        ),
+      ),
+    )
+    signInAs('editor')
+    renderWithProviders(<ChangePasswordScreen />)
+    expect(await screen.findByLabelText(/Mật khẩu hiện tại/)).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('closes the form on a SUPER_ADMIN_SSO_ONLY refusal and re-reads methods', async () => {
+    // The race: `methods` said "off" when the screen opened; the switch flips
+    // before the submit, which the server refuses.
+    let switchOn = false
+    let methodsReads = 0
+    server.use(
+      http.get('/v1/cms/auth/methods', () => {
+        methodsReads += 1
+        return HttpResponse.json({ password: true, accessSso: true, superAdminSsoOnly: switchOn })
+      }),
+      http.post('/v1/cms/auth/change-password', () => {
+        switchOn = true
+        return ssoOnlyRefusal()
+      }),
+    )
+    signInAs('super_admin')
+    const user = userEvent.setup()
+    renderWithProviders(<ChangePasswordScreen />)
+    await screen.findByLabelText(/Mật khẩu hiện tại/)
+    await waitFor(() => expect(methodsReads).toBe(1))
+    await fill(user)
+    await submit(user)
+
+    // Not an error under a form that can be submitted again: the form is
+    // gone, and the screen says what is now true.
+    expect(await screen.findByText(/không có mật khẩu; không có gì để đổi/)).toBeInTheDocument()
+    expect(screen.queryByLabelText(/Mật khẩu hiện tại/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Đổi mật khẩu' })).not.toBeInTheDocument()
+    // And the fact was re-read from the server rather than assumed for good.
+    await waitFor(() => expect(methodsReads).toBeGreaterThanOrEqual(2))
+  })
+
+  it('does not dead-end a super admin forced here by a password obligation', async () => {
+    server.use(
+      http.get('/v1/cms/auth/methods', () =>
+        HttpResponse.json({ password: true, accessSso: true, superAdminSsoOnly: true }),
+      ),
+    )
+    signInAs('super_admin')
+    // The shape RequireAuth routes here and nowhere else (#101).
+    window.localStorage.setItem(
+      'gogo.cms.session-hint',
+      JSON.stringify({ role: 'super_admin', displayName: 'test.user', mustChangePassword: true }),
+    )
+    renderWithProviders(<ChangePasswordScreen />)
+
+    // Says what to do, and offers the one action the API accepts in this
+    // state: the Access confirmation that lets the next deploy clear both the
+    // password and the obligation.
+    const note = await screen.findByText(/còn nợ một lần đổi mật khẩu/)
+    expect(note).toHaveTextContent(/Tài khoản CMS/)
+    expect(screen.getByText('Xác nhận đăng nhập qua Cloudflare Access')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Xác nhận' })).toBeEnabled()
+    expect(screen.queryByLabelText(/Mật khẩu hiện tại/)).not.toBeInTheDocument()
+  })
+
+  it('offers no confirmation card when nothing is owed — the accounts page has it', async () => {
+    server.use(
+      http.get('/v1/cms/auth/methods', () =>
+        HttpResponse.json({ password: true, accessSso: true, superAdminSsoOnly: true }),
+      ),
+    )
+    signInAs('super_admin')
+    renderWithProviders(<ChangePasswordScreen />)
+
+    expect(await screen.findByText(/không có gì để đổi/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Xác nhận' })).not.toBeInTheDocument()
   })
 })

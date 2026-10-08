@@ -10,6 +10,9 @@ export const styles = {
   privacyNote:
     'rounded-compact bg-surface-muted px-3 py-2 text-[11px] leading-relaxed text-text-subtle',
   actions: 'flex items-center justify-end gap-1',
+  methodsAlert:
+    'flex flex-wrap items-center gap-3 rounded-compact border border-danger/40 bg-danger-soft px-3 py-2 text-xs text-danger-ink',
+  methodsAlertText: 'flex-1',
   dialogBody: 'flex flex-col gap-4',
   dialogTarget: 'text-[13px] font-semibold text-text',
   dialogHint: 'text-xs text-text-muted',

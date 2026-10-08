@@ -4145,6 +4145,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/cms/auth/super-admin/confirm-sso": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Super admin: confirm that Access sign-in works for your current address
+         * @description GoGo-BE#687 (alpha.71). Called by the super admin from a session opened through Cloudflare Access (`cmsAccessExchange`). Records that the Access door works for the account's current address; only after this does the deploy-time sync erase the account's password hash when `superAdminSsoOnly` is on. Idempotent: a repeat call records nothing new and answers the same.
+         */
+        post: operations["cmsConfirmSuperAdminSso"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/cms/auth/change-password": {
         parameters: {
             query?: never;
@@ -7777,6 +7797,8 @@ export interface components {
             password: boolean;
             /** @description `cmsAccessExchange` is configured in this deployment. */
             accessSso: boolean;
+            /** @description ADR-0034 (added in alpha.70). True when the `super_admin` account signs in through `cmsAccessExchange` only: `cmsLogin` answers it `403 SUPER_ADMIN_SSO_ONLY` before any credential is checked whenever the general door is open and neither the per-IP rate limit nor an account lockout applies (those `429`s and `PASSWORD_LOGIN_DISABLED` take precedence). `password` still describes every other role. Absent on APIs older than alpha.70 — read as false. */
+            superAdminSsoOnly?: boolean;
         };
         AdminSession: {
             /** @description For non-browser callers. Browser clients use the cookie. */
@@ -13768,7 +13790,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description Production refuses accounts without MFA (`MFA_SETUP_REQUIRED`), or the password door is turned off for this environment (`PASSWORD_LOGIN_DISABLED`, not retryable — ADR-0032). The second is answered before any credential is checked, so a correct and a wrong password get the same answer. `cmsAuthMethods` says in advance which doors are open. */
+            /** @description Production refuses accounts without MFA (`MFA_SETUP_REQUIRED`), or the password door is turned off for this environment (`PASSWORD_LOGIN_DISABLED`, not retryable — ADR-0032), or the account is the `super_admin` and this environment lets it sign in through `cmsAccessExchange` only (`SUPER_ADMIN_SSO_ONLY`, not retryable — ADR-0034, added in alpha.70). Both are answered before the password is compared, so a correct and a wrong password get the same answer. Precedence: `429` (per-IP rate limit), then `PASSWORD_LOGIN_DISABLED`, then `429` (account lockout), then `SUPER_ADMIN_SSO_ONLY`, then the credential outcomes. `cmsAuthMethods` says in advance which doors are open. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -17016,6 +17038,8 @@ export interface operations {
              *     Neither freezes the account's credentials. It rotates its password through `POST /cms/auth/change-password` like every other account.
              *
              *     `ADMIN_EMAIL_TAKEN` — another staff account already uses that address (case-insensitive).
+             *
+             *     `SUPER_ADMIN_EMAIL_FROM_SSM` (GoGo-BE#687, alpha.71) — the super admin's address cannot be changed here: it comes from SSM `cms/super-admin-email` and the deploy applies it. Staff addresses change as before.
              */
             409: {
                 headers: {
@@ -17127,7 +17151,53 @@ export interface operations {
                     };
                 };
             };
+            /** @description `SUPER_ADMIN_SSO_ONLY` (GoGo-BE#687, alpha.71) — the target is the super admin and `superAdminSsoOnly` is on: it signs in through Cloudflare Access and has no password to reset. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
             404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    cmsConfirmSuperAdminSso: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Confirmed (now or earlier) */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        confirmed: true;
+                        /** Format: email */
+                        email: string;
+                        alreadyConfirmed: boolean;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description `ACCESS_SESSION_REQUIRED` — the calling session was opened by password, not through Access. `ROLE_DENIED` / `ADMIN_ONLY` — the caller is not the super admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
             429: components["responses"]["RateLimited"];
         };
     };
@@ -17169,6 +17239,15 @@ export interface operations {
             };
             /** @description `INVALID_CREDENTIALS` — current password is incorrect. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description `SUPER_ADMIN_SSO_ONLY` (GoGo-BE#687, alpha.71) — the caller is the super admin and `superAdminSsoOnly` is on: it has no password. */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

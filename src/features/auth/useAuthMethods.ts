@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, type QueryClient } from '@tanstack/react-query'
 import { z } from 'zod'
 import { apiFetchParsed } from '@/shared/api/client'
 import { ApiError } from '@/shared/api/errors'
@@ -13,6 +13,12 @@ export type AuthMethods = Schemas['CmsAuthMethods']
 export const authMethodsSchema = z.object({
   password: z.boolean(),
   accessSso: z.boolean(),
+  /**
+   * GoGo-BE#687 (alpha.70+): the super admin signs in through Access only;
+   * `password` still describes every other role. Absent from an older API,
+   * which reads as false.
+   */
+  superAdminSsoOnly: z.boolean().optional(),
 })
 
 /**
@@ -41,6 +47,9 @@ export async function fetchAuthMethods(): Promise<AuthMethods> {
   }
 }
 
+/** One key for every observer, so a fact learned anywhere reaches them all. */
+export const AUTH_METHODS_KEY = ['cms', 'auth', 'methods'] as const
+
 /**
  * GoGo-BE#679 / ADR-0032 — which sign-in doors this deployment has open, read
  * at runtime. The login screen renders those and nothing else: a password form
@@ -52,10 +61,29 @@ export async function fetchAuthMethods(): Promise<AuthMethods> {
  */
 export function useAuthMethods() {
   return useQuery({
-    queryKey: ['cms', 'auth', 'methods'],
+    queryKey: AUTH_METHODS_KEY,
     queryFn: fetchAuthMethods,
     staleTime: 0,
     gcTime: 0,
     retry: false,
   })
+}
+
+/**
+ * GoGo-BE#687 — the API just answered `403 SUPER_ADMIN_SSO_ONLY` to a password
+ * action, so the switch is on whatever `methods` said when it was last read.
+ * Write that fact into the cached answer at once, so every super-admin
+ * password control (sidebar, change screen, staff-list reset) goes unavailable
+ * in the same render rather than after a round trip; then re-read `methods` so
+ * the cache carries the server's own answer and not this inference.
+ *
+ * Only the one field is touched. Without a cached answer there is nothing to
+ * patch — the controls were already unavailable (unknown reads as unavailable
+ * for the super admin) — and the refetch alone is enough.
+ */
+export function markSuperAdminSsoOnly(queryClient: QueryClient): void {
+  queryClient.setQueryData<AuthMethods>(AUTH_METHODS_KEY, (current) =>
+    current ? { ...current, superAdminSsoOnly: true } : undefined,
+  )
+  void queryClient.invalidateQueries({ queryKey: AUTH_METHODS_KEY })
 }

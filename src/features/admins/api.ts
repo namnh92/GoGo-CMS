@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { apiFetch, apiFetchParsed } from '@/shared/api/client'
+import type { operations } from '@/shared/api/generated'
 import {
   adminAssignableRoleSchema,
   cmsAdminPageSchema,
@@ -129,4 +130,37 @@ export function changeOwnPassword(input: {
   newPassword: string
 }): Promise<unknown> {
   return apiFetch('/cms/auth/change-password', { method: 'POST', body: input })
+}
+
+/** The generated 201 body of `cmsConfirmSuperAdminSso` — the type, not a copy. */
+export type SsoConfirmation =
+  operations['cmsConfirmSuperAdminSso']['responses'][201]['content']['application/json']
+export const ssoConfirmationSchema = z.object({
+  confirmed: z.literal(true),
+  email: z.string().email(),
+  alreadyConfirmed: z.boolean(),
+})
+
+/**
+ * Fails to compile unless the zod shape and the generated type are the same
+ * type (review F-02): a contract change breaks `tsc` instead of being stripped
+ * or rejected at runtime.
+ */
+type Equal<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false
+const ssoConfirmationMatchesContract: Equal<
+  z.infer<typeof ssoConfirmationSchema>,
+  SsoConfirmation
+> = true
+void ssoConfirmationMatchesContract
+
+/**
+ * GoGo-BE#687 — the super admin records, from a session Cloudflare Access
+ * opened, that Access works for its current address. Only after this does the
+ * deploy-time sync remove the super admin's password. Idempotent.
+ */
+export function confirmSuperAdminSso(): Promise<SsoConfirmation> {
+  return apiFetchParsed(ssoConfirmationSchema, '/cms/auth/super-admin/confirm-sso', {
+    method: 'POST',
+  })
 }

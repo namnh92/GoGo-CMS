@@ -7,6 +7,8 @@ import { Button } from '@/shared/ui/Button'
 import { Select, TextArea } from '@/shared/ui/Field'
 import { Modal } from '@/shared/ui/Overlay'
 import { useToast } from '@/shared/ui/Toast'
+import { markSuperAdminSsoOnly } from '@/features/auth/useAuthMethods'
+import { useSuperAdminPasswordGate } from '@/features/auth/useSuperAdminPasswordGate'
 import {
   adminAssignableRoleSchema,
   type AdminAssignableRole,
@@ -67,6 +69,30 @@ export function AdminActionDialog({
    * rotating this account's password is the supported path (ADR-0018).
    */
   const refused = isSuperAdmin && (action === 'edit' || action === 'suspend')
+  /**
+   * GoGo-BE#687 — with the switch on the super admin has no password, and a
+   * reset of it answers `403 SUPER_ADMIN_SSO_ONLY`. The list does not open
+   * this dialog then, and a refusal that arrives under an open one (the switch
+   * flipped meanwhile) closes it here too: the submit goes unavailable at
+   * once, and the refusal is written into the shared `methods` answer so the
+   * list's button follows without waiting for the re-read (review F-01,
+   * round 2).
+   */
+  const superAdminPassword = useSuperAdminPasswordGate(isSuperAdmin && action === 'reset')
+  const [refusedSsoOnly, setRefusedSsoOnly] = useState(false)
+  const noPassword = refusedSsoOnly || superAdminPassword.state === 'ssoOnly'
+  // Review of PR #235 (round 3, F-01): a dialog opened while `methods` is
+  // pending, or whose re-read fails under it, is unknown — unavailable, with
+  // the reason and (on failure) the re-read, like the list's row button.
+  const gateBlocked =
+    !noPassword &&
+    (superAdminPassword.state === 'pending' || superAdminPassword.state === 'unknown')
+  const gateReason =
+    superAdminPassword.state === 'pending'
+      ? t('admins.superAdminPasswordPending')
+      : superAdminPassword.state === 'unknown'
+        ? t('admins.superAdminPasswordUnknown')
+        : null
   const [error, setError] = useState<string | null>(null)
   const [tempPassword, setTempPassword] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
@@ -79,6 +105,7 @@ export function AdminActionDialog({
       if (cause.code === 'SELF_SUSPEND') return t('admins.error.selfSuspend')
       if (cause.code === 'LAST_SUPER_ADMIN') return t('admins.error.lastSuperAdmin')
       if (cause.code === 'SUPER_ADMIN_SINGLETON') return t('admins.error.superAdminSingleton')
+      if (cause.code === 'SUPER_ADMIN_SSO_ONLY') return t('admins.superAdminNoPassword')
       return cause.message
     }
     return t('error.UNKNOWN')
@@ -104,12 +131,18 @@ export function AdminActionDialog({
       toast.success(t(`admins.done.${action}` as const))
       onClose()
     },
-    onError: (cause) => setError(describeRefusal(cause)),
+    onError: (cause) => {
+      if (cause instanceof ApiError && cause.code === 'SUPER_ADMIN_SSO_ONLY') {
+        setRefusedSsoOnly(true)
+        markSuperAdminSsoOnly(queryClient)
+      }
+      setError(describeRefusal(cause))
+    },
   })
 
   const submit = () => {
     setError(null)
-    if (refused) return
+    if (refused || noPassword || gateBlocked) return
     if (reason.trim().length < 3) {
       setError(t('admins.reasonRequired'))
       return
@@ -159,7 +192,14 @@ export function AdminActionDialog({
           <Button
             variant={action === 'suspend' || action === 'reset' ? 'danger' : 'primary'}
             loading={mutation.isPending}
-            disabled={refused}
+            disabled={refused || noPassword || gateBlocked}
+            title={
+              noPassword
+                ? t('admins.superAdminNoPassword')
+                : gateBlocked
+                  ? (gateReason ?? undefined)
+                  : undefined
+            }
             onClick={submit}
           >
             {t(`admins.action.${action}` as const)}
@@ -183,6 +223,36 @@ export function AdminActionDialog({
             <span aria-hidden="true">⚠</span>
             {t('admins.superAdminLocked')}
           </p>
+        ) : null}
+
+        {noPassword && !error ? (
+          // Reached with the fact already known (never from the list, which
+          // does not open this then): said before any submit, not after one.
+          <p role="alert" className={styles.dialogError}>
+            <span aria-hidden="true">⚠</span>
+            {t('admins.superAdminNoPassword')}
+          </p>
+        ) : null}
+
+        {gateBlocked && gateReason ? (
+          <div
+            role={superAdminPassword.state === 'unknown' ? 'alert' : 'status'}
+            className={styles.dialogError}
+          >
+            <span aria-hidden="true">⚠</span>
+            <span>{gateReason}</span>
+            {superAdminPassword.state === 'unknown' ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                loading={superAdminPassword.retrying}
+                disabled={superAdminPassword.retrying}
+                onClick={superAdminPassword.retry}
+              >
+                {t('state.retry')}
+              </Button>
+            ) : null}
+          </div>
         ) : null}
 
         {action === 'edit' && !isSuperAdmin ? (

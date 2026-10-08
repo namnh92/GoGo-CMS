@@ -1,8 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import userEvent from '@testing-library/user-event'
 import { screen, waitFor, within } from '@testing-library/react'
+import { delay, http, HttpResponse } from 'msw'
+import { server } from '@/shared/test/server'
 import { renderWithProviders, signInAs } from '@/shared/test/render'
+import ChangePasswordScreen from '@/features/auth/changePassword.view'
 import { AppShell } from './AppShell'
+import { Sidebar } from './Sidebar'
 
 afterEach(() => {
   vi.unstubAllEnvs()
@@ -128,5 +132,119 @@ describe('grouped navigation (CMS-017)', () => {
         'false',
       ),
     )
+  })
+})
+
+describe('sidebar password control (GoGo-BE#687, review F-01)', () => {
+  it('is unavailable to the super admin once Access-only, with the reason', async () => {
+    server.use(
+      http.get('/v1/cms/auth/methods', () =>
+        HttpResponse.json({ password: true, accessSso: true, superAdminSsoOnly: true }),
+      ),
+    )
+    signInAs('super_admin')
+    renderWithProviders(<AppShell />)
+    const control = await screen.findByRole('button', { name: /không có mật khẩu/ })
+    expect(control).toBeDisabled()
+  })
+
+  it('stays available to other roles', async () => {
+    server.use(
+      http.get('/v1/cms/auth/methods', () =>
+        HttpResponse.json({ password: true, accessSso: true, superAdminSsoOnly: true }),
+      ),
+    )
+    signInAs('editor')
+    renderWithProviders(<AppShell />)
+    expect(await screen.findByRole('button', { name: 'Đổi mật khẩu' })).toBeEnabled()
+  })
+
+  /*
+   * Round 2. The first fix read `superAdminSsoOnly === true`, so the control
+   * was operable for the super admin while `methods` was pending or failed —
+   * leading to a screen whose form can only 403. Unknown reads as unavailable
+   * now, and the control's name says which unknown it is.
+   */
+  it('is unavailable to the super admin while methods is pending, and says so', async () => {
+    server.use(http.get('/v1/cms/auth/methods', async () => await delay('infinite')))
+    signInAs('super_admin')
+    renderWithProviders(<AppShell />)
+    const control = await screen.findByRole('button', { name: /Đang kiểm tra quản trị tối cao/ })
+    expect(control).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Đổi mật khẩu' })).not.toBeInTheDocument()
+  })
+
+  it('is unavailable to the super admin when methods failed, with the reason', async () => {
+    server.use(
+      http.get('/v1/cms/auth/methods', () =>
+        HttpResponse.json(
+          { code: 'INTERNAL', message: 'x', request_id: 'r', retryable: true },
+          { status: 500 },
+        ),
+      ),
+    )
+    signInAs('super_admin')
+    renderWithProviders(<AppShell />)
+    const control = await screen.findByRole('button', { name: /Không đọc được cách đăng nhập/ })
+    expect(control).toBeDisabled()
+  })
+
+  it('stays available to other roles when methods failed', async () => {
+    server.use(
+      http.get('/v1/cms/auth/methods', () =>
+        HttpResponse.json(
+          { code: 'INTERNAL', message: 'x', request_id: 'r', retryable: true },
+          { status: 500 },
+        ),
+      ),
+    )
+    signInAs('editor')
+    renderWithProviders(<AppShell />)
+    expect(await screen.findByRole('button', { name: 'Đổi mật khẩu' })).toBeEnabled()
+  })
+
+  it('goes unavailable at once when a password change is refused SUPER_ADMIN_SSO_ONLY', async () => {
+    // The race: `methods` said "off" when the shell mounted; the switch flips
+    // before the submit, which the server refuses.
+    let switchOn = false
+    server.use(
+      http.get('/v1/cms/auth/methods', () =>
+        HttpResponse.json({ password: true, accessSso: true, superAdminSsoOnly: switchOn }),
+      ),
+      http.post('/v1/cms/auth/change-password', () => {
+        switchOn = true
+        return HttpResponse.json(
+          {
+            code: 'SUPER_ADMIN_SSO_ONLY',
+            message: 'x',
+            field_errors: [],
+            request_id: 'r',
+            retryable: false,
+          },
+          { status: 403 },
+        )
+      }),
+    )
+    signInAs('super_admin')
+    const user = userEvent.setup()
+    // The shell's control and the screen it opens, side by side: one cached
+    // answer feeds both, so the refusal the screen meets closes the control.
+    renderWithProviders(
+      <>
+        <Sidebar />
+        <ChangePasswordScreen />
+      </>,
+    )
+    const aside = await screen.findByRole('complementary')
+    expect(await within(aside).findByRole('button', { name: 'Đổi mật khẩu' })).toBeEnabled()
+
+    await user.type(await screen.findByLabelText(/Mật khẩu hiện tại/), 'current-password-1')
+    await user.type(screen.getByLabelText(/^Mật khẩu mới/), 'a-much-longer-password-2')
+    await user.type(screen.getByLabelText(/Nhập lại mật khẩu mới/), 'a-much-longer-password-2')
+    await user.click(screen.getAllByRole('button', { name: 'Đổi mật khẩu' }).at(-1)!)
+
+    const closed = await within(aside).findByRole('button', { name: /không có mật khẩu/ })
+    expect(closed).toBeDisabled()
+    expect(within(aside).queryByRole('button', { name: 'Đổi mật khẩu' })).not.toBeInTheDocument()
   })
 })

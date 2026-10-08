@@ -1101,6 +1101,31 @@ export const en: Partial<Record<MessageKey, string>> = {
     'The identity provider cannot be reached right now. Try again in a few minutes.',
   'auth.sso.changed':
     'Sign-in methods for this environment just changed. The screen has been updated.',
+  'admins.ssoConfirm.title': 'Confirm sign-in through Cloudflare Access',
+  'admins.ssoConfirm.hint':
+    'Use this while in a session Cloudflare Access opened. Only after it does the next deploy remove the super admin password.',
+  'admins.ssoConfirm.action': 'Confirm',
+  'admins.ssoConfirm.done': 'Cloudflare Access confirmed for {email}.',
+  'admins.ssoConfirm.already': 'Already confirmed for {email}.',
+  'admins.ssoConfirm.needAccess':
+    'This session was opened by password. Sign in again through Cloudflare Access, then confirm.',
+  'admins.ssoConfirm.notSuperAdmin':
+    'Only the super admin can confirm, and only from a live session.',
+  'admins.superAdminNoPassword':
+    'The super admin signs in through Cloudflare Access only and has no password to reset or change.',
+  'admins.superAdminPasswordPending': 'Checking whether the super admin still has a password…',
+  'admins.superAdminPasswordUnknown':
+    'Could not read how this environment signs in, so the super admin’s password actions are unavailable until it answers.',
+  'account.password.superAdminSsoOnly':
+    'The super admin signs in through Cloudflare Access and has no password; there is nothing to change here.',
+  'account.password.superAdminSsoOnlyForced':
+    'This account still owes a password change from before it became Access-only, and the API refuses to set a new password for the super admin. Confirm sign-in through Cloudflare Access below (the same step is on the CMS accounts page); the next deploy clears both the password and the obligation, and you sign in again through Access.',
+  'admins.ssoConfirm.unsupported':
+    'This environment’s API does not support the confirmation yet. Tell the operator.',
+  'auth.sso.superAdminOnly':
+    'The super admin account signs in only through Cloudflare Access. Use the button above.',
+  'auth.sso.superAdminHint':
+    'The super admin signs in through Cloudflare Access. Other roles can still use a password.',
   'auth.sso.passwordDisabled':
     'Password sign-in is turned off in this environment. Use Cloudflare Access.',
   'auth.badCredentials': 'Wrong email or password.',
