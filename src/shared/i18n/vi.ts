@@ -1051,13 +1051,14 @@ export const vi = {
 
   'auth.title': 'Đăng nhập CMS',
   'auth.subtitle':
-    'Tài khoản nội bộ GoGo. Đăng nhập qua Cloudflare Access bằng đúng email của tài khoản.',
+    'Tài khoản nội bộ GoGo. Quản trị tối cao đăng nhập qua Cloudflare Access; các vai khác dùng email và mật khẩu.',
   'auth.email': 'Email công việc',
   'auth.password': 'Mật khẩu',
   'auth.submit': 'Đăng nhập',
   'auth.submitting': 'Đang đăng nhập…',
   'auth.sso.button': 'Đăng nhập qua Cloudflare Access',
-  'auth.sso.hint': 'Dùng tài khoản bạn vừa xác thực ở Cloudflare Access, không cần mật khẩu GoGo.',
+  'auth.sso.hint':
+    'Mở màn đăng nhập của Cloudflare Access, rồi quay lại console — không cần mật khẩu GoGo.',
   'auth.sso.orPassword': 'Hoặc đăng nhập bằng mật khẩu',
   'auth.sso.loading': 'Đang kiểm tra cách đăng nhập',
   'auth.sso.methodsError': 'Không lấy được danh sách cách đăng nhập. Kiểm tra kết nối rồi thử lại.',
@@ -1067,7 +1068,7 @@ export const vi = {
   'auth.sso.adminOnly':
     'Cloudflare Access đã xác thực bạn, nhưng địa chỉ này không có tài khoản quản trị đang hoạt động.',
   'auth.sso.switchIdentity': 'Đăng nhập bằng danh tính khác',
-  'auth.sso.missing': 'Phải mở CMS qua địa chỉ có Cloudflare Access mới đăng nhập được.',
+  'auth.sso.missing': 'Chưa có phiên Cloudflare Access. Tải lại để mở màn đăng nhập của Access.',
   'auth.sso.missingLocal':
     'Request không mang assertion của Access. Ở máy local, chạy `cloudflared access login` rồi khởi động dev server với CF_ACCESS_TOKEN.',
   'auth.sso.invalid': 'Phiên Cloudflare Access đã hết hạn. Tải lại trang để xác thực lại.',
@@ -2790,7 +2791,7 @@ export const vi = {
   'auth.hidePassword': 'Ẩn mật khẩu',
   'auth.envNoteDev': 'môi trường thử nghiệm, dữ liệu seed dùng chung.',
   'auth.envNoteProduction':
-    'mọi tài khoản đi qua Cloudflare Access (MFA ở Access); thao tác được kiểm toán.',
+    'quản trị tối cao đăng nhập qua Cloudflare Access (MFA ở Access); thao tác được kiểm toán.',
 
   'dashboard.satelliteError': 'Không tải được phần này. Các phần khác không bị ảnh hưởng.',
   'dashboard.queues.title': 'Hàng chờ kiểm duyệt',

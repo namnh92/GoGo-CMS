@@ -1,13 +1,21 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { Route, Routes } from 'react-router-dom'
+import { Route, Routes, useLocation } from 'react-router-dom'
 import { delay, http, HttpResponse } from 'msw'
 import { server } from '@/shared/test/server'
 import { renderWithProviders } from '@/shared/test/render'
 import { CHANGE_PASSWORD_PATH, RequireAuth } from '@/app/RequireAuth'
 import LoginScreen from './login.view'
 import ChangePasswordScreen from './changePassword.view'
+import { ssoRedirect } from './ssoRedirect'
+
+// GoGo-BE#687 rev 6 — the button on /login is a real page load of /sso (where
+// Access gates); jsdom cannot navigate, so the load is recorded instead.
+vi.mock('./ssoRedirect', async (orig) => ({
+  ...(await orig<typeof import('./ssoRedirect')>()),
+  ssoRedirect: vi.fn(),
+}))
 
 /**
  * GoGo-BE#679 / ADR-0032 — the sign-in screen renders the doors the API says
@@ -47,10 +55,35 @@ function session(mustChangePassword = false) {
   )
 }
 
+/** Where the console landed after sign-in: pathname + search, exactly. */
+function Landing() {
+  const location = useLocation()
+  return <p data-testid="landing">{`${location.pathname}${location.search}`}</p>
+}
+
+/** As app(), with a probe that shows the exact landing location. */
+function probedApp() {
+  return (
+    <Routes>
+      <Route path="/login" element={<LoginScreen />} />
+      <Route path="/sso" element={<LoginScreen />} />
+      <Route
+        path="*"
+        element={
+          <RequireAuth>
+            <Landing />
+          </RequireAuth>
+        }
+      />
+    </Routes>
+  )
+}
+
 function app() {
   return (
     <Routes>
       <Route path="/login" element={<LoginScreen />} />
+      <Route path="/sso" element={<LoginScreen />} />
       <Route
         path={CHANGE_PASSWORD_PATH}
         element={
@@ -163,6 +196,81 @@ describe('sign-in doors (GoGo-BE#679)', () => {
 })
 
 describe('single sign-on exchange (GoGo-BE#679)', () => {
+  it('rev 6: the button on /login loads /sso for Access, carrying the return path', async () => {
+    methods({ password: true, accessSso: true })
+    const calls = exchange(() => session())
+    const user = userEvent.setup()
+    renderWithProviders(app(), {
+      route: { pathname: '/login', state: { from: '/places?q=pho' } },
+    })
+    await user.click(await screen.findByRole('button', { name: 'Đăng nhập qua Cloudflare Access' }))
+    expect(vi.mocked(ssoRedirect)).toHaveBeenLastCalledWith('/sso?start=1&from=%2Fplaces%3Fq%3Dpho')
+    // No exchange from /login: it would carry no assertion once only /sso is gated.
+    expect(calls.count).toBe(0)
+  })
+
+  it('rev 6: a valid from= is where the exchange lands', async () => {
+    methods({ password: true, accessSso: true })
+    exchange(() => session())
+    renderWithProviders(probedApp(), { route: '/sso?start=1&from=%2Fplaces%3Fq%3Dpho' })
+    expect((await screen.findByTestId('landing')).textContent).toBe('/places?q=pho')
+  })
+
+  it.each([
+    '//evil.example/x',
+    '/\\evil.example/x',
+    '\\evil.example',
+    'https://evil.example/x',
+    'javascript:alert(1)',
+  ])('rev 6: an unsafe from=%s lands on the role default instead', async (from) => {
+    methods({ password: true, accessSso: true })
+    exchange(() => session())
+    renderWithProviders(probedApp(), {
+      route: `/sso?start=1&from=${encodeURIComponent(from)}`,
+    })
+    // session() is a super_admin, whose default landing is '/'.
+    const landing = await screen.findByTestId('landing')
+    expect(landing.textContent).toBe('/')
+  })
+
+  it('rev 6: unsafe router state is dropped too', async () => {
+    methods({ password: true, accessSso: true })
+    const user = userEvent.setup()
+    renderWithProviders(app(), {
+      route: { pathname: '/login', state: { from: '//evil.example/x' } },
+    })
+    await user.click(await screen.findByRole('button', { name: 'Đăng nhập qua Cloudflare Access' }))
+    expect(vi.mocked(ssoRedirect)).toHaveBeenLastCalledWith('/sso?start=1')
+  })
+
+  it('rev 6: a missing assertion on /sso offers the page load of /sso that fixes it', async () => {
+    methods({ password: true, accessSso: true })
+    exchange(() => envelope(401, 'ACCESS_ASSERTION_MISSING'))
+    const user = userEvent.setup()
+    renderWithProviders(app(), { route: '/sso?start=1' })
+    // DEV build in tests: the local variant of the message; the action is the same.
+    await screen.findByRole('alert')
+    await user.click(screen.getByRole('button', { name: 'Tải lại trang' }))
+    expect(vi.mocked(ssoRedirect)).toHaveBeenLastCalledWith('/sso?start=1')
+  })
+
+  it('rev 6: /sso?start=1 exchanges once on arrival and opens the console', async () => {
+    methods({ password: true, accessSso: true })
+    const calls = exchange(() => session())
+    renderWithProviders(app(), { route: '/sso?start=1' })
+    expect(await screen.findByText('console')).toBeInTheDocument()
+    expect(calls.count).toBe(1)
+  })
+
+  it('rev 6: /sso without start=1 never exchanges by itself', async () => {
+    methods({ password: true, accessSso: true })
+    const calls = exchange(() => session())
+    renderWithProviders(app(), { route: '/sso' })
+    await screen.findByRole('button', { name: 'Đăng nhập qua Cloudflare Access' })
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(calls.count).toBe(0)
+  })
+
   it('never exchanges on its own — only on a click', async () => {
     methods({ password: false, accessSso: true })
     const calls = exchange(() => session())
@@ -178,7 +286,7 @@ describe('single sign-on exchange (GoGo-BE#679)', () => {
     methods({ password: false, accessSso: true })
     const calls = exchange(() => session())
     const user = userEvent.setup()
-    renderWithProviders(app(), { route: '/login' })
+    renderWithProviders(app(), { route: '/sso' })
 
     await user.click(await screen.findByRole('button', { name: 'Đăng nhập qua Cloudflare Access' }))
     expect(await screen.findByText('console')).toBeInTheDocument()
@@ -194,7 +302,7 @@ describe('single sign-on exchange (GoGo-BE#679)', () => {
     methods({ password: false, accessSso: true })
     exchange(() => session(true))
     const user = userEvent.setup()
-    renderWithProviders(app(), { route: '/login' })
+    renderWithProviders(app(), { route: '/sso' })
 
     await user.click(await screen.findByRole('button', { name: 'Đăng nhập qua Cloudflare Access' }))
     const current = await screen.findByLabelText(/Mật khẩu hiện tại/)
@@ -216,7 +324,7 @@ describe('single sign-on exchange (GoGo-BE#679)', () => {
     methods({ password: false, accessSso: true })
     exchange(() => envelope(403, 'ADMIN_ONLY'))
     const user = userEvent.setup()
-    renderWithProviders(app(), { route: '/login' })
+    renderWithProviders(app(), { route: '/sso' })
 
     await user.click(await screen.findByRole('button', { name: 'Đăng nhập qua Cloudflare Access' }))
     expect(await screen.findByRole('alert')).toHaveTextContent(
@@ -239,7 +347,7 @@ describe('single sign-on exchange (GoGo-BE#679)', () => {
       }),
     )
     const user = userEvent.setup()
-    renderWithProviders(app(), { route: '/login' })
+    renderWithProviders(app(), { route: '/sso' })
 
     await user.click(await screen.findByRole('button', { name: 'Đăng nhập qua Cloudflare Access' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Phiên Cloudflare Access đã hết hạn')
@@ -250,7 +358,7 @@ describe('single sign-on exchange (GoGo-BE#679)', () => {
     methods({ password: false, accessSso: true })
     exchange(() => envelope(401, 'ACCESS_ASSERTION_MISSING'))
     const user = userEvent.setup()
-    renderWithProviders(app(), { route: '/login' })
+    renderWithProviders(app(), { route: '/sso' })
 
     await user.click(await screen.findByRole('button', { name: 'Đăng nhập qua Cloudflare Access' }))
     // Vitest runs with import.meta.env.DEV, so the local-dev hint is the one shown.
@@ -261,7 +369,7 @@ describe('single sign-on exchange (GoGo-BE#679)', () => {
     methods({ password: false, accessSso: true })
     exchange(() => envelope(503, 'ACCESS_KEYS_UNAVAILABLE'))
     const user = userEvent.setup()
-    renderWithProviders(app(), { route: '/login' })
+    renderWithProviders(app(), { route: '/sso' })
 
     await user.click(await screen.findByRole('button', { name: 'Đăng nhập qua Cloudflare Access' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Tạm thời không kết nối được')
@@ -277,7 +385,7 @@ describe('single sign-on exchange (GoGo-BE#679)', () => {
       return envelope(503, 'ACCESS_SSO_NOT_CONFIGURED')
     })
     const user = userEvent.setup()
-    renderWithProviders(app(), { route: '/login' })
+    renderWithProviders(app(), { route: '/sso' })
 
     await user.click(await screen.findByRole('button', { name: 'Đăng nhập qua Cloudflare Access' }))
     await waitFor(() =>
@@ -385,7 +493,7 @@ describe('sign-in matrix, remaining cells (GoGo-CMS#232 review)', () => {
     methods({ password: false, accessSso: true })
     exchange(() => session())
     const user = userEvent.setup()
-    renderWithProviders(app(), { route: '/login' })
+    renderWithProviders(app(), { route: '/sso' })
 
     await user.click(await ssoButton())
     await screen.findByText('console')
@@ -400,7 +508,7 @@ describe('sign-in matrix, remaining cells (GoGo-CMS#232 review)', () => {
     methods({ password: false, accessSso: true })
     exchange(() => envelope(401, 'ACCESS_ASSERTION_INVALID'))
     const user = userEvent.setup()
-    renderWithProviders(app(), { route: '/login' })
+    renderWithProviders(app(), { route: '/sso' })
 
     await user.click(await ssoButton())
     expect(await screen.findByRole('button', { name: 'Tải lại trang' })).toBeInTheDocument()
@@ -410,7 +518,7 @@ describe('sign-in matrix, remaining cells (GoGo-CMS#232 review)', () => {
     methods({ password: false, accessSso: true })
     exchange(() => envelope(403, 'CROSS_SITE_REQUEST'))
     const user = userEvent.setup()
-    renderWithProviders(app(), { route: '/login' })
+    renderWithProviders(app(), { route: '/sso' })
 
     await user.click(await ssoButton())
     expect(await screen.findByRole('alert')).toHaveTextContent('CROSS_SITE_REQUEST')
@@ -427,7 +535,7 @@ describe('sign-in matrix, remaining cells (GoGo-CMS#232 review)', () => {
     )
     exchange(() => envelope(403, 'PASSWORD_LOGIN_DISABLED'))
     const user = userEvent.setup()
-    renderWithProviders(app(), { route: '/login' })
+    renderWithProviders(app(), { route: '/sso' })
 
     await user.click(await ssoButton())
     await waitFor(() => expect(calls).toBe(2))
@@ -438,7 +546,7 @@ describe('sign-in matrix, remaining cells (GoGo-CMS#232 review)', () => {
     methods({ password: false, accessSso: true })
     exchange(() => envelope(429, 'RATE_LIMITED'))
     const user = userEvent.setup()
-    renderWithProviders(app(), { route: '/login' })
+    renderWithProviders(app(), { route: '/sso' })
 
     await user.click(await ssoButton())
     expect(await screen.findByRole('alert')).toHaveTextContent('Bạn đã thử quá nhiều lần')
@@ -478,9 +586,7 @@ describe('super admin through Access only (GoGo-BE#687)', () => {
       ),
     )
     renderWithProviders(app(), { route: '/login' })
-    expect(
-      await screen.findByText(/Quản trị tối cao đăng nhập qua Cloudflare Access/),
-    ).toBeInTheDocument()
+    expect(await screen.findByText(/Các vai trò khác vẫn dùng được mật khẩu/)).toBeInTheDocument()
     expect(screen.getByLabelText(/Mật khẩu/)).toBeInTheDocument()
   })
 
@@ -488,7 +594,7 @@ describe('super admin through Access only (GoGo-BE#687)', () => {
     methods({ password: true, accessSso: true })
     renderWithProviders(app(), { route: '/login' })
     await screen.findByRole('button', { name: 'Đăng nhập qua Cloudflare Access' })
-    expect(screen.queryByText(/Quản trị tối cao đăng nhập qua/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Các vai trò khác vẫn dùng được mật khẩu/)).not.toBeInTheDocument()
   })
 
   it('points the super admin to single sign-on when the password is refused for that account', async () => {

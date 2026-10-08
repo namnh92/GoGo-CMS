@@ -1072,13 +1072,14 @@ export const en: Partial<Record<MessageKey, string>> = {
 
   'auth.title': 'CMS sign in',
   'auth.subtitle':
-    'GoGo staff account. Sign in through Cloudflare Access with the account’s own email.',
+    'GoGo staff account. The super admin signs in through Cloudflare Access; other roles use email and password.',
   'auth.email': 'Work email',
   'auth.password': 'Password',
   'auth.submit': 'Sign in',
   'auth.submitting': 'Signing in…',
   'auth.sso.button': 'Sign in with Cloudflare Access',
-  'auth.sso.hint': 'Uses the identity you just verified with Cloudflare Access — no GoGo password.',
+  'auth.sso.hint':
+    'Opens the Cloudflare Access sign-in, then returns to the console — no GoGo password.',
   'auth.sso.orPassword': 'Or sign in with a password',
   'auth.sso.loading': 'Checking sign-in methods',
   'auth.sso.methodsError':
@@ -1089,7 +1090,7 @@ export const en: Partial<Record<MessageKey, string>> = {
   'auth.sso.adminOnly':
     'Cloudflare Access verified you, but this address has no active staff account.',
   'auth.sso.switchIdentity': 'Sign in as someone else',
-  'auth.sso.missing': 'Open the CMS through its Cloudflare Access address to sign in.',
+  'auth.sso.missing': 'No Cloudflare Access session yet. Reload to open the Access sign-in.',
   'auth.sso.missingLocal':
     'The request carries no Access assertion. Locally, run `cloudflared access login` and start the dev server with CF_ACCESS_TOKEN.',
   'auth.sso.invalid':
@@ -2090,7 +2091,7 @@ export const en: Partial<Record<MessageKey, string>> = {
   'auth.hidePassword': 'Hide password',
   'auth.envNoteDev': 'test environment with shared seed data.',
   'auth.envNoteProduction':
-    'every account goes through Cloudflare Access (MFA at Access); actions are audited.',
+    'the super admin signs in through Cloudflare Access (MFA at Access); actions are audited.',
 
   'dashboard.satelliteError': 'This section failed to load. Other sections are unaffected.',
   'dashboard.queues.title': 'Moderation queues',

@@ -86,6 +86,16 @@ export const router = createBrowserRouter([
       </Suspense>
     ),
   },
+  // GoGo-BE#687 rev 6 — the one path Cloudflare Access gates; single sign-on
+  // starts here (see features/auth/ssoRedirect.ts).
+  {
+    path: '/sso',
+    element: (
+      <Suspense fallback={<LoadingState />}>
+        <LoginScreen />
+      </Suspense>
+    ),
+  },
   {
     path: '/',
     element: (

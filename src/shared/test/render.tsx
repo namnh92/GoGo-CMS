@@ -1,6 +1,6 @@
 import type { ReactElement, ReactNode } from 'react'
 import { render, type RenderOptions } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, type InitialEntry } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { I18nProvider } from '@/shared/i18n/i18n'
 import { SessionProvider } from '@/shared/auth/session'
@@ -21,7 +21,7 @@ export function signInAs(role: AdminRole, displayName = 'test.user'): void {
 
 export function renderWithProviders(
   ui: ReactElement,
-  { route = '/', ...options }: RenderOptions & { route?: string } = {},
+  { route = '/', ...options }: RenderOptions & { route?: InitialEntry } = {},
 ) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },

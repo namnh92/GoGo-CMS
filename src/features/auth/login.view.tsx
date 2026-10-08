@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -14,6 +14,7 @@ import { CheckCircleIcon, ClockIcon, EyeIcon, EyeOffIcon, LogoMark } from '@/sha
 import { Skeleton } from '@/shared/ui/State'
 import { useChangeOwnPassword } from './useChangeOwnPassword'
 import { useAuthMethods } from './useAuthMethods'
+import { safeReturnPath, ssoRedirect, ssoStartUrl } from './ssoRedirect'
 import { useSuperAdminPasswordGate } from './useSuperAdminPasswordGate'
 import { SsoConfirmCard } from '@/features/admins/ssoConfirm.view'
 import { styles } from './login.style'
@@ -83,7 +84,20 @@ export default function LoginScreen() {
   const [ssoPending, setSsoPending] = useState(false)
   const environment = getAppEnvironment()
   // Set by RequireAuth when it bounced an authenticated route.
-  const returnTo = (location.state as { from?: string } | null)?.from
+  /**
+   * GoGo-BE#687 rev 6 — `/sso` is the one console path behind Cloudflare
+   * Access. Reached with `start=1` (the button on `/login` sends people there),
+   * it runs the exchange once on arrival: Access has just admitted the browser
+   * and the user asked for single sign-on. Without `start=1` it behaves like
+   * `/login`, so a bookmark or a back-button never signs anyone in by itself.
+   */
+  const onSsoPath = location.pathname === '/sso'
+  const search = new URLSearchParams(location.search)
+  const autoStart = onSsoPath && search.get('start') === '1'
+  // Both sources are validated: router state can be set by any in-app link.
+  const returnTo =
+    safeReturnPath((location.state as { from?: unknown } | null)?.from) ??
+    safeReturnPath(search.get('from'))
 
   const [step, setStep] = useState<Step>('credentials')
   const [formError, setFormError] = useState<string | null>(null)
@@ -179,8 +193,11 @@ export default function LoginScreen() {
       } else if (error.code === 'ADMIN_ONLY') {
         setSsoError({ message: t('auth.sso.adminOnly'), adminOnly: true })
       } else if (error.code === 'ACCESS_ASSERTION_MISSING') {
+        // Rev 6 (review of GoGo-CMS#237, F-02): Access issues the assertion
+        // only on a page load of /sso, so the way out is that page load.
         setSsoError({
           message: import.meta.env.DEV ? t('auth.sso.missingLocal') : t('auth.sso.missing'),
+          reload: true,
         })
       } else if (error.code === 'ACCESS_ASSERTION_INVALID') {
         setSsoError({ message: t('auth.sso.invalid'), reload: true })
@@ -204,6 +221,23 @@ export default function LoginScreen() {
 
   const passwordOpen = methods.data?.password === true
   const ssoOpen = methods.data?.accessSso === true
+
+  const autoStarted = useRef(false)
+  useEffect(() => {
+    if (!autoStart || autoStarted.current || !ssoOpen) return
+    autoStarted.current = true
+    void startSso()
+    // startSso is recreated each render; the ref makes this run exactly once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoStart, ssoOpen])
+
+  const onSsoClick = () => {
+    if (onSsoPath) {
+      void startSso()
+      return
+    }
+    ssoRedirect(ssoStartUrl(returnTo))
+  }
 
   const submitChangePassword = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -389,7 +423,7 @@ export default function LoginScreen() {
                     variant="primary"
                     loading={ssoPending}
                     disabled={isSubmitting}
-                    onClick={() => void startSso()}
+                    onClick={onSsoClick}
                   >
                     {ssoPending ? t('auth.submitting') : t('auth.sso.button')}
                   </Button>
@@ -414,12 +448,13 @@ export default function LoginScreen() {
                     </div>
                   ) : null}
                   {ssoError?.reload ? (
-                    // Access issues a fresh assertion only on a navigation; a
-                    // second exchange from this page would send the stale one.
+                    // Access issues a fresh assertion only on a page load of
+                    // /sso; a second exchange from here would send the stale
+                    // one, or none.
                     <Button
                       type="button"
                       variant="secondary"
-                      onClick={() => window.location.reload()}
+                      onClick={() => ssoRedirect(ssoStartUrl(returnTo))}
                     >
                       {t('auth.sso.reload')}
                     </Button>
