@@ -1617,8 +1617,6 @@ type CmsAdminFixture = {
   status: 'active' | 'suspended'
   createdAt: string
   lastLoginAt: string | null
-  /** #248 — enrollment status only, never anything about the secret. */
-  mfaEnrolled: boolean
   /** A temporary password is outstanding. */
   mustChangePassword: boolean
 }
@@ -1632,7 +1630,6 @@ export const cmsAdmins: CmsAdminFixture[] = [
     status: 'active',
     createdAt: iso(60 * 24 * 300),
     lastLoginAt: iso(2),
-    mfaEnrolled: true,
     mustChangePassword: false,
   },
   {
@@ -1643,7 +1640,6 @@ export const cmsAdmins: CmsAdminFixture[] = [
     status: 'active',
     createdAt: iso(60 * 24 * 210),
     lastLoginAt: iso(30),
-    mfaEnrolled: true,
     mustChangePassword: false,
   },
   {
@@ -1654,7 +1650,6 @@ export const cmsAdmins: CmsAdminFixture[] = [
     status: 'active',
     createdAt: iso(60 * 24 * 140),
     lastLoginAt: iso(90),
-    mfaEnrolled: false,
     mustChangePassword: true,
   },
   {
@@ -1665,7 +1660,6 @@ export const cmsAdmins: CmsAdminFixture[] = [
     status: 'active',
     createdAt: iso(60 * 24 * 90),
     lastLoginAt: iso(6),
-    mfaEnrolled: false,
     mustChangePassword: false,
   },
   {
@@ -1676,7 +1670,6 @@ export const cmsAdmins: CmsAdminFixture[] = [
     status: 'suspended',
     createdAt: iso(60 * 24 * 400),
     lastLoginAt: iso(60 * 24 * 45),
-    mfaEnrolled: false,
     mustChangePassword: false,
   },
   {
@@ -1688,7 +1681,6 @@ export const cmsAdmins: CmsAdminFixture[] = [
     createdAt: iso(30),
     // Never signed in — absent, not empty.
     lastLoginAt: null,
-    mfaEnrolled: false,
     mustChangePassword: false,
   },
 ]

@@ -33,7 +33,7 @@ function unauthorized() {
 
 async function signIn(result: { current: ReturnType<typeof useSession> }) {
   await act(async () => {
-    await result.current.login({ email: 'ops@gogo.vn', password: 'pw', totp: '123456' })
+    await result.current.login({ email: 'ops@gogo.vn', password: 'pw' })
   })
 }
 
@@ -42,7 +42,7 @@ describe('staff session', () => {
     const { result } = renderHook(() => useSession(), { wrapper })
 
     await act(async () => {
-      await result.current.login({ email: 'ops@gogo.vn', password: 'pw', totp: '123456' })
+      await result.current.login({ email: 'ops@gogo.vn', password: 'pw' })
     })
 
     const stored = window.localStorage.getItem('gogo.cms.session-hint')
@@ -61,7 +61,7 @@ describe('staff session', () => {
       const { result } = renderHook(() => useSession(), { wrapper })
 
       await act(async () => {
-        await result.current.login({ email: 'ops@gogo.vn', password: 'pw', totp: '123456' })
+        await result.current.login({ email: 'ops@gogo.vn', password: 'pw' })
       })
       expect(result.current.session).not.toBeNull()
 
@@ -83,7 +83,7 @@ describe('staff session', () => {
       const { result } = renderHook(() => useSession(), { wrapper })
 
       await act(async () => {
-        await result.current.login({ email: 'ops@gogo.vn', password: 'pw', totp: '123456' })
+        await result.current.login({ email: 'ops@gogo.vn', password: 'pw' })
       })
 
       await act(async () => {
@@ -111,7 +111,7 @@ describe('staff session', () => {
     const { result } = renderHook(() => useSession(), { wrapper })
 
     await act(async () => {
-      await result.current.login({ email: 'ops@gogo.vn', password: 'pw', totp: '123456' })
+      await result.current.login({ email: 'ops@gogo.vn', password: 'pw' })
     })
 
     await act(async () => {
@@ -132,7 +132,7 @@ describe('staff session', () => {
       const { result } = renderHook(() => useSession(), { wrapper })
 
       await act(async () => {
-        await result.current.login({ email: 'ops@gogo.vn', password: 'pw', totp: '123456' })
+        await result.current.login({ email: 'ops@gogo.vn', password: 'pw' })
       })
 
       await act(async () => {
@@ -239,7 +239,6 @@ describe('staff session', () => {
       signedInAgain = result.current.login({
         email: 'ops@gogo.vn',
         password: 'pw',
-        totp: '123456',
       })
       await new Promise((resolve) => setTimeout(resolve, 50))
     })
@@ -262,7 +261,7 @@ describe('staff session', () => {
     const { result } = renderHook(() => useSession(), { wrapper })
 
     await act(async () => {
-      await result.current.login({ email: 'temp.admin@gogo.vn', password: 'pw', totp: '123456' })
+      await result.current.login({ email: 'temp.admin@gogo.vn', password: 'pw' })
     })
     expect(result.current.session?.mustChangePassword).toBe(true)
     // A reload must land on the same obligation.
@@ -382,7 +381,7 @@ describe('staff session', () => {
     )
 
     await act(async () => {
-      await result.current.login({ email: 'temp.one@gogo.vn', password: 'pw', totp: '123456' })
+      await result.current.login({ email: 'temp.one@gogo.vn', password: 'pw' })
     })
     await act(async () => {
       result.current.logout()
@@ -414,7 +413,7 @@ describe('staff session', () => {
     const { result } = renderHook(() => useSession(), { wrapper })
 
     await act(async () => {
-      await result.current.login({ email: 'temp.one@gogo.vn', password: 'pw', totp: '123456' })
+      await result.current.login({ email: 'temp.one@gogo.vn', password: 'pw' })
     })
     const staleEpoch = result.current.currentEpoch()
 
@@ -422,7 +421,7 @@ describe('staff session', () => {
       result.current.logout()
     })
     await act(async () => {
-      await result.current.login({ email: 'temp.two@gogo.vn', password: 'pw', totp: '123456' })
+      await result.current.login({ email: 'temp.two@gogo.vn', password: 'pw' })
     })
     expect(result.current.session?.mustChangePassword).toBe(true)
 

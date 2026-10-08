@@ -36,9 +36,6 @@ export const styles = {
   fields: 'flex flex-col gap-4',
   passwordWrap: 'relative',
   passwordToggle: 'absolute right-1 top-[26px]',
-  otpInput: 'text-center font-mono text-2xl tracking-[0.5em]',
-  otpCompat: 'mt-4 text-center text-xs text-text-subtle',
-  backButton: 'w-full py-1 text-center text-xs text-text-subtle hover:text-text',
 
   /* Single sign-on (GoGo-BE#679): the button, then what it does, then the way
      back to identity selection when Access vouched for the wrong person. */

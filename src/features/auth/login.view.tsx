@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -10,14 +10,7 @@ import { getAppEnvironment } from '@/shared/config/env'
 import { ApiError } from '@/shared/api/errors'
 import { Button, IconButton } from '@/shared/ui/Button'
 import { TextInput } from '@/shared/ui/Field'
-import {
-  CheckCircleIcon,
-  ClockIcon,
-  EyeIcon,
-  EyeOffIcon,
-  LockIcon,
-  LogoMark,
-} from '@/shared/ui/icons'
+import { CheckCircleIcon, ClockIcon, EyeIcon, EyeOffIcon, LogoMark } from '@/shared/ui/icons'
 import { Skeleton } from '@/shared/ui/State'
 import { useChangeOwnPassword } from './useChangeOwnPassword'
 import { useAuthMethods } from './useAuthMethods'
@@ -29,22 +22,17 @@ import { styles } from './login.style'
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
-  totp: z
-    .string()
-    .regex(/^\d{6}$/)
-    .optional()
-    .or(z.literal('')),
 })
 
 type LoginForm = z.infer<typeof loginSchema>
 
 /**
- * Credentials first, MFA second — the server drives the second step.
- *
- * The client never guesses whether an account has MFA: it submits email and
- * password, and only `MFA_REQUIRED` opens the code step. That keeps a DEV
- * account without MFA on a one-step path, and means the form cannot leak
- * which accounts are enrolled before a valid password is proven.
+ * One credentials step. GoGo-BE#687 D-4 removed TOTP: the second factor is
+ * Cloudflare Access admitting this mailbox, and the browser carries that
+ * assertion on the login request itself. The API answers
+ * `ACCESS_ASSERTION_REQUIRED` when the assertion is missing or names another
+ * mailbox — said here as "sign in to Access with this address", never as a
+ * wrong password.
  *
  * A forced password change (#248) is its own step: the server answers login
  * with `mustChangePassword` when a temporary password is outstanding, and
@@ -57,7 +45,7 @@ type LoginForm = z.infer<typeof loginSchema>
  * sign an operator straight back in after logout or an idle timeout. Where the
  * password door is closed the form is not rendered at all.
  */
-type Step = 'credentials' | 'mfa' | 'change-password'
+type Step = 'credentials' | 'change-password'
 
 const BULLETS = ['places', 'moderation', 'observability', 'rbac'] as const
 
@@ -106,29 +94,16 @@ export default function LoginScreen() {
   const changePassword = useChangeOwnPassword()
   /** Where to land once the obligation is cleared. */
   const pendingDestination = useRef<string>('/')
-  const otpRef = useRef<HTMLInputElement | null>(null)
 
   const {
     register,
     handleSubmit,
-    setValue,
     getValues,
     formState: { errors, isSubmitting },
   } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
-    defaultValues: { email: '', password: '', totp: '' },
+    defaultValues: { email: '', password: '' },
   })
-
-  // The whole point of the step is the code, so focus lands on it.
-  useEffect(() => {
-    if (step === 'mfa') otpRef.current?.focus()
-  }, [step])
-
-  const backToCredentials = () => {
-    setStep('credentials')
-    setValue('totp', '')
-    setFormError(null)
-  }
 
   const onSubmit = handleSubmit(async (values) => {
     setFormError(null)
@@ -136,11 +111,7 @@ export default function LoginScreen() {
     // super admin's address) is about that attempt, not this one (review F-05).
     setSsoError(null)
     try {
-      const session = await login({
-        email: values.email,
-        password: values.password,
-        totp: values.totp || undefined,
-      })
+      const session = await login({ email: values.email, password: values.password })
       const destination = returnTo ?? landingPathFor(session.role)
       if (session.mustChangePassword) {
         // A temporary password is outstanding: every other CMS route answers
@@ -156,32 +127,21 @@ export default function LoginScreen() {
         setFormError(t('error.UNKNOWN'))
         return
       }
-      if (error.code === 'MFA_REQUIRED') {
-        // The password checked out; only the second factor is missing. A wrong
-        // code lands here again, which is the correct place to say so.
-        if (step === 'credentials') setStep('mfa')
-        else setFormError(t('auth.totpHint'))
-        return
-      }
-      if (error.code === 'MFA_SETUP_REQUIRED') {
-        setFormError(t('auth.mfaSetupRequired'))
+      if (error.code === 'ACCESS_ASSERTION_REQUIRED') {
+        // GoGo-BE#687 D-4 — answered before the password is compared: Access
+        // did not admit this address on this request. Not a credential problem.
+        setFormError(t('auth.accessAssertionRequired'))
         return
       }
       if (error.code === 'SUPER_ADMIN_SSO_ONLY') {
         // GoGo-BE#687 — this account is the super admin, which signs in only
         // through Access. Said beside the single sign-on button, which is the
         // way in; the password form stays for the other roles.
-        setStep('credentials')
-        setValue('totp', '')
         setSsoError({ message: t('auth.sso.superAdminOnly') })
         void methods.refetch()
         return
       }
       if (error.code === 'PASSWORD_LOGIN_DISABLED') {
-        // Back to the first step with the code cleared: the MFA step belongs
-        // to a door that no longer exists (review F-01).
-        setStep('credentials')
-        setValue('totp', '')
         // The door closed under an open form. Re-read which doors exist; the
         // form goes away with the answer.
         // Said beside the single sign-on button, since the form this error
@@ -195,8 +155,6 @@ export default function LoginScreen() {
         return
       }
       if (error.status === 401) {
-        // Never trapped behind a code prompt for a password problem.
-        setStep('credentials')
         setFormError(t('auth.badCredentials'))
         return
       }
@@ -247,15 +205,6 @@ export default function LoginScreen() {
   const passwordOpen = methods.data?.password === true
   const ssoOpen = methods.data?.accessSso === true
 
-  // A refetch can close the password door while the MFA step is showing. That
-  // step then belongs to nothing: go back, and drop the code typed so far.
-  useEffect(() => {
-    if (methods.data && !methods.data.password && step === 'mfa') {
-      setStep('credentials')
-      setValue('totp', '')
-    }
-  }, [methods.data, step, setValue])
-
   const submitChangePassword = async (event: React.FormEvent) => {
     event.preventDefault()
     setFormError(null)
@@ -269,8 +218,6 @@ export default function LoginScreen() {
       navigate(pendingDestination.current, { replace: true })
     }
   }
-
-  const totpField = register('totp')
 
   return (
     <div className={styles.root}>
@@ -320,14 +267,6 @@ export default function LoginScreen() {
             <div className={styles.stepHead}>
               <h1 className={styles.title}>{t('auth.title')}</h1>
               <p className={styles.subtitle}>{t('auth.subtitle')}</p>
-            </div>
-          ) : step === 'mfa' ? (
-            <div className={styles.stepHead}>
-              <div className={styles.stepBadge}>
-                <LockIcon size={22} />
-              </div>
-              <h1 className={styles.title}>{t('auth.mfaTitle')}</h1>
-              <p className={styles.subtitle}>{t('auth.mfaSubtitle')}</p>
             </div>
           ) : (
             <div className={styles.stepHead}>
@@ -492,12 +431,7 @@ export default function LoginScreen() {
               ) : null}
               {passwordOpen ? (
                 <form key="credentials" onSubmit={onSubmit} noValidate>
-                  {/* Credentials and MFA deliberately share this one form and this
-                one key: hiding a field keeps its value, and the request has to
-                carry email, password and code together. The keyed boundary is
-                between *that* form and the change-password form, not between
-                these two steps. */}
-                  <div className={styles.fields} hidden={step !== 'credentials'}>
+                  <div className={styles.fields}>
                     <TextInput
                       label={t('auth.email')}
                       type="email"
@@ -525,25 +459,6 @@ export default function LoginScreen() {
                     </div>
                   </div>
 
-                  <div className={styles.fields} hidden={step !== 'mfa'}>
-                    <TextInput
-                      label={t('auth.totp')}
-                      inputMode="numeric"
-                      autoComplete="one-time-code"
-                      maxLength={6}
-                      placeholder="000000"
-                      className="w-full"
-                      hint={t('auth.totpHint')}
-                      required={step === 'mfa'}
-                      error={errors.totp ? t('auth.totpHint') : undefined}
-                      {...totpField}
-                      ref={(node) => {
-                        totpField.ref(node)
-                        otpRef.current = node
-                      }}
-                    />
-                  </div>
-
                   {formError ? (
                     <p role="alert" className={`${styles.alertDanger} mt-4`}>
                       <span aria-hidden="true">⚠</span>
@@ -556,32 +471,17 @@ export default function LoginScreen() {
                     submit steps down to secondary. */}
                     <Button
                       type="submit"
-                      variant={ssoOpen && step === 'credentials' ? 'secondary' : 'primary'}
+                      variant={ssoOpen ? 'secondary' : 'primary'}
                       loading={isSubmitting}
                       disabled={ssoPending}
                     >
-                      {isSubmitting
-                        ? t('auth.submitting')
-                        : step === 'credentials'
-                          ? t('auth.continue')
-                          : t('auth.verifySubmit')}
+                      {isSubmitting ? t('auth.submitting') : t('auth.continue')}
                     </Button>
-                    {step === 'mfa' ? (
-                      <button
-                        type="button"
-                        className={styles.backButton}
-                        onClick={backToCredentials}
-                      >
-                        {t('auth.backToCredentials')}
-                      </button>
-                    ) : null}
                   </div>
                 </form>
               ) : null}
             </>
           )}
-
-          {step === 'mfa' ? <p className={styles.otpCompat}>{t('auth.totpApps')}</p> : null}
 
           {step === 'credentials' ? (
             <p

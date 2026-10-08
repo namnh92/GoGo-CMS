@@ -35,7 +35,7 @@ const REFRESH_PATH = '/cms/auth/refresh'
 
 /**
  * A 401 from the login endpoint is a credential answer — wrong password,
- * MFA_REQUIRED — not a dead session. Retrying it through a refresh would be a
+ * ACCESS_ASSERTION_REQUIRED — not a dead session. Retrying it through a refresh would be a
  * wasted round-trip, and announcing "session expired" over it would tell a
  * person mid-sign-in that something else went wrong.
  */

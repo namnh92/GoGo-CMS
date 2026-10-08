@@ -1159,11 +1159,13 @@ export const handlers = [
   ),
 
   http.post(`${BASE}/cms/auth/login`, async ({ request }) => {
-    const body = (await request.json()) as { email?: string; password?: string; totp?: string }
+    const body = (await request.json()) as { email?: string; password?: string }
     if (!body.email || !body.password) return envelope(401, 'UNAUTHORIZED', 'bad credentials')
-    // Exercise the MFA branch: any account with no code gets asked once.
-    if (!body.totp) return envelope(401, 'MFA_REQUIRED', 'totp required')
-    if (!/^\d{6}$/.test(body.totp)) return envelope(401, 'MFA_REQUIRED', 'totp invalid')
+    // GoGo-BE#687 D-4: a local part containing "noaccess" simulates a request
+    // Cloudflare Access did not admit for this mailbox.
+    if ((body.email.split('@')[0] ?? '').includes('noaccess')) {
+      return envelope(401, 'ACCESS_ASSERTION_REQUIRED', 'no Access assertion for this mailbox')
+    }
     const role = roleFromEmail(body.email)
     mockRole = role
     mockDisplayName = body.email.split('@')[0] ?? 'ban'
@@ -1391,8 +1393,7 @@ export const handlers = [
         status: 'active',
         createdAt: new Date().toISOString(),
         lastLoginAt: null,
-        // A fresh account has no second factor and owes nothing.
-        mfaEnrolled: false,
+        // A fresh account owes nothing.
         mustChangePassword: false,
       })
     }
