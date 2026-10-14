@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { ROUTE_WORDS } from './routeWords'
+import { PATH_TEMPLATES } from './pathTemplates'
 import type { Breadcrumb, ErrorEvent, RequestEventData, User } from '@sentry/react'
 
 /*
@@ -397,9 +397,9 @@ describe('review r1 regressions', () => {
 
   it('F-07 reports a path template, not the concrete path', () => {
     expect(sentry.toPathTemplate('/cms/places/5f1c2a3e-1234-4abc-8def-0123456789ab/media')).toBe(
-      '/cms/places/{id}/media',
+      '/cms/places/{placeId}/media',
     )
-    expect(sentry.toPathTemplate('/cms/experiments/ranking_v2')).toBe('/cms/experiments/{id}')
+    expect(sentry.toPathTemplate('/cms/experiments/ranking_v2')).toBe('/cms/experiments/{key}')
     expect(sentry.toPathTemplate('/cms/ranking-configs/42/evaluate')).toBe(
       '/cms/ranking-configs/{id}/evaluate',
     )
@@ -432,8 +432,8 @@ describe('review r1 regressions', () => {
 /* Review round 2 of PR #239 (Sol confirm): F-07 still open, F-10 new. */
 describe('review r2 regressions', () => {
   it('F-07 replaces a lowercase dynamic segment that is no OpenAPI route word', () => {
-    expect(sentry.toPathTemplate('/cms/experiments/homepage')).toBe('/cms/experiments/{id}')
-    expect(sentry.toPathTemplate('/cms/places/abc-def/media')).toBe('/cms/places/{id}/media')
+    expect(sentry.toPathTemplate('/cms/experiments/homepage')).toBe('/cms/experiments/{key}')
+    expect(sentry.toPathTemplate('/cms/places/abc-def/media')).toBe('/cms/places/{placeId}/media')
   })
 
   it.each([
@@ -446,15 +446,27 @@ describe('review r2 regressions', () => {
   })
 })
 
-describe('ROUTE_WORDS', () => {
-  it('is exactly the static path segments of the vendored OpenAPI', () => {
+describe('PATH_TEMPLATES', () => {
+  it('is exactly the paths of the vendored OpenAPI', () => {
     const yaml = readFileSync(resolve(process.cwd(), 'openapi/gogo.v1.yaml'), 'utf8')
-    const words = new Set<string>()
-    for (const match of yaml.matchAll(/^ {2}(\/[^:\s]*):\s*$/gm)) {
-      for (const segment of (match[1] ?? '').split('/')) {
-        if (segment && !segment.startsWith('{')) words.add(segment)
-      }
-    }
-    expect([...ROUTE_WORDS].sort()).toEqual([...words].sort())
+    const paths = [...yaml.matchAll(/^ {2}(\/[^:\s]*):\s*$/gm)].map((match) => match[1])
+    expect(paths.length).toBeGreaterThan(0)
+    expect(PATH_TEMPLATES).toEqual(paths)
+  })
+})
+
+/* SA ruling on F-07 (Fable delta check of f33d89d): match the OpenAPI path templates themselves. */
+describe('F-07 SA ruling', () => {
+  it.each([
+    ['/cms/feature-flags/search', '/cms/feature-flags/{key}'],
+    ['/cms/feature-flags/catalog', '/cms/feature-flags/catalog'],
+    ['/cms/experiments/homepage', '/cms/experiments/{key}'],
+    ['/cms/ranking-configs/status/rollback', '/cms/ranking-configs/{key}/rollback'],
+  ])('%s → %s', (path, template) => {
+    expect(sentry.toPathTemplate(path)).toBe(template)
+  })
+
+  it('falls back to positional {id} when no template matches', () => {
+    expect(sentry.toPathTemplate('/cms/nowhere/abc/search')).toBe('/cms/{id}/{id}/search')
   })
 })

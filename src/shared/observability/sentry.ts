@@ -1,7 +1,7 @@
 import * as Sentry from '@sentry/react'
 import type { Breadcrumb, ErrorEvent, EventHint, RequestEventData, User } from '@sentry/react'
 import { getAppEnvironment, type AppEnvironment } from '@/shared/config/env'
-import { ROUTE_WORDS } from './routeWords'
+import { PATH_TEMPLATES } from './pathTemplates'
 
 /**
  * GoGo-CMS#238 — the only file that talks to the Sentry SDK (pinned by
@@ -701,16 +701,45 @@ export function rootErrorHandlers(): {
   return { onUncaughtError: Sentry.reactErrorHandler(), onCaughtError: Sentry.reactErrorHandler() }
 }
 
+const TEMPLATE_SEGMENTS: readonly (readonly string[])[] = PATH_TEMPLATES.map((t) => t.split('/'))
+/** Static segments of every template; the fallback keeps only these. */
+const ROUTE_WORDS: ReadonlySet<string> = new Set(
+  TEMPLATE_SEGMENTS.flat().filter((segment) => segment !== '' && !segment.startsWith('{')),
+)
+
 /**
- * D-10 — the request path as a template: every segment that is not a static
- * segment of the OpenAPI ({@link ROUTE_WORDS}) becomes `{id}`, so
- * `/cms/places/<uuid>/media` is reported as `/cms/places/{id}/media` and
- * `/cms/experiments/homepage` as `/cms/experiments/{id}`. Parameter names are
- * not recovered.
+ * D-10 — the OpenAPI path template a request path matches, with its real
+ * parameter names: `/cms/feature-flags/search` → `/cms/feature-flags/{key}`.
+ * Matched segment by segment (same count, literals equal, `{…}` takes any
+ * segment); when several match, the one with the most literals wins, as a
+ * router would (`/cms/feature-flags/catalog` beats `/cms/feature-flags/{key}`).
+ * No template matches → every segment that is no static OpenAPI segment
+ * becomes `{id}`.
  */
 export function toPathTemplate(path: string): string {
-  return path
-    .split('/')
+  const segments = path.split('/')
+  let best: readonly string[] | null = null
+  let bestLiterals = -1
+  for (const template of TEMPLATE_SEGMENTS) {
+    if (template.length !== segments.length) continue
+    let literals = 0
+    let matches = true
+    for (let i = 0; i < template.length; i++) {
+      const part = template[i] ?? ''
+      if (part.startsWith('{')) continue
+      if (part !== segments[i]) {
+        matches = false
+        break
+      }
+      literals++
+    }
+    if (matches && literals > bestLiterals) {
+      best = template
+      bestLiterals = literals
+    }
+  }
+  if (best) return best.join('/')
+  return segments
     .map((segment) => (segment === '' || ROUTE_WORDS.has(segment) ? segment : '{id}'))
     .join('/')
 }
