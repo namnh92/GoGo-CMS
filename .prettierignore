@@ -9,3 +9,6 @@ src/shared/api/schema.d.ts
 openapi/gogo.v1.yaml
 playwright-report
 test-results
+
+# Vendored verbatim from GoGo-Infra; its sha256 is pinned (ADR-0005).
+src/shared/observability/__fixtures__/redaction-cases.v1.json

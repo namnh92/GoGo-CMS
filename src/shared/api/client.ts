@@ -1,5 +1,6 @@
 import { ApiError, errorEnvelopeSchema } from './errors'
 import { getAccessToken } from '@/shared/auth/token'
+import { captureError, ContractMismatchError } from '@/shared/observability/sentry'
 import type { z, ZodType } from 'zod'
 
 const BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? '/v1'
@@ -251,6 +252,15 @@ export async function apiFetchParsed<S extends ZodType>(
   const raw = await apiFetch<unknown>(path, options)
   const parsed = schema.safeParse(raw)
   if (!parsed.success) {
+    // Reported before it becomes an ApiError, which is filtered as expected.
+    // Issue paths only — never the values or zod's messages (ADR-0005).
+    captureError(
+      new ContractMismatchError(
+        path,
+        parsed.error.issues.map((issue) => issue.path.join('.')),
+      ),
+      { kind: 'contract' },
+    )
     throw new ApiError({
       code: 'CONTRACT_MISMATCH',
       message: `Response for ${path} did not match the expected shape: ${parsed.error.issues

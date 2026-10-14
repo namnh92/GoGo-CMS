@@ -17,6 +17,7 @@ import {
 import { ApiError } from '@/shared/api/errors'
 import { adminRoleSchema, type AdminRole } from '@/shared/api/contracts'
 import { setAccessToken } from './token'
+import { setSentryUser } from '@/shared/observability/sentry'
 import { roleCan, type Permission } from './permissions'
 
 const loginResponseSchema = z.object({
@@ -202,6 +203,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     sessionEpoch += 1
     signedIn.current = false
     setAccessToken(null)
+    setSentryUser(null)
     writeHint(null)
     setSession(null)
     setIdleSecondsLeft(null)
@@ -302,6 +304,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const adopt = useCallback((raw: unknown): SessionHint => {
     const parsed = loginResponseSchema.parse(raw)
     setAccessToken(parsed.accessToken ?? null)
+    // `AdminSession` carries no admin id, and an email or display name is never
+    // a substitute (ADR-0005), so error reports stay anonymous.
+    setSentryUser(null)
     signedIn.current = true
     writeSignOutIncomplete(false)
     setSignOutIncomplete(false)

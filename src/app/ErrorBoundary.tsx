@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
+import { captureError } from '@/shared/observability/sentry'
 
 type Props = { children: ReactNode }
 type State = { error: Error | null }
@@ -17,6 +18,7 @@ export class AppErrorBoundary extends Component<Props, State> {
   override componentDidCatch(error: Error, info: ErrorInfo): void {
     // No payloads, no tokens — just what is needed to find the component.
     console.error('[cms] render error', error.message, info.componentStack)
+    captureError(error, { kind: 'boundary' })
   }
 
   override render(): ReactNode {

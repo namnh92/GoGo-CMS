@@ -1,0 +1,759 @@
+import * as Sentry from '@sentry/react'
+import type { Breadcrumb, ErrorEvent, EventHint, RequestEventData, User } from '@sentry/react'
+import { getAppEnvironment, type AppEnvironment } from '@/shared/config/env'
+import { PATH_TEMPLATES } from './pathTemplates'
+
+/**
+ * GoGo-CMS#238 — the only file that talks to the Sentry SDK (pinned by
+ * `sentry-usage.test.ts`). Policy: GoGo-Infra ADR-0011, adopted by
+ * `docs/adr/0005-bao-cao-loi-sentry.md`; every case of the vendored oracle
+ * `__fixtures__/redaction-cases.v1.json` runs in `sentry.test.ts`.
+ *
+ * Structural limits (nothing to pattern-match, so nothing to miss):
+ * - errors only — no tracing, no replay, no release-health sessions, no
+ *   user-feedback widget, `sendDefaultPii: false`;
+ * - `event.request` is rebuilt from an allowlist, `event.user` is `{ id }` or
+ *   absent, breadcrumbs outside a short category list are dropped — `console`
+ *   included, since console text is free text nobody modelled.
+ *
+ * Pattern limits: every other string goes through {@link redactText}, except
+ * the opaque paths (stack frames, SDK and browser contexts, release ids), which
+ * the generic token rule would otherwise eat.
+ */
+
+export const REDACTED = '[redacted]'
+export const REDACTED_EMAIL = '[redacted-email]'
+
+// ---------------------------------------------------------------------------
+// Names
+// ---------------------------------------------------------------------------
+
+/** Lowercased, `_`/`-` stripped: `Refresh_Token`, `refreshToken` and `refresh-token` are one name. */
+function normalizeName(name: string): string {
+  return name.toLowerCase().replace(/[_-]/g, '')
+}
+
+/** C-4 — credentials and identifiers whose value never leaves the browser. */
+const SECRET_NAMES: ReadonlySet<string> = new Set(
+  [
+    'token',
+    'inviteCode',
+    'invite',
+    'code',
+    'slug',
+    'refreshToken',
+    'accessToken',
+    'guestToken',
+    'key',
+    'signature',
+    'idempotencyKey',
+    'jwt',
+    'assertion',
+    'password',
+    'email',
+  ].map(normalizeName),
+)
+
+const EXACT_COORDINATE_NAME = /^(?:lat|lng|lon|latitude|longitude)$/i
+/** `originLat`, `homeLongitude` — camelCase, so `flat` or `plateau` never match. */
+const CAMEL_COORDINATE_SUFFIX = /[a-z0-9](?:Lat|Lng|Lon|Latitude|Longitude)$/
+/** `origin_lat`, `Origin_Lat`, `start_longitude`. */
+const SNAKE_COORDINATE_SUFFIX = /_(?:lat|lng|lon|latitude|longitude)$/i
+/** Keys whose whole value is a position or a set of positions, whatever its shape (C-7). */
+const COORDINATE_CONTAINER_NAME =
+  /^(?:coordinates|bbox|bounds|viewport|latlng|ll|geom|geometry|point|origin)$/i
+
+function isCoordinateKey(name: string): boolean {
+  return (
+    EXACT_COORDINATE_NAME.test(name) ||
+    CAMEL_COORDINATE_SUFFIX.test(name) ||
+    SNAKE_COORDINATE_SUFFIX.test(name)
+  )
+}
+
+function isContainerKey(name: string): boolean {
+  return COORDINATE_CONTAINER_NAME.test(name)
+}
+
+function isSecretName(name: string): boolean {
+  return SECRET_NAMES.has(normalizeName(name))
+}
+
+/** A name whose value is replaced wherever it appears — key, parameter or tuple head. */
+function isRedactedName(name: string): boolean {
+  return isSecretName(name) || isCoordinateKey(name) || isContainerKey(name)
+}
+
+// ---------------------------------------------------------------------------
+// Text — stages run in order, each on the output of the previous (ADR-0011 §4)
+// ---------------------------------------------------------------------------
+
+/** `"name": value` inside JSON text; the value is measured by {@link jsonValueEnd}. */
+const JSON_KEY = /"([A-Za-z_][\w-]*)"(\s*:\s*)/g
+/** `name=value` in a URL, a bare query string or free text; the value stops at a separator (`;` included). */
+const QUERY_PARAMETER = /(^|[?&;\s])([A-Za-z_][\w.-]*)=([^&#;\s"'<>]*)/g
+/** A JSON number or literal, matched in place (sticky) so a long one is measured whole. */
+const JSON_SCALAR = /-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null/y
+
+/**
+ * The index just past the JSON value starting at `start`. An unterminated
+ * array, object or string runs to the end of the text, so a cut-off value is
+ * still redacted. One pass, so linear.
+ */
+function jsonValueEnd(text: string, start: number): number {
+  const first = text[start]
+  if (first === '[' || first === '{') {
+    let depth = 0
+    let inString = false
+    for (let i = start; i < text.length; i++) {
+      const ch = text[i]
+      if (inString) {
+        if (ch === '\\') i++
+        else if (ch === '"') inString = false
+        continue
+      }
+      if (ch === '"') inString = true
+      else if (ch === '[' || ch === '{') depth++
+      else if (ch === ']' || ch === '}') {
+        depth--
+        if (depth === 0) return i + 1
+      }
+    }
+    return text.length
+  }
+  if (first === '"') {
+    for (let i = start + 1; i < text.length; i++) {
+      if (text[i] === '\\') i++
+      else if (text[i] === '"') return i + 1
+    }
+    return text.length
+  }
+  JSON_SCALAR.lastIndex = start
+  const scalar = JSON_SCALAR.exec(text)
+  return scalar ? start + scalar[0].length : start
+}
+
+/** Stage 1a — `"refreshToken":"abc"`, `"latitude":10.7` → `"…":"[redacted]"`, so JSON text stays JSON. */
+function redactJsonMembers(text: string): string {
+  let out = ''
+  let last = 0
+  JSON_KEY.lastIndex = 0
+  for (let match = JSON_KEY.exec(text); match; match = JSON_KEY.exec(text)) {
+    if (!isRedactedName(match[1] ?? '')) continue
+    const start = match.index + match[0].length
+    const end = jsonValueEnd(text, start)
+    if (end <= start || text.slice(start, end) === 'null') continue
+    out += `${text.slice(last, start)}"${REDACTED}"`
+    last = end
+    JSON_KEY.lastIndex = end
+  }
+  return out + text.slice(last)
+}
+
+/** Stage 1b — `token=abc`, `lat=10.7`, `invite_code=x` → `name=[redacted]`. */
+function redactNamedParameters(text: string): string {
+  return text.replace(QUERY_PARAMETER, (match, lead: string, name: string) =>
+    isRedactedName(name) ? `${lead}${name}=${REDACTED}` : match,
+  )
+}
+
+/** Path keywords whose next segment is a credential (`/r/<code>`, `/share-links/<slug>`). */
+const SEGMENT_KEYWORDS: ReadonlySet<string> = new Set([
+  'r',
+  'l',
+  'invite',
+  'share-links',
+  'room',
+  'rooms',
+])
+/** Longer than `share-links` fully percent-encoded cannot be a keyword, so it is never decoded. */
+const LONGEST_ENCODED_KEYWORD = 'share-links'.length * 3
+/** `room|rooms` carry a credential only when the segment looks like one and is not a uuid. */
+const ROOM_SEGMENT = /^[A-Za-z0-9_-]{6,64}$/
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/** Length of the path separator (`/` or `%2F`, any case) at `i`, else 0. */
+function separatorAt(text: string, i: number): number {
+  if (text[i] === '/') return 1
+  if (text[i] === '%' && text[i + 1] === '2' && (text[i + 2] === 'F' || text[i + 2] === 'f')) {
+    return 3
+  }
+  return 0
+}
+
+function isSegmentStop(ch: string): boolean {
+  return ch === '?' || ch === '#' || ch === '&' || /\s/.test(ch)
+}
+
+/** A path segment: `[start, end)`, and where the next one starts when a separator follows it (else -1). */
+type Segment = { start: number; end: number; next: number }
+
+/**
+ * Every path segment in one pass. A segment starts at the beginning of the
+ * text or after a separator, and ends at a separator, `?`, `#`, `&`,
+ * whitespace or the end.
+ */
+function pathSegments(text: string): Segment[] {
+  const segments: Segment[] = []
+  let start: number | null = 0
+  let i = 0
+  while (i < text.length) {
+    const separator = separatorAt(text, i)
+    if (separator) {
+      if (start !== null) segments.push({ start, end: i, next: i + separator })
+      start = i + separator
+      i += separator
+      continue
+    }
+    if (isSegmentStop(text[i] ?? '')) {
+      if (start !== null) segments.push({ start, end: i, next: -1 })
+      start = null
+    }
+    i++
+  }
+  if (start !== null) segments.push({ start, end: text.length, next: -1 })
+  return segments
+}
+
+function percentDecode(text: string): string {
+  try {
+    return decodeURIComponent(text)
+  } catch {
+    return text
+  }
+}
+
+/**
+ * Stage 2 — the segment after a keyword. Keyword and value are each evaluated
+ * on the raw text and on its percent-decoded form (`/inv%69te/…`,
+ * `room/%41BC_123`); either match redacts the raw span.
+ */
+function redactPathSegments(text: string): string {
+  const segments = pathSegments(text)
+  let out = ''
+  let last = 0
+  for (let k = 0; k + 1 < segments.length; k++) {
+    const key = segments[k] as Segment
+    const value = segments[k + 1] as Segment
+    if (key.next < 0 || value.start !== key.next || value.end <= value.start) continue
+    if (key.end - key.start > LONGEST_ENCODED_KEYWORD) continue
+    const keyword = percentDecode(text.slice(key.start, key.end)).toLowerCase()
+    if (!SEGMENT_KEYWORDS.has(keyword)) continue
+    const raw = text.slice(value.start, value.end)
+    if (raw === REDACTED) continue
+    if (keyword === 'room' || keyword === 'rooms') {
+      const decoded = percentDecode(raw)
+      const looksLikeCode = [raw, decoded].some(
+        (form) => ROOM_SEGMENT.test(form) && !UUID.test(form),
+      )
+      if (!looksLikeCode) continue
+    }
+    out += `${text.slice(last, value.start)}${REDACTED}`
+    last = value.end
+    k++
+  }
+  return out + text.slice(last)
+}
+
+/** A WKT/EWKT geometry keyword; what follows it is read by {@link redactWktGeometries}, linearly. */
+const WKT_KEYWORD =
+  /\b(?:MULTI)?(?:POINT|LINESTRING|POLYGON|GEOMETRYCOLLECTION)(?:ZM|Z|M)?(?![A-Za-z0-9_])/gi
+/** An EWKT prefix right before the keyword; run on a bounded slice, so constant cost. */
+const SRID_PREFIX = /SRID=\d{1,10};\s{0,64}$/i
+const WKT_DIMENSION = /^(?:ZM|Z|M)(?![A-Za-z0-9_])/i
+/** Google Maps data parameters: `!3d10.7769!4d106.7009`. */
+const MAPS_DATA_POSITION = /!3d-?\d+(?:\.\d+)?!4d-?\d+(?:\.\d+)?/g
+/**
+ * `10.776912,106.700981`, `@10.7769,106.7009`, `%4010.7769%2C106.7009` — three
+ * decimals or more on both sides. An attempt starts only at a number that
+ * looks like a coordinate, so the whitespace runs cost linear time overall.
+ */
+const COORDINATE_PAIR =
+  /(?:(?<=%40)|(?<![\w.]))-?\d{1,3}\.\d{3,}\s*(?:,|%2C)\s*-?\d{1,3}\.\d{3,}(?![\w.])/gi
+
+function skipWhitespace(text: string, from: number): number {
+  let i = from
+  while (i < text.length && /\s/.test(text[i] ?? '')) i++
+  return i
+}
+
+/** The index just past the `)` that closes the `(` at `open`, or `-1` when the text ends first. */
+function balancedEnd(text: string, open: number): number {
+  let depth = 0
+  for (let i = open; i < text.length; i++) {
+    const ch = text[i]
+    if (ch === '(') depth++
+    else if (ch === ')') {
+      depth--
+      if (depth === 0) return i + 1
+    }
+  }
+  return -1
+}
+
+/**
+ * `POINT(106.7 10.7)`, `SRID=4326;POLYGON((…))`, across lines and any
+ * whitespace → `[redacted]`. A geometry never closed is redacted to the end of
+ * the text. Each whitespace run is skipped once, so the pass stays linear.
+ */
+function redactWktGeometries(text: string): string {
+  let out = ''
+  let last = 0
+  WKT_KEYWORD.lastIndex = 0
+  for (let match = WKT_KEYWORD.exec(text); match; match = WKT_KEYWORD.exec(text)) {
+    let open = skipWhitespace(text, match.index + match[0].length)
+    const dimension = WKT_DIMENSION.exec(text.slice(open, open + 3))
+    if (dimension) open = skipWhitespace(text, open + dimension[0].length)
+    if (text[open] !== '(') continue
+    const end = balancedEnd(text, open)
+    const stop = end < 0 ? text.length : end
+    let from = match.index
+    const srid = SRID_PREFIX.exec(text.slice(Math.max(last, from - 80), from))
+    if (srid) from -= srid[0].length
+    out += `${text.slice(last, from)}${REDACTED}`
+    last = stop
+    WKT_KEYWORD.lastIndex = Math.max(stop, match.index + 1)
+  }
+  return out + text.slice(last)
+}
+
+/** Stage 3 — coordinate shapes. */
+function redactCoordinateShapes(text: string): string {
+  return redactWktGeometries(
+    text.replace(MAPS_DATA_POSITION, REDACTED).replace(COORDINATE_PAIR, REDACTED),
+  )
+}
+
+const BEARER = /\bBearer[ \t]+\S+/gi
+/** Runs of token characters and dots; a JWT can only live inside one. */
+const DOTTED_RUN = /[A-Za-z0-9_.-]+/g
+/** Bounded (RFC 5321 lengths) so a long run with no `@` costs a constant per position, not the run (C-16). */
+const EMAIL =
+  /[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]{1,63}(?:\.[A-Za-z0-9-]{1,63}){0,8}\.[A-Za-z]{2,24}(?![A-Za-z])/g
+const TOKEN_RUN = /[A-Za-z0-9_-]{6,}/g
+
+/**
+ * Stage 4b — `eyJ…` followed by two more non-empty dot-separated parts, the
+ * same span `eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+` matches, found by
+ * splitting each run once instead of rescanning from every `eyJ` (F-06).
+ */
+function redactJwts(text: string): string {
+  return text.replace(DOTTED_RUN, (run) => {
+    if (!run.includes('eyJ')) return run
+    const parts = run.split('.')
+    const kept: string[] = []
+    for (let i = 0; i < parts.length;) {
+      const part = parts[i] ?? ''
+      const at = part.indexOf('eyJ')
+      if (at >= 0 && i + 2 < parts.length && parts[i + 1] !== '' && parts[i + 2] !== '') {
+        kept.push(`${part.slice(0, at)}${REDACTED}`)
+        i += 3
+      } else {
+        kept.push(part)
+        i += 1
+      }
+    }
+    return kept.join('.')
+  })
+}
+
+/** Stage 6 — a run of ≥ 6 with a letter and a digit that is not a uuid. */
+function redactTokenRuns(text: string): string {
+  return text.replace(TOKEN_RUN, (run) =>
+    !UUID.test(run) && /[A-Za-z]/.test(run) && /\d/.test(run) ? REDACTED : run,
+  )
+}
+
+/** Every rule of ADR-0011 §4, in its precedence order. Linear in the input (C-16). */
+export function redactText(text: string): string {
+  let out = redactNamedParameters(redactJsonMembers(text))
+  out = redactPathSegments(out)
+  out = redactCoordinateShapes(out)
+  out = redactJwts(out.replace(BEARER, `Bearer ${REDACTED}`))
+  out = out.replace(EMAIL, REDACTED_EMAIL)
+  return redactTokenRuns(out)
+}
+
+// ---------------------------------------------------------------------------
+// Objects
+// ---------------------------------------------------------------------------
+
+const MAX_DEPTH = 32
+
+/** Root keys copied through untouched. `sdkProcessingMetadata` holds live SDK state and is never sent. */
+const OPAQUE_ROOT: ReadonlySet<string> = new Set([
+  'event_id',
+  'timestamp',
+  'release',
+  'dist',
+  'sdk',
+  'platform',
+  'environment',
+  'level',
+  'debug_meta',
+  'modules',
+  'sdkProcessingMetadata',
+])
+const OPAQUE_CONTEXTS: ReadonlySet<string> = new Set([
+  'device',
+  'os',
+  'app',
+  'react_native_context',
+  'browser',
+])
+const OPAQUE_EXCEPTION_VALUE: ReadonlySet<string> = new Set(['stacktrace', 'type', 'mechanism'])
+const OPAQUE_BREADCRUMB: ReadonlySet<string> = new Set(['timestamp', 'level'])
+
+type Path = readonly (string | number)[]
+
+/** Whether `key` under `parent` is an opaque path of ADR-0011 §4 (`[]` = any array index). */
+function isOpaque(parent: Path, key: string): boolean {
+  const depth = parent.length
+  if (depth === 0) return OPAQUE_ROOT.has(key)
+  if (depth === 1 && parent[0] === 'contexts') return OPAQUE_CONTEXTS.has(key)
+  // Header values are allowlisted by name, not rewritten: `x-request-id` is what operators correlate on (C-17b).
+  if (depth === 1 && parent[0] === 'request') return key === 'headers'
+  if (depth === 3 && parent[0] === 'exception' && parent[1] === 'values') {
+    return OPAQUE_EXCEPTION_VALUE.has(key)
+  }
+  if (depth === 2 && parent[0] === 'breadcrumbs') return OPAQUE_BREADCRUMB.has(key)
+  return false
+}
+
+function walk(value: unknown, path: Path, ancestors: Set<object>): unknown {
+  if (value === null || value === undefined) return value
+  if (path.length >= MAX_DEPTH) return REDACTED
+  if (typeof value === 'string') return redactText(value)
+  if (typeof value !== 'object') return value
+  if (ancestors.has(value)) return REDACTED
+  ancestors.add(value)
+  try {
+    if (Array.isArray(value)) {
+      if (value.length === 2 && typeof value[0] === 'string' && isRedactedName(value[0])) {
+        return [value[0], REDACTED]
+      }
+      return value.map((item, index) => walk(item, [...path, index], ancestors))
+    }
+    const out: Record<string, unknown> = {}
+    for (const [key, inner] of Object.entries(value)) {
+      if (isOpaque(path, key)) out[key] = inner
+      else if (isContainerKey(key) || isSecretName(key)) {
+        out[key] = inner === null || inner === undefined ? inner : REDACTED
+      } else if (isCoordinateKey(key) && (inner === null || typeof inner !== 'object')) {
+        out[key] = inner === null || inner === undefined ? inner : REDACTED
+      } else out[key] = walk(inner, [...path, key], ancestors)
+    }
+    return out
+  } finally {
+    ancestors.delete(value)
+  }
+}
+
+/**
+ * A copy of `value` with key rules applied and every string leaf through
+ * {@link redactText}. Paths are read from the root, so call it on a whole
+ * event to keep the opaque paths. Cycle-safe; past depth 32 the rest becomes
+ * the literal.
+ */
+export function redactDeep<T>(value: T): T {
+  return walk(value, [], new Set()) as T
+}
+
+// ---------------------------------------------------------------------------
+// Request, user, breadcrumbs
+// ---------------------------------------------------------------------------
+
+/** GoGo-BE's set (`libs/observability/src/sentry.ts`); everything else is dropped. */
+const REQUEST_HEADERS: ReadonlySet<string> = new Set([
+  'accept',
+  'accept-language',
+  'content-length',
+  'content-type',
+  'user-agent',
+  'x-request-id',
+])
+
+/** C-8 — `{ url, method, query_string, headers }` from allowlists; cookies, body, env and the rest do not exist afterwards. */
+export function rebuildRequest(
+  request: RequestEventData | null | undefined,
+): RequestEventData | null | undefined {
+  if (!request) return request
+  const out: RequestEventData = {}
+  if (typeof request.url === 'string') out.url = redactText(request.url)
+  if (typeof request.method === 'string') out.method = request.method
+  if (request.query_string !== undefined) {
+    out.query_string =
+      typeof request.query_string === 'string'
+        ? redactText(request.query_string)
+        : redactDeep(request.query_string)
+  }
+  if (request.headers) {
+    out.headers = Object.fromEntries(
+      Object.entries(request.headers).filter(([name]) => REQUEST_HEADERS.has(name.toLowerCase())),
+    )
+  }
+  return out
+}
+
+/** C-12 — `{ id }` or nothing: no email, username, ip, segment or geo. */
+export function rebuildUser(user: User | null | undefined): User | null {
+  if (!user || user.id === undefined || user.id === null || user.id === '') return null
+  return { id: user.id }
+}
+
+const HTTP_CATEGORIES: ReadonlySet<string> = new Set(['fetch', 'xhr', 'http'])
+
+function pickDefined<T extends object>(source: T, keys: readonly (keyof T)[]): Partial<T> {
+  const out: Partial<T> = {}
+  for (const key of keys) if (source[key] !== undefined) out[key] = source[key]
+  return out
+}
+
+/** C-10/C-11 — kept categories with rebuilt `data`; every other category, `console` included, is dropped. */
+export function rebuildBreadcrumb(breadcrumb: Breadcrumb): Breadcrumb | null {
+  const category = breadcrumb.category
+  if (!category) return null
+  const head: Breadcrumb = pickDefined(breadcrumb, ['type', 'category', 'level', 'timestamp'])
+  if (typeof breadcrumb.message === 'string') head.message = redactText(breadcrumb.message)
+  const data = breadcrumb.data ?? {}
+  const text = (value: unknown) => (typeof value === 'string' ? redactText(value) : undefined)
+
+  if (HTTP_CATEGORIES.has(category)) {
+    return {
+      ...head,
+      data: pickDefined(
+        { url: text(data.url), method: data.method, status_code: data.status_code },
+        ['url', 'method', 'status_code'],
+      ),
+    }
+  }
+  if (category === 'navigation') {
+    return {
+      ...head,
+      data: pickDefined({ from: text(data.from), to: text(data.to) }, ['from', 'to']),
+    }
+  }
+  if (category === 'ui.click' || category === 'touch') return head
+  if (category === 'app.lifecycle') {
+    return { ...head, data: pickDefined({ state: data.state }, ['state']) }
+  }
+  if (category === 'device.orientation') {
+    return { ...head, data: pickDefined({ orientation: data.orientation }, ['orientation']) }
+  }
+  return null
+}
+
+// ---------------------------------------------------------------------------
+// What is not an error
+// ---------------------------------------------------------------------------
+
+/** Expected failures the UI already renders. By `name`, which our constructors set as a literal, so minification cannot break it. */
+const IGNORED_NAMES: ReadonlySet<string> = new Set(['ApiError'])
+/** An aborted or timed-out fetch is rethrown raw by `apiFetch` (`client.ts`). */
+const IGNORED_DOM_EXCEPTIONS: ReadonlySet<string> = new Set(['AbortError', 'TimeoutError'])
+
+export function isIgnored(error: unknown): boolean {
+  if (typeof DOMException !== 'undefined' && error instanceof DOMException) {
+    return IGNORED_DOM_EXCEPTIONS.has(error.name)
+  }
+  return error instanceof Error && IGNORED_NAMES.has(error.name)
+}
+
+function isIgnoredEvent(event: ErrorEvent, hint: EventHint | undefined): boolean {
+  if (hint && hint.originalException !== undefined) return isIgnored(hint.originalException)
+  // No original exception (a replayed event): the recorded type is all there is.
+  return (event.exception?.values ?? []).some(
+    (value) =>
+      typeof value.type === 'string' &&
+      (IGNORED_NAMES.has(value.type) || IGNORED_DOM_EXCEPTIONS.has(value.type)),
+  )
+}
+
+export function beforeSend(event: ErrorEvent, hint?: EventHint): ErrorEvent | null {
+  if (isIgnoredEvent(event, hint)) return null
+  const { request, user, breadcrumbs, ...rest } = event
+  const out = redactDeep(rest) as ErrorEvent
+  const rebuiltRequest = rebuildRequest(request)
+  if (rebuiltRequest) out.request = rebuiltRequest
+  const rebuiltUser = rebuildUser(user)
+  if (rebuiltUser) out.user = rebuiltUser
+  if (breadcrumbs) {
+    out.breadcrumbs = redactDeep({
+      breadcrumbs: breadcrumbs
+        .map(rebuildBreadcrumb)
+        .filter((crumb): crumb is Breadcrumb => crumb !== null),
+    }).breadcrumbs
+  }
+  return out
+}
+
+export function beforeBreadcrumb(breadcrumb: Breadcrumb): Breadcrumb | null {
+  return rebuildBreadcrumb(breadcrumb)
+}
+
+// ---------------------------------------------------------------------------
+// Init and the helpers the app calls
+// ---------------------------------------------------------------------------
+
+/** `https://<key>@<host>/<project>`; `http` and a port are allowed for the local envelope relay. Deploys accept https only (GoGo-Infra `check-sentry-dsn.sh`). */
+const DSN = /^https?:\/\/[A-Za-z0-9]+@[A-Za-z0-9.-]+(?::\d{1,5})?\/\d+$/
+
+/** The shape, then a real parse: a port out of range, a password, a query or a fragment is not a DSN. */
+function isDsn(value: string): boolean {
+  if (!DSN.test(value)) return false
+  try {
+    const url = new URL(value)
+    return (
+      (url.protocol === 'https:' || url.protocol === 'http:') &&
+      url.username !== '' &&
+      url.password === '' &&
+      url.hostname !== '' &&
+      url.search === '' &&
+      url.hash === '' &&
+      /^\/\d+$/.test(url.pathname)
+    )
+  } catch {
+    return false
+  }
+}
+
+export type SentryConfig = {
+  dsn: string
+  appEnvironment: AppEnvironment
+  release: string
+}
+
+export function readSentryConfig(): SentryConfig {
+  const dsn: unknown = import.meta.env.VITE_SENTRY_DSN
+  const release: unknown = import.meta.env.VITE_RELEASE_SHA
+  return {
+    dsn: typeof dsn === 'string' ? dsn : '',
+    appEnvironment: getAppEnvironment(),
+    release: typeof release === 'string' && release !== '' ? release : 'local',
+  }
+}
+
+/** BE vocabulary (`dev | staging | prod`), never from `import.meta.env.DEV` (BE#674). */
+export function sentryEnvironment(appEnvironment: AppEnvironment): 'dev' | 'staging' | 'prod' {
+  return appEnvironment === 'production' ? 'prod' : appEnvironment
+}
+
+let enabled = false
+
+/**
+ * `''` or the literal `off` → nothing initialises and every helper is a no-op.
+ * Any other value must be a DSN: `OFF`, `false` or a typo throw, so a build
+ * cannot switch reporting off by accident.
+ */
+export function initSentry(config: SentryConfig = readSentryConfig()): void {
+  if (config.dsn === '' || config.dsn === 'off') {
+    enabled = false
+    return
+  }
+  if (!isDsn(config.dsn)) throw new Error('Invalid SENTRY DSN')
+  Sentry.init({
+    dsn: config.dsn,
+    environment: sentryEnvironment(config.appEnvironment),
+    release: config.release,
+    sendDefaultPii: false,
+    // Errors only: discard counts are envelopes of their own (F-08).
+    sendClientReports: false,
+    integrations: (defaults) => [
+      ...defaults.filter(
+        (integration) =>
+          integration.name !== 'BrowserSession' && integration.name !== 'Breadcrumbs',
+      ),
+      // Console is never recorded at all; `beforeBreadcrumb` would drop it anyway.
+      Sentry.breadcrumbsIntegration({ console: false }),
+    ],
+    beforeSend,
+    beforeBreadcrumb,
+  })
+  enabled = true
+}
+
+export type CaptureKind = 'boundary' | 'contract'
+
+export function captureError(error: unknown, context: { kind: CaptureKind }): void {
+  if (!enabled) return
+  Sentry.captureException(error, { tags: { kind: context.kind } })
+}
+
+/** D-8 — a pseudonymous id or nobody. Never an email or a display name. */
+export function setSentryUser(id: string | null): void {
+  if (!enabled) return
+  Sentry.setUser(id ? { id } : null)
+}
+
+type RootErrorHandler = (error: unknown, errorInfo: { componentStack?: string }) => void
+
+/**
+ * React 19 root callbacks. A render error caught by a route's error boundary
+ * never reaches `AppErrorBoundary`, so `onCaughtError` is the only place it is
+ * seen; when it is `AppErrorBoundary`, the boundary's own capture is a
+ * duplicate the SDK's `Dedupe` integration drops.
+ */
+export function rootErrorHandlers(): {
+  onUncaughtError?: RootErrorHandler
+  onCaughtError?: RootErrorHandler
+} {
+  if (!enabled) return {}
+  return { onUncaughtError: Sentry.reactErrorHandler(), onCaughtError: Sentry.reactErrorHandler() }
+}
+
+const TEMPLATE_SEGMENTS: readonly (readonly string[])[] = PATH_TEMPLATES.map((t) => t.split('/'))
+/** Static segments of every template; the fallback keeps only these. */
+const ROUTE_WORDS: ReadonlySet<string> = new Set(
+  TEMPLATE_SEGMENTS.flat().filter((segment) => segment !== '' && !segment.startsWith('{')),
+)
+
+/**
+ * D-10 — the OpenAPI path template a request path matches, with its real
+ * parameter names: `/cms/feature-flags/search` → `/cms/feature-flags/{key}`.
+ * Matched segment by segment (same count, literals equal, `{…}` takes any
+ * segment); when several match, the one with the most literals wins, as a
+ * router would (`/cms/feature-flags/catalog` beats `/cms/feature-flags/{key}`).
+ * No template matches → every segment that is no static OpenAPI segment
+ * becomes `{id}`.
+ */
+export function toPathTemplate(path: string): string {
+  const segments = path.split('/')
+  let best: readonly string[] | null = null
+  let bestLiterals = -1
+  for (const template of TEMPLATE_SEGMENTS) {
+    if (template.length !== segments.length) continue
+    let literals = 0
+    let matches = true
+    for (let i = 0; i < template.length; i++) {
+      const part = template[i] ?? ''
+      if (part.startsWith('{')) continue
+      if (part !== segments[i]) {
+        matches = false
+        break
+      }
+      literals++
+    }
+    if (matches && literals > bestLiterals) {
+      best = template
+      bestLiterals = literals
+    }
+  }
+  if (best) return best.join('/')
+  return segments
+    .map((segment) => (segment === '' || ROUTE_WORDS.has(segment) ? segment : '{id}'))
+    .join('/')
+}
+
+/** D-10 — a response that broke its zod schema: the path template and the issue paths, never values or messages. */
+export class ContractMismatchError extends Error {
+  readonly path: string
+  readonly issuePaths: readonly string[]
+
+  constructor(path: string, issuePaths: readonly string[]) {
+    const template = toPathTemplate(path)
+    super(`Contract mismatch on ${template}: ${issuePaths.join(', ')}`)
+    this.name = 'ContractMismatchError'
+    this.path = template
+    this.issuePaths = issuePaths
+  }
+}
