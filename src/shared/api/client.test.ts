@@ -1,8 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/shared/test/server'
-import { apiFetch, SESSION_EXPIRED_EVENT } from './client'
+import { z } from 'zod'
+import { apiFetch, apiFetchParsed, SESSION_EXPIRED_EVENT } from './client'
+import { ApiError } from './errors'
 import { setAccessToken } from '@/shared/auth/token'
+import { captureError, ContractMismatchError } from '@/shared/observability/sentry'
+
+vi.mock('@/shared/observability/sentry', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/shared/observability/sentry')>()),
+  captureError: vi.fn(),
+}))
 
 function signedInByCookie() {
   document.cookie = 'gogo_csrf=mock-csrf-token; path=/'
@@ -12,6 +20,7 @@ function signedInByCookie() {
 }
 
 afterEach(() => {
+  vi.mocked(captureError).mockClear()
   document.cookie = 'gogo_csrf=; path=/; max-age=0'
   setAccessToken(null)
 })
@@ -99,5 +108,34 @@ describe('apiFetch', () => {
     expect(refreshes).toBe(1)
     expect(expired).toHaveBeenCalledTimes(1)
     window.removeEventListener(SESSION_EXPIRED_EVENT, expired)
+  })
+})
+
+describe('apiFetchParsed', () => {
+  it('reports a contract mismatch with issue paths only, then throws the filtered ApiError', async () => {
+    server.use(
+      http.get('/v1/cms/probe', () =>
+        HttpResponse.json({ items: [{ name: 42 }], email: 'staff@example.com' }),
+      ),
+    )
+    const schema = z.object({ items: z.array(z.object({ name: z.string() })), total: z.number() })
+
+    const thrown = await apiFetchParsed(schema, '/cms/probe').catch((error: unknown) => error)
+
+    expect(thrown).toBeInstanceOf(ApiError)
+    expect((thrown as ApiError).code).toBe('CONTRACT_MISMATCH')
+    expect(captureError).toHaveBeenCalledTimes(1)
+    const [reported, context] = vi.mocked(captureError).mock.calls[0] ?? []
+    expect(context).toEqual({ kind: 'contract' })
+    expect(reported).toBeInstanceOf(ContractMismatchError)
+    expect(reported).toMatchObject({ path: '/cms/probe', issuePaths: ['items.0.name', 'total'] })
+    // No value and no zod message travels with it.
+    expect((reported as Error).message).toBe('Contract mismatch on /cms/probe: items.0.name, total')
+  })
+
+  it('reports nothing when the response matches', async () => {
+    server.use(http.get('/v1/cms/probe', () => HttpResponse.json({ total: 1 })))
+    await apiFetchParsed(z.object({ total: z.number() }), '/cms/probe')
+    expect(captureError).not.toHaveBeenCalled()
   })
 })

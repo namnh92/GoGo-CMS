@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
+    "@sentry/react": "10.75.3",
     "@tanstack/react-query": "^5.62.7",
     "@tanstack/react-table": "^8.20.5",
     "react": "^19.0.0",
