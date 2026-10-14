@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { ROUTE_WORDS } from './routeWords'
 import type { Breadcrumb, ErrorEvent, RequestEventData, User } from '@sentry/react'
 
 /*
@@ -425,5 +426,35 @@ describe('review r1 regressions', () => {
     expect(() => sentry.initSentry({ dsn, appEnvironment: 'dev', release: 'x' })).toThrow(
       'Invalid SENTRY DSN',
     )
+  })
+})
+
+/* Review round 2 of PR #239 (Sol confirm): F-07 still open, F-10 new. */
+describe('review r2 regressions', () => {
+  it('F-07 replaces a lowercase dynamic segment that is no OpenAPI route word', () => {
+    expect(sentry.toPathTemplate('/cms/experiments/homepage')).toBe('/cms/experiments/{id}')
+    expect(sentry.toPathTemplate('/cms/places/abc-def/media')).toBe('/cms/places/{id}/media')
+  })
+
+  it.each([
+    ['POINTZ(106.7009 10.7769 1)', '[redacted]'],
+    ['POINTM(106.7009 10.7769 1) x', '[redacted] x'],
+    ['MULTIPOINTZM((106.7009 10.7769 1 2))', '[redacted]'],
+    ['SRID=4326;POLYGONZ((1.123 2.123 0, 3.123 4.123 0))', '[redacted]'],
+  ])('F-10 redacts compact dimensional WKT %s', (input, expected) => {
+    expect(sentry.redactText(input)).toBe(expected)
+  })
+})
+
+describe('ROUTE_WORDS', () => {
+  it('is exactly the static path segments of the vendored OpenAPI', () => {
+    const yaml = readFileSync(resolve(process.cwd(), 'openapi/gogo.v1.yaml'), 'utf8')
+    const words = new Set<string>()
+    for (const match of yaml.matchAll(/^ {2}(\/[^:\s]*):\s*$/gm)) {
+      for (const segment of (match[1] ?? '').split('/')) {
+        if (segment && !segment.startsWith('{')) words.add(segment)
+      }
+    }
+    expect([...ROUTE_WORDS].sort()).toEqual([...words].sort())
   })
 })

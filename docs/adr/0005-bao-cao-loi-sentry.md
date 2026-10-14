@@ -42,10 +42,9 @@ content-length content-type user-agent x-request-id`, giá trị giữ nguyên),
 - **Không có user id:** `AdminSession` (OpenAPI) không có id của admin, nên `setSentryUser(null)` ở
   đăng nhập và đăng xuất; báo cáo lỗi CMS ẩn danh. Không dùng email hay displayName thay thế (D-8).
 - **Template suy từ đường dẫn:** `apiFetchParsed` chỉ nhận đường dẫn cụ thể, không có template
-  OpenAPI. `toPathTemplate` thay mọi segment không phải "từ route" (chữ thường nối bằng `-` — mọi
-  segment tĩnh của `/v1/cms` trong OpenAPI đều như vậy) bằng `{id}`: `/cms/places/<uuid>/media` →
-  `/cms/places/{id}/media`. Tên tham số không khôi phục được; một tham số toàn chữ thường (vd. key
-  experiment `homepage`) giữ nguyên.
+  OpenAPI. `toPathTemplate` giữ segment nằm trong `ROUTE_WORDS` (mọi segment tĩnh của
+  `openapi/gogo.v1.yaml`; test khoá hai bên khớp nhau) và thay mọi segment khác bằng `{id}`:
+  `/cms/places/<uuid>/media` → `/cms/places/{id}/media`. Tên tham số không khôi phục được.
 - **WKT không đóng ngoặc** bị redact tới hết chuỗi (không chỉ hết dòng như GoGo-BE), để WKT nhiều dòng
   không lộ toạ độ ở dòng sau.
 - **Tên file test:** Vitest của repo chỉ chạy `*.test.ts`, nên các spec của shape mang tên

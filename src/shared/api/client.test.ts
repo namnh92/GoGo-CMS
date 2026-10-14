@@ -112,15 +112,19 @@ describe('apiFetch', () => {
 })
 
 describe('apiFetchParsed', () => {
-  it('reports a contract mismatch with issue paths only, then throws the filtered ApiError', async () => {
+  const PLACE_ID = '5f1c2a3e-1234-4abc-8def-0123456789ab'
+
+  it('reports a contract mismatch with a path template and issue paths only, then throws the filtered ApiError', async () => {
     server.use(
-      http.get('/v1/cms/probe', () =>
+      http.get(`/v1/cms/places/${PLACE_ID}`, () =>
         HttpResponse.json({ items: [{ name: 42 }], email: 'staff@example.com' }),
       ),
     )
     const schema = z.object({ items: z.array(z.object({ name: z.string() })), total: z.number() })
 
-    const thrown = await apiFetchParsed(schema, '/cms/probe').catch((error: unknown) => error)
+    const thrown = await apiFetchParsed(schema, `/cms/places/${PLACE_ID}`).catch(
+      (error: unknown) => error,
+    )
 
     expect(thrown).toBeInstanceOf(ApiError)
     expect((thrown as ApiError).code).toBe('CONTRACT_MISMATCH')
@@ -128,9 +132,14 @@ describe('apiFetchParsed', () => {
     const [reported, context] = vi.mocked(captureError).mock.calls[0] ?? []
     expect(context).toEqual({ kind: 'contract' })
     expect(reported).toBeInstanceOf(ContractMismatchError)
-    expect(reported).toMatchObject({ path: '/cms/probe', issuePaths: ['items.0.name', 'total'] })
+    expect(reported).toMatchObject({
+      path: '/cms/places/{id}',
+      issuePaths: ['items.0.name', 'total'],
+    })
     // No value and no zod message travels with it.
-    expect((reported as Error).message).toBe('Contract mismatch on /cms/probe: items.0.name, total')
+    expect((reported as Error).message).toBe(
+      'Contract mismatch on /cms/places/{id}: items.0.name, total',
+    )
   })
 
   it('reports nothing when the response matches', async () => {

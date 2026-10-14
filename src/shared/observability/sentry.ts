@@ -1,6 +1,7 @@
 import * as Sentry from '@sentry/react'
 import type { Breadcrumb, ErrorEvent, EventHint, RequestEventData, User } from '@sentry/react'
 import { getAppEnvironment, type AppEnvironment } from '@/shared/config/env'
+import { ROUTE_WORDS } from './routeWords'
 
 /**
  * GoGo-CMS#238 — the only file that talks to the Sentry SDK (pinned by
@@ -255,7 +256,8 @@ function redactPathSegments(text: string): string {
 }
 
 /** A WKT/EWKT geometry keyword; what follows it is read by {@link redactWktGeometries}, linearly. */
-const WKT_KEYWORD = /\b(?:MULTI)?(?:POINT|LINESTRING|POLYGON|GEOMETRYCOLLECTION)\b/gi
+const WKT_KEYWORD =
+  /\b(?:MULTI)?(?:POINT|LINESTRING|POLYGON|GEOMETRYCOLLECTION)(?:ZM|Z|M)?(?![A-Za-z0-9_])/gi
 /** An EWKT prefix right before the keyword; run on a bounded slice, so constant cost. */
 const SRID_PREFIX = /SRID=\d{1,10};\s{0,64}$/i
 const WKT_DIMENSION = /^(?:ZM|Z|M)(?![A-Za-z0-9_])/i
@@ -699,18 +701,17 @@ export function rootErrorHandlers(): {
   return { onUncaughtError: Sentry.reactErrorHandler(), onCaughtError: Sentry.reactErrorHandler() }
 }
 
-/** A static `/v1/cms` route segment: lowercase words joined by `-` (every one in the OpenAPI is). */
-const ROUTE_WORD = /^[a-z]+(?:-[a-z]+)*$/
-
 /**
- * D-10 — the request path as a template: every segment that is not a route
- * word becomes `{id}`, so `/cms/places/<uuid>/media` is reported as
- * `/cms/places/{id}/media`. Parameter names are not recovered.
+ * D-10 — the request path as a template: every segment that is not a static
+ * segment of the OpenAPI ({@link ROUTE_WORDS}) becomes `{id}`, so
+ * `/cms/places/<uuid>/media` is reported as `/cms/places/{id}/media` and
+ * `/cms/experiments/homepage` as `/cms/experiments/{id}`. Parameter names are
+ * not recovered.
  */
 export function toPathTemplate(path: string): string {
   return path
     .split('/')
-    .map((segment) => (segment === '' || ROUTE_WORD.test(segment) ? segment : '{id}'))
+    .map((segment) => (segment === '' || ROUTE_WORDS.has(segment) ? segment : '{id}'))
     .join('/')
 }
 
