@@ -338,3 +338,92 @@ describe('ContractMismatchError', () => {
     expect(sentry.isIgnored(error)).toBe(false)
   })
 })
+
+/*
+ * Review round 1 of PR #239 (Sol). Not oracle rows: the oracle is canonical in
+ * GoGo-Infra and changes only there (a v2 would carry these).
+ */
+describe('review r1 regressions', () => {
+  it('F-01 ends a parameter value at `;`', () => {
+    expect(sentry.redactText('page=2;password=hunter')).toBe('page=2;password=[redacted]')
+  })
+
+  it('F-02 redacts a long numeric JSON secret whole', () => {
+    const long = '1'.repeat(80)
+    expect(sentry.redactText(`{"code":${long},"page":2}`)).toBe('{"code":"[redacted]","page":2}')
+  })
+
+  it('F-03 matches a percent-encoded keyword segment', () => {
+    expect(sentry.redactText('https://x/inv%69te/ABCDEF')).toBe('https://x/inv%69te/[redacted]')
+    expect(sentry.redactText('/%72/abcdef')).toBe('/%72/[redacted]')
+  })
+
+  it('F-04 redacts coordinate shapes with long or multiline whitespace', () => {
+    expect(sentry.redactText(`POINT(\n106.7009 10.7769)`)).toBe('[redacted]')
+    expect(sentry.redactText(`POINT${' '.repeat(20)}(106.7009 10.7769) after`)).toBe(
+      '[redacted] after',
+    )
+    expect(sentry.redactText(`at 10.7769${' '.repeat(20)},${' '.repeat(20)}106.7009 ok`)).toBe(
+      'at [redacted] ok',
+    )
+  })
+
+  it('F-05 replaces a primitive found at depth 32', () => {
+    let value: unknown = 'secret-leaf'
+    for (let i = 0; i < 32; i++) value = { a: value }
+    let cursor = sentry.redactDeep(value) as { a: unknown }
+    for (let i = 0; i < 31; i++) cursor = cursor.a as { a: unknown }
+    expect(cursor.a).toBe('[redacted]')
+  })
+
+  it('F-06 stays linear on repeated eyJ without periods', () => {
+    const input = 'eyJ'.repeat(34000)
+    const started = performance.now()
+    sentry.redactText(input)
+    expect(performance.now() - started).toBeLessThanOrEqual(process.env.CI ? 1000 : 300)
+  })
+
+  it.each([
+    ['POINT then newlines', `POINT${'\n'.repeat(100000)}x`],
+    ['POINT Z then spaces', `POINT Z${' '.repeat(100000)}x`],
+    ['keyword segments', 'inv%69te/'.repeat(11000)],
+    ['pair with spaces', `1.2345${' '.repeat(50000)},${' '.repeat(50000)}y`],
+  ])('F-04/F-03 scanners stay linear: %s', (_name, input) => {
+    const started = performance.now()
+    sentry.redactText(input)
+    expect(performance.now() - started).toBeLessThanOrEqual(process.env.CI ? 1000 : 300)
+  })
+
+  it('F-07 reports a path template, not the concrete path', () => {
+    expect(sentry.toPathTemplate('/cms/places/5f1c2a3e-1234-4abc-8def-0123456789ab/media')).toBe(
+      '/cms/places/{id}/media',
+    )
+    expect(sentry.toPathTemplate('/cms/experiments/ranking_v2')).toBe('/cms/experiments/{id}')
+    expect(sentry.toPathTemplate('/cms/ranking-configs/42/evaluate')).toBe(
+      '/cms/ranking-configs/{id}/evaluate',
+    )
+    expect(sentry.toPathTemplate('/cms/feature-flags/catalog')).toBe('/cms/feature-flags/catalog')
+  })
+
+  it('F-08 sends no client reports', () => {
+    sentry.initSentry({
+      dsn: 'https://0123456789abcdef0123456789abcdef@o0.ingest.us.sentry.io/1',
+      appEnvironment: 'dev',
+      release: 'x',
+    })
+    expect(sdk.init.mock.calls[0]?.[0]).toMatchObject({ sendClientReports: false })
+  })
+
+  it.each([
+    'https://k@host:99999/1',
+    'https://k@/1',
+    'https://k:pw@host/1',
+    'https://k@host/1?x=1',
+    'ftp://k@host/1',
+    'https://host/1',
+  ])('F-09 refuses the malformed DSN %s', (dsn) => {
+    expect(() => sentry.initSentry({ dsn, appEnvironment: 'dev', release: 'x' })).toThrow(
+      'Invalid SENTRY DSN',
+    )
+  })
+})

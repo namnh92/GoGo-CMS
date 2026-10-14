@@ -89,8 +89,10 @@ function isRedactedName(name: string): boolean {
 
 /** `"name": value` inside JSON text; the value is measured by {@link jsonValueEnd}. */
 const JSON_KEY = /"([A-Za-z_][\w-]*)"(\s*:\s*)/g
-/** `name=value` in a URL, a bare query string or free text; the value stops at a separator. */
-const QUERY_PARAMETER = /(^|[?&;\s])([A-Za-z_][\w.-]*)=([^&#\s"'<>]*)/g
+/** `name=value` in a URL, a bare query string or free text; the value stops at a separator (`;` included). */
+const QUERY_PARAMETER = /(^|[?&;\s])([A-Za-z_][\w.-]*)=([^&#;\s"'<>]*)/g
+/** A JSON number or literal, matched in place (sticky) so a long one is measured whole. */
+const JSON_SCALAR = /-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null/y
 
 /**
  * The index just past the JSON value starting at `start`. An unterminated
@@ -125,9 +127,8 @@ function jsonValueEnd(text: string, start: number): number {
     }
     return text.length
   }
-  const scalar = /^(?:-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null)/.exec(
-    text.slice(start, start + 64),
-  )
+  JSON_SCALAR.lastIndex = start
+  const scalar = JSON_SCALAR.exec(text)
   return scalar ? start + scalar[0].length : start
 }
 
@@ -156,19 +157,61 @@ function redactNamedParameters(text: string): string {
 }
 
 /** Path keywords whose next segment is a credential (`/r/<code>`, `/share-links/<slug>`). */
-const SEGMENT_KEYWORD = /(?:^|\/|%2F)(r|l|invite|share-links|room|rooms)(?:\/|%2F)/gi
+const SEGMENT_KEYWORDS: ReadonlySet<string> = new Set([
+  'r',
+  'l',
+  'invite',
+  'share-links',
+  'room',
+  'rooms',
+])
+/** Longer than `share-links` fully percent-encoded cannot be a keyword, so it is never decoded. */
+const LONGEST_ENCODED_KEYWORD = 'share-links'.length * 3
 /** `room|rooms` carry a credential only when the segment looks like one and is not a uuid. */
 const ROOM_SEGMENT = /^[A-Za-z0-9_-]{6,64}$/
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-/** The index where the path segment starting at `start` ends: `/`, `%2F`, `?`, `#`, `&`, whitespace or end. */
-function segmentEnd(text: string, start: number): number {
-  for (let i = start; i < text.length; i++) {
-    const ch = text[i] ?? ''
-    if (ch === '/' || ch === '?' || ch === '#' || ch === '&' || /\s/.test(ch)) return i
-    if (ch === '%' && text[i + 1] === '2' && (text[i + 2] === 'F' || text[i + 2] === 'f')) return i
+/** Length of the path separator (`/` or `%2F`, any case) at `i`, else 0. */
+function separatorAt(text: string, i: number): number {
+  if (text[i] === '/') return 1
+  if (text[i] === '%' && text[i + 1] === '2' && (text[i + 2] === 'F' || text[i + 2] === 'f')) {
+    return 3
   }
-  return text.length
+  return 0
+}
+
+function isSegmentStop(ch: string): boolean {
+  return ch === '?' || ch === '#' || ch === '&' || /\s/.test(ch)
+}
+
+/** A path segment: `[start, end)`, and where the next one starts when a separator follows it (else -1). */
+type Segment = { start: number; end: number; next: number }
+
+/**
+ * Every path segment in one pass. A segment starts at the beginning of the
+ * text or after a separator, and ends at a separator, `?`, `#`, `&`,
+ * whitespace or the end.
+ */
+function pathSegments(text: string): Segment[] {
+  const segments: Segment[] = []
+  let start: number | null = 0
+  let i = 0
+  while (i < text.length) {
+    const separator = separatorAt(text, i)
+    if (separator) {
+      if (start !== null) segments.push({ start, end: i, next: i + separator })
+      start = i + separator
+      i += separator
+      continue
+    }
+    if (isSegmentStop(text[i] ?? '')) {
+      if (start !== null) segments.push({ start, end: i, next: -1 })
+      start = null
+    }
+    i++
+  }
+  if (start !== null) segments.push({ start, end: text.length, next: -1 })
+  return segments
 }
 
 function percentDecode(text: string): string {
@@ -179,19 +222,24 @@ function percentDecode(text: string): string {
   }
 }
 
-/** Stage 2 — evaluated on the raw segment and on its percent-decoded form; either match redacts the raw span. */
+/**
+ * Stage 2 — the segment after a keyword. Keyword and value are each evaluated
+ * on the raw text and on its percent-decoded form (`/inv%69te/…`,
+ * `room/%41BC_123`); either match redacts the raw span.
+ */
 function redactPathSegments(text: string): string {
+  const segments = pathSegments(text)
   let out = ''
   let last = 0
-  SEGMENT_KEYWORD.lastIndex = 0
-  for (let match = SEGMENT_KEYWORD.exec(text); match; match = SEGMENT_KEYWORD.exec(text)) {
-    const start = match.index + match[0].length
-    const end = segmentEnd(text, start)
-    // Resume on the separator, so `/r//r/x` still sees the second keyword.
-    SEGMENT_KEYWORD.lastIndex = Math.max(start - 1, match.index + 1)
-    if (end <= start) continue
-    const raw = text.slice(start, end)
-    const keyword = (match[1] ?? '').toLowerCase()
+  for (let k = 0; k + 1 < segments.length; k++) {
+    const key = segments[k] as Segment
+    const value = segments[k + 1] as Segment
+    if (key.next < 0 || value.start !== key.next || value.end <= value.start) continue
+    if (key.end - key.start > LONGEST_ENCODED_KEYWORD) continue
+    const keyword = percentDecode(text.slice(key.start, key.end)).toLowerCase()
+    if (!SEGMENT_KEYWORDS.has(keyword)) continue
+    const raw = text.slice(value.start, value.end)
+    if (raw === REDACTED) continue
     if (keyword === 'room' || keyword === 'rooms') {
       const decoded = percentDecode(raw)
       const looksLikeCode = [raw, decoded].some(
@@ -199,33 +247,39 @@ function redactPathSegments(text: string): string {
       )
       if (!looksLikeCode) continue
     }
-    if (raw === REDACTED) continue
-    out += `${text.slice(last, start)}${REDACTED}`
-    last = end
-    SEGMENT_KEYWORD.lastIndex = end
+    out += `${text.slice(last, value.start)}${REDACTED}`
+    last = value.end
+    k++
   }
   return out + text.slice(last)
 }
 
-/**
- * The head of a WKT/EWKT geometry up to its opening parenthesis. Every
- * quantifier is bounded, so a failed attempt costs a constant; the body is
- * measured by {@link balancedEnd}.
- */
-const WKT_HEAD =
-  /\b(?:SRID=\d{1,10};[ \t]{0,8})?(?:MULTI)?(?:POINT|LINESTRING|POLYGON|GEOMETRYCOLLECTION)(?:[ \t]{0,8}(?:ZM|Z|M))?[ \t]{0,8}\(/gi
+/** A WKT/EWKT geometry keyword; what follows it is read by {@link redactWktGeometries}, linearly. */
+const WKT_KEYWORD = /\b(?:MULTI)?(?:POINT|LINESTRING|POLYGON|GEOMETRYCOLLECTION)\b/gi
+/** An EWKT prefix right before the keyword; run on a bounded slice, so constant cost. */
+const SRID_PREFIX = /SRID=\d{1,10};\s{0,64}$/i
+const WKT_DIMENSION = /^(?:ZM|Z|M)(?![A-Za-z0-9_])/i
 /** Google Maps data parameters: `!3d10.7769!4d106.7009`. */
 const MAPS_DATA_POSITION = /!3d-?\d+(?:\.\d+)?!4d-?\d+(?:\.\d+)?/g
-/** `10.776912,106.700981`, `@10.7769,106.7009`, `%4010.7769%2C106.7009` — three decimals or more on both sides. */
+/**
+ * `10.776912,106.700981`, `@10.7769,106.7009`, `%4010.7769%2C106.7009` — three
+ * decimals or more on both sides. An attempt starts only at a number that
+ * looks like a coordinate, so the whitespace runs cost linear time overall.
+ */
 const COORDINATE_PAIR =
-  /(?:(?<=%40)|(?<![\w.]))-?\d{1,3}\.\d{3,}\s{0,8}(?:,|%2C)\s{0,8}-?\d{1,3}\.\d{3,}(?![\w.])/gi
+  /(?:(?<=%40)|(?<![\w.]))-?\d{1,3}\.\d{3,}\s*(?:,|%2C)\s*-?\d{1,3}\.\d{3,}(?![\w.])/gi
 
-/** The index just past the `)` that closes the `(` at `open`, or `-1` when the line ends first. */
+function skipWhitespace(text: string, from: number): number {
+  let i = from
+  while (i < text.length && /\s/.test(text[i] ?? '')) i++
+  return i
+}
+
+/** The index just past the `)` that closes the `(` at `open`, or `-1` when the text ends first. */
 function balancedEnd(text: string, open: number): number {
   let depth = 0
   for (let i = open; i < text.length; i++) {
     const ch = text[i]
-    if (ch === '\n') return -1
     if (ch === '(') depth++
     else if (ch === ')') {
       depth--
@@ -235,19 +289,28 @@ function balancedEnd(text: string, open: number): number {
   return -1
 }
 
-/** `POINT(106.7 10.7)` → `[redacted]`; a geometry cut off before `)` is redacted to the end of its line. */
+/**
+ * `POINT(106.7 10.7)`, `SRID=4326;POLYGON((…))`, across lines and any
+ * whitespace → `[redacted]`. A geometry never closed is redacted to the end of
+ * the text. Each whitespace run is skipped once, so the pass stays linear.
+ */
 function redactWktGeometries(text: string): string {
   let out = ''
   let last = 0
-  WKT_HEAD.lastIndex = 0
-  for (let match = WKT_HEAD.exec(text); match; match = WKT_HEAD.exec(text)) {
-    const open = match.index + match[0].length - 1
+  WKT_KEYWORD.lastIndex = 0
+  for (let match = WKT_KEYWORD.exec(text); match; match = WKT_KEYWORD.exec(text)) {
+    let open = skipWhitespace(text, match.index + match[0].length)
+    const dimension = WKT_DIMENSION.exec(text.slice(open, open + 3))
+    if (dimension) open = skipWhitespace(text, open + dimension[0].length)
+    if (text[open] !== '(') continue
     const end = balancedEnd(text, open)
-    const newline = text.indexOf('\n', open)
-    const stop = end >= 0 ? end : newline < 0 ? text.length : newline
-    out += `${text.slice(last, match.index)}${REDACTED}`
+    const stop = end < 0 ? text.length : end
+    let from = match.index
+    const srid = SRID_PREFIX.exec(text.slice(Math.max(last, from - 80), from))
+    if (srid) from -= srid[0].length
+    out += `${text.slice(last, from)}${REDACTED}`
     last = stop
-    WKT_HEAD.lastIndex = Math.max(stop, match.index + 1)
+    WKT_KEYWORD.lastIndex = Math.max(stop, match.index + 1)
   }
   return out + text.slice(last)
 }
@@ -260,11 +323,37 @@ function redactCoordinateShapes(text: string): string {
 }
 
 const BEARER = /\bBearer[ \t]+\S+/gi
-const JWT = /eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g
+/** Runs of token characters and dots; a JWT can only live inside one. */
+const DOTTED_RUN = /[A-Za-z0-9_.-]+/g
 /** Bounded (RFC 5321 lengths) so a long run with no `@` costs a constant per position, not the run (C-16). */
 const EMAIL =
   /[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]{1,63}(?:\.[A-Za-z0-9-]{1,63}){0,8}\.[A-Za-z]{2,24}(?![A-Za-z])/g
 const TOKEN_RUN = /[A-Za-z0-9_-]{6,}/g
+
+/**
+ * Stage 4b — `eyJ…` followed by two more non-empty dot-separated parts, the
+ * same span `eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+` matches, found by
+ * splitting each run once instead of rescanning from every `eyJ` (F-06).
+ */
+function redactJwts(text: string): string {
+  return text.replace(DOTTED_RUN, (run) => {
+    if (!run.includes('eyJ')) return run
+    const parts = run.split('.')
+    const kept: string[] = []
+    for (let i = 0; i < parts.length;) {
+      const part = parts[i] ?? ''
+      const at = part.indexOf('eyJ')
+      if (at >= 0 && i + 2 < parts.length && parts[i + 1] !== '' && parts[i + 2] !== '') {
+        kept.push(`${part.slice(0, at)}${REDACTED}`)
+        i += 3
+      } else {
+        kept.push(part)
+        i += 1
+      }
+    }
+    return kept.join('.')
+  })
+}
 
 /** Stage 6 — a run of ≥ 6 with a letter and a digit that is not a uuid. */
 function redactTokenRuns(text: string): string {
@@ -278,7 +367,7 @@ export function redactText(text: string): string {
   let out = redactNamedParameters(redactJsonMembers(text))
   out = redactPathSegments(out)
   out = redactCoordinateShapes(out)
-  out = out.replace(BEARER, `Bearer ${REDACTED}`).replace(JWT, REDACTED)
+  out = redactJwts(out.replace(BEARER, `Bearer ${REDACTED}`))
   out = out.replace(EMAIL, REDACTED_EMAIL)
   return redactTokenRuns(out)
 }
@@ -330,9 +419,11 @@ function isOpaque(parent: Path, key: string): boolean {
 }
 
 function walk(value: unknown, path: Path, ancestors: Set<object>): unknown {
+  if (value === null || value === undefined) return value
+  if (path.length >= MAX_DEPTH) return REDACTED
   if (typeof value === 'string') return redactText(value)
-  if (value === null || typeof value !== 'object') return value
-  if (path.length >= MAX_DEPTH || ancestors.has(value)) return REDACTED
+  if (typeof value !== 'object') return value
+  if (ancestors.has(value)) return REDACTED
   ancestors.add(value)
   try {
     if (Array.isArray(value)) {
@@ -505,6 +596,25 @@ export function beforeBreadcrumb(breadcrumb: Breadcrumb): Breadcrumb | null {
 /** `https://<key>@<host>/<project>`; `http` and a port are allowed for the local envelope relay. Deploys accept https only (GoGo-Infra `check-sentry-dsn.sh`). */
 const DSN = /^https?:\/\/[A-Za-z0-9]+@[A-Za-z0-9.-]+(?::\d{1,5})?\/\d+$/
 
+/** The shape, then a real parse: a port out of range, a password, a query or a fragment is not a DSN. */
+function isDsn(value: string): boolean {
+  if (!DSN.test(value)) return false
+  try {
+    const url = new URL(value)
+    return (
+      (url.protocol === 'https:' || url.protocol === 'http:') &&
+      url.username !== '' &&
+      url.password === '' &&
+      url.hostname !== '' &&
+      url.search === '' &&
+      url.hash === '' &&
+      /^\/\d+$/.test(url.pathname)
+    )
+  } catch {
+    return false
+  }
+}
+
 export type SentryConfig = {
   dsn: string
   appEnvironment: AppEnvironment
@@ -538,12 +648,14 @@ export function initSentry(config: SentryConfig = readSentryConfig()): void {
     enabled = false
     return
   }
-  if (!DSN.test(config.dsn)) throw new Error('Invalid SENTRY DSN')
+  if (!isDsn(config.dsn)) throw new Error('Invalid SENTRY DSN')
   Sentry.init({
     dsn: config.dsn,
     environment: sentryEnvironment(config.appEnvironment),
     release: config.release,
     sendDefaultPii: false,
+    // Errors only: discard counts are envelopes of their own (F-08).
+    sendClientReports: false,
     integrations: (defaults) => [
       ...defaults.filter(
         (integration) =>
@@ -587,15 +699,31 @@ export function rootErrorHandlers(): {
   return { onUncaughtError: Sentry.reactErrorHandler(), onCaughtError: Sentry.reactErrorHandler() }
 }
 
-/** D-10 — a response that broke its zod schema: the path and the issue paths, never values or messages. */
+/** A static `/v1/cms` route segment: lowercase words joined by `-` (every one in the OpenAPI is). */
+const ROUTE_WORD = /^[a-z]+(?:-[a-z]+)*$/
+
+/**
+ * D-10 — the request path as a template: every segment that is not a route
+ * word becomes `{id}`, so `/cms/places/<uuid>/media` is reported as
+ * `/cms/places/{id}/media`. Parameter names are not recovered.
+ */
+export function toPathTemplate(path: string): string {
+  return path
+    .split('/')
+    .map((segment) => (segment === '' || ROUTE_WORD.test(segment) ? segment : '{id}'))
+    .join('/')
+}
+
+/** D-10 — a response that broke its zod schema: the path template and the issue paths, never values or messages. */
 export class ContractMismatchError extends Error {
   readonly path: string
   readonly issuePaths: readonly string[]
 
   constructor(path: string, issuePaths: readonly string[]) {
-    super(`Contract mismatch on ${path}: ${issuePaths.join(', ')}`)
+    const template = toPathTemplate(path)
+    super(`Contract mismatch on ${template}: ${issuePaths.join(', ')}`)
     this.name = 'ContractMismatchError'
-    this.path = path
+    this.path = template
     this.issuePaths = issuePaths
   }
 }

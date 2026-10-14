@@ -14,8 +14,8 @@
   `onUncaughtError` + `onCaughtError` (`Sentry.reactErrorHandler`). `AppErrorBoundary` gọi thêm
   `captureError(…, { kind: 'boundary' })`; bản trùng do integration `Dedupe` bỏ.
 - **Chỉ lỗi:** không tracing, không Replay, không session release-health (bỏ integration
-  `BrowserSession`), không breadcrumb console (`breadcrumbsIntegration({ console: false })`),
-  `sendDefaultPii: false`.
+  `BrowserSession`), không client report (`sendClientReports: false`), không breadcrumb console
+  (`breadcrumbsIntegration({ console: false })`), `sendDefaultPii: false`.
 - **Cấu hình build:** `VITE_SENTRY_DSN` — rỗng hoặc đúng chữ `off` thì không init, mọi helper là
   no-op; giá trị khác phải là DSN (`http` + port chỉ để chạy relay cục bộ; deploy chỉ nhận `https`
   — GoGo-Infra `check-sentry-dsn.sh`), `OFF`/`false` làm build ném lỗi. `environment` lấy từ
@@ -29,8 +29,8 @@ content-length content-type user-agent x-request-id`, giá trị giữ nguyên),
 - **Không gửi:** `ApiError` (theo `error.name`, không phụ thuộc minify) và `DOMException`
   `AbortError`/`TimeoutError`. Không lọc theo nội dung message.
 - **Hợp đồng:** `apiFetchParsed` báo `ContractMismatchError(path, issuePaths)` (`kind: 'contract'`)
-  trước khi đổi lỗi zod thành `ApiError{CONTRACT_MISMATCH}`; chỉ đường dẫn và đường dẫn issue,
-  không giá trị, không message của zod.
+  trước khi đổi lỗi zod thành `ApiError{CONTRACT_MISMATCH}`; chỉ template đường dẫn và đường dẫn
+  issue, không giá trị, không message của zod.
 - **Oracle:** `src/shared/observability/__fixtures__/redaction-cases.v1.json` chép nguyên văn từ
   GoGo-Infra `docs/adr/0011/redaction-cases.v1.json`, **v1, sha256
   `decf6c4336269b086b209a4d27a9c36ca2c392b307c9d76e4b24883a4f4ef6a0`**; `sentry.test.ts` kiểm digest
@@ -41,9 +41,13 @@ content-length content-type user-agent x-request-id`, giá trị giữ nguyên),
 
 - **Không có user id:** `AdminSession` (OpenAPI) không có id của admin, nên `setSentryUser(null)` ở
   đăng nhập và đăng xuất; báo cáo lỗi CMS ẩn danh. Không dùng email hay displayName thay thế (D-8).
-- **Đường dẫn, không phải template:** `apiFetchParsed` chỉ nhận đường dẫn cụ thể
-  (`/cms/experiments/<key>`), không có template OpenAPI; `ContractMismatchError` mang đường dẫn đó và
-  `beforeSend` redact phần trông như token (uuid giữ nguyên).
+- **Template suy từ đường dẫn:** `apiFetchParsed` chỉ nhận đường dẫn cụ thể, không có template
+  OpenAPI. `toPathTemplate` thay mọi segment không phải "từ route" (chữ thường nối bằng `-` — mọi
+  segment tĩnh của `/v1/cms` trong OpenAPI đều như vậy) bằng `{id}`: `/cms/places/<uuid>/media` →
+  `/cms/places/{id}/media`. Tên tham số không khôi phục được; một tham số toàn chữ thường (vd. key
+  experiment `homepage`) giữ nguyên.
+- **WKT không đóng ngoặc** bị redact tới hết chuỗi (không chỉ hết dòng như GoGo-BE), để WKT nhiều dòng
+  không lộ toạ độ ở dòng sau.
 - **Tên file test:** Vitest của repo chỉ chạy `*.test.ts`, nên các spec của shape mang tên
   `sentry.test.ts`, `sentry-perf.test.ts`, `sentry-usage.test.ts`.
 - **`contexts.trace.trace_id`** (32 hex) không nằm trong danh sách opaque nên bị luật token chung
