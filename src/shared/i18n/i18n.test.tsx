@@ -4,8 +4,13 @@ import { en } from './en'
 import { I18nProvider, useI18n } from './i18n'
 import { vi } from './vi'
 
+// What <html lang> said while each render ran — before React commits, so
+// before any effect could have corrected it.
+const langDuringRender: string[] = []
+
 function Probe() {
   const { t, setLocale } = useI18n()
+  langDuringRender.push(document.documentElement.lang)
   return (
     <>
       <span>{t('placeEditor.lat')}</span>
@@ -15,6 +20,7 @@ function Probe() {
 }
 
 afterEach(() => {
+  langDuringRender.length = 0
   window.localStorage.clear()
   document.documentElement.lang = 'vi'
 })
@@ -27,6 +33,7 @@ describe('I18nProvider (#240)', () => {
         <Probe />
       </I18nProvider>,
     )
+    expect(langDuringRender[0]).toBe('en')
     expect(document.documentElement.lang).toBe('en')
     expect(screen.getByText('Latitude')).toBeInTheDocument()
   })
@@ -39,6 +46,7 @@ describe('I18nProvider (#240)', () => {
       </I18nProvider>,
     )
     act(() => screen.getByRole('button', { name: 'vi' }).click())
+    expect(langDuringRender.at(-1)).toBe('vi')
     expect(document.documentElement.lang).toBe('vi')
     expect(screen.getByText('Vĩ độ')).toBeInTheDocument()
   })

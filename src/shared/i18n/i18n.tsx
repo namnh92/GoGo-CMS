@@ -1,12 +1,4 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from 'react'
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
 import { vi, type MessageKey } from './vi'
 import { en } from './en'
 
@@ -43,16 +35,18 @@ function readStoredLocale(): Locale {
 }
 
 export function I18nProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>(readStoredLocale)
-
-  // #240: the document language follows the locale from the first render — a
-  // stored `en` used to leave `<html lang="vi">`, so a screen reader read the
-  // English UI with Vietnamese rules.
-  useEffect(() => {
-    document.documentElement.lang = locale
-  }, [locale])
+  // #240: the document language is set before anything renders in the stored
+  // locale — a stored `en` used to leave `<html lang="vi">`, so a screen reader
+  // read the English UI with Vietnamese rules. Synchronous, not an effect: an
+  // effect runs after the English content is already on screen.
+  const [locale, setLocaleState] = useState<Locale>(() => {
+    const stored = readStoredLocale()
+    document.documentElement.lang = stored
+    return stored
+  })
 
   const setLocale = useCallback((next: Locale) => {
+    document.documentElement.lang = next
     setLocaleState(next)
     try {
       window.localStorage.setItem(LOCALE_STORAGE_KEY, next)
