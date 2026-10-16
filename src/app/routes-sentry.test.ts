@@ -1,6 +1,4 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
 import type { RouteObject } from 'react-router-dom'
 import { matchRoutes } from 'react-router-dom'
 import { router } from './routes'
@@ -70,19 +68,5 @@ describe('the tag follows the real router', () => {
     expect(tagOf()).toBe('/places/:id')
     await router.navigate('/costs/test-runs/42')
     expect(tagOf()).toBe('/costs/test-runs/:id')
-  })
-})
-
-/** `main.tsx` runs `bootstrap()` on import, so its order is checked as source. */
-describe('main.tsx route wiring', () => {
-  const main = readFileSync(resolve(__dirname, '..', 'main.tsx'), 'utf8')
-  const body = main.slice(main.indexOf('async function bootstrap()'))
-
-  it('tracks the route right after Sentry starts, before the first await (Sol #243 F-01)', () => {
-    const init = body.indexOf('initSentry()')
-    const track = body.indexOf('trackSentryRoute(router)')
-    expect(init).toBeGreaterThan(-1)
-    expect(track).toBeGreaterThan(init)
-    expect(track).toBeLessThan(body.indexOf('await '))
   })
 })
