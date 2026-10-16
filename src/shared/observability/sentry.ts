@@ -569,10 +569,51 @@ function isIgnoredEvent(event: ErrorEvent, hint: EventHint | undefined): boolean
   )
 }
 
+// ---------------------------------------------------------------------------
+// The screen an error happened on (GoGo-CMS#241, D-7 record addition 3)
+// ---------------------------------------------------------------------------
+
+/**
+ * The shapes a react-router path definition here has: a lowercase word
+ * (`test-runs`), a status page (`403`), `:param`, or the `*` splat. No other
+ * digit is allowed, so a UUID, a numeric id or a hex token is never a segment.
+ */
+const ROUTE_SEGMENT = /^(?:[a-z]+(?:-[a-z]+)*|[1-5]\d\d|:[A-Za-z][A-Za-z0-9]*|\*)$/
+
+/**
+ * A route template (`/places/:id`), or `null` when the value is not one. The
+ * app builds it from the router's own path definitions, never from the
+ * location, so it carries no id — and anything the ADR-0011 text rules would
+ * change is refused outright rather than sent redacted.
+ */
+export function asRouteTemplate(value: string): string | null {
+  if (value === '/') return value
+  if (!value.startsWith('/') || value.length > 120) return null
+  const segments = value.slice(1).split('/')
+  if (!segments.every((segment) => ROUTE_SEGMENT.test(segment))) return null
+  return redactText(value) === value ? value : null
+}
+
+/** The `path` of each matched route, outermost first, joined: `/` + `places/:id` → `/places/:id`. */
+export function routeTemplateOf(matches: readonly { route: { path?: string } }[]): string | null {
+  const parts = matches
+    .map((match) => (match.route.path ?? '').replace(/^\/+|\/+$/g, ''))
+    .filter((part) => part !== '')
+  return asRouteTemplate(`/${parts.join('/')}`)
+}
+
+let currentRoute: string | null = null
+
+/** Called by the router subscription in `main.tsx`; an invalid template clears the tag. */
+export function setSentryRoute(template: string | null): void {
+  currentRoute = template === null ? null : asRouteTemplate(template)
+}
+
 export function beforeSend(event: ErrorEvent, hint?: EventHint): ErrorEvent | null {
   if (isIgnoredEvent(event, hint)) return null
   const { request, user, breadcrumbs, ...rest } = event
   const out = redactDeep(rest) as ErrorEvent
+  if (currentRoute) out.tags = { ...out.tags, route: currentRoute }
   const rebuiltRequest = rebuildRequest(request)
   if (rebuiltRequest) out.request = rebuiltRequest
   const rebuiltUser = rebuildUser(user)

@@ -470,3 +470,61 @@ describe('F-07 SA ruling', () => {
     expect(sentry.toPathTemplate('/cms/nowhere/abc/search')).toBe('/cms/{id}/{id}/search')
   })
 })
+
+/**
+ * GoGo-CMS#241 (D-7 record addition 3) — the screen an error happened on, as a
+ * route template and nothing else.
+ */
+describe('route tag', () => {
+  const event = () =>
+    ({ exception: { values: [{ type: 'TypeError', value: 'x' }] } }) as unknown as ErrorEvent
+
+  it('tags the event with the current route template', () => {
+    sentry.setSentryRoute('/places/:id')
+    expect(sentry.beforeSend(event(), { originalException: new TypeError('x') })?.tags).toEqual({
+      route: '/places/:id',
+    })
+  })
+
+  it('no route yet: no tag', () => {
+    sentry.setSentryRoute(null)
+    expect(
+      sentry.beforeSend(event(), { originalException: new TypeError('x') })?.tags,
+    ).toBeUndefined()
+  })
+
+  it.each([
+    ['a real path with an id', '/places/3f2504e0-4f89-11d3-9a0c-0305e82c3301'],
+    ['a query', '/places?lat=10.7'],
+    ['an invite path', '/r/YDi_00PB1z4FSQZjpLbgdw'],
+    ['an email', '/users/a.b@example.com'],
+    ['a full URL', 'https://cms-dev.gogo.id.vn/places'],
+    ['upper case or underscores', '/Places/some_slug'],
+    ['a numeric id', '/costs/test-runs/42'],
+  ])('refuses %s, and clears a previous tag', (_label, value) => {
+    sentry.setSentryRoute('/places')
+    sentry.setSentryRoute(value)
+    expect(
+      sentry.beforeSend(event(), { originalException: new TypeError('x') })?.tags,
+    ).toBeUndefined()
+  })
+
+  it('builds the template from route definitions, outermost first', () => {
+    expect(
+      sentry.routeTemplateOf([
+        { route: { path: '/' } },
+        { route: {} },
+        { route: { path: 'places/:id' } },
+      ]),
+    ).toBe('/places/:id')
+    expect(sentry.routeTemplateOf([{ route: { path: '/' } }, { route: {} }, { route: {} }])).toBe(
+      '/',
+    )
+    expect(sentry.routeTemplateOf([{ route: { path: '/' } }, { route: { path: '*' } }])).toBe('/*')
+  })
+
+  it('keeps a template the redaction would touch out entirely, never sends it redacted', () => {
+    // A static segment that reads as a token to the ADR-0011 rules.
+    expect(sentry.asRouteTemplate('/r/abcdefghijklmnopqrstuv')).toBeNull()
+  })
+})
