@@ -4,7 +4,12 @@ import { RouterProvider } from 'react-router-dom'
 import { Providers } from '@/app/Providers'
 import { AppErrorBoundary } from '@/app/ErrorBoundary'
 import { router } from '@/app/routes'
-import { initSentry, rootErrorHandlers } from '@/shared/observability/sentry'
+import {
+  initSentry,
+  rootErrorHandlers,
+  routeTemplateOf,
+  setSentryRoute,
+} from '@/shared/observability/sentry'
 import './styles/global.css'
 
 async function bootstrap(): Promise<void> {
@@ -17,6 +22,10 @@ async function bootstrap(): Promise<void> {
     const { worker } = await import('@/shared/test/browser')
     await worker.start({ onUnhandledRequest: 'bypass' })
   }
+
+  // GoGo-CMS#241 — which screen an error came from, as a route template.
+  setSentryRoute(routeTemplateOf(router.state.matches))
+  router.subscribe((state) => setSentryRoute(routeTemplateOf(state.matches)))
 
   const container = document.getElementById('root')
   if (!container) throw new Error('#root missing')
