@@ -31,6 +31,12 @@ content-length content-type user-agent x-request-id`, giá trị giữ nguyên),
 - **Hợp đồng:** `apiFetchParsed` báo `ContractMismatchError(path, issuePaths)` (`kind: 'contract'`)
   trước khi đổi lỗi zod thành `ApiError{CONTRACT_MISMATCH}`; chỉ template đường dẫn và đường dẫn
   issue, không giá trị, không message của zod.
+- **Tag màn hình (GoGo-CMS#241, bổ sung D-7 lần 3 trên GoGo-Infra#208):** `main.tsx` gọi
+  `setSentryRoute(routeTemplateOf(router.state.matches))` lúc khởi động và ở mỗi lần điều hướng
+  (`router.subscribe`); `beforeSend` gắn `tags.route` sau bước redact. Giá trị ghép từ `path` của
+  định nghĩa route React Router (`/places/:id`), không bao giờ từ location; bị từ chối (không gắn
+  tag) nếu một segment không phải chữ thường-gạch nối, mã trạng thái 3 chữ số, `:param` hay `*`, hoặc
+  nếu `redactText` làm đổi giá trị. Action Discord 6164951 thêm `route` vào `data.tags`.
 - **Oracle:** `src/shared/observability/__fixtures__/redaction-cases.v1.json` chép nguyên văn từ
   GoGo-Infra `docs/adr/0011/redaction-cases.v1.json`, **v1, sha256
   `decf6c4336269b086b209a4d27a9c36ca2c392b307c9d76e4b24883a4f4ef6a0`**; `sentry.test.ts` kiểm digest
