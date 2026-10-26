@@ -10,7 +10,7 @@ export const styles = {
     'border px-2.5 text-xs font-semibold transition-colors ' +
     'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-coral ' +
     'disabled:cursor-not-allowed disabled:opacity-60',
-  dayToggleOn: 'border-coral bg-coral/10 text-coral',
+  dayToggleOn: 'border-accent-primary bg-accent-soft text-accent-on-soft',
   dayToggleOff: 'border-line-strong bg-surface text-text-muted hover:border-neutral-500',
   applyRow: 'flex flex-wrap items-end gap-2',
   applyHint: 'text-xs text-text-subtle',
@@ -24,7 +24,7 @@ export const styles = {
     'inline-flex min-h-[44px] items-center gap-1.5 rounded-compact border px-2.5 text-xs font-semibold ' +
     'transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ' +
     'focus-visible:outline-coral disabled:cursor-not-allowed disabled:opacity-60',
-  stateChipOn: 'border-coral bg-coral/10 text-coral',
+  stateChipOn: 'border-accent-primary bg-accent-soft text-accent-on-soft',
   stateChipOff: 'border-line-strong bg-surface text-text-muted hover:border-neutral-500',
 
   intervals: 'flex flex-col gap-2',

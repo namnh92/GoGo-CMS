@@ -5,7 +5,7 @@ export const styles = {
   weightRow: 'mb-4 last:mb-0',
   weightHead: 'mb-1.5 flex items-center justify-between gap-2',
   weightLabel: 'text-[13px] font-semibold text-text',
-  weightValue: 'text-[13px] font-bold tabular-nums text-coral-deep',
+  weightValue: 'text-[13px] font-bold tabular-nums text-accent-primary',
   slider: 'h-1.5 w-full cursor-pointer appearance-none rounded-pill',
   bounds: 'mt-0.5 flex justify-between text-[10px] tabular-nums text-text-subtle',
   flagRow:
@@ -14,7 +14,7 @@ export const styles = {
   flagDesc: 'mt-0.5 max-w-lg text-xs text-text-muted',
   flagMeta: 'mt-1 text-[11px] text-text-subtle',
   version: 'rounded-compact border p-3',
-  versionActive: 'border-coral/40 bg-coral-soft/40',
+  versionActive: 'border-accent-primary/40 bg-accent-soft/40',
   versionIdle: 'border-line',
   versionHead: 'mb-1 flex items-center justify-between gap-2',
   versionLabel: 'text-[13px] font-semibold text-text',

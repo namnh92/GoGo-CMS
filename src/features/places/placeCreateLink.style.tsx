@@ -19,7 +19,7 @@ export const styles = {
   providerLabel: 'text-[11px] text-text-subtle',
   providerValue: 'text-xs text-text',
   providerLink:
-    'text-xs font-medium text-coral underline underline-offset-2 ' +
+    'text-xs font-medium text-accent-primary underline underline-offset-2 ' +
     'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-coral',
   providerNote: 'mt-1.5 text-[11px] text-text-subtle',
   staleNote: 'mt-2 flex items-center gap-1.5 text-[11px] font-medium text-text-muted',

@@ -7,7 +7,7 @@ export const styles = {
   factLabel: 'shrink-0 text-text-muted',
   factValue: 'min-w-0 text-right font-semibold text-text break-words',
   mono: 'font-mono text-[12px] text-text',
-  link: 'text-coral underline underline-offset-2',
+  link: 'text-accent-primary underline underline-offset-2',
   note: 'rounded-compact border border-line bg-surface-sunken px-3 py-2 text-[13px] text-text',
   hint: 'flex items-start gap-2 rounded-compact border border-line bg-surface-sunken px-3 py-2 text-xs text-text-muted',
   warn: 'flex items-start gap-2 rounded-compact border border-amber/45 bg-amber-soft px-3 py-2 text-xs text-text',

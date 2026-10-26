@@ -35,7 +35,7 @@ export const styles = {
   candidateList: 'flex flex-col gap-2',
   candidate:
     'flex items-start gap-3 rounded-compact border border-line bg-surface px-3 py-2.5 text-left',
-  candidateOn: 'border-coral bg-coral-soft/40',
+  candidateOn: 'border-accent-primary bg-accent-soft/40',
   candidateOff: 'opacity-60',
   candidateBody: 'min-w-0 flex-1',
   candidateWhy: 'mt-1 text-[11px] text-text-subtle',

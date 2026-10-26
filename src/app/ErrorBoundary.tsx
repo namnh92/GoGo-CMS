@@ -31,7 +31,7 @@ export class AppErrorBoundary extends Component<Props, State> {
           <button
             type="button"
             onClick={() => window.location.assign('/')}
-            className="mt-4 inline-flex min-h-11 items-center rounded-compact bg-coral px-4 text-sm font-semibold text-text-on-accent"
+            className="mt-4 inline-flex min-h-11 items-center rounded-compact bg-accent-primary px-4 text-sm font-semibold text-text-on-accent"
           >
             GoGo CMS
           </button>

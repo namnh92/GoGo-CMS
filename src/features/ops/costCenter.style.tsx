@@ -40,7 +40,7 @@ export const styles = {
   sourceId: 'font-mono text-[12px] text-text',
   operation: 'rounded-compact border border-line bg-surface px-3 py-2',
   operationHead: 'flex flex-wrap items-center gap-2',
-  runLink: 'font-semibold text-coral-deep underline-offset-2 hover:underline',
+  runLink: 'font-semibold text-accent-primary underline-offset-2 hover:underline',
   totals: 'grid gap-4 sm:grid-cols-3',
   forecastGrid: 'grid gap-4 md:grid-cols-2',
   forecastBlock: 'rounded-compact border border-line bg-surface-muted px-4 py-3',

@@ -426,8 +426,8 @@ describe('sign-in matrix, remaining cells (GoGo-CMS#232 review)', () => {
     methods({ password: true, accessSso: true })
     renderWithProviders(app(), { route: '/login' })
 
-    expect(await ssoButton()).toHaveClass('bg-coral')
-    expect(screen.getByRole('button', { name: 'Tiếp tục' })).not.toHaveClass('bg-coral')
+    expect(await ssoButton()).toHaveClass('bg-accent-primary')
+    expect(screen.getByRole('button', { name: 'Tiếp tục' })).not.toHaveClass('bg-accent-primary')
   })
 
   it('renders no sign-in control at all when no door is open', async () => {
