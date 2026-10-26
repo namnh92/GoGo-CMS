@@ -11,7 +11,7 @@ export const styles = {
   time: 'text-[11px] tabular-nums text-text-subtle',
   body: 'line-clamp-2 text-[13px] text-text-muted',
   itemFoot: 'mt-2 flex flex-wrap items-center justify-between gap-2',
-  place: 'text-[11px] font-semibold text-coral-deep',
+  place: 'text-[11px] font-semibold text-accent-primary',
   kind: 'text-[11px] text-text-subtle',
   detailStack: 'flex flex-col gap-4',
   quote: 'rounded-compact bg-surface-muted p-3 text-[13px] italic text-text-muted',

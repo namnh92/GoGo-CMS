@@ -6,7 +6,10 @@ type Size = 'sm' | 'md'
 
 const VARIANT: Record<Variant, string> = {
   primary:
-    'bg-coral text-text-on-accent hover:bg-coral-deep active:bg-coral-deep disabled:bg-coral/45',
+    'bg-accent-primary text-text-on-accent hover:bg-accent-pressed active:bg-accent-pressed ' +
+    // Disabled is a neutral surface, not a faded accent: white on a 45% coral
+    // was about 2:1, and a washed-out CTA still reads as the thing to press.
+    'disabled:bg-surface-sunken disabled:text-text-muted',
   secondary:
     'bg-surface text-text border border-line-strong hover:bg-surface-muted disabled:text-text-subtle',
   ghost: 'bg-transparent text-text-muted hover:bg-surface-sunken disabled:text-text-subtle',

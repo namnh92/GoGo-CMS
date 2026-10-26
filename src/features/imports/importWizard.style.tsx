@@ -5,7 +5,7 @@ export const styles = {
   templateHint: 'text-[11px] text-text-subtle',
   sourceGrid: 'grid gap-3 md:grid-cols-2',
   sourceOption: 'flex flex-col gap-2 rounded-card border-2 p-4 text-left transition-colors',
-  sourceOptionActive: 'border-coral bg-coral-soft/40',
+  sourceOptionActive: 'border-accent-primary bg-accent-soft/40',
   sourceOptionIdle: 'border-line hover:border-line-strong',
   sourceTitle: 'font-display text-sm font-bold text-text',
   sourceHint: 'text-xs text-text-muted',

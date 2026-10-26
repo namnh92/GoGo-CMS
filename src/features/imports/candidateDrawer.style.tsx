@@ -5,7 +5,7 @@ export const styles = {
   factValue: 'text-text',
   list: 'mt-4 flex flex-col gap-2',
   candidate: 'flex gap-3 rounded-card border border-line p-3',
-  candidateActive: 'border-coral bg-coral-soft/40',
+  candidateActive: 'border-accent-primary bg-accent-soft/40',
   thumb: 'h-14 w-14 shrink-0 rounded-compact object-cover',
   thumbFallback:
     'flex h-14 w-14 shrink-0 items-center justify-center rounded-compact bg-surface-sunken text-[11px] text-text-subtle',

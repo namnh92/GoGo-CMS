@@ -220,7 +220,7 @@ export function BulkActionBar({
       aria-label={hint}
       className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 flex-wrap items-center gap-3 rounded-sheet border border-line-strong bg-surface-inverse px-4 py-3 text-neutral-0 shadow-2xl"
     >
-      <span className="rounded-pill bg-coral px-2 py-0.5 text-[11px] font-bold tabular-nums">
+      <span className="rounded-pill bg-accent-primary px-2 py-0.5 text-[11px] font-bold tabular-nums">
         {count}
       </span>
       {hint ? <span className="text-[13px] text-neutral-300">{hint}</span> : null}

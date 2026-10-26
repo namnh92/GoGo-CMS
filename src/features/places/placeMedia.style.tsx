@@ -2,7 +2,7 @@ export const styles = {
   /* Uploader ------------------------------------------------------------ */
   dropzone:
     'flex flex-col items-center justify-center gap-2 rounded-card border border-dashed border-line-strong bg-surface-sunken px-4 py-6 text-center transition-colors duration-[var(--duration-fast)]',
-  dropzoneActive: 'border-coral bg-coral-soft/40',
+  dropzoneActive: 'border-accent-primary bg-accent-soft/40',
   dropzoneDisabled: 'opacity-60',
   dropzoneTitle: 'text-[13px] font-semibold text-text',
   dropzoneHint: 'max-w-md text-[11px] text-text-subtle',

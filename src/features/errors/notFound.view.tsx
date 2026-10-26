@@ -13,7 +13,7 @@ export default function NotFoundScreen() {
         <div className={styles.action}>
           <Link
             to="/"
-            className="inline-flex min-h-11 items-center rounded-compact bg-coral px-4 text-sm font-semibold text-text-on-accent"
+            className="inline-flex min-h-11 items-center rounded-compact bg-accent-primary px-4 text-sm font-semibold text-text-on-accent"
           >
             {t('state.backToDashboard')}
           </Link>

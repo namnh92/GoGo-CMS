@@ -9,5 +9,5 @@ export const styles = {
   diffValue: 'break-all font-mono text-[11px] text-text',
   blocked: 'flex flex-col gap-1 rounded-compact border border-dashed border-line-strong p-2.5',
   blockedWhy: 'text-[11px] text-text-subtle',
-  blockedLink: 'text-[11px] font-semibold text-coral underline underline-offset-2',
+  blockedLink: 'text-[11px] font-semibold text-accent-primary underline underline-offset-2',
 } as const

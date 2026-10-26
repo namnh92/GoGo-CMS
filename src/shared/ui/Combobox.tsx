@@ -386,7 +386,7 @@ export function Combobox({
                         ) : null}
                       </span>
                       {/* A glyph, so selection is never colour alone. */}
-                      <span className="shrink-0 text-coral" aria-hidden="true">
+                      <span className="shrink-0 text-accent-primary" aria-hidden="true">
                         {selected ? <CheckIcon size={14} /> : null}
                       </span>
                     </div>

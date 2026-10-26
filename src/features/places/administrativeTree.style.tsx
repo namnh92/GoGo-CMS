@@ -17,7 +17,7 @@ export const styles = {
   name: 'min-w-0 flex-1 truncate text-[13px] text-text',
   count: 'shrink-0 tabular-nums text-[12px] font-semibold text-text',
   review: 'shrink-0 tabular-nums text-[11px] text-amber-ink',
-  check: 'shrink-0 text-coral',
+  check: 'shrink-0 text-accent-primary',
   reviewRow: 'border-t border-line',
   reviewBreakdown: 'flex flex-wrap gap-x-3 gap-y-1 px-4 pb-3 text-[11px] text-text-subtle',
   footer: 'border-t border-line px-4 py-2 text-[11px] text-text-subtle',

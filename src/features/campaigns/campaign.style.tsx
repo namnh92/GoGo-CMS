@@ -36,7 +36,7 @@ export const styles = {
   pushBody: 'min-w-0 flex-1',
   pushTitle: 'truncate text-[12px] font-semibold text-text',
   pushText: 'line-clamp-2 text-[11px] text-text-muted',
-  pushCta: 'mt-1 inline-flex text-[11px] font-semibold text-coral',
+  pushCta: 'mt-1 inline-flex text-[11px] font-semibold text-accent-primary',
   /* The expanded notification: both platforms put the picture under the text. */
   pushImage: 'mt-2 block h-24 w-full rounded-compact object-cover',
   pushImageFallback:

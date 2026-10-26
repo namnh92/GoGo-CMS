@@ -33,6 +33,17 @@
   --color-danger-ink: #b73647;
   --color-danger-soft: #fadde2;
 
+  /* ---- Accent (= accents.orange on mobile) -------------------------- */
+  /* What a CTA, the active tab and a link use. Brand coral stays for badges,
+     charts and the logo, but white on it is 4.09 and coral text on the sunken
+     surface 3.69 — under AA (GoGo-CMS#246). Mobile lowered the lightness of
+     the same hue until white clears 4.5 on white and ivory (owner 2026-09-24):
+     primary 5.13 / 4.63, on-soft 5.66 on soft. */
+  --color-accent-primary: #ca381f;
+  --color-accent-pressed: #a72e19;
+  --color-accent-soft: #ffe3da;
+  --color-accent-on-soft: #a72e19;
+
   /* ---- Neutrals (= colors.neutral on mobile) ------------------------ */
   --color-neutral-0: #ffffff;
   --color-neutral-25: #fcfbf8;

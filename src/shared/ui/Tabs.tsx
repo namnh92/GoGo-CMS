@@ -48,7 +48,7 @@ export function Tabs<T extends string>({
               '-mb-px flex min-h-11 items-center gap-1.5 border-b-2 px-4 text-[13px] font-semibold',
               'transition-colors duration-[var(--duration-fast)]',
               selected
-                ? 'border-coral text-coral'
+                ? 'border-accent-primary text-accent-primary'
                 : 'border-transparent text-text-subtle hover:text-text',
             )}
           >
@@ -57,7 +57,9 @@ export function Tabs<T extends string>({
               <span
                 className={cn(
                   'rounded-pill px-1.5 py-0.5 text-[11px] tabular-nums',
-                  selected ? 'bg-coral-soft text-coral-ink' : 'bg-surface-sunken text-text-subtle',
+                  selected
+                    ? 'bg-accent-soft text-accent-on-soft'
+                    : 'bg-surface-sunken text-text-subtle',
                 )}
               >
                 {item.count}

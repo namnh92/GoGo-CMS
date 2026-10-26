@@ -121,7 +121,7 @@ export function Sidebar() {
     )
 
   const countBadge = (count: number) => (
-    <span className="rounded-pill bg-coral px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-text-on-accent">
+    <span className="rounded-pill bg-accent-primary px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-text-on-accent">
       {count}
     </span>
   )
@@ -222,7 +222,7 @@ export function Sidebar() {
       <div className="flex items-center gap-2.5 border-t border-line px-3 py-3">
         <span
           aria-hidden="true"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-pill bg-coral text-xs font-bold text-text-on-accent"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-pill bg-accent-primary text-xs font-bold text-text-on-accent"
         >
           {(session?.displayName || '?').trim().charAt(0).toUpperCase()}
         </span>

@@ -35,5 +35,5 @@ export const styles = {
   previewTitle: 'font-display text-sm font-bold text-text',
   previewSubtitle: 'mt-0.5 text-xs text-text-muted',
   previewCta:
-    'mt-2 inline-flex rounded-pill bg-coral px-3 py-1 text-[11px] font-semibold text-neutral-0',
+    'mt-2 inline-flex rounded-pill bg-accent-primary px-3 py-1 text-[11px] font-semibold text-neutral-0',
 } as const

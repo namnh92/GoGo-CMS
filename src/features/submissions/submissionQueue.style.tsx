@@ -1,7 +1,7 @@
 export const styles = {
   list: 'flex flex-col gap-3',
   row: 'flex w-full flex-col gap-2 rounded-card border border-line bg-surface p-4 text-left',
-  rowActive: 'border-coral bg-coral-soft/40',
+  rowActive: 'border-accent-primary bg-accent-soft/40',
   rowIdle: 'hover:border-line-strong hover:bg-surface-sunken',
   rowTop: 'flex flex-wrap items-center justify-between gap-2',
   title: 'text-[15px] font-bold text-text',

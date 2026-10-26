@@ -132,7 +132,7 @@ export function AdministrativeSummary({
         ) : (
           <p className="text-xs">
             <Link
-              className="text-coral underline underline-offset-2"
+              className="text-accent-primary underline underline-offset-2"
               to={`/administrative-mapping?status=&place=${placeId}`}
             >
               {t('placeEditor.administrativeReviewQueue')}

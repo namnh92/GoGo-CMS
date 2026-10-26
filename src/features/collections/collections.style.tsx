@@ -1,7 +1,7 @@
 export const styles = {
   layout: 'grid gap-5 xl:grid-cols-2',
   item: 'flex w-full items-center gap-3 rounded-compact border p-3 text-left',
-  itemActive: 'border-coral/40 bg-coral-soft/40',
+  itemActive: 'border-accent-primary/40 bg-accent-soft/40',
   itemIdle: 'border-transparent hover:bg-surface-muted',
   cover: 'h-10 w-12 shrink-0 rounded-compact object-cover',
   coverFallback:
