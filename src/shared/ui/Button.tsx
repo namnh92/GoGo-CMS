@@ -9,20 +9,21 @@ const VARIANT: Record<Variant, string> = {
     'bg-accent-primary text-text-on-accent hover:bg-accent-pressed active:bg-accent-pressed ' +
     // Disabled is a neutral surface, not a faded accent: white on a 45% coral
     // was about 2:1, and a washed-out CTA still reads as the thing to press.
-    'disabled:bg-surface-sunken disabled:text-text-muted',
+    // surface-subtle is mobile's disabled fill; text-muted on it is 7.66.
+    'disabled:bg-surface-subtle disabled:text-text-muted',
   secondary:
-    'bg-surface text-text border border-line-strong hover:bg-surface-muted disabled:text-text-subtle',
-  ghost: 'bg-transparent text-text-muted hover:bg-surface-sunken disabled:text-text-subtle',
+    'bg-surface-card text-text-primary border border-line-strong hover:bg-surface-muted disabled:text-text-secondary',
+  ghost: 'bg-transparent text-text-muted hover:bg-surface-canvas disabled:text-text-secondary',
   danger:
-    'bg-surface text-danger-ink border border-danger/40 hover:bg-danger-soft disabled:text-danger-ink/45',
+    'bg-surface-card text-danger-ink border border-danger/40 hover:bg-danger-soft disabled:text-danger-ink/45',
   success:
-    'bg-surface text-mint-ink border border-mint/45 hover:bg-mint-soft disabled:text-mint-ink/45',
+    'bg-surface-card text-mint-ink border border-mint/45 hover:bg-mint-soft disabled:text-mint-ink/45',
 }
 
 const SIZE: Record<Size, string> = {
   // Dense layout, but the 44px minimum target still holds: `sm` tightens the
   // horizontal padding and the type scale, never the hit area.
-  sm: 'text-[13px] px-3 min-h-11',
+  sm: 'text-body px-3 min-h-11',
   md: 'text-sm px-4 min-h-11',
 }
 
@@ -114,7 +115,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
         'transition-colors duration-[var(--duration-fast)]',
         tone === 'danger'
           ? 'text-danger-ink hover:bg-danger-soft'
-          : 'text-text-subtle hover:bg-surface-sunken hover:text-text',
+          : 'text-text-secondary hover:bg-surface-canvas hover:text-text-primary',
         'disabled:cursor-not-allowed disabled:opacity-45',
         className,
       )}

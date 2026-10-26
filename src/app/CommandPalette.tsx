@@ -217,16 +217,16 @@ function CommandPaletteDialog({ open, onClose }: { open: boolean; onClose: () =>
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={onKeyDown}
             className={cn(
-              'min-h-11 w-full rounded-compact border border-line-strong bg-surface pr-10 pl-9 text-sm text-text',
-              'placeholder:text-text-subtle transition-colors duration-[var(--duration-fast)]',
+              'min-h-11 w-full rounded-compact border border-line-strong bg-surface-card pr-10 pl-9 text-sm text-text-primary',
+              'placeholder:text-text-secondary transition-colors duration-[var(--duration-fast)]',
               'hover:border-neutral-500',
             )}
           />
-          <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-text-subtle">
+          <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-text-secondary">
             <SearchIcon size={15} />
           </span>
           {searching ? (
-            <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-text-subtle">
+            <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-text-secondary">
               <Spinner />
             </span>
           ) : null}
@@ -254,28 +254,28 @@ function CommandPaletteDialog({ open, onClose }: { open: boolean; onClose: () =>
               }}
               onMouseEnter={() => setActiveIndex(index)}
               className={cn(
-                'flex min-h-11 w-full items-center justify-between gap-3 rounded-compact px-3 text-left text-[13px]',
+                'flex min-h-11 w-full items-center justify-between gap-3 rounded-compact px-3 text-left text-body',
                 'transition-colors duration-[var(--duration-fast)]',
                 index === activeIndex
                   ? 'bg-coral-soft text-coral-ink'
-                  : 'text-text hover:bg-surface-sunken',
+                  : 'text-text-primary hover:bg-surface-canvas',
               )}
             >
               <span className="truncate font-semibold">{result.label}</span>
-              <span className="shrink-0 text-[11px] text-text-subtle">{result.hint}</span>
+              <span className="shrink-0 text-caption text-text-secondary">{result.hint}</span>
             </button>
           </li>
         ))}
       </ul>
 
       {searching ? (
-        <p role="status" aria-live="polite" className="px-5 pb-4 text-xs text-text-subtle">
+        <p role="status" aria-live="polite" className="px-5 pb-4 text-xs text-text-secondary">
           {t('state.loading')}
         </p>
       ) : noResults ? (
         // Two different situations, two different sentences: nothing typed yet
         // is not the same as "we looked and there is nothing".
-        <p role="status" aria-live="polite" className="px-5 pb-4 text-xs text-text-subtle">
+        <p role="status" aria-live="polite" className="px-5 pb-4 text-xs text-text-secondary">
           {debounced.length > 0 ? t('palette.noResults', { query: debounced }) : t('palette.empty')}
         </p>
       ) : null}

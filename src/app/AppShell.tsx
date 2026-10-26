@@ -16,7 +16,7 @@ export function AppShell() {
 
   return (
     <CommandPaletteProvider>
-      <div className="flex h-full flex-col bg-surface-sunken">
+      <div className="flex h-full flex-col bg-surface-canvas">
         <a href="#main" className="skip-link">
           {t('app.skipToContent')}
         </a>
@@ -36,7 +36,7 @@ export function AppShell() {
             {!online ? (
               <p
                 role="status"
-                className="flex items-center justify-center gap-2 bg-amber-soft px-4 py-1.5 text-xs font-semibold text-text"
+                className="flex items-center justify-center gap-2 bg-amber-soft px-4 py-1.5 text-xs font-semibold text-text-primary"
               >
                 <span aria-hidden="true">⚠</span>
                 {t('state.offlineHint')}
@@ -46,7 +46,7 @@ export function AppShell() {
               // Warned, not ambushed: a half-typed moderation reason survives.
               <div
                 role="alert"
-                className="flex flex-wrap items-center justify-center gap-3 bg-amber-soft px-4 py-2 text-xs font-semibold text-text"
+                className="flex flex-wrap items-center justify-center gap-3 bg-amber-soft px-4 py-2 text-xs font-semibold text-text-primary"
               >
                 <span>
                   <span aria-hidden="true">⏱ </span>

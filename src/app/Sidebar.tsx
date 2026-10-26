@@ -113,25 +113,27 @@ export function Sidebar() {
   const leafClass = (active: boolean, nested: boolean) =>
     cn(
       'flex min-h-11 items-center gap-2.5 rounded-compact px-3 font-semibold',
-      nested ? 'text-[12px]' : 'text-[13px]',
+      nested ? 'text-label' : 'text-body',
       'transition-colors duration-[var(--duration-fast)]',
       active
         ? 'bg-coral-soft text-coral-ink'
-        : 'text-text-muted hover:bg-surface-sunken hover:text-text',
+        : 'text-text-muted hover:bg-surface-canvas hover:text-text-primary',
     )
 
   const countBadge = (count: number) => (
-    <span className="rounded-pill bg-accent-primary px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-text-on-accent">
+    <span className="rounded-pill bg-accent-primary px-1.5 py-0.5 text-caption font-bold tabular-nums text-text-on-accent">
       {count}
     </span>
   )
 
   return (
-    <aside className="flex h-full w-48 shrink-0 flex-col border-r border-line bg-surface">
+    <aside className="flex h-full w-48 shrink-0 flex-col border-r border-line bg-surface-card">
       <div className="flex flex-wrap items-center gap-2 px-4 py-5">
         <LogoMark size={30} />
-        <span className="font-display text-base font-extrabold text-text">{t('app.name')}</span>
-        <span className="rounded bg-coral-soft px-1.5 py-0.5 text-[10px] font-bold text-coral-ink">
+        <span className="font-display text-base font-extrabold text-text-primary">
+          {t('app.name')}
+        </span>
+        <span className="rounded bg-coral-soft px-1.5 py-0.5 text-caption font-bold text-coral-ink">
           {t('app.suffix')}
         </span>
         {/* One instance, always on screen: which deployment is this? */}
@@ -170,12 +172,12 @@ export function Sidebar() {
                 aria-controls={regionId}
                 onClick={() => toggleGroup(entry.id)}
                 className={cn(
-                  'flex min-h-11 w-full items-center gap-2.5 rounded-compact px-3 text-[13px] font-semibold',
+                  'flex min-h-11 w-full items-center gap-2.5 rounded-compact px-3 text-body font-semibold',
                   'transition-colors duration-[var(--duration-fast)]',
                   // A closed group still says the current screen lives inside it.
                   holdsActiveRoute && !open
                     ? 'bg-coral-soft text-coral-ink'
-                    : 'text-text-muted hover:bg-surface-sunken hover:text-text',
+                    : 'text-text-muted hover:bg-surface-canvas hover:text-text-primary',
                 )}
               >
                 <entry.icon size={17} />
@@ -227,8 +229,10 @@ export function Sidebar() {
           {(session?.displayName || '?').trim().charAt(0).toUpperCase()}
         </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-xs font-semibold text-text">{session?.displayName || '—'}</p>
-          <p className="truncate text-[10px] text-text-subtle">
+          <p className="truncate text-xs font-semibold text-text-primary">
+            {session?.displayName || '—'}
+          </p>
+          <p className="truncate text-caption text-text-secondary">
             {session ? t(`role.${session.role}` as const) : ''}
           </p>
         </div>

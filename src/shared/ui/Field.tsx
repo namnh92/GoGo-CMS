@@ -9,9 +9,9 @@ import {
 import { cn } from './cn'
 
 const CONTROL =
-  'w-full rounded-compact border border-line-strong bg-surface px-3 py-2.5 text-sm text-text ' +
-  'placeholder:text-text-subtle transition-colors duration-[var(--duration-fast)] ' +
-  'hover:border-neutral-500 disabled:cursor-not-allowed disabled:bg-surface-sunken disabled:text-text-subtle ' +
+  'w-full rounded-compact border border-line-strong bg-surface-card px-3 py-2.5 text-sm text-text-primary ' +
+  'placeholder:text-text-secondary transition-colors duration-[var(--duration-fast)] ' +
+  'hover:border-neutral-500 disabled:cursor-not-allowed disabled:bg-surface-canvas disabled:text-text-secondary ' +
   'aria-[invalid=true]:border-danger'
 
 /**
@@ -65,7 +65,7 @@ export function Field({
           {error}
         </p>
       ) : hint ? (
-        <p id={messageId} className="text-xs text-text-subtle">
+        <p id={messageId} className="text-xs text-text-secondary">
           {hint}
         </p>
       ) : null}
@@ -230,9 +230,9 @@ export const InlineSelect = forwardRef<
       // Built from the same tokens as CONTROL but without `w-full`, which
       // would fight the auto width a toolbar control needs.
       className={cn(
-        'min-h-11 rounded-compact border border-line-strong bg-surface px-3 pr-8 text-[13px] text-text',
+        'min-h-11 rounded-compact border border-line-strong bg-surface-card px-3 pr-8 text-body text-text-primary',
         'transition-colors duration-[var(--duration-fast)] hover:border-neutral-500',
-        'disabled:cursor-not-allowed disabled:bg-surface-sunken disabled:text-text-subtle',
+        'disabled:cursor-not-allowed disabled:bg-surface-canvas disabled:text-text-secondary',
         className,
       )}
       {...props}
@@ -250,7 +250,7 @@ export function SearchInput({
   return (
     <div className={cn('relative', className)}>
       <input type="search" aria-label={label} className={cn(CONTROL, 'min-h-11 pl-9')} {...props} />
-      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-subtle">
+      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary">
         <svg width="15" height="15" viewBox="0 0 18 18" fill="none" aria-hidden="true">
           <circle cx="7.75" cy="7.75" r="5.25" stroke="currentColor" strokeWidth="1.5" />
           <path

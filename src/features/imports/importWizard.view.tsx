@@ -225,7 +225,7 @@ export default function ImportWizardScreen() {
                   />
                   <label
                     htmlFor="import-file"
-                    className="inline-flex min-h-11 cursor-pointer items-center rounded-compact border border-line-strong bg-surface px-4 text-sm font-semibold text-text"
+                    className="inline-flex min-h-11 cursor-pointer items-center rounded-compact border border-line-strong bg-surface-card px-4 text-sm font-semibold text-text-primary"
                   >
                     {t('wizard.filePick')}
                   </label>
@@ -235,7 +235,7 @@ export default function ImportWizardScreen() {
                       {formatBytes(file.size, locale)}
                     </p>
                   ) : (
-                    <p className="text-xs text-text-subtle">{t('wizard.fileHint')}</p>
+                    <p className="text-xs text-text-secondary">{t('wizard.fileHint')}</p>
                   )}
                 </div>
               ) : (
@@ -300,7 +300,7 @@ export default function ImportWizardScreen() {
                       {preview.headers.map((header, columnIndex) => (
                         <tr key={header}>
                           <td className={styles.mappingCell}>
-                            <span className="font-mono text-[12px] font-semibold text-text">
+                            <span className="font-mono text-label font-semibold text-text-primary">
                               {header}
                             </span>
                           </td>
@@ -316,7 +316,7 @@ export default function ImportWizardScreen() {
                           <td className={styles.mappingCell}>
                             <select
                               aria-label={header}
-                              className="min-h-11 w-full rounded-compact border border-line-strong bg-surface px-2 text-[13px]"
+                              className="min-h-11 w-full rounded-compact border border-line-strong bg-surface-card px-2 text-body"
                               value={mapping[header] ?? ''}
                               onChange={(event) =>
                                 setMapping((current) => {
@@ -435,7 +435,7 @@ export default function ImportWizardScreen() {
                           onChange={() => setMode(option)}
                           className="accent-[var(--color-coral)]"
                         />
-                        <span className="text-[13px] font-semibold text-text">
+                        <span className="text-body font-semibold text-text-primary">
                           {t(`importMode.${option}` as const)}
                         </span>
                       </span>
@@ -457,16 +457,18 @@ export default function ImportWizardScreen() {
                 <option value={defaultCity || 'Hồ Chí Minh'}>{defaultCity || 'Hồ Chí Minh'}</option>
               </Select>
 
-              <dl className="grid gap-2 rounded-compact border border-line bg-surface-muted p-3 text-[13px] sm:grid-cols-2">
+              <dl className="grid gap-2 rounded-compact border border-line bg-surface-muted p-3 text-body sm:grid-cols-2">
                 <div>
-                  <dt className="text-xs text-text-subtle">{t('imports.col.source')}</dt>
-                  <dd className="font-semibold text-text">
+                  <dt className="text-xs text-text-secondary">{t('imports.col.source')}</dt>
+                  <dd className="font-semibold text-text-primary">
                     {sourceKind === 'file' ? (file?.name ?? '—') : sheetUrl || '—'}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-text-subtle">{t('imports.col.mode')}</dt>
-                  <dd className="font-semibold text-text">{t(`importMode.${mode}` as const)}</dd>
+                  <dt className="text-xs text-text-secondary">{t('imports.col.mode')}</dt>
+                  <dd className="font-semibold text-text-primary">
+                    {t(`importMode.${mode}` as const)}
+                  </dd>
                 </div>
               </dl>
 

@@ -84,7 +84,7 @@ export function TakedownDialog({
       description={t('emergency.subtitle')}
       footer={
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="text-[11px] text-text-subtle">{t('emergency.oneAtATime')}</span>
+          <span className="text-caption text-text-secondary">{t('emergency.oneAtATime')}</span>
           {/* #247 — a locked button says why, beside itself. The reason the
               operator typed stays in the box for when the API answers again. */}
           {!online ? (

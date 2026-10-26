@@ -81,21 +81,27 @@ export function AdministrativeSummary({
   const hasUnit = Boolean(summary.provinceCode || summary.communeCode)
 
   return (
-    <section className="flex flex-col gap-2 rounded-lg border border-line bg-surface-sunken p-3">
+    <section className="flex flex-col gap-2 rounded-lg border border-line bg-surface-canvas p-3">
       <header className="flex flex-wrap items-center gap-2">
-        <h4 className="text-[13px] font-semibold text-text">{t('placeEditor.administrative')}</h4>
+        <h4 className="text-body font-semibold text-text-primary">
+          {t('placeEditor.administrative')}
+        </h4>
         <MappingStatusBadge status={summary.status} />
       </header>
 
       {hasUnit ? (
-        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[13px]">
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-body">
           <dt className="text-text-muted">{t('placeEditor.province')}</dt>
-          <dd className="text-text">{unitLine(summary.provinceName, summary.provinceCode)}</dd>
+          <dd className="text-text-primary">
+            {unitLine(summary.provinceName, summary.provinceCode)}
+          </dd>
           <dt className="text-text-muted">{t('placeEditor.commune')}</dt>
-          <dd className="text-text">{unitLine(summary.communeName, summary.communeCode)}</dd>
+          <dd className="text-text-primary">
+            {unitLine(summary.communeName, summary.communeCode)}
+          </dd>
         </dl>
       ) : (
-        <p className="text-[13px] text-text-muted">{t('placeEditor.administrativeUnmapped')}</p>
+        <p className="text-body text-text-muted">{t('placeEditor.administrativeUnmapped')}</p>
       )}
 
       <p className="text-xs text-text-muted">
@@ -136,7 +142,7 @@ export function AdministrativeSummary({
             <Button variant="secondary" onClick={() => setReviewing(true)}>
               {t('placeEditor.administrativeReview')}
             </Button>
-            <p className="mt-1 text-xs text-text-subtle">
+            <p className="mt-1 text-xs text-text-secondary">
               {t('placeEditor.administrativeReviewHint')}
             </p>
           </div>
@@ -152,7 +158,7 @@ export function AdministrativeSummary({
         )
       ) : null}
 
-      <p className="text-xs text-text-subtle">{t('placeEditor.administrativeLegacyNote')}</p>
+      <p className="text-xs text-text-secondary">{t('placeEditor.administrativeLegacyNote')}</p>
 
       {placeId ? (
         <MappingDetailDrawer

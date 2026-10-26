@@ -96,12 +96,12 @@ function UnsavedList({ pending }: { pending: string[] }): ReactNode {
   if (pending.length === 0) return null
   return (
     <>
-      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-subtle">
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-secondary">
         {t('unsaved.pending')}
       </p>
       <ul className="divide-y divide-line rounded-compact border border-line">
         {pending.map((item) => (
-          <li key={item} className="px-3 py-2.5 text-sm text-text">
+          <li key={item} className="px-3 py-2.5 text-sm text-text-primary">
             {item}
           </li>
         ))}

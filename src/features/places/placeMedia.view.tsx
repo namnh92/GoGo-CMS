@@ -1054,7 +1054,7 @@ export function PlaceMediaCard({
 
         <div className="mt-4">
           {ordered.length === 0 ? (
-            <p className="text-xs text-text-subtle">{t('placeEditor.mediaEmpty')}</p>
+            <p className="text-xs text-text-secondary">{t('placeEditor.mediaEmpty')}</p>
           ) : (
             <ul className={styles.list}>
               {ordered.map((item, index) => {
@@ -1111,7 +1111,7 @@ export function PlaceMediaCard({
                           </Badge>
                         ) : null}
                         {item.createdAt ? (
-                          <span className="text-[11px] text-text-subtle">
+                          <span className="text-caption text-text-secondary">
                             {formatDateTime(item.createdAt, locale)}
                           </span>
                         ) : null}

@@ -40,12 +40,12 @@ function Frame({
             ? 'bg-danger-soft text-danger-ink'
             : tone === 'amber'
               ? 'bg-amber-soft text-amber-ink'
-              : 'bg-surface-sunken text-text-subtle',
+              : 'bg-surface-canvas text-text-secondary',
         )}
       >
         {icon}
       </span>
-      <p className="font-display text-sm font-bold text-text">{title}</p>
+      <p className="font-display text-sm font-bold text-text-primary">{title}</p>
       {hint ? <p className="max-w-md text-xs text-text-muted">{hint}</p> : null}
       {action ? <div className="mt-2">{action}</div> : null}
     </div>
@@ -58,7 +58,7 @@ export function LoadingState({ label }: { label?: string }) {
     <div
       role="status"
       aria-live="polite"
-      className="flex items-center justify-center gap-2 rounded-card border border-line bg-surface px-6 py-12 text-sm text-text-muted"
+      className="flex items-center justify-center gap-2 rounded-card border border-line bg-surface-card px-6 py-12 text-sm text-text-muted"
     >
       <Spinner />
       {label ?? t('state.loading')}
@@ -140,7 +140,7 @@ export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () =>
         <>
           {describe(error)}
           {apiError?.requestId ? (
-            <span className="mt-1 block font-mono text-[11px] text-text-subtle">
+            <span className="mt-1 block font-mono text-caption text-text-secondary">
               {t('state.requestId')}: {apiError.requestId}
             </span>
           ) : null}
@@ -190,7 +190,7 @@ export function AsyncBoundary<T>({
 
 export function Skeleton({ className }: { className?: string }) {
   return (
-    <div className={cn('animate-pulse rounded bg-surface-sunken', className)} aria-hidden="true" />
+    <div className={cn('animate-pulse rounded bg-surface-canvas', className)} aria-hidden="true" />
   )
 }
 

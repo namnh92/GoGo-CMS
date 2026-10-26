@@ -25,7 +25,7 @@ export function Stepper({
   const currentIndex = steps.findIndex((step) => step.id === current)
 
   return (
-    <ol className={cn('flex flex-wrap items-center gap-2 text-[12px]', className)}>
+    <ol className={cn('flex flex-wrap items-center gap-2 text-label', className)}>
       {steps.map((step, index) => {
         const active = step.id === current
         const done = currentIndex > index
@@ -39,13 +39,13 @@ export function Stepper({
                 ? 'border-coral bg-coral-soft text-coral-ink'
                 : done
                   ? 'border-mint/45 bg-mint-soft text-mint-ink'
-                  : 'border-line-strong bg-surface text-text-subtle',
+                  : 'border-line-strong bg-surface-card text-text-secondary',
             )}
           >
             {/* Number and tick are decoration: the label is the name of the
                 step, and `aria-current` is what marks where we are. */}
             <span
-              className="flex h-5 w-5 items-center justify-center rounded-full bg-surface text-[10px]"
+              className="flex h-5 w-5 items-center justify-center rounded-full bg-surface-card text-caption"
               aria-hidden="true"
             >
               {done ? '✓' : index + 1}

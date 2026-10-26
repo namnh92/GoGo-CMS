@@ -1099,7 +1099,7 @@ export default function PlaceEditorScreen() {
                     />
                     <CardBody>
                       {detail.prices.length === 0 ? (
-                        <p className="text-xs text-text-subtle">{t('state.emptyHint')}</p>
+                        <p className="text-xs text-text-secondary">{t('state.emptyHint')}</p>
                       ) : (
                         <ul>
                           {detail.prices.map((price) => (
@@ -1261,19 +1261,21 @@ export default function PlaceEditorScreen() {
                     <CardHeader title={t('placeEditor.sources')} />
                     <CardBody>
                       {detail.sources.length === 0 ? (
-                        <p className="text-xs text-text-subtle">{t('state.emptyHint')}</p>
+                        <p className="text-xs text-text-secondary">{t('state.emptyHint')}</p>
                       ) : (
                         <ul>
                           {detail.sources.map((source) => (
                             <li key={source.id} className={styles.sourceRow}>
                               <span className="min-w-0">
-                                <span className="font-semibold text-text">{source.provider}</span>
-                                <span className="block font-mono text-[11px] text-text-subtle">
+                                <span className="font-semibold text-text-primary">
+                                  {source.provider}
+                                </span>
+                                <span className="block font-mono text-caption text-text-secondary">
                                   {source.externalId}
                                 </span>
                                 {/* FR-INGEST-014: provider facts travel with their attribution. */}
                                 {source.attribution ? (
-                                  <span className="block text-[11px] text-text-subtle">
+                                  <span className="block text-caption text-text-secondary">
                                     {source.attribution}
                                   </span>
                                 ) : null}
@@ -1288,7 +1290,7 @@ export default function PlaceEditorScreen() {
                                   </a>
                                 ) : null}
                               </span>
-                              <span className="shrink-0 text-[11px] tabular-nums text-text-subtle">
+                              <span className="shrink-0 text-caption tabular-nums text-text-secondary">
                                 {formatRelative(source.fetchedAt, locale)}
                               </span>
                             </li>

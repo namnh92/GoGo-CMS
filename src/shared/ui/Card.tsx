@@ -13,7 +13,7 @@ export function Card({
   children: ReactNode
 }) {
   return (
-    <section id={id} className={cn('rounded-card border border-line bg-surface', className)}>
+    <section id={id} className={cn('rounded-card border border-line bg-surface-card', className)}>
       {children}
     </section>
   )
@@ -38,8 +38,8 @@ export function CardHeader({
       )}
     >
       <div className="min-w-0">
-        <h2 className="font-display text-[15px] font-bold text-text">{title}</h2>
-        {hint ? <p className="mt-0.5 text-xs text-text-subtle">{hint}</p> : null}
+        <h2 className="font-display text-title font-bold text-text-primary">{title}</h2>
+        {hint ? <p className="mt-0.5 text-xs text-text-secondary">{hint}</p> : null}
       </div>
       {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
     </div>
@@ -62,18 +62,20 @@ export function KpiCard({
   tone?: 'neutral' | 'positive' | 'negative'
 }) {
   return (
-    <div className="rounded-card border border-line bg-surface p-5">
-      <p className="text-xs font-semibold text-text-subtle">{label}</p>
-      <p className="mt-1 font-display text-2xl font-extrabold text-text tabular-nums">{value}</p>
+    <div className="rounded-card border border-line bg-surface-card p-5">
+      <p className="text-xs font-semibold text-text-secondary">{label}</p>
+      <p className="mt-1 font-display text-2xl font-extrabold text-text-primary tabular-nums">
+        {value}
+      </p>
       {sub ? (
         <p
           className={cn(
-            'mt-1 text-[11px]',
+            'mt-1 text-caption',
             tone === 'positive'
               ? 'text-mint'
               : tone === 'negative'
                 ? 'text-danger'
-                : 'text-text-subtle',
+                : 'text-text-secondary',
           )}
         >
           {/* A glyph carries the judgement so colour is not the only cue. It is

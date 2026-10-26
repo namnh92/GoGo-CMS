@@ -14,7 +14,7 @@ export type BadgeShape = 'dot' | 'check' | 'alert' | 'clock' | 'info'
 // stay in use for borders and for the status dots on the ops dashboard, where
 // they are shapes rather than text.
 const TONE: Record<Tone, string> = {
-  neutral: 'bg-surface-sunken text-text-muted border-line-strong',
+  neutral: 'bg-surface-canvas text-text-muted border-line-strong',
   coral: 'bg-coral-soft text-coral-ink border-coral/35',
   lavender: 'bg-lavender-soft text-lavender-ink border-lavender/35',
   mint: 'bg-mint-soft text-mint-ink border-mint/40',
@@ -36,7 +36,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 rounded-pill border px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap',
+        'inline-flex items-center gap-1 rounded-pill border px-2 py-0.5 text-caption font-semibold whitespace-nowrap',
         TONE[tone],
         className,
       )}

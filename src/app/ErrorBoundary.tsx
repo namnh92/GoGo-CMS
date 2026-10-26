@@ -25,8 +25,8 @@ export class AppErrorBoundary extends Component<Props, State> {
     if (!this.state.error) return this.props.children
     return (
       <div className="flex h-full items-center justify-center p-8">
-        <div className="max-w-md rounded-card border border-line bg-surface p-6 text-center">
-          <p className="font-display text-lg font-bold text-text">GoGo CMS</p>
+        <div className="max-w-md rounded-card border border-line bg-surface-card p-6 text-center">
+          <p className="font-display text-lg font-bold text-text-primary">GoGo CMS</p>
           <p className="mt-2 text-sm text-text-muted">{this.state.error.message}</p>
           <button
             type="button"

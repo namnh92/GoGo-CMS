@@ -45,21 +45,21 @@ export function Tabs<T extends string>({
             }}
             onClick={() => onChange(item.id)}
             className={cn(
-              '-mb-px flex min-h-11 items-center gap-1.5 border-b-2 px-4 text-[13px] font-semibold',
+              '-mb-px flex min-h-11 items-center gap-1.5 border-b-2 px-4 text-body font-semibold',
               'transition-colors duration-[var(--duration-fast)]',
               selected
                 ? 'border-accent-primary text-accent-primary'
-                : 'border-transparent text-text-subtle hover:text-text',
+                : 'border-transparent text-text-secondary hover:text-text-primary',
             )}
           >
             {item.label}
             {typeof item.count === 'number' ? (
               <span
                 className={cn(
-                  'rounded-pill px-1.5 py-0.5 text-[11px] tabular-nums',
+                  'rounded-pill px-1.5 py-0.5 text-caption tabular-nums',
                   selected
                     ? 'bg-accent-soft text-accent-on-soft'
-                    : 'bg-surface-sunken text-text-subtle',
+                    : 'bg-surface-canvas text-text-secondary',
                 )}
               >
                 {item.count}

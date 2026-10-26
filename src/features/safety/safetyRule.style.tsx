@@ -1,12 +1,12 @@
 export const styles = {
   filterBar: 'flex flex-wrap items-end gap-3 border-b border-line px-4 py-3',
   search: 'w-64',
-  name: 'text-[13px] font-semibold text-text',
-  reason: 'font-mono text-[11px] text-text-subtle',
-  muted: 'text-[12px] text-text-subtle',
-  priority: 'tabular-nums text-[13px] text-text',
+  name: 'text-body font-semibold text-text-primary',
+  reason: 'font-mono text-caption text-text-secondary',
+  muted: 'text-label text-text-secondary',
+  priority: 'tabular-nums text-body text-text-primary',
   pager: 'flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3',
-  pagerInfo: 'text-xs text-text-subtle',
+  pagerInfo: 'text-xs text-text-secondary',
   pagerActions: 'flex items-center gap-2',
 
   layout: 'grid gap-5 xl:grid-cols-5',
@@ -17,10 +17,10 @@ export const styles = {
   actions: 'flex flex-wrap items-center justify-end gap-2 border-t border-line px-5 py-4',
   statusRow: 'flex flex-wrap items-center gap-2 px-5 py-4',
   facts: 'grid gap-3 px-5 py-4 sm:grid-cols-2',
-  factLabel: 'text-[11px] uppercase tracking-wide text-text-subtle',
-  factValue: 'text-[13px] text-text',
-  note: 'mx-5 mb-4 flex items-start gap-2 rounded-compact border border-amber/40 bg-amber-soft px-3 py-2 text-xs text-text',
+  factLabel: 'text-caption uppercase tracking-wide text-text-secondary',
+  factValue: 'text-body text-text-primary',
+  note: 'mx-5 mb-4 flex items-start gap-2 rounded-compact border border-amber/40 bg-amber-soft px-3 py-2 text-xs text-text-primary',
   formNote:
-    'flex items-start gap-2 rounded-compact border border-amber/40 bg-amber-soft px-3 py-2 text-xs text-text',
-  immutable: 'rounded-compact bg-surface-muted px-3 py-2 text-[11px] text-text-subtle',
+    'flex items-start gap-2 rounded-compact border border-amber/40 bg-amber-soft px-3 py-2 text-xs text-text-primary',
+  immutable: 'rounded-compact bg-surface-muted px-3 py-2 text-caption text-text-secondary',
 } as const

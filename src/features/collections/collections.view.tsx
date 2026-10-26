@@ -308,7 +308,7 @@ export default function CollectionsScreen() {
                       ))}
                     </Select>
                   </div>
-                  <p className="text-[11px] text-text-subtle">
+                  <p className="text-caption text-text-secondary">
                     {t('collections.startsAt')}: {formatDateTime(active.startsAt, locale)} ·{' '}
                     {t('collections.endsAt')}: {formatDateTime(active.endsAt, locale)}
                   </p>
@@ -332,7 +332,7 @@ export default function CollectionsScreen() {
 
                   {search.trim().length >= 2 ? (
                     <div className="flex flex-col gap-1">
-                      <p className="text-[11px] font-semibold text-text-muted">
+                      <p className="text-caption font-semibold text-text-muted">
                         {t('collections.searchResults')}
                       </p>
                       {(catalogQuery.data?.items ?? []).map((place) => (
@@ -369,7 +369,7 @@ export default function CollectionsScreen() {
                   <div>
                     <p className="mb-2 text-xs font-semibold text-text-muted">
                       {t('collections.items.title')}{' '}
-                      <span className="font-normal text-text-subtle">
+                      <span className="font-normal text-text-secondary">
                         — {t('collections.items.hint')}
                       </span>
                       {dirty ? (
@@ -387,7 +387,7 @@ export default function CollectionsScreen() {
                               aria-label={t('collections.moveUp')}
                               disabled={index === 0}
                               onClick={() => move(index, -1)}
-                              className="px-1 text-[10px] text-text-subtle disabled:opacity-30"
+                              className="px-1 text-caption text-text-secondary disabled:opacity-30"
                             >
                               ▲
                             </button>
@@ -396,19 +396,19 @@ export default function CollectionsScreen() {
                               aria-label={t('collections.moveDown')}
                               disabled={index === picked.length - 1}
                               onClick={() => move(index, 1)}
-                              className="px-1 text-[10px] text-text-subtle disabled:opacity-30"
+                              className="px-1 text-caption text-text-secondary disabled:opacity-30"
                             >
                               ▼
                             </button>
                           </div>
-                          <span className="w-5 text-[11px] tabular-nums text-text-subtle">
+                          <span className="w-5 text-caption tabular-nums text-text-secondary">
                             {index + 1}
                           </span>
                           <span className="min-w-0 flex-1">
                             <span className={`block ${styles.itemName}`}>{place.name}</span>
                             {/* A pinned place that left publication is named, not silently blank. */}
                             {place.status && place.status !== 'published' ? (
-                              <span className="block text-[11px] text-amber">
+                              <span className="block text-caption text-amber">
                                 {t('collections.items.unpublished')}
                               </span>
                             ) : null}
@@ -428,7 +428,9 @@ export default function CollectionsScreen() {
                         </div>
                       ))}
                       {picked.length === 0 ? (
-                        <p className="text-xs text-text-subtle">{t('collections.items.empty')}</p>
+                        <p className="text-xs text-text-secondary">
+                          {t('collections.items.empty')}
+                        </p>
                       ) : null}
                     </div>
                   </div>

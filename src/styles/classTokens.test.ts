@@ -16,13 +16,15 @@ import { describe, expect, it } from 'vitest'
 const SRC = path.resolve(__dirname, '..')
 const TOKENS = readFileSync(path.resolve(__dirname, 'tokens.css'), 'utf8')
 const COLORS = new Set([...TOKENS.matchAll(/--color-([a-z0-9-]+)\s*:/g)].map((m) => m[1]!))
+/** The named type scale (`--text-body`), which shares the `text-` prefix with colours. */
+const TEXT_SIZES = new Set([...TOKENS.matchAll(/--text-([a-z]+)\s*:/g)].map((m) => m[1]!))
 
 /** CSS keywords that are colours without being tokens. */
 const KEYWORD_COLORS = new Set(['transparent', 'current', 'inherit'])
 
 /**
  * Suffixes of the same prefixes that are not colours at all. Numeric suffixes
- * (`border-2`, `text-2xl`) and arbitrary values (`text-[11px]`) never reach
+ * (`border-2`, `text-2xl`) and arbitrary values (`text-caption`) never reach
  * the check — it only looks at suffixes that start with a letter.
  */
 const NOT_A_COLOR: Record<string, RegExp> = {
@@ -54,6 +56,7 @@ function colourPart(prefix: string, suffix: string): string | null {
     }
   }
   if (NOT_A_COLOR[prefix]?.test(rest)) return null
+  if (prefix === 'text' && TEXT_SIZES.has(rest)) return null
   if (/^\d/.test(rest)) return null
   return rest
 }
@@ -84,13 +87,21 @@ describe('colour classes resolve to tokens (#247)', () => {
   it('reads the tokens it checks against', () => {
     // Guards the guard: an empty set would flag everything, a wrong regex nothing.
     expect(COLORS.has('line')).toBe(true)
-    expect(COLORS.has('surface-sunken')).toBe(true)
+    expect(COLORS.has('surface-canvas')).toBe(true)
+    expect(TEXT_SIZES.has('body')).toBe(true)
   })
 
   it('recognises what it is meant to catch, and only that', () => {
-    expect(unknownColourClasses(`'rounded-lg border border-border bg-surface-subtle p-3'`)).toEqual(
-      ['border-border', 'bg-surface-subtle'],
+    expect(unknownColourClasses(`'rounded-lg border border-border bg-surface-sunken p-3'`)).toEqual(
+      ['border-border', 'bg-surface-sunken'],
     )
+    // #248: the names the shared vocabulary replaced are gone, not aliased.
+    expect(unknownColourClasses(`'bg-surface text-text text-text-subtle'`)).toEqual([
+      'bg-surface',
+      'text-text',
+      'text-text-subtle',
+    ])
+    expect(unknownColourClasses(`'text-caption text-body text-hero text-text-primary'`)).toEqual([])
     expect(
       unknownColourClasses(
         `'border-b-2 border-l-danger text-xs text-text-muted hover:bg-danger-soft/40 bg-transparent'`,
