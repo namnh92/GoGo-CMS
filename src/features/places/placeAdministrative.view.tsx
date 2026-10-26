@@ -5,6 +5,7 @@ import { useT } from '@/shared/i18n/i18n'
 import type { MessageKey } from '@/shared/i18n/vi'
 import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
+import { ErrorState } from '@/shared/ui/State'
 import { queryKeys } from '@/shared/api/queryKeys'
 import { useSession } from '@/shared/auth/session'
 import { fetchPlaceAdministrativeMapping } from '@/features/administrative/api'
@@ -80,7 +81,7 @@ export function AdministrativeSummary({
   const hasUnit = Boolean(summary.provinceCode || summary.communeCode)
 
   return (
-    <section className="flex flex-col gap-2 rounded-lg border border-border bg-surface-subtle p-3">
+    <section className="flex flex-col gap-2 rounded-lg border border-line bg-surface-sunken p-3">
       <header className="flex flex-wrap items-center gap-2">
         <h4 className="text-[13px] font-semibold text-text">{t('placeEditor.administrative')}</h4>
         <MappingStatusBadge status={summary.status} />
@@ -119,7 +120,17 @@ export function AdministrativeSummary({
         everybody else gets the queue itself, focused on this place, so a
         blocker is never the end of the road.
       */}
-      {blocked && placeId ? (
+      {/*
+        #247 — a failed read is said out loud. It used to fall through to the
+        queue link, which told a reviewer they had no say when the truth was
+        that the call had failed. The queue link is withheld while it stands:
+        its text says the reader may not decide, which nobody knows yet.
+      */}
+      {blocked && placeId && mapping.isError ? (
+        <ErrorState error={mapping.error} onRetry={() => void mapping.refetch()} />
+      ) : null}
+
+      {blocked && placeId && !mapping.isError ? (
         mayReview ? (
           <div>
             <Button variant="secondary" onClick={() => setReviewing(true)}>

@@ -2156,6 +2156,16 @@ export const vi = {
   'emergency.done': 'Đã gỡ nội dung',
   'emergency.notApplicable': 'Chỉ áp dụng khi nội dung đang ở trạng thái {from}.',
   'emergency.oneAtATime': 'Mỗi lần một tài nguyên — API không có dạng hàng loạt.',
+  'emergency.offline':
+    'Mất kết nối tới máy chủ — chưa gỡ được cho tới khi có lại. Lý do đã nhập vẫn được giữ.',
+
+  // #247 — wire states named by a takedown transition. One family for all
+  // three targets, so the dialog never shows the raw enum.
+  'status.published': 'Đã xuất bản',
+  'status.suspended': 'Tạm ngưng',
+  'status.hidden': 'Đang ẩn',
+  'status.pending': 'Chờ duyệt',
+  'status.approved': 'Đã duyệt',
   'error.VALIDATION_FAILED': 'Dữ liệu gửi lên không hợp lệ. Xem chi tiết ngay dưới ô nhập.',
   'error.INVALID_PLACE_TRANSITION':
     'Trạng thái hiện tại không cho phép chuyển sang trạng thái này.',

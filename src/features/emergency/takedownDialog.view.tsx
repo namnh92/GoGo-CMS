@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useT } from '@/shared/i18n/i18n'
+import { useI18n } from '@/shared/i18n/i18n'
 import { queryKeys } from '@/shared/api/queryKeys'
 import { useOnline } from '@/shared/ui/useOnline'
 import { Modal } from '@/shared/ui/Overlay'
@@ -14,6 +14,7 @@ import {
   MIN_TAKEDOWN_REASON,
   TAKEDOWN_TRANSITION,
   takedown,
+  type TakedownStatus,
   type TakedownTarget,
 } from './api'
 
@@ -40,7 +41,8 @@ export function TakedownDialog({
   resourceLabel?: string
   onDone?: () => void
 }) {
-  const t = useT()
+  const { t, locale } = useI18n()
+  const offlineId = useId()
   const toast = useToast()
   const online = useOnline()
   const queryClient = useQueryClient()
@@ -52,6 +54,12 @@ export function TakedownDialog({
   }, [open, resourceId])
 
   const transition = TAKEDOWN_TRANSITION[target]
+  const label = (status: TakedownStatus) => t(`status.${status}`)
+  // "Pending or Approved" / "Chờ duyệt hoặc Đã duyệt" — the conjunction is
+  // the locale's, not a pipe from the wire.
+  const from = new Intl.ListFormat(locale, { type: 'disjunction' }).format(
+    transition.from.map(label),
+  )
   const trimmed = reason.trim()
   const tooShort = trimmed.length < MIN_TAKEDOWN_REASON
 
@@ -77,6 +85,14 @@ export function TakedownDialog({
       footer={
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-[11px] text-text-subtle">{t('emergency.oneAtATime')}</span>
+          {/* #247 — a locked button says why, beside itself. The reason the
+              operator typed stays in the box for when the API answers again. */}
+          {!online ? (
+            <p id={offlineId} role="status" className={styles.offline}>
+              <span aria-hidden="true">⚠</span>
+              {t('emergency.offline')}
+            </p>
+          ) : null}
           <span className="flex gap-2">
             <Button variant="secondary" onClick={onClose} disabled={mutation.isPending}>
               {t('action.cancel')}
@@ -84,6 +100,7 @@ export function TakedownDialog({
             <Button
               variant="danger"
               disabled={tooShort || !online}
+              aria-describedby={online ? undefined : offlineId}
               loading={mutation.isPending}
               onClick={() => mutation.mutate()}
             >
@@ -95,11 +112,11 @@ export function TakedownDialog({
     >
       <div className={styles.transition}>
         <span className={styles.transitionLabel}>{t('emergency.transition')}</span>
-        <span className={styles.from}>{transition.from}</span>
+        <span className={styles.from}>{from}</span>
         <span className={styles.arrow} aria-hidden="true">
           →
         </span>
-        <span className={styles.to}>{transition.to}</span>
+        <span className={styles.to}>{label(transition.to)}</span>
       </div>
       {resourceLabel ? <p className={styles.resource}>{resourceLabel}</p> : null}
       <p className={styles.resourceId}>{resourceId}</p>

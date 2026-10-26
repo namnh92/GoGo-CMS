@@ -35,13 +35,20 @@ export function takedown(target: TakedownTarget, id: string, reason: string) {
   })
 }
 
+/** The wire states a takedown moves between. Labels live under `status.*`. */
+export type TakedownStatus = 'published' | 'suspended' | 'hidden' | 'pending' | 'approved'
+
 /**
  * The one transition each route accepts. Anything else is refused with
  * `409 NOT_TAKEDOWNABLE` rather than coerced, so the UI disables the action
- * instead of letting an operator discover it mid-incident.
+ * instead of letting an operator discover it mid-incident. `from` is a list
+ * because a check-in comes down from either of two states.
  */
-export const TAKEDOWN_TRANSITION: Record<TakedownTarget, { from: string; to: string }> = {
-  place: { from: 'published', to: 'suspended' },
-  review: { from: 'published', to: 'hidden' },
-  checkin: { from: 'pending | approved', to: 'hidden' },
+export const TAKEDOWN_TRANSITION: Record<
+  TakedownTarget,
+  { from: readonly TakedownStatus[]; to: TakedownStatus }
+> = {
+  place: { from: ['published'], to: 'suspended' },
+  review: { from: ['published'], to: 'hidden' },
+  checkin: { from: ['pending', 'approved'], to: 'hidden' },
 }
