@@ -206,6 +206,19 @@ export const queryKeys = {
       ['ranking', 'evaluation', id, sampleSize] as const,
   },
 
+  /** GoGo-CMS#249 — every GoGo AI query hangs off this prefix. */
+  assistant: {
+    all: ['assistant'] as const,
+    documents: (filters: Record<string, unknown>) => ['assistant', 'documents', filters] as const,
+    document: (id: string) => ['assistant', 'document', id] as const,
+    versions: (id: string) => ['assistant', 'document', id, 'versions'] as const,
+    version: (id: string, versionId: string) =>
+      ['assistant', 'document', id, 'version', versionId] as const,
+    audit: (id: string) => ['assistant', 'document', id, 'audit'] as const,
+    feedback: (filters: Record<string, unknown>) => ['assistant', 'feedback', filters] as const,
+    killSwitchAudit: ['assistant', 'kill-switch', 'audit'] as const,
+  },
+
   audit: {
     all: ['audit'] as const,
     list: (filters: Record<string, unknown>) => ['audit', 'list', filters] as const,

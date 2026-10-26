@@ -500,3 +500,16 @@ export const UsersIcon = (p: IconProps) => (
     />
   </Icon>
 )
+
+/** GoGo AI — a four-point sparkle, the assistant's mark in the app. */
+export const AssistantIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path
+      d="M8 2.5 9.4 6.6 13.5 8 9.4 9.4 8 13.5 6.6 9.4 2.5 8 6.6 6.6Z"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinejoin="round"
+    />
+    <path d="M14 11.5v4M12 13.5h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+  </Icon>
+)

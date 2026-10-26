@@ -25,7 +25,7 @@ const drift = read('scripts/check-openapi-drift.mjs')
 const generated = read('src/shared/api/schema.d.ts')
 const administrativeContracts = read('src/shared/api/contracts-administrative.ts')
 
-const EXPECTED = '1.0.0-alpha.72'
+const EXPECTED = '2.0.0-alpha.2'
 
 /**
  * The vendored file byte for byte, as GoGo-BE published it.
@@ -35,10 +35,17 @@ const EXPECTED = '1.0.0-alpha.72'
  * hand-edited, and this is what makes that visible rather than invisible. A
  * legitimate re-vendor updates the version above and this digest together.
  */
-const SPEC_SHA256 = '0a098a285b70aa67bb6318eee86fa3acc717b9b035eab608aaa48017fdfda80d'
+const SPEC_SHA256 = 'cec82f0df1af0bd64082b3a6c00346447e459963c87d20f889e2fadea1df59bb'
 
 /** `pnpm api:routes` on GoGo-BE reports the same number against the real router. */
 const SERVED_OPERATIONS = 269
+
+/**
+ * GoGo-BE#713 declares the GoGo AI surface ahead of the module: these
+ * operations carry `x-gogo-planned` and answer 404 until it ships, so they are
+ * counted apart from what the router serves.
+ */
+const PLANNED_OPERATIONS = 24
 
 describe('the vendored OpenAPI contract', () => {
   it(`declares ${EXPECTED}, and the drift gate expects the same`, () => {
@@ -57,7 +64,24 @@ describe('the vendored OpenAPI contract', () => {
   it('still carries every operation the API actually serves', () => {
     // Operations, not paths: a re-vendor that silently drops one fails here
     // rather than at the first request the CMS makes against it.
-    expect(spec.match(/^ {6}operationId:/gm)?.length).toBe(SERVED_OPERATIONS)
+    expect(spec.match(/^ {6}operationId:/gm)?.length).toBe(SERVED_OPERATIONS + PLANNED_OPERATIONS)
+    expect(spec.match(/^ {6}x-gogo-planned:/gm)?.length).toBe(PLANNED_OPERATIONS)
+  })
+
+  it('keeps every GoGo AI back-office path the assistant screens call (CMS#249)', () => {
+    for (const path of [
+      '/cms/assistant/documents:',
+      '/cms/assistant/documents/{id}:',
+      '/cms/assistant/documents/{id}/publish:',
+      '/cms/assistant/documents/{id}/unpublish:',
+      '/cms/assistant/documents/{id}/versions:',
+      '/cms/assistant/documents/{id}/versions/{versionId}:',
+      '/cms/assistant/feedback:',
+    ]) {
+      expect(spec).toContain(path)
+    }
+    // The kill switch is a flag, not a route — the key is named in the contract.
+    expect(spec).toContain('`assistant.enabled`')
   })
 
   it('keeps every administrative path the dataset screen is built on', () => {

@@ -235,6 +235,8 @@ export function ConfirmDialog({
   tone = 'danger',
   loading,
   irreversible = true,
+  confirmDisabled,
+  children,
 }: {
   open: boolean
   onClose: () => void
@@ -246,6 +248,10 @@ export function ConfirmDialog({
   tone?: 'danger' | 'primary'
   loading?: boolean
   irreversible?: boolean
+  /** Holds the confirm button until the caller's own input is valid (a required reason). */
+  confirmDisabled?: boolean
+  /** Extra content under the change list — a fuller preview, a reason field. */
+  children?: ReactNode
 }) {
   const t = useT()
   return (
@@ -263,6 +269,7 @@ export function ConfirmDialog({
             variant={tone === 'danger' ? 'danger' : 'primary'}
             onClick={onConfirm}
             loading={loading}
+            disabled={confirmDisabled}
           >
             {confirmLabel}
           </Button>
@@ -301,6 +308,7 @@ export function ConfirmDialog({
           </li>
         ))}
       </ul>
+      {children ? <div className="mt-3 flex flex-col gap-3">{children}</div> : null}
       {irreversible ? (
         <p className="mt-3 flex items-start gap-1.5 rounded-compact bg-amber-soft px-3 py-2 text-xs text-text-muted">
           <span aria-hidden="true">⚠</span>

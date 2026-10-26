@@ -692,6 +692,7 @@ describe('the rest of the console is untouched', () => {
     expect(NAV_ENTRIES.filter((entry) => entry.kind === 'group').map((e) => e.id)).toEqual([
       'catalog',
       'review',
+      'assistant',
       'operations',
       'users',
       'administration',

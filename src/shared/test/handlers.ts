@@ -71,6 +71,7 @@ import {
   privacyRequests,
   cmsPlanTemplates,
 } from './fixtures'
+import { assistantAudit, createAssistantHandlers, resetAssistantMock } from './assistantMock'
 
 const BASE = '/v1'
 
@@ -211,6 +212,7 @@ let db = seedDb()
  */
 export function resetMockDb(): void {
   db = seedDb()
+  resetAssistantMock()
 }
 
 /**
@@ -621,6 +623,9 @@ function isGroupable(place: (typeof db.places)[number]): boolean {
 }
 
 export const handlers = [
+  // GoGo-CMS#249 — GoGo AI documents and feedback (GoGo-BE#713 contract).
+  ...createAssistantHandlers({ base: BASE, currentActor, envelope }),
+
   // Runs before every other handler: MSW walks this list in order, and
   // returning nothing falls through to the real handler below.
   http.all(`${BASE}/*`, ({ request, cookies }) => csrfFailure(request, cookies) ?? undefined),
@@ -1779,7 +1784,7 @@ export const handlers = [
     const { role } = currentActor()
     const canSeeIp = role === 'ops_admin' || role === 'super_admin'
 
-    let items = [...db.audit, ...auditEntries, ...administrativeAuditEntries]
+    let items = [...db.audit, ...auditEntries, ...administrativeAuditEntries, ...assistantAudit()]
     if (breakGlass) items = items.filter((entry) => entry.breakGlass)
     if (resourceType) items = items.filter((entry) => entry.resourceType === resourceType)
     if (resourceId) items = items.filter((entry) => entry.resourceId === resourceId)
@@ -4095,9 +4100,33 @@ export const handlers = [
     }
     row.enabled = body.enabled
     row.value = definition.valueType === 'boolean' ? body.enabled : (body.value ?? null)
+    const before = existing ? { enabled: existing.enabled, value: existing.value } : null
     row.updatedBy = { id: 'ad-me', displayName: currentActor().displayName }
     row.updatedAt = new Date().toISOString()
     if (!existing) db.flags.push(row)
+    // `cms-ops.service` audits every flag write as `feature_flag.set` with
+    // before/after and the scope — the kill switch screen reads it back.
+    db.audit.unshift({
+      id: `audit-flag-${db.audit.length + 1}-${Date.now()}`,
+      action: 'feature_flag.set',
+      actorType: 'admin',
+      actorId: 'ad-me',
+      actorRole: currentActor().role,
+      resourceType: 'feature_flag',
+      resourceId: row.key,
+      occurredAt: row.updatedAt,
+      diff: {
+        before,
+        after: { enabled: row.enabled, value: row.value },
+        environment,
+        platform,
+      },
+      reason: null,
+      breakGlass: false,
+      requestId: 'mock-feature-flag-set',
+      ipAddress: '10.0.0.1',
+      authorizationPath: null,
+    })
 
     return HttpResponse.json({
       key: row.key,
