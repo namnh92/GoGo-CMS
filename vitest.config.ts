@@ -8,7 +8,8 @@ export default defineConfig({
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },
   test: {
-    environment: 'jsdom',
+    // jsdom plus a Node 25+ compatibility layer; see vitest.environment.ts.
+    environment: './vitest.environment.ts',
     globals: true,
     setupFiles: ['./vitest.setup.ts'],
     css: false,

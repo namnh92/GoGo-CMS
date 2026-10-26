@@ -30,6 +30,23 @@ jobs:
       - run: pnpm test
       - run: pnpm build
 
+  # The unit suite again on the newest Node release. Developer machines run
+  # whatever Homebrew ships, and Node 25 broke the suite while CI stayed green
+  # on 22 (vitest.environment.ts). `latest` is deliberate: the next major
+  # shows up here first. Not a required check, so a new Node can't block merges.
+  unit-latest-node:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: latest
+          cache: pnpm
+      - run: node --version
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+
   e2e:
     runs-on: ubuntu-latest
     steps:
