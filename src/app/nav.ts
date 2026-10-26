@@ -2,6 +2,7 @@ import type { ComponentType, SVGProps } from 'react'
 import type { MessageKey } from '@/shared/i18n/vi'
 import type { Permission } from '@/shared/auth/permissions'
 import {
+  AssistantIcon,
   AuditIcon,
   DashboardIcon,
   ModerationIcon,
@@ -190,6 +191,33 @@ const OPERATIONS: NavLeaf[] = [
 ]
 
 /**
+ * GoGo AI (GoGo-CMS#249, GoGo-BE#713). Each entry keeps the gate its endpoint
+ * has: the guide documents are rank-1 reads (editor/moderator/ops), the
+ * feedback queue is moderator's and read by rank, and the kill switch is the
+ * `assistant.enabled` flag — ops only, like every flag.
+ */
+const ASSISTANT: NavLeaf[] = [
+  {
+    to: '/assistant/documents',
+    labelKey: 'nav.assistantDocuments',
+    permission: 'assistant.read',
+    match: (p) => p.startsWith('/assistant/documents'),
+  },
+  {
+    to: '/assistant/feedback',
+    labelKey: 'nav.assistantFeedback',
+    permission: 'assistant.feedback',
+    match: (p) => p.startsWith('/assistant/feedback'),
+  },
+  {
+    to: '/assistant/kill-switch',
+    labelKey: 'nav.assistantKillSwitch',
+    permission: 'flag.read',
+    match: (p) => p.startsWith('/assistant/kill-switch'),
+  },
+]
+
+/**
  * `ops_admin` and above, matching the server's deliberate exclusion of this
  * area from rank-read: support work on the user base is not catalogue work.
  */
@@ -262,6 +290,13 @@ export const NAV_ENTRIES: NavEntry[] = [
     labelKey: 'nav.group.review',
     icon: ModerationIcon,
     children: REVIEW,
+  },
+  {
+    kind: 'group',
+    id: 'assistant',
+    labelKey: 'nav.group.assistant',
+    icon: AssistantIcon,
+    children: ASSISTANT,
   },
   {
     kind: 'group',

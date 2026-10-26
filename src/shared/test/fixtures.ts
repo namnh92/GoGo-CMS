@@ -888,6 +888,15 @@ export const featureFlagCatalog: FeatureFlagDefinition[] = [
     platformScoped: false,
   },
   {
+    // GoGo-BE#713 / CMS#249 — the GoGo AI kill switch. Declared by the
+    // contract ahead of the module; default off, no per-platform form.
+    key: 'assistant.enabled',
+    valueType: 'boolean',
+    defaultValue: false,
+    description: 'GoGo AI trả lời người dùng đã đăng ký. Tắt: 503 ASSISTANT_DISABLED.',
+    platformScoped: false,
+  },
+  {
     key: 'place_import.rules',
     valueType: 'json',
     defaultValue: { minReviews: 10, minRating: 3.5, autoPublish: false },

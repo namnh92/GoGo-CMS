@@ -78,6 +78,7 @@ describe('navigation offers each destination to exactly the roles that may read 
     expect(NAV_ENTRIES.filter((entry) => entry.kind === 'group').map((entry) => entry.id)).toEqual([
       'catalog',
       'review',
+      'assistant',
       'operations',
       'users',
       'administration',

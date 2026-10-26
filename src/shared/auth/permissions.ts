@@ -76,6 +76,22 @@ const ROUTE_ROLES = {
    * judged against through the mapping screen, not through this one.
    */
   administrativeDataset: ['ops_admin'],
+  /**
+   * GoGo-BE#713 `AssistantCmsController` — the "GoGo guide" source documents.
+   * Declared on `editor, ops_admin`: both write drafts, and `moderator` reads
+   * the set by rank so feedback can be judged against it.
+   */
+  assistantContent: ['editor', 'ops_admin'],
+  /**
+   * Publish / unpublish — handler-level `ops_admin`. Changes what GoGo AI tells
+   * every user, a release decision split from authoring.
+   */
+  assistantPublish: ['ops_admin'],
+  /**
+   * `GET /cms/assistant/feedback` — declared on `moderator`. Read-only, so the
+   * rank rule also opens it to `editor` (a peer) and `ops_admin`.
+   */
+  assistantFeedback: ['moderator'],
   /** `POST /cms/auth/admins` — @RequireRole('super_admin') */
   admins: ['super_admin'],
 } as const satisfies Record<string, readonly AdminRole[]>
@@ -202,6 +218,14 @@ const PERMISSIONS = {
   // Audit — declared on `editor`, so rank-based read opens the log to every
   // role. It is read-only everywhere: the server serves no write route here.
   'audit.read': ['audit', 'read'],
+
+  // GoGo AI (GoGo-BE#713, CMS#249). Drafts are editor + ops; publishing and
+  // withdrawing are ops only; the feedback queue is moderator, read by rank.
+  // The kill switch is the `assistant.enabled` feature flag — `flag.*` above.
+  'assistant.read': ['assistantContent', 'read'],
+  'assistant.draft': ['assistantContent', 'write'],
+  'assistant.publish': ['assistantPublish', 'write'],
+  'assistant.feedback': ['assistantFeedback', 'read'],
 
   // Emergency takedown — anyone on shift can pull content down.
   'emergency.takedown': ['emergency', 'write'],

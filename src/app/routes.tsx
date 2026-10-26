@@ -60,6 +60,10 @@ const ChangePasswordScreen = lazy(() => import('@/features/auth/changePassword.v
 const RolesPermissionsScreen = lazy(() => import('@/features/administration/rolesPermissions.view'))
 const AuditLogScreen = lazy(() => import('@/features/audit/auditLog.view'))
 const SearchQualityScreen = lazy(() => import('@/features/search/searchQuality.view'))
+const AssistantDocumentListScreen = lazy(() => import('@/features/assistant/documentList.view'))
+const AssistantDocumentDetailScreen = lazy(() => import('@/features/assistant/documentDetail.view'))
+const AssistantFeedbackScreen = lazy(() => import('@/features/assistant/feedbackQueue.view'))
+const AssistantKillSwitchScreen = lazy(() => import('@/features/assistant/killSwitch.view'))
 const ForbiddenScreen = lazy(() => import('@/features/errors/forbidden.view'))
 const NotFoundScreen = lazy(() => import('@/features/errors/notFound.view'))
 
@@ -147,6 +151,13 @@ export const router = createBrowserRouter([
           { path: 'plan-templates/:id', element: <PlanTemplateDetailScreen /> },
           { path: 'campaigns', element: <CampaignListScreen /> },
           { path: 'campaigns/:id', element: <CampaignDetailScreen /> },
+          // GoGo-CMS#249 — GoGo AI back office. Each screen checks its own
+          // permission; the nav hiding an entry is presentation only.
+          { path: 'assistant', element: <Navigate to="/assistant/documents" replace /> },
+          { path: 'assistant/documents', element: <AssistantDocumentListScreen /> },
+          { path: 'assistant/documents/:id', element: <AssistantDocumentDetailScreen /> },
+          { path: 'assistant/feedback', element: <AssistantFeedbackScreen /> },
+          { path: 'assistant/kill-switch', element: <AssistantKillSwitchScreen /> },
           { path: 'banners', element: <BannerListScreen /> },
           { path: 'banners/:id', element: <BannerDetailScreen /> },
           { path: 'safety-rules', element: <SafetyRuleListScreen /> },
