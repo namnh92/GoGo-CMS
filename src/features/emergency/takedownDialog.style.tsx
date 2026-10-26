@@ -10,5 +10,7 @@ export const styles = {
   warning:
     'flex items-start gap-2 rounded-compact border border-amber/45 bg-amber-soft px-3 py-2 text-xs text-text',
   note: 'text-[11px] leading-relaxed text-text-subtle',
+  offline:
+    'flex w-full items-start gap-2 rounded-compact border border-amber/45 bg-amber-soft px-3 py-2 text-xs text-text',
   counter: 'text-right text-[11px] tabular-nums text-text-subtle',
 } as const

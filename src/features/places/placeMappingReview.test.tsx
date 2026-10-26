@@ -115,6 +115,33 @@ describe('reviewing a place mapping from the editor', () => {
     expect(link).toHaveAttribute('href', `/administrative-mapping?status=&place=${PLACE.id}`)
   })
 
+  it('says the mapping could not be read instead of quietly showing the queue (#247)', async () => {
+    // A failed read used to fall through to the editor branch: a moderator saw
+    // the queue link as if they had no say, and nothing said the call failed.
+    server.use(
+      http.get('*/cms/places/:id/administrative-mapping', () =>
+        HttpResponse.json(
+          {
+            code: 'INTERNAL',
+            message: 'boom',
+            field_errors: [],
+            request_id: 'req-247',
+            retryable: true,
+          },
+          { status: 500 },
+        ),
+      ),
+    )
+    openEditor('moderator')
+    const panel = await summary()
+
+    expect(await within(panel).findByText('Không tải được dữ liệu')).toBeInTheDocument()
+    expect(within(panel).getByText(/req-247/)).toBeInTheDocument()
+    expect(within(panel).getByRole('button', { name: 'Thử lại' })).toBeInTheDocument()
+    // Not the editor's "you cannot decide" link: nobody knows that yet.
+    expect(within(panel).queryByRole('link', { name: /hàng đợi/i })).not.toBeInTheDocument()
+  })
+
   it('does not offer a review where nothing is blocked', async () => {
     server.use(
       http.get('/v1/cms/places/:id', () =>

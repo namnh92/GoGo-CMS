@@ -336,7 +336,7 @@ export default function PlaceListScreen() {
                 label={
                   takedownable
                     ? t('emergency.action')
-                    : `${t('emergency.action')} — ${t('emergency.notApplicable', { from: 'published' })}`
+                    : `${t('emergency.action')} — ${t('emergency.notApplicable', { from: t('status.published') })}`
                 }
                 tone="danger"
                 disabled={!canTakedown || !takedownable || !online}

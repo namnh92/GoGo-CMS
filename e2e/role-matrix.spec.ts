@@ -141,8 +141,9 @@ for (const [email, role] of [
 
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
-    // It names the transition and warns, rather than asking "are you sure?".
-    await expect(dialog.getByText('suspended')).toBeVisible()
+    // It names the transition — in words, not the wire enum (#247) — and
+    // warns, rather than asking "are you sure?".
+    await expect(dialog.getByText('Tạm ngưng', { exact: true })).toBeVisible()
     await expect(dialog.getByText(/ghi audit/)).toBeVisible()
     await expect(dialog.getByRole('button', { name: 'Gỡ ngay' })).toBeDisabled()
   })

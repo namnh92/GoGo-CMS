@@ -90,7 +90,7 @@ const PRICE_UNITS: PriceUnit[] = ['per_person', 'per_item', 'per_hour', 'per_nig
 type BlockTone = 'clean' | 'dirty' | 'saved' | 'failed'
 
 const BLOCK_DOT: Record<BlockTone, string> = {
-  clean: 'bg-neutral-400',
+  clean: 'bg-neutral-500',
   dirty: 'bg-amber',
   saved: 'bg-mint',
   failed: 'bg-danger',
@@ -629,7 +629,7 @@ export default function PlaceEditorScreen() {
               disabled={!can('emergency.takedown') || place?.status !== 'published' || !online}
               title={
                 place?.status !== 'published'
-                  ? t('emergency.notApplicable', { from: 'published' })
+                  ? t('emergency.notApplicable', { from: t('status.published') })
                   : undefined
               }
               onClick={() => setTakedownOpen(true)}
