@@ -474,7 +474,7 @@ export default function PlanTemplateDetailScreen() {
 
                 <Card>
                   <CardBody>
-                    <p className="text-[11px] text-text-subtle">
+                    <p className="text-caption text-text-secondary">
                       {t('recommendations.updatedAt')}: {formatDateTime(item!.updatedAt, locale)}
                     </p>
                     <Button

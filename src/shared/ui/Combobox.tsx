@@ -250,9 +250,9 @@ export function Combobox({
             placeholder={placeholder}
             value={displayValue}
             className={cn(
-              'min-h-11 w-full rounded-compact border border-line-strong bg-surface px-3 py-2.5 text-sm text-text',
-              'placeholder:text-text-subtle transition-colors duration-[var(--duration-fast)]',
-              'hover:border-neutral-500 disabled:cursor-not-allowed disabled:bg-surface-sunken disabled:text-text-subtle',
+              'min-h-11 w-full rounded-compact border border-line-strong bg-surface-card px-3 py-2.5 text-sm text-text-primary',
+              'placeholder:text-text-secondary transition-colors duration-[var(--duration-fast)]',
+              'hover:border-neutral-500 disabled:cursor-not-allowed disabled:bg-surface-canvas disabled:text-text-secondary',
               'aria-[invalid=true]:border-danger',
               inputClassName,
             )}
@@ -270,7 +270,7 @@ export function Combobox({
               // Clearing is the only way to send `null` for this field, so it
               // is a control in its own right, not a decoration.
               aria-label={t('combobox.clear')}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-compact text-text-subtle hover:bg-surface-sunken hover:text-text"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-compact text-text-secondary hover:bg-surface-canvas hover:text-text-primary"
               onClick={() => {
                 onChange(null)
                 onQueryChange('')
@@ -283,7 +283,7 @@ export function Combobox({
         </div>
 
         {open ? (
-          <div className="absolute left-0 right-0 z-20 mt-1 max-h-72 overflow-auto rounded-card border border-line-strong bg-surface shadow-lg">
+          <div className="absolute left-0 right-0 z-20 mt-1 max-h-72 overflow-auto rounded-card border border-line-strong bg-surface-card shadow-lg">
             {/*
               One node per message, and it is the live region: a hidden copy
               of the same sentence would be read twice and drift the moment
@@ -303,7 +303,9 @@ export function Combobox({
                 <div className="flex items-start gap-2 px-3 py-4 text-xs text-text-muted">
                   <ShieldOffIcon size={14} />
                   <span>
-                    <span className="block font-semibold text-text">{t('state.denied')}</span>
+                    <span className="block font-semibold text-text-primary">
+                      {t('state.denied')}
+                    </span>
                     {t('combobox.deniedHint')}
                   </span>
                 </div>
@@ -357,9 +359,9 @@ export function Combobox({
                       role="option"
                       aria-selected={selected}
                       className={cn(
-                        'flex min-h-11 cursor-pointer items-center justify-between gap-2 border-l-2 px-3 py-2 text-[13px]',
+                        'flex min-h-11 cursor-pointer items-center justify-between gap-2 border-l-2 px-3 py-2 text-body',
                         index === activeIndex
-                          ? 'border-l-coral bg-surface-sunken'
+                          ? 'border-l-coral bg-surface-canvas'
                           : 'border-l-transparent',
                       )}
                       onMouseEnter={() => setActiveIndex(index)}
@@ -372,15 +374,17 @@ export function Combobox({
                     >
                       <span className="min-w-0">
                         <span className="flex items-center gap-1.5">
-                          <span className="truncate font-medium text-text">{option.label}</span>
+                          <span className="truncate font-medium text-text-primary">
+                            {option.label}
+                          </span>
                           {option.badge ? (
-                            <span className="shrink-0 rounded-pill border border-line-strong bg-surface-muted px-1.5 py-0.5 text-[10px] font-semibold text-text-muted">
+                            <span className="shrink-0 rounded-pill border border-line-strong bg-surface-muted px-1.5 py-0.5 text-caption font-semibold text-text-muted">
                               {option.badge}
                             </span>
                           ) : null}
                         </span>
                         {option.meta ? (
-                          <span className="block truncate text-[11px] text-text-subtle">
+                          <span className="block truncate text-caption text-text-secondary">
                             {option.meta}
                           </span>
                         ) : null}
@@ -395,7 +399,7 @@ export function Combobox({
                 if (!group) return items
                 return (
                   <div key={group} role="group" aria-label={group}>
-                    <p className="sticky top-0 bg-surface-muted px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-text-subtle">
+                    <p className="sticky top-0 bg-surface-muted px-3 py-1 text-caption font-semibold uppercase tracking-wide text-text-secondary">
                       {group}
                     </p>
                     {items}

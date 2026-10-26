@@ -38,7 +38,7 @@ export function Sparkline({
     return (
       <div
         className={cn(
-          'flex h-14 items-center justify-center rounded-compact border border-dashed border-line text-[11px] text-text-subtle',
+          'flex h-14 items-center justify-center rounded-compact border border-dashed border-line text-caption text-text-secondary',
           className,
         )}
       >

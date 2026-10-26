@@ -82,7 +82,7 @@ function WeightSlider({
         onChange={(event) => onChange(Number.parseFloat(event.target.value))}
         className={styles.slider}
         style={{
-          background: `linear-gradient(to right, var(--color-coral) ${percent}%, var(--color-surface-sunken) ${percent}%)`,
+          background: `linear-gradient(to right, var(--color-coral) ${percent}%, var(--color-surface-canvas) ${percent}%)`,
         }}
       />
       <div className={styles.bounds}>
@@ -592,7 +592,7 @@ export default function SettingsScreen() {
                                 const share = variantDraft[name] ?? 0
                                 return (
                                   <div key={config.id} className={styles.variantRow}>
-                                    <span className="text-[13px] text-text">
+                                    <span className="text-body text-text-primary">
                                       v{config.version} ·{' '}
                                       {t(`rankingStatus.${config.status}` as const)}
                                     </span>
@@ -610,7 +610,7 @@ export default function SettingsScreen() {
                                         }))
                                       }}
                                     />
-                                    <span className="pb-2 text-[11px] text-text-subtle">
+                                    <span className="pb-2 text-caption text-text-secondary">
                                       {formatPercent(share, locale)}
                                     </span>
                                   </div>
@@ -620,7 +620,7 @@ export default function SettingsScreen() {
                               {configs
                                 .filter((config) => config.status === 'draft')
                                 .map((config) => (
-                                  <p key={config.id} className="text-[11px] text-text-subtle">
+                                  <p key={config.id} className="text-caption text-text-secondary">
                                     v{config.version} — {t('settings.experiments.draftBlocked')}
                                   </p>
                                 ))}
@@ -628,7 +628,7 @@ export default function SettingsScreen() {
                                 className={
                                   draftOverAllocated
                                     ? styles.fourEyes
-                                    : 'text-[11px] text-text-muted'
+                                    : 'text-caption text-text-muted'
                                 }
                               >
                                 {draftOverAllocated
@@ -727,14 +727,14 @@ export default function SettingsScreen() {
                             status board out of nothing. */}
                         <div className={styles.providerCard}>
                           <div className={styles.providerHead}>
-                            <span className="text-[13px] font-semibold text-text">
+                            <span className="text-body font-semibold text-text-primary">
                               {t('dashboard.provider.title')}
                             </span>
                             <Badge tone={kpis.providerErrorsLast7d > 0 ? 'amber' : 'mint'}>
                               {t('dashboard.window7d')}
                             </Badge>
                           </div>
-                          <p className="font-display text-2xl font-extrabold tabular-nums text-text">
+                          <p className="font-display text-2xl font-extrabold tabular-nums text-text-primary">
                             {formatNumber(kpis.providerErrorsLast7d, locale)}
                           </p>
                           <p className="mt-1 text-xs text-text-muted">

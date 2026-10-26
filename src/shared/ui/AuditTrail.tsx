@@ -54,20 +54,23 @@ export function AuditTrail({ entries }: { entries: AuditEntry[] }) {
         return (
           <li
             key={entry.id}
-            className={`rounded-card border bg-surface p-3 ${
+            className={`rounded-card border bg-surface-card p-3 ${
               entry.breakGlass ? 'border-danger/50' : 'border-line'
             }`}
           >
             <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <p className="text-[13px] font-semibold text-text">
+              <p className="text-body font-semibold text-text-primary">
                 {entry.actorRole ? t(`role.${entry.actorRole}` as const) : entry.actorType}{' '}
                 <span className="font-normal text-text-muted">{entry.action}</span>
               </p>
-              <time className="text-xs tabular-nums text-text-subtle" dateTime={entry.occurredAt}>
+              <time
+                className="text-xs tabular-nums text-text-secondary"
+                dateTime={entry.occurredAt}
+              >
                 {formatDateTime(entry.occurredAt, locale)}
               </time>
             </div>
-            <p className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-text-subtle">
+            <p className="mt-1 flex flex-wrap items-center gap-2 text-caption text-text-secondary">
               {/* Colour is never the only signal: break-glass is also worded. */}
               {entry.breakGlass ? <Badge tone="danger">{t('audit.breakGlassBadge')}</Badge> : null}
               {entry.authorizationPath ? (
@@ -79,7 +82,7 @@ export function AuditTrail({ entries }: { entries: AuditEntry[] }) {
             </p>
             {entry.reason ? (
               <p className="mt-2 text-xs text-text-muted">
-                <span className="text-text-subtle">{t('audit.reason')}: </span>
+                <span className="text-text-secondary">{t('audit.reason')}: </span>
                 {entry.reason}
               </p>
             ) : null}
@@ -87,15 +90,15 @@ export function AuditTrail({ entries }: { entries: AuditEntry[] }) {
               <dl className="mt-2 grid grid-cols-[minmax(6rem,auto)_1fr] gap-x-3 gap-y-1 text-xs">
                 {keys.map((key) => (
                   <div key={key} className="contents">
-                    <dt className="font-mono text-text-subtle">{key}</dt>
+                    <dt className="font-mono text-text-secondary">{key}</dt>
                     <dd className="flex flex-wrap items-center gap-2">
                       <span className="rounded bg-danger-soft px-1.5 py-0.5 text-danger-ink line-through">
                         {renderValue(before[key])}
                       </span>
-                      <span aria-hidden="true" className="text-text-subtle">
+                      <span aria-hidden="true" className="text-text-secondary">
                         →
                       </span>
-                      <span className="rounded bg-mint-soft px-1.5 py-0.5 text-text">
+                      <span className="rounded bg-mint-soft px-1.5 py-0.5 text-text-primary">
                         {renderValue(after[key])}
                       </span>
                     </dd>
@@ -104,7 +107,7 @@ export function AuditTrail({ entries }: { entries: AuditEntry[] }) {
               </dl>
             ) : null}
             {rest ? (
-              <pre className="mt-2 max-h-40 overflow-auto rounded-compact bg-surface-sunken p-2 font-mono text-[11px] text-text-muted">
+              <pre className="mt-2 max-h-40 overflow-auto rounded-compact bg-surface-canvas p-2 font-mono text-caption text-text-muted">
                 {JSON.stringify(rest, null, 2)}
               </pre>
             ) : null}

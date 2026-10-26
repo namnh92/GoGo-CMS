@@ -310,7 +310,7 @@ export default function ImportJobScreen() {
               label={t('jobDetail.col.confidence')}
             />
           ) : (
-            <span className="text-[12px] text-text-subtle">—</span>
+            <span className="text-label text-text-secondary">—</span>
           ),
         enableSorting: false,
       },
@@ -533,7 +533,7 @@ export default function ImportJobScreen() {
                 </Badge>
                 <Badge tone="neutral">{t(`importSource.${detail.sourceType}` as const)}</Badge>
                 {detail.defaultCity ? <Badge tone="neutral">{detail.defaultCity}</Badge> : null}
-                <span className="text-[11px] text-text-subtle">
+                <span className="text-caption text-text-secondary">
                   {formatRelative(detail.createdAt, locale)}
                 </span>
               </div>
@@ -622,7 +622,7 @@ export default function ImportJobScreen() {
                   />
                   {detail.missingRequiredColumns.length > 0 ? (
                     <div className="mt-3">
-                      <p className="mb-1 text-[11px] font-semibold text-text-muted">
+                      <p className="mb-1 text-caption font-semibold text-text-muted">
                         {t('jobDetail.missingRequiredColumns')}
                       </p>
                       <div className={styles.unmapped}>
@@ -636,7 +636,7 @@ export default function ImportJobScreen() {
                   ) : null}
                   {detail.unmappedHeaders.length > 0 ? (
                     <div className="mt-3">
-                      <p className="mb-1 text-[11px] font-semibold text-text-muted">
+                      <p className="mb-1 text-caption font-semibold text-text-muted">
                         {t('jobDetail.unmappedHeaders')}
                       </p>
                       <div className={styles.unmapped}>

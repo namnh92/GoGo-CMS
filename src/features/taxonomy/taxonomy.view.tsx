@@ -147,14 +147,14 @@ export default function TaxonomyScreen() {
         id: 'labelEn',
         header: () => t('taxonomy.col.labelEn'),
         cell: ({ row }) => (
-          <span className="text-[13px] text-text-muted">{row.original.labels.en ?? '—'}</span>
+          <span className="text-body text-text-muted">{row.original.labels.en ?? '—'}</span>
         ),
       },
       {
         id: 'order',
         header: () => t('taxonomy.col.order'),
         cell: ({ row }) => (
-          <span className="tabular-nums text-[13px] text-text-muted">{row.original.sortOrder}</span>
+          <span className="tabular-nums text-body text-text-muted">{row.original.sortOrder}</span>
         ),
       },
       {
@@ -202,7 +202,7 @@ export default function TaxonomyScreen() {
               </span>
             ))}
             {row.original.synonyms.length === 0 ? (
-              <span className="text-[11px] text-text-subtle">—</span>
+              <span className="text-caption text-text-secondary">—</span>
             ) : null}
           </div>
         ),
@@ -377,10 +377,10 @@ export default function TaxonomyScreen() {
                       <span className={styles.arrow} aria-hidden="true">
                         →
                       </span>
-                      <span className="text-[12px] font-semibold text-text">
+                      <span className="text-label font-semibold text-text-primary">
                         {item.labels[locale] ?? item.key}
                       </span>
-                      <span className="ml-auto font-mono text-[10px] text-text-subtle">
+                      <span className="ml-auto font-mono text-caption text-text-secondary">
                         {entry.locale}
                       </span>
                     </div>

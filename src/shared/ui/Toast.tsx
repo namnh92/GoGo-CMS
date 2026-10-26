@@ -92,14 +92,14 @@ function ToastViewport({
               ? 'border-mint/40 bg-mint-soft'
               : toast.tone === 'error'
                 ? 'border-danger/40 bg-danger-soft'
-                : 'border-line bg-surface',
+                : 'border-line bg-surface-card',
           )}
         >
           <span aria-hidden="true" className="mt-0.5 text-sm">
             {toast.tone === 'success' ? '✓' : toast.tone === 'error' ? '⚠' : 'ℹ'}
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-[13px] font-semibold text-text">{toast.message}</p>
+            <p className="text-body font-semibold text-text-primary">{toast.message}</p>
             {toast.detail ? <p className="mt-0.5 text-xs text-text-muted">{toast.detail}</p> : null}
           </div>
           <IconButton

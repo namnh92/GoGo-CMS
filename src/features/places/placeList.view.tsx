@@ -584,7 +584,7 @@ export default function PlaceListScreen() {
                         }
                       />
                       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3">
-                        <p className="text-xs text-text-subtle">
+                        <p className="text-xs text-text-secondary">
                           {t('places.pageInfo', { count: formatNumber(items.length, locale) })}
                           {nextCursor === null ? ` · ${t('places.lastPage')}` : ''}
                         </p>
@@ -621,7 +621,7 @@ export default function PlaceListScreen() {
               </Card>
             </div>
 
-            <p className="text-[11px] text-text-subtle">{t('places.ratingNote')}</p>
+            <p className="text-caption text-text-secondary">{t('places.ratingNote')}</p>
 
             <BulkActionBar
               count={selected.length}

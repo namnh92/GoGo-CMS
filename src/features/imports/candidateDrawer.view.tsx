@@ -74,16 +74,16 @@ export function CandidateDrawer({
       }
     >
       <div className="mb-3 flex items-center gap-2">
-        <span className="font-mono text-[12px] text-text-subtle">#{row.rowNumber}</span>
+        <span className="font-mono text-label text-text-secondary">#{row.rowNumber}</span>
         <RowStatusBadge status={row.status} />
       </div>
 
       <section className={styles.rowFacts}>
-        <h3 className="mb-2 text-[11px] font-bold uppercase tracking-wide text-text-subtle">
+        <h3 className="mb-2 text-caption font-bold uppercase tracking-wide text-text-secondary">
           {t('candidate.rowData')}
         </h3>
         {facts.length === 0 ? (
-          <p className="text-xs text-text-subtle">{t('state.emptyHint')}</p>
+          <p className="text-xs text-text-secondary">{t('state.emptyHint')}</p>
         ) : (
           <dl className={styles.factGrid}>
             {facts.map(([key, value]) => (
@@ -140,7 +140,7 @@ export function CandidateDrawer({
                           {candidate.ratingCount != null ? ` (${candidate.ratingCount})` : ''}
                         </span>
                       ) : null}
-                      <span className="font-mono text-[10px]">{candidate.googlePlaceId}</span>
+                      <span className="font-mono text-caption">{candidate.googlePlaceId}</span>
                     </span>
                   </span>
                   <span className="shrink-0">

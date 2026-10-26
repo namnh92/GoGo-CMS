@@ -8,8 +8,8 @@ import { describe, expect, it } from 'vitest'
  *
  * Every status badge failed at once and none of them looked broken: the tone on
  * its own `-soft` fill ran from 3.74 (danger) down to 2.24 (amber), on the
- * column an editor reads most. `--color-text-subtle` was 3.78 on the sunken
- * surface across 200-odd usages.
+ * column an editor reads most. `--color-text-secondary` was 3.78 on the sunken
+ * surface across 200-odd usages (now `--color-text-secondary` on canvas).
  */
 const AA_TEXT = 4.5
 const AA_NON_TEXT = 3
@@ -53,17 +53,17 @@ describe('token contrast', () => {
 
   it.each([
     ['on white', 'color-neutral-0'],
-    ['on the sunken surface', 'color-neutral-50'],
-  ])('subtle text reads %s', (_label, surface) => {
+    ['on the canvas surface', 'color-neutral-50'],
+  ])('secondary text reads %s', (_label, surface) => {
     expect(contrast(hex('color-neutral-500'), hex(surface))).toBeGreaterThanOrEqual(AA_TEXT)
   })
 
   // GoGo-CMS#246: white on the brand coral is 4.09, and the primary CTA, the
   // active tab and 35 links used it. The suite only looked at -ink/-soft pairs.
   it.each([
-    ['on white', 'color-surface'],
+    ['on the card surface', 'color-surface-card'],
     ['on the muted surface', 'color-surface-muted'],
-    ['on the sunken surface', 'color-surface-sunken'],
+    ['on the canvas surface', 'color-surface-canvas'],
   ])('accent text and links read %s', (_label, surface) => {
     expect(contrast(hex('color-accent-primary'), hex(surface))).toBeGreaterThanOrEqual(AA_TEXT)
   })
@@ -78,12 +78,49 @@ describe('token contrast', () => {
     )
   })
 
-  it.each(['color-surface', 'color-surface-sunken'])(
+  it.each(['color-surface-card', 'color-surface-canvas'])(
     'the focus ring is visible on %s',
     (surface) => {
       expect(contrast(hex('color-focus'), hex(surface))).toBeGreaterThanOrEqual(AA_NON_TEXT)
     },
   )
+
+  // GoGo-CMS#248: the shared vocabulary. Each text level that carries text
+  // must read on every surface it lands on; tertiary is placeholder-only.
+  it.each([
+    ['color-text-primary', 'color-surface-card'],
+    ['color-text-primary', 'color-surface-canvas'],
+    ['color-text-primary', 'color-surface-subtle'],
+    ['color-text-secondary', 'color-surface-card'],
+    ['color-text-secondary', 'color-surface-muted'],
+    ['color-text-secondary', 'color-surface-canvas'],
+    ['color-text-muted', 'color-surface-card'],
+    ['color-text-muted', 'color-surface-canvas'],
+    ['color-text-muted', 'color-surface-subtle'],
+  ])('%s reads on %s', (text, surface) => {
+    expect(contrast(hex(text), hex(surface))).toBeGreaterThanOrEqual(AA_TEXT)
+  })
+
+  it('tertiary text is decoration, and measurably not body text', () => {
+    // Guards the comment in tokens.css: if this ever passes AA the token can
+    // carry text, and the "placeholder only" rule should be revisited.
+    expect(contrast(hex('color-text-tertiary'), hex('color-surface-card'))).toBeLessThan(AA_TEXT)
+  })
+
+  it('the focus ring follows the accent', () => {
+    expect(hex('color-focus')).toBe(hex('color-accent-primary'))
+  })
+
+  it('the disabled primary button label reads on its fill', () => {
+    const button = readFileSync(path.join(UI, 'Button.tsx'), 'utf8')
+    // The primary variant runs from `primary:` to the next variant key.
+    const primary = /primary:([\s\S]*?)\n\s*secondary:/.exec(button)?.[1]
+    expect(primary, 'primary variant classes').toBeDefined()
+    const fill = /disabled:bg-([a-z][\w-]*)/.exec(primary!)?.[1]
+    const label = /disabled:text-([a-z][\w-]*)/.exec(primary!)?.[1]
+    expect(fill).toBe('surface-subtle')
+    expect(contrast(hex(`color-${label}`), hex(`color-${fill}`))).toBeGreaterThanOrEqual(AA_TEXT)
+  })
 
   it('the primary button fills with a colour white text reads on', () => {
     // Read from the component, not restated here: the bug was a correct token

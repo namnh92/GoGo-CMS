@@ -372,7 +372,7 @@ function Row({
     <tr>
       <td className={styles.td}>
         <span className={styles.provider}>{label}</span>
-        <p className="text-[11px] text-text-subtle">{hint}</p>
+        <p className="text-caption text-text-secondary">{hint}</p>
       </td>
       <td className={styles.tdNum}>{value}</td>
       <td className={styles.tdNum}>{rate}</td>

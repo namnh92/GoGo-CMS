@@ -140,13 +140,13 @@ export function Drawer({
         aria-modal="true"
         aria-label={typeof title === 'string' ? title : undefined}
         className={cn(
-          'relative flex h-full w-full flex-col border-l border-line bg-surface shadow-2xl',
+          'relative flex h-full w-full flex-col border-l border-line bg-surface-card shadow-2xl',
           width === 'lg' ? 'max-w-3xl' : 'max-w-xl',
         )}
       >
         <header className="flex items-start justify-between gap-4 border-b border-line px-5 py-4">
           <div className="min-w-0">
-            <h2 className="font-display text-base font-bold text-text">{title}</h2>
+            <h2 className="font-display text-base font-bold text-text-primary">{title}</h2>
             {description ? <p className="mt-0.5 text-xs text-text-muted">{description}</p> : null}
           </div>
           <IconButton label={t('action.close')} onClick={onClose}>
@@ -197,11 +197,11 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={typeof title === 'string' ? title : undefined}
-        className="relative flex max-h-[85vh] w-full max-w-lg flex-col rounded-sheet border border-line bg-surface shadow-2xl"
+        className="relative flex max-h-[85vh] w-full max-w-lg flex-col rounded-sheet border border-line bg-surface-card shadow-2xl"
       >
         <header className="flex items-start justify-between gap-4 border-b border-line px-5 py-4">
           <div className="min-w-0">
-            <h2 className="font-display text-base font-bold text-text">{title}</h2>
+            <h2 className="font-display text-base font-bold text-text-primary">{title}</h2>
             {description ? <p className="mt-0.5 text-xs text-text-muted">{description}</p> : null}
           </div>
           <IconButton label={t('action.close')} onClick={onClose}>
@@ -269,7 +269,7 @@ export function ConfirmDialog({
         </div>
       }
     >
-      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-subtle">
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-secondary">
         {t('confirm.changesTitle')}
       </p>
       <ul className="divide-y divide-line rounded-compact border border-line">
@@ -279,23 +279,25 @@ export function ConfirmDialog({
             {change.from !== undefined || change.to !== undefined ? (
               <span className="flex flex-wrap items-center gap-2">
                 {change.from !== undefined ? (
-                  <span className="rounded bg-danger-soft px-1.5 py-0.5 text-[13px] text-danger-ink line-through">
+                  <span className="rounded bg-danger-soft px-1.5 py-0.5 text-body text-danger-ink line-through">
                     {change.from}
                   </span>
                 ) : null}
                 {change.from !== undefined && change.to !== undefined ? (
-                  <span aria-hidden="true" className="text-text-subtle">
+                  <span aria-hidden="true" className="text-text-secondary">
                     →
                   </span>
                 ) : null}
                 {change.to !== undefined ? (
-                  <span className="rounded bg-mint-soft px-1.5 py-0.5 text-[13px] text-text">
+                  <span className="rounded bg-mint-soft px-1.5 py-0.5 text-body text-text-primary">
                     {change.to}
                   </span>
                 ) : null}
               </span>
             ) : null}
-            {change.note ? <span className="text-xs text-text-subtle">{change.note}</span> : null}
+            {change.note ? (
+              <span className="text-xs text-text-secondary">{change.note}</span>
+            ) : null}
           </li>
         ))}
       </ul>

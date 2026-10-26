@@ -443,14 +443,14 @@ export default function ModerationQueueScreen() {
               ) : (
                 <>
                   <div>
-                    <p className="mb-1 text-[11px] font-bold tracking-wide text-text-subtle uppercase">
+                    <p className="mb-1 text-caption font-bold tracking-wide text-text-secondary uppercase">
                       {t('moderation.content')}
                     </p>
                     <p className={styles.quote}>{active.body ?? t('moderation.noText')}</p>
                   </div>
 
                   {tab === 'checkins' ? (
-                    <p className="flex items-center gap-1 text-[13px] text-text-muted">
+                    <p className="flex items-center gap-1 text-body text-text-muted">
                       <StarIcon size={13} className="text-amber" />
                       {active.title}
                     </p>
@@ -458,14 +458,14 @@ export default function ModerationQueueScreen() {
 
                   {tab === 'reports' ? (
                     <>
-                      <dl className="grid grid-cols-2 gap-2 text-[12px]">
+                      <dl className="grid grid-cols-2 gap-2 text-label">
                         <div>
-                          <dt className="text-text-subtle">{t('moderation.reportTarget')}</dt>
-                          <dd className="font-medium text-text">{active.meta}</dd>
+                          <dt className="text-text-secondary">{t('moderation.reportTarget')}</dt>
+                          <dd className="font-medium text-text-primary">{active.meta}</dd>
                         </div>
                         <div>
-                          <dt className="text-text-subtle">{t('moderation.reportReason')}</dt>
-                          <dd className="font-mono text-text">{active.title}</dd>
+                          <dt className="text-text-secondary">{t('moderation.reportReason')}</dt>
+                          <dd className="font-mono text-text-primary">{active.title}</dd>
                         </div>
                       </dl>
                       {/* The realistic incident path: a report names a published

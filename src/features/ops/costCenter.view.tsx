@@ -673,7 +673,7 @@ function ProviderCard({
       />
       <CardBody className="p-0">
         {provider.services.length === 0 ? (
-          <p className="px-5 py-4 text-xs text-text-subtle">{t('cost.provider.noServices')}</p>
+          <p className="px-5 py-4 text-xs text-text-secondary">{t('cost.provider.noServices')}</p>
         ) : (
           <div className={styles.scroller}>
             <table className={styles.table}>

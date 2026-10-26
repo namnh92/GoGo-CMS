@@ -86,7 +86,7 @@ export function DataTable<T>({
                             ? 'none'
                             : undefined
                     }
-                    className="px-3 py-2.5 text-[11px] font-bold uppercase tracking-wide text-text-subtle first:pl-4 last:pr-4"
+                    className="px-3 py-2.5 text-caption font-bold uppercase tracking-wide text-text-secondary first:pl-4 last:pr-4"
                   >
                     {header.isPlaceholder ? null : sortable ? (
                       <button
@@ -172,7 +172,7 @@ export function Pagination({
   const t = useT()
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3">
-      <p className="text-xs text-text-subtle">{summary}</p>
+      <p className="text-xs text-text-secondary">{summary}</p>
       <div className="flex items-center gap-2">
         <Button
           size="sm"
@@ -220,15 +220,15 @@ export function BulkActionBar({
       aria-label={hint}
       className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 flex-wrap items-center gap-3 rounded-sheet border border-line-strong bg-surface-inverse px-4 py-3 text-neutral-0 shadow-2xl"
     >
-      <span className="rounded-pill bg-accent-primary px-2 py-0.5 text-[11px] font-bold tabular-nums">
+      <span className="rounded-pill bg-accent-primary px-2 py-0.5 text-caption font-bold tabular-nums">
         {count}
       </span>
-      {hint ? <span className="text-[13px] text-neutral-300">{hint}</span> : null}
+      {hint ? <span className="text-body text-neutral-300">{hint}</span> : null}
       <div className="flex items-center gap-2">{children}</div>
       <button
         type="button"
         onClick={onClear}
-        className="ml-1 min-h-11 px-2 text-[13px] font-semibold text-neutral-300 hover:text-neutral-0"
+        className="ml-1 min-h-11 px-2 text-body font-semibold text-neutral-300 hover:text-neutral-0"
       >
         {t('places.bulk.clear')}
       </button>

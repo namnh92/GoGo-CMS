@@ -29,14 +29,14 @@ export function ProgressBar({
   const percent = Math.min(100, Math.max(0, (value / safeMax) * 100))
   return (
     <div className={cn('min-w-[9rem]', className)}>
-      {caption ? <p className="mb-1 text-[11px] tabular-nums text-text-muted">{caption}</p> : null}
+      {caption ? <p className="mb-1 text-caption tabular-nums text-text-muted">{caption}</p> : null}
       <div
         role="progressbar"
         aria-label={label}
         aria-valuenow={Math.round(value)}
         aria-valuemin={0}
         aria-valuemax={safeMax}
-        className="h-1.5 w-full overflow-hidden rounded-pill bg-surface-sunken"
+        className="h-1.5 w-full overflow-hidden rounded-pill bg-surface-canvas"
       >
         <div
           className={cn(
