@@ -10,10 +10,12 @@ import type {
 
 /**
  * GoGo-CMS#249 — the mock half of the GoGo AI contract (GoGo-BE#713,
- * `2.0.0-alpha.2`). It behaves the way the contract says the server will:
+ * `2.0.0-alpha.3`). It behaves the way the contract says the server will:
  *
  * - drafts: `editor` / `ops_admin` (and `super_admin`); publish / unpublish:
- *   `ops_admin` only; reads and the feedback queue open to every rank-1 role;
+ *   `ops_admin` only; document reads open to every rank-1 role; the feedback
+ *   queue is moderator / ops_admin / super_admin only (Q8: editor gets
+ *   `403 ROLE_DENIED`);
  * - `PATCH` refuses a stale `baseRevision` with `409 REVISION_CONFLICT`;
  * - publish supersedes the previous live version, unpublish withdraws it and
  *   requires a reason; both refuse a state that no longer holds (409);
@@ -343,6 +345,22 @@ function seed() {
         text: 'GoGo chưa có thông tin về câu hỏi này.',
         sources: [],
         notice: { kind: 'fallback', reason: 'timeout', copyKey: 'assistant.notice.fallback' },
+        model: 'model-a',
+      },
+    },
+    {
+      // Contract 2.0.0-alpha.3: the hard ceiling was hit, partial text kept.
+      id: 'fb000000-0000-4000-8000-000000000004',
+      rating: 'down',
+      reason: 'not_helpful',
+      createdAt: iso(60 * 30),
+      conversationRef: '0123456789abcdef',
+      reply: {
+        status: 'truncated',
+        text: 'Lịch trình gợi ý: 18:00 ăn tối ở quận 1, 19:30 đi dạo phố đi bộ, 21:00',
+        sources: [],
+        cardKinds: [],
+        proposalKinds: [],
         model: 'model-a',
       },
     },
@@ -677,6 +695,10 @@ export function createAssistantHandlers({ base, currentActor, envelope }: Deps) 
     }),
 
     http.get(`${base}/cms/assistant/feedback`, ({ request }) => {
+      // GoGo-BE#713 Q8 — an explicit exception to rank-read.
+      if (!['moderator', 'ops_admin', 'super_admin'].includes(currentActor().role)) {
+        return envelope(403, 'ROLE_DENIED', 'role not allowed')
+      }
       const url = new URL(request.url)
       const rating = url.searchParams.get('rating')
       const reason = url.searchParams.get('reason')

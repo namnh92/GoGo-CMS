@@ -8,6 +8,8 @@ import { resetMockDb } from '@/shared/test/handlers'
 import { clearAssistantMock } from '@/shared/test/assistantMock'
 import { featureFlagCatalog } from '@/shared/test/fixtures'
 import type { AdminRole } from '@/shared/api/contracts'
+import { ApiError } from '@/shared/api/errors'
+import { fetchFeedback } from './api'
 import FeedbackQueueScreen from './feedbackQueue.view'
 import KillSwitchScreen from './killSwitch.view'
 
@@ -21,8 +23,9 @@ const envelope = (status: number, code: string) =>
 beforeEach(() => resetMockDb())
 
 describe('GoGo AI feedback queue — role × state (CMS#249)', () => {
-  // Declared on moderator; a safe read, so every rank-1 role reads it too.
-  it.each<AdminRole>(['moderator', 'editor', 'ops_admin', 'super_admin'])(
+  // GoGo-BE#713 Q8: declared on moderator + ops_admin with an explicit
+  // exception to rank-read, so the rank-1 editor peer does not read it.
+  it.each<AdminRole>(['moderator', 'ops_admin', 'super_admin'])(
     '%s reads the queue with reply, sources and reason only',
     async (role) => {
       signInAs(role)
@@ -32,7 +35,7 @@ describe('GoGo AI feedback queue — role × state (CMS#249)', () => {
       const items = within(list)
         .getAllByRole('listitem')
         .filter((el) => el.parentElement === list)
-      expect(items).toHaveLength(3)
+      expect(items).toHaveLength(4)
       expect(within(list).getByText(/chỉ hiện sau khi chủ phòng chốt/)).toBeInTheDocument()
       expect(within(list).getByText('Đã cũ')).toBeInTheDocument()
       // A guide source links to the CMS document; place data says when it was checked.
@@ -48,8 +51,43 @@ describe('GoGo AI feedback queue — role × state (CMS#249)', () => {
       expect(within(list).getByText(/Hội thoại #c9f1a2b3/)).toBeInTheDocument()
       expect(list.textContent).not.toMatch(/@|\d+\.\d{4,}/)
       expect(screen.getByText(/Không có người đánh giá, câu hỏi của họ/)).toBeInTheDocument()
+      // Q3/Q10: the v1 limitation is said, not left for the reviewer to infer.
+      expect(screen.getByText(/Câu hỏi của người dùng không hiển thị trong v1/)).toBeInTheDocument()
     },
   )
+
+  it('editor gets permission-denied: the queue is outside rank-read', async () => {
+    signInAs('editor')
+    renderWithProviders(<FeedbackQueueScreen />)
+    expect(await screen.findByText('Không đủ quyền')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('list', { name: 'Phản hồi câu trả lời GoGo AI' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('the API itself refuses an editor with 403 ROLE_DENIED', async () => {
+    // RoleGate is not authorization: a hand-crafted request must fail too.
+    signInAs('editor')
+    const refused = await fetchFeedback({ limit: 20 }).catch((error: unknown) => error)
+    expect(refused).toBeInstanceOf(ApiError)
+    expect(refused).toMatchObject({ status: 403, code: 'ROLE_DENIED' })
+  })
+
+  it('labels a reply that hit the length ceiling as cut short', async () => {
+    signInAs('moderator')
+    renderWithProviders(<FeedbackQueueScreen />)
+    const list = await screen.findByRole('list', { name: 'Phản hồi câu trả lời GoGo AI' })
+    expect(within(list).getByText('Bị cắt ngắn')).toBeInTheDocument()
+    expect(within(list).queryByText('truncated')).not.toBeInTheDocument()
+  })
+
+  it('labels it in English too', async () => {
+    window.localStorage.setItem('gogo.cms.locale', 'en')
+    signInAs('moderator')
+    renderWithProviders(<FeedbackQueueScreen />)
+    expect(await screen.findByText('Cut short')).toBeInTheDocument()
+    expect(screen.getByText(/question is not shown in v1/)).toBeInTheDocument()
+  })
 
   it('filters by rating on the server', async () => {
     signInAs('moderator')
@@ -136,22 +174,51 @@ describe('GoGo AI kill switch — role × state (CMS#249)', () => {
       const dialog = await screen.findByRole('dialog', { name: 'Bật GoGo AI?' })
       expect(within(dialog).getByText('assistant.enabled')).toBeInTheDocument()
       expect(within(dialog).getByText('2 tài liệu nguồn đang xuất bản.')).toBeInTheDocument()
+      await user.type(within(dialog).getByLabelText(/Lý do thay đổi/), 'Ra mắt bản thử nghiệm')
       await user.click(within(dialog).getByRole('button', { name: 'Bật trợ lý' }))
 
       expect(await screen.findByText('Đã bật GoGo AI.')).toBeInTheDocument()
       expect(await screen.findByText('Đang bật')).toBeInTheDocument()
       expect(await screen.findByText('feature_flag.set')).toBeInTheDocument()
+      // The reason the operator typed is the one the history reads back.
+      expect(await screen.findByText(/Ra mắt bản thử nghiệm/)).toBeInTheDocument()
     },
   )
+
+  it('requires a 3–500 character reason and sends it, trimmed, in the PUT body', async () => {
+    signInAs('ops_admin')
+    const bodies: unknown[] = []
+    // Returns nothing, so the request falls through to the regular mock.
+    server.use(
+      http.put('/v1/cms/feature-flags/:key', async ({ request }) => {
+        bodies.push(await request.clone().json())
+      }),
+    )
+    const user = userEvent.setup()
+    renderWithProviders(<KillSwitchScreen />)
+    await user.click(await screen.findByRole('button', { name: 'Bật trợ lý' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Bật GoGo AI?' })
+    const confirm = within(dialog).getByRole('button', { name: 'Bật trợ lý' })
+    expect(confirm).toBeDisabled()
+    const field = within(dialog).getByLabelText(/Lý do thay đổi/)
+    await user.type(field, ' ab ')
+    expect(confirm).toBeDisabled()
+    expect(within(dialog).getByText('Lý do cần ít nhất 3 ký tự.')).toBeInTheDocument()
+    await user.type(field, 'c')
+    expect(confirm).toBeEnabled()
+    await user.click(confirm)
+    expect(await screen.findByText('Đã bật GoGo AI.')).toBeInTheDocument()
+    expect(bodies).toEqual([{ enabled: true, reason: 'ab c' }])
+  })
 
   it('says what turning it off does before doing it', async () => {
     signInAs('ops_admin')
     const user = userEvent.setup()
     renderWithProviders(<KillSwitchScreen />)
     await user.click(await screen.findByRole('button', { name: 'Bật trợ lý' }))
-    await user.click(
-      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Bật trợ lý' }),
-    )
+    const onDialog = await screen.findByRole('dialog')
+    await user.type(within(onDialog).getByLabelText(/Lý do thay đổi/), 'Thử nghiệm')
+    await user.click(within(onDialog).getByRole('button', { name: 'Bật trợ lý' }))
     await user.click(await screen.findByRole('button', { name: 'Tắt trợ lý' }))
     const dialog = await screen.findByRole('dialog', { name: 'Tắt GoGo AI?' })
     expect(within(dialog).getByText(/503 ASSISTANT_DISABLED/)).toBeInTheDocument()

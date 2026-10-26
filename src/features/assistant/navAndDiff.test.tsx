@@ -7,7 +7,8 @@ import { diffLines, withContext } from './textDiff'
 
 describe('GoGo AI navigation, rendered per role (CMS#249)', () => {
   it.each<[AdminRole, { docs: boolean; feedback: boolean; kill: boolean }]>([
-    ['editor', { docs: true, feedback: true, kill: false }],
+    // Q8: the queue is outside rank-read, so the editor peer is not offered it.
+    ['editor', { docs: true, feedback: false, kill: false }],
     ['moderator', { docs: true, feedback: true, kill: false }],
     ['ops_admin', { docs: true, feedback: true, kill: true }],
     ['super_admin', { docs: true, feedback: true, kill: true }],

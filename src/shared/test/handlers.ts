@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw'
-import type { z } from 'zod'
+import { z } from 'zod'
 import type { AdminRole, AuditEntry, CollectionStatus, PlaceStatus } from '@/shared/api/contracts'
 import {
   cmsPlaceEditMockSchema,
@@ -372,6 +372,9 @@ function mockAssertContactCurrent(jobId: string, row: ImportRow) {
  * `placeEditSchema` (`avgVisitMinutes` 0..1440 here against 10..720 there)
  * with a green test suite and a broken save button.
  */
+/** `PUT /cms/feature-flags/{key}` `reason`, as GoGo-BE's `reasonSchema.optional()`. */
+const flagReasonBody = z.string().trim().min(3).max(500).optional()
+
 function validationEnvelope(issues: readonly z.ZodIssue[]) {
   return HttpResponse.json(
     {
@@ -4067,6 +4070,15 @@ export const handlers = [
       value?: unknown
       environment?: string
       platform?: string
+      reason?: unknown
+    }
+    // GoGo-BE#713 Q7, contract 2.0.0-alpha.3: optional, but when present it is
+    // trimmed and 3–500 or the whole write is refused on `reason`.
+    const reason = flagReasonBody.safeParse(body.reason)
+    if (!reason.success) {
+      return validationEnvelope(
+        reason.error.issues.map((issue) => ({ ...issue, path: ['reason'] })),
+      )
     }
     const environment = (body.environment ?? 'all') as (typeof db.flags)[number]['environment']
     const platform = (body.platform ?? 'all') as (typeof db.flags)[number]['platform']
@@ -4120,8 +4132,11 @@ export const handlers = [
         after: { enabled: row.enabled, value: row.value },
         environment,
         platform,
+        // Omitted, not null, when an older writer sent none — as the server does.
+        ...(reason.data ? { reason: reason.data } : {}),
       },
-      reason: null,
+      // The audit list lifts it out of the diff for display.
+      reason: reason.data ?? null,
       breakGlass: false,
       requestId: 'mock-feature-flag-set',
       ipAddress: '10.0.0.1',

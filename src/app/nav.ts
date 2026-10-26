@@ -193,7 +193,7 @@ const OPERATIONS: NavLeaf[] = [
 /**
  * GoGo AI (GoGo-CMS#249, GoGo-BE#713). Each entry keeps the gate its endpoint
  * has: the guide documents are rank-1 reads (editor/moderator/ops), the
- * feedback queue is moderator's and read by rank, and the kill switch is the
+ * feedback queue is moderator/ops only (no rank-read, Q8), and the kill switch is the
  * `assistant.enabled` flag — ops only, like every flag.
  */
 const ASSISTANT: NavLeaf[] = [

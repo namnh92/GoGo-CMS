@@ -11,6 +11,7 @@ import { Badge } from '@/shared/ui/Badge'
 import { TextInput, Toggle } from '@/shared/ui/Field'
 import { AsyncBoundary, EmptyState, PermissionDeniedState } from '@/shared/ui/State'
 import type { AuditEntry } from '@/shared/api/contracts'
+import { auditReason } from '@/shared/ui/auditReason'
 import { fetchAudit, type AuditFilters } from './api'
 import { styles } from './auditLog.style'
 
@@ -262,9 +263,9 @@ export default function AuditLogScreen() {
                             </span>
                           ) : null}
                         </div>
-                        {entry.reason ? (
+                        {auditReason(entry) ? (
                           <p className={styles.reason}>
-                            {t('audit.reason')}: {entry.reason}
+                            {t('audit.reason')}: {auditReason(entry)}
                           </p>
                         ) : null}
                         {entry.diff != null ? (

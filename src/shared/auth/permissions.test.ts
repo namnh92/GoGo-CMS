@@ -65,6 +65,17 @@ describe('read is hierarchical, write is exact', () => {
     }
   })
 
+  it('keeps the GoGo AI feedback queue out of rank-read (GoGo-BE#713 Q8)', () => {
+    // Editor and moderator are both rank 1, so the hierarchical rule alone
+    // would admit editors. The queue is an explicit exception.
+    expect(roleCan('editor', 'assistant.feedback')).toBe(false)
+    expect(roleCan('moderator', 'assistant.feedback')).toBe(true)
+    expect(roleCan('ops_admin', 'assistant.feedback')).toBe(true)
+    expect(roleCan('super_admin', 'assistant.feedback')).toBe(true)
+    // Guide documents stay hierarchical: the moderator still reads them.
+    expect(roleCan('moderator', 'assistant.read')).toBe(true)
+  })
+
   it('keeps experiments and search analytics on the ops controller', () => {
     expect(roleCan('ops_admin', 'experiment.manage')).toBe(true)
     expect(roleCan('super_admin', 'experiment.manage')).toBe(true)

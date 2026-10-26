@@ -2,6 +2,7 @@ import { useI18n, useLabel, useT } from '@/shared/i18n/i18n'
 import { formatDateTime } from '@/shared/format'
 import type { AuditEntry } from '@/shared/api/contracts'
 import { Badge } from './Badge'
+import { auditReason } from './auditReason'
 import { EmptyState } from './State'
 
 function renderValue(value: unknown): string {
@@ -51,6 +52,7 @@ export function AuditTrail({ entries }: { entries: AuditEntry[] }) {
       {entries.map((entry) => {
         const { before, after, rest } = splitDiff(entry.diff)
         const keys = Array.from(new Set([...Object.keys(before), ...Object.keys(after)]))
+        const reason = auditReason(entry)
         return (
           <li
             key={entry.id}
@@ -80,10 +82,10 @@ export function AuditTrail({ entries }: { entries: AuditEntry[] }) {
               {/* Absent for roles that are not entitled to it — not an empty cell. */}
               {entry.ipAddress ? <span className="font-mono">{entry.ipAddress}</span> : null}
             </p>
-            {entry.reason ? (
+            {reason ? (
               <p className="mt-2 text-xs text-text-muted">
                 <span className="text-text-secondary">{t('audit.reason')}: </span>
-                {entry.reason}
+                {reason}
               </p>
             ) : null}
             {keys.length > 0 ? (

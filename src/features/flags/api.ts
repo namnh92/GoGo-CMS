@@ -1,3 +1,4 @@
+import { z } from 'zod'
 import { apiFetch, apiFetchParsed } from '@/shared/api/client'
 import {
   featureFlagCatalogSchema,
@@ -30,6 +31,17 @@ export function fetchFlagOverrides(
   })
 }
 
+/**
+ * GoGo-BE#713 Q7 — every flag write carries the operator's rationale, kept in
+ * the `feature_flag.set` audit entry. Optional in contract 2.0.0-alpha.3 so
+ * older writers keep working; the CMS always sends it, with the server's own
+ * bounds (trimmed, 3–500) checked before the request goes out.
+ */
+export const MIN_FLAG_REASON = 3
+export const MAX_FLAG_REASON = 500
+
+export const flagReasonSchema = z.string().trim().min(MIN_FLAG_REASON).max(MAX_FLAG_REASON)
+
 export type SetFlagInput = {
   key: string
   /**
@@ -41,6 +53,8 @@ export type SetFlagInput = {
   value?: unknown
   environment?: FlagEnvironment
   platform?: FlagPlatform
+  /** Required here even though the contract still accepts its absence. */
+  reason: string
 }
 
 /**
@@ -52,7 +66,7 @@ export type SetFlagInput = {
  * which is what every resolution falls back to.
  */
 export function setFlag(input: SetFlagInput) {
-  const { key, enabled, value, environment, platform } = input
+  const { key, enabled, value, environment, platform, reason } = input
   return apiFetch(`/cms/feature-flags/${encodeURIComponent(key)}`, {
     method: 'PUT',
     body: {
@@ -60,6 +74,7 @@ export function setFlag(input: SetFlagInput) {
       ...(value === undefined ? {} : { value }),
       ...(environment ? { environment } : {}),
       ...(platform ? { platform } : {}),
+      reason: reason.trim(),
     },
   })
 }

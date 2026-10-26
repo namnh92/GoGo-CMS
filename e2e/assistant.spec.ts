@@ -34,6 +34,11 @@ test('editor opens the guide from the nav, edits the draft, and is not offered p
   await expect(page.getByText('Bản nháp v3 · lần sửa 3')).toBeVisible()
   await expect(page.getByRole('button', { name: /Xuất bản bản nháp/ })).toHaveCount(0)
   expect(await axeViolations(page)).toEqual([])
+
+  // GoGo-BE#713 Q8: the feedback queue is outside rank-read for an editor.
+  await expect(page.getByRole('link', { name: 'Phản hồi câu trả lời' })).toHaveCount(0)
+  await page.goto('/assistant/feedback')
+  await expect(page.getByText('Không đủ quyền')).toBeVisible()
 })
 
 test('ops admin publishes a draft after reading the diff', async ({ page }) => {
@@ -56,6 +61,8 @@ test('moderator reads the feedback queue and gets no kill switch', async ({ page
   await page.getByRole('link', { name: 'Phản hồi câu trả lời' }).click()
   await expect(page.getByRole('heading', { name: 'Phản hồi câu trả lời GoGo AI' })).toBeVisible()
   await expect(page.getByText(/Hội thoại #c9f1a2b3/)).toBeVisible()
+  await expect(page.getByText('Bị cắt ngắn')).toBeVisible()
+  await expect(page.getByText(/Câu hỏi của người dùng không hiển thị trong v1/)).toBeVisible()
   expect(await axeViolations(page)).toEqual([])
 
   await expect(page.getByRole('link', { name: 'Công tắc tắt trợ lý' })).toHaveCount(0)
@@ -71,7 +78,13 @@ test('ops admin turns the assistant on through a previewed confirmation', async 
   await page.getByRole('button', { name: 'Bật trợ lý' }).click()
   const dialog = page.getByRole('dialog', { name: 'Bật GoGo AI?' })
   await expect(dialog.getByText('assistant.enabled')).toBeVisible()
+  await expect(dialog.getByRole('button', { name: 'Bật trợ lý' })).toBeDisabled()
+  // Checked while the confirm is still locked: right after it unlocks, axe
+  // can catch the button mid colour-transition.
+  expect(await axeViolations(page)).toEqual([])
+  await dialog.getByLabel(/Lý do thay đổi/).fill('Ra mắt nội bộ cho nhóm vận hành')
   await dialog.getByRole('button', { name: 'Bật trợ lý' }).click()
   await expect(page.getByText('Đang bật')).toBeVisible()
   await expect(page.getByText('feature_flag.set').first()).toBeVisible()
+  await expect(page.getByText(/Ra mắt nội bộ cho nhóm vận hành/)).toBeVisible()
 })

@@ -19,7 +19,8 @@ import {
   type FlagEnvironment,
   type FlagPlatform,
 } from '@/shared/api/contracts'
-import { fetchFlagCatalog, fetchFlagOverrides, setFlag } from './api'
+import { fetchFlagCatalog, fetchFlagOverrides, setFlag, type SetFlagInput } from './api'
+import { FlagConfirmDialog } from './flagConfirmDialog'
 import { formatFlagValue, parseFlagValue, resolveOverride } from './flagValue'
 import { styles } from './flagsPanel.style'
 
@@ -45,6 +46,12 @@ export function FlagsPanel() {
   const [platform, setPlatform] = useState<FlagPlatform>('all')
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [errors, setErrors] = useState<Record<string, string>>({})
+  // A write waiting on its confirmation and reason (GoGo-BE#713 Q7).
+  const [pendingWrite, setPendingWrite] = useState<{
+    input: Omit<SetFlagInput, 'reason'>
+    from: string
+    to: string
+  } | null>(null)
 
   const canRead = can('flag.read')
   const canManage = can('flag.manage')
@@ -74,6 +81,7 @@ export function FlagsPanel() {
   const save = useMutation({
     mutationFn: setFlag,
     onSuccess: (_result, variables) => {
+      setPendingWrite(null)
       toast.success(t('flags.saved', { key: variables.key }))
       setDrafts((current) => {
         const next = { ...current }
@@ -107,9 +115,22 @@ export function FlagsPanel() {
     const draft = drafts[definition.key]
     const draftValue = draft ?? formatFlagValue(currentValue, definition.valueType)
 
+    // What the row shows now, for the "from" side of the confirmation.
+    const shownNow = (): string => {
+      if (definition.valueType === 'boolean') {
+        return configured && override.enabled ? t('flags.state.on') : t('flags.state.off')
+      }
+      if (!configured || !override.enabled) return t('flags.state.default')
+      return formatFlagValue(currentValue, definition.valueType) || t('flags.emptyString')
+    }
+
     const commit = (enabled: boolean, rawValue?: string) => {
       if (definition.valueType === 'boolean') {
-        save.mutate({ key: definition.key, enabled, ...writeScope })
+        setPendingWrite({
+          input: { key: definition.key, enabled, ...writeScope },
+          from: shownNow(),
+          to: enabled ? t('flags.state.on') : t('flags.state.off'),
+        })
         return
       }
       const parsed = parseFlagValue(rawValue ?? draftValue, definition.valueType)
@@ -125,7 +146,13 @@ export function FlagsPanel() {
         delete next[definition.key]
         return next
       })
-      save.mutate({ key: definition.key, enabled, value: parsed.value, ...writeScope })
+      setPendingWrite({
+        input: { key: definition.key, enabled, value: parsed.value, ...writeScope },
+        from: shownNow(),
+        to: enabled
+          ? formatFlagValue(parsed.value, definition.valueType) || t('flags.emptyString')
+          : t('flags.state.default'),
+      })
     }
 
     return (
@@ -301,6 +328,27 @@ export function FlagsPanel() {
       ) : null}
 
       <p className={styles.secretsNote}>{t('flags.secretsNote')}</p>
+
+      <FlagConfirmDialog
+        open={pendingWrite !== null}
+        onClose={() => setPendingWrite(null)}
+        title={t('flags.confirm.title', { key: pendingWrite?.input.key ?? '' })}
+        description={t('flags.confirm.body')}
+        changes={
+          pendingWrite
+            ? [
+                { label: t('flags.environment'), to: t(`flags.env.${environment}` as const) },
+                { label: t('flags.platform'), to: t(`flags.platform.${platform}` as const) },
+                { label: pendingWrite.input.key, from: pendingWrite.from, to: pendingWrite.to },
+              ]
+            : []
+        }
+        confirmLabel={t('flags.confirm.save')}
+        tone="primary"
+        loading={save.isPending}
+        online={online}
+        onConfirm={(reason) => pendingWrite && save.mutate({ ...pendingWrite.input, reason })}
+      />
     </>
   )
 }

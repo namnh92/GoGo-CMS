@@ -78,10 +78,3 @@ export function rollbackRankingConfig(key: RankingKey) {
     idempotencyKey: newIdempotencyKey(),
   })
 }
-
-export function setFeatureFlag(key: string, enabled: boolean, payload?: unknown) {
-  return apiFetch(`/cms/feature-flags/${key}`, {
-    method: 'PUT',
-    body: payload === undefined ? { enabled } : { enabled, payload },
-  })
-}
