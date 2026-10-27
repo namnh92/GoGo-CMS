@@ -88,15 +88,28 @@ const ROUTE_ROLES = {
    */
   assistantPublish: ['ops_admin'],
   /**
-   * `GET /cms/assistant/feedback` — declared on `moderator`. Read-only, so the
-   * rank rule also opens it to `editor` (a peer) and `ops_admin`.
+   * `GET /cms/assistant/feedback` — `moderator`, `ops_admin` (and
+   * `super_admin`) only, contract 2.0.0-alpha.3 (GoGo-BE#713 Q8). An explicit
+   * exception to rank-read: `editor` and `moderator` are both rank 1, so the
+   * hierarchical rule would admit editors to private conversational material.
+   * Listed in `EXACT_READ` below; editors get `403 ROLE_DENIED`.
    */
-  assistantFeedback: ['moderator'],
+  assistantFeedback: ['moderator', 'ops_admin'],
   /** `POST /cms/auth/admins` — @RequireRole('super_admin') */
   admins: ['super_admin'],
 } as const satisfies Record<string, readonly AdminRole[]>
 
 export type RouteGroup = keyof typeof ROUTE_ROLES
+
+/**
+ * Groups the server takes out of rank-read: a safe method still needs one of
+ * the declared roles exactly (or `super_admin`). Each entry is a decision
+ * recorded in GoGo-BE, never a client-side tightening.
+ */
+const EXACT_READ: ReadonlySet<RouteGroup> = new Set<RouteGroup>([
+  // GoGo-BE#713 Q8 — the GoGo AI feedback queue.
+  'assistantFeedback',
+])
 
 /** Safe methods are the ones the guard lets through on rank. */
 export type Access = 'read' | 'write'
@@ -110,7 +123,7 @@ export function canAccess(
   if (role === 'super_admin') return true
   const required = ROUTE_ROLES[group] as readonly AdminRole[]
   if (required.includes(role)) return true
-  if (access === 'write') return false
+  if (access === 'write' || EXACT_READ.has(group)) return false
   const lowest = Math.min(...required.map((candidate) => ROLE_RANK[candidate]))
   return ROLE_RANK[role] >= lowest
 }
@@ -220,7 +233,8 @@ const PERMISSIONS = {
   'audit.read': ['audit', 'read'],
 
   // GoGo AI (GoGo-BE#713, CMS#249). Drafts are editor + ops; publishing and
-  // withdrawing are ops only; the feedback queue is moderator, read by rank.
+  // withdrawing are ops only; the feedback queue is moderator + ops, outside
+  // rank-read (Q8), so an editor does not read it.
   // The kill switch is the `assistant.enabled` feature flag — `flag.*` above.
   'assistant.read': ['assistantContent', 'read'],
   'assistant.draft': ['assistantContent', 'write'],

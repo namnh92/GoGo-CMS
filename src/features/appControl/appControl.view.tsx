@@ -10,7 +10,6 @@ import { Card, CardHeader } from '@/shared/ui/Card'
 import { Button } from '@/shared/ui/Button'
 import { Badge } from '@/shared/ui/Badge'
 import { InlineSelect, TextInput, Toggle } from '@/shared/ui/Field'
-import { ConfirmDialog } from '@/shared/ui/Overlay'
 import {
   AsyncBoundary,
   EmptyState,
@@ -25,7 +24,13 @@ import {
   type FlagEnvironment,
   type FlagPlatform,
 } from '@/shared/api/contracts'
-import { fetchFlagCatalog, fetchFlagOverrides, setFlag } from '@/features/flags/api'
+import {
+  fetchFlagCatalog,
+  fetchFlagOverrides,
+  setFlag,
+  type SetFlagInput,
+} from '@/features/flags/api'
+import { FlagConfirmDialog } from '@/features/flags/flagConfirmDialog'
 import { VERSION_PATTERN, resolveOverride } from '@/features/flags/flagValue'
 import { styles } from './appControl.style'
 
@@ -63,6 +68,13 @@ export default function AppControlScreen() {
   const [versionDrafts, setVersionDrafts] = useState<Record<string, string>>({})
   const [versionErrors, setVersionErrors] = useState<Record<string, boolean>>({})
   const [confirmMaintenance, setConfirmMaintenance] = useState(false)
+  // Every other write here waits on the shared flag confirmation, reason
+  // included (GoGo-BE#713 Q7) — the same rule as the flags panel.
+  const [pendingWrite, setPendingWrite] = useState<{
+    input: Omit<SetFlagInput, 'reason'>
+    from: string
+    to: string
+  } | null>(null)
 
   const catalogQuery = useQuery({
     queryKey: queryKeys.flags.catalog,
@@ -87,6 +99,8 @@ export default function AppControlScreen() {
   const save = useMutation({
     mutationFn: setFlag,
     onSuccess: (_result, variables) => {
+      setPendingWrite(null)
+      setConfirmMaintenance(false)
       toast.success(t('appControl.saved', { key: variables.key }))
       setVersionDrafts((current) => {
         const next = { ...current }
@@ -205,11 +219,12 @@ export default function AppControlScreen() {
                             disabled={!canManage || !online}
                             onClick={() => {
                               if (maintenanceOn) {
-                                // Turning the app back ON needs no ceremony.
-                                save.mutate({
-                                  key: MAINTENANCE_KEY,
-                                  enabled: false,
-                                  ...writeScope,
+                                // Turning the app back on needs no warning,
+                                // but it is still an audited flag write.
+                                setPendingWrite({
+                                  input: { key: MAINTENANCE_KEY, enabled: false, ...writeScope },
+                                  from: t('appControl.maintenance.on'),
+                                  to: t('appControl.maintenance.off'),
                                 })
                               } else {
                                 setConfirmMaintenance(true)
@@ -293,7 +308,11 @@ export default function AppControlScreen() {
                                 return
                               }
                               setVersionErrors((current) => ({ ...current, [key]: false }))
-                              save.mutate({ key, enabled: true, value: raw, ...writeScope })
+                              setPendingWrite({
+                                input: { key, enabled: true, value: raw, ...writeScope },
+                                from: String(currentValue(definition) ?? '—'),
+                                to: raw,
+                              })
                             }}
                           >
                             {t('flags.save')}
@@ -370,7 +389,11 @@ export default function AppControlScreen() {
                                 (save.isPending && save.variables?.key === definition.key)
                               }
                               onChange={(enabled) =>
-                                save.mutate({ key: definition.key, enabled, ...writeScope })
+                                setPendingWrite({
+                                  input: { key: definition.key, enabled, ...writeScope },
+                                  from: on ? t('flags.state.on') : t('flags.state.off'),
+                                  to: enabled ? t('flags.state.on') : t('flags.state.off'),
+                                })
                               }
                             />
                           </div>
@@ -392,7 +415,7 @@ export default function AppControlScreen() {
 
       {/* Turning maintenance ON takes the app away from everyone in scope —
           the dialog names exactly what is about to happen. */}
-      <ConfirmDialog
+      <FlagConfirmDialog
         open={confirmMaintenance}
         onClose={() => setConfirmMaintenance(false)}
         title={t('appControl.maintenance.confirmTitle')}
@@ -408,11 +431,33 @@ export default function AppControlScreen() {
         ]}
         confirmLabel={t('appControl.maintenance.enable')}
         tone="danger"
+        irreversible
         loading={save.isPending}
-        onConfirm={() => {
-          setConfirmMaintenance(false)
-          save.mutate({ key: MAINTENANCE_KEY, enabled: true, ...writeScope })
-        }}
+        online={online}
+        onConfirm={(reason) =>
+          save.mutate({ key: MAINTENANCE_KEY, enabled: true, ...writeScope, reason })
+        }
+      />
+
+      <FlagConfirmDialog
+        open={pendingWrite !== null}
+        onClose={() => setPendingWrite(null)}
+        title={t('flags.confirm.title', { key: pendingWrite?.input.key ?? '' })}
+        description={t('flags.confirm.body')}
+        changes={
+          pendingWrite
+            ? [
+                { label: t('flags.environment'), to: t(`flags.env.${environment}` as const) },
+                { label: t('flags.platform'), to: t(`flags.platform.${platform}` as const) },
+                { label: pendingWrite.input.key, from: pendingWrite.from, to: pendingWrite.to },
+              ]
+            : []
+        }
+        confirmLabel={t('flags.confirm.save')}
+        tone="primary"
+        loading={save.isPending}
+        online={online}
+        onConfirm={(reason) => pendingWrite && save.mutate({ ...pendingWrite.input, reason })}
       />
     </>
   )

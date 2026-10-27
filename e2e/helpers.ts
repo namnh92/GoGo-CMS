@@ -9,4 +9,7 @@ export async function signIn(page: Page, email: string): Promise<void> {
   await page.getByLabel(/Email công việc/).fill(email)
   await page.getByLabel(/Mật khẩu/).fill('correct-horse-battery')
   await page.getByRole('button', { name: 'Tiếp tục' }).click()
+  // Wait for the session to land before the caller navigates: a `page.goto`
+  // racing the login response reloads into the login screen under load.
+  await page.waitForURL((url) => !url.pathname.startsWith('/login'))
 }

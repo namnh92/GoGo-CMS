@@ -11,7 +11,6 @@ import { Card, CardHeader } from '@/shared/ui/Card'
 import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
 import { InlineSelect } from '@/shared/ui/Field'
-import { ConfirmDialog } from '@/shared/ui/Overlay'
 import { AuditTrail } from '@/shared/ui/AuditTrail'
 import {
   AsyncBoundary,
@@ -24,6 +23,7 @@ import { useToast } from '@/shared/ui/Toast'
 import { flagEnvironmentSchema, type FlagEnvironment } from '@/shared/api/contracts'
 import { fetchFlagCatalog, fetchFlagOverrides, setFlag } from '@/features/flags/api'
 import { resolveOverride } from '@/features/flags/flagValue'
+import { FlagConfirmDialog } from '@/features/flags/flagConfirmDialog'
 import { fetchAudit } from '@/features/audit/api'
 import { ASSISTANT_FLAG_KEY, fetchDocuments } from './api'
 import { styles } from './assistant.style'
@@ -238,7 +238,7 @@ export default function KillSwitchScreen() {
         </Card>
       </PageBody>
 
-      <ConfirmDialog
+      <FlagConfirmDialog
         open={confirm !== null}
         onClose={() => setConfirm(null)}
         title={confirm ? t('assistant.kill.confirmOnTitle') : t('assistant.kill.confirmOffTitle')}
@@ -271,13 +271,14 @@ export default function KillSwitchScreen() {
         tone={confirm ? 'primary' : 'danger'}
         irreversible={false}
         loading={save.isPending}
-        confirmDisabled={!online}
-        onConfirm={() =>
+        online={online}
+        onConfirm={(reason) =>
           confirm !== null &&
           save.mutate({
             key: ASSISTANT_FLAG_KEY,
             enabled: confirm,
             ...(environment === 'all' ? {} : { environment }),
+            reason,
           })
         }
       >
@@ -285,7 +286,7 @@ export default function KillSwitchScreen() {
           <span aria-hidden="true">ℹ</span>
           {t('assistant.kill.auditNote')}
         </p>
-      </ConfirmDialog>
+      </FlagConfirmDialog>
     </>
   )
 }

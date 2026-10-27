@@ -3,7 +3,7 @@ import type { Schemas } from './generated'
 
 /**
  * GoGo-CMS#249 — boundary schemas for the GoGo AI back office (GoGo-BE#713,
- * OpenAPI `2.0.0-alpha.2`, tag `assistant`).
+ * OpenAPI `2.0.0-alpha.3`, tag `assistant`).
  *
  * Every shape mirrors a component schema in the vendored spec; the
  * `Mirrors<…>` checks at the bottom make a re-vendor that changes one of them

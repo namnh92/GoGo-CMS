@@ -37,6 +37,10 @@ function dayEnd(value: string): string | undefined {
  * person who rated it — no user id, their own message, attachments, the
  * place or plan they were looking at, coordinates or email. The API does not
  * send them and this screen has no field that could show them.
+ *
+ * Contract 2.0.0-alpha.3 (GoGo-BE#713): moderator, ops_admin and super_admin
+ * only — editors are refused by the API (`403 ROLE_DENIED`), and the
+ * permission check here only decides what to show. Read-only in v1.
  */
 export default function FeedbackQueueScreen() {
   const t = useT()
@@ -98,6 +102,12 @@ export default function FeedbackQueueScreen() {
       {header}
       <PageBody>
         <Card>
+          {/* Q3/Q10 (owner): the question stays out of v1. Said up front, so a
+              reviewer does not mistake "cannot tell" for "irrelevant". */}
+          <p className={styles.privacyNote}>
+            <span aria-hidden="true">ℹ</span>
+            {t('assistant.feedback.questionLimit')}
+          </p>
           <p className={styles.privacyNote}>
             <span aria-hidden="true">ℹ</span>
             {t('assistant.feedback.privacy')}
@@ -240,7 +250,9 @@ function FeedbackCard({ item }: { item: CmsAssistantFeedbackItem }) {
               {label(`assistant.feedback.reason.${item.reason}`, item.reason)}
             </Badge>
           ) : null}
-          <Badge tone="neutral">
+          {/* `truncated` hit the length ceiling: partial text, not a finished
+              answer — worth a second look, so it is not neutral. */}
+          <Badge tone={reply.status === 'truncated' ? 'amber' : 'neutral'}>
             {label(`assistant.replyStatus.${reply.status}`, reply.status)}
           </Badge>
           {reply.notice ? (

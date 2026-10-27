@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import userEvent from '@testing-library/user-event'
 import { screen, waitFor, within } from '@testing-library/react'
+import { http } from 'msw'
+import { server } from '@/shared/test/server'
 import { renderWithProviders, signInAs } from '@/shared/test/render'
 import { FlagsPanel } from './flagsPanel.view'
+import { setFlag } from './api'
 
 /** The row for one catalog key, found by its key text. */
 async function rowFor(key: string) {
@@ -82,7 +85,64 @@ describe('FlagsPanel (CMS-030)', () => {
     await user.type(field, '3.0.0')
     await user.click(within(row).getByRole('button', { name: 'Lưu' }))
 
+    // Every flag write is audited with a reason (GoGo-BE#713 Q7).
+    const dialog = await screen.findByRole('dialog', { name: 'Đổi minimum_app_version?' })
+    expect(within(dialog).getByText('3.0.0')).toBeInTheDocument()
+    await user.type(within(dialog).getByLabelText(/Lý do thay đổi/), 'Bắt buộc bản vá bảo mật')
+    await user.click(within(dialog).getByRole('button', { name: 'Lưu thay đổi' }))
+
     expect(await screen.findByText(/Đã lưu minimum_app_version/)).toBeInTheDocument()
+  })
+
+  it('holds a toggle until a reason is given, then sends it in the PUT body', async () => {
+    signInAs('ops_admin')
+    const bodies: unknown[] = []
+    server.use(
+      http.put('/v1/cms/feature-flags/:key', async ({ request }) => {
+        bodies.push(await request.clone().json())
+      }),
+    )
+    const user = userEvent.setup()
+    renderWithProviders(<FlagsPanel />)
+
+    const row = await rowFor('place_import.autopublish')
+    await user.click(within(row).getByRole('switch'))
+    const dialog = await screen.findByRole('dialog', { name: 'Đổi place_import.autopublish?' })
+    const confirm = within(dialog).getByRole('button', { name: 'Lưu thay đổi' })
+    expect(confirm).toBeDisabled()
+    expect(bodies).toEqual([])
+
+    await user.type(within(dialog).getByLabelText(/Lý do thay đổi/), '  Tạm dừng nhập tự động  ')
+    await user.click(confirm)
+    expect(await screen.findByText(/Đã lưu place_import.autopublish/)).toBeInTheDocument()
+    expect(bodies).toEqual([{ enabled: true, reason: 'Tạm dừng nhập tự động' }])
+  })
+
+  it('the mock refuses an out-of-bounds reason the way the server does', async () => {
+    signInAs('ops_admin')
+    const refused = await setFlag({
+      key: 'place_import.autopublish',
+      enabled: true,
+      reason: ' ab ',
+    })
+      .then(() => null)
+      .catch((error: unknown) => error)
+    expect(refused).toMatchObject({ status: 400, code: 'VALIDATION_FAILED' })
+    expect((refused as { fieldErrors: { field: string }[] }).fieldErrors[0]?.field).toBe('reason')
+  })
+
+  it('refuses a reason over 500 characters before it reaches the server', async () => {
+    signInAs('ops_admin')
+    const user = userEvent.setup()
+    renderWithProviders(<FlagsPanel />)
+
+    const row = await rowFor('place_import.autopublish')
+    await user.click(within(row).getByRole('switch'))
+    const dialog = await screen.findByRole('dialog')
+    const field = within(dialog).getByLabelText(/Lý do thay đổi/)
+    // The field caps input at 500, so the limit holds for a paste too.
+    expect(field).toHaveAttribute('maxLength', '500')
+    expect(within(dialog).getByText('0/500')).toBeInTheDocument()
   })
 
   it('blocks a per-platform edit on a key that is not platform-scoped', async () => {
