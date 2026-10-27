@@ -77,6 +77,17 @@ describe('forced password change (#101)', () => {
     expect(await screen.findByText('change password')).toBeInTheDocument()
   })
 
+  it('never sends the super admin there — it has no password (GoGo-BE#687)', async () => {
+    signInAs('super_admin')
+    window.localStorage.setItem(
+      HINT_KEY,
+      JSON.stringify({ role: 'super_admin', displayName: 'owner', mustChangePassword: true }),
+    )
+    renderWithProviders(guardedRoutes(), { route: '/settings/accounts' })
+
+    expect(await screen.findByText('accounts')).toBeInTheDocument()
+  })
+
   it('leaves an ordinary session alone, including a hint written before this field existed', async () => {
     // `signInAs` writes exactly that older shape: role and displayName only.
     signInAs('ops_admin')

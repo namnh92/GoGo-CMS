@@ -7,7 +7,6 @@ import { TextInput } from '@/shared/ui/Field'
 import { useToast } from '@/shared/ui/Toast'
 import { CheckIcon } from '@/shared/ui/icons'
 import { useSession } from '@/shared/auth/session'
-import { SsoConfirmCard } from '@/features/admins/ssoConfirm.view'
 import { useChangeOwnPassword } from './useChangeOwnPassword'
 import { styles } from './changePassword.style'
 
@@ -130,27 +129,15 @@ function ChangePasswordForm() {
  * only and the API refuses a change with `SUPER_ADMIN_SSO_ONLY`, so a form here
  * would be a dead control (review F-01). The sidebar does not link here for it;
  * reached by address, this says so in words instead.
- *
- * `forced`: `RequireAuth` sends an account owing a password change here and
- * nowhere else (#101), and this account cannot discharge that obligation with
- * a password. The way out the API provides is the Access confirmation
- * (`confirm-sso` is reachable while a change is owed). The accounts page where
- * that control normally lives is unreachable from here, so the control is
- * rendered on this screen as well.
  */
-function SuperAdminSsoOnlyNote({ forced }: { forced: boolean }) {
+function SuperAdminSsoOnlyNote() {
   const t = useT()
   return (
     <div className={styles.form}>
       <p role="status" className={styles.note}>
         <span aria-hidden="true">ℹ</span>
-        <span>
-          {forced
-            ? t('account.password.superAdminSsoOnlyForced')
-            : t('account.password.superAdminSsoOnly')}
-        </span>
+        <span>{t('account.password.superAdminSsoOnly')}</span>
       </p>
-      {forced ? <SsoConfirmCard /> : null}
     </div>
   )
 }
@@ -169,11 +156,7 @@ export default function ChangePasswordScreen() {
         <Card className={styles.panel}>
           <CardHeader title={t('account.password.title')} hint={t('account.password.subtitle')} />
           <CardBody>
-            {session?.role === 'super_admin' ? (
-              <SuperAdminSsoOnlyNote forced={session?.mustChangePassword === true} />
-            ) : (
-              <ChangePasswordForm />
-            )}
+            {session?.role === 'super_admin' ? <SuperAdminSsoOnlyNote /> : <ChangePasswordForm />}
           </CardBody>
         </Card>
       </PageBody>

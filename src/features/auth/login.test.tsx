@@ -4,6 +4,7 @@ import { http, HttpResponse } from 'msw'
 import { server } from '@/shared/test/server'
 import userEvent from '@testing-library/user-event'
 import { renderWithProviders } from '@/shared/test/render'
+import { Route, Routes } from 'react-router-dom'
 import LoginScreen from './login.view'
 
 describe('CMS sign-in (CMS-034, stepped)', () => {
@@ -64,17 +65,23 @@ describe('CMS sign-in (CMS-034, stepped)', () => {
     expect(password.type).toBe('password')
   })
 
-  it('replaces the forced change with the SSO confirmation for the super admin, which has no password (PR #235 r3 F-02)', async () => {
+  it('skips the forced change for the super admin, which has no password (GoGo-BE#687)', async () => {
     const user = userEvent.setup()
-    renderWithProviders(<LoginScreen />)
+    renderWithProviders(
+      <Routes>
+        <Route path="/login" element={<LoginScreen />} />
+        <Route path="*" element={<p>console</p>} />
+      </Routes>,
+      { route: '/login' },
+    )
     await screen.findByLabelText(/Email công việc/)
     // "temp" owes a change; no role word in the local part → super_admin in the mock.
     await user.type(screen.getByLabelText(/Email công việc/), 'temp.boss@gogo.vn')
     await user.type(screen.getByLabelText(/Mật khẩu/), 'temporary-pass-123')
     await user.click(screen.getByRole('button', { name: 'Tiếp tục' }))
 
-    expect(await screen.findByText(/còn nợ một lần đổi mật khẩu/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Xác nhận' })).toBeInTheDocument()
+    expect(await screen.findByText('console')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Đặt mật khẩu mới' })).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/^Mật khẩu mới/)).not.toBeInTheDocument()
   })
 

@@ -196,29 +196,16 @@ describe('super admin password gate (GoGo-BE#687)', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
-  it('does not dead-end a super admin forced here by a password obligation', async () => {
+  it('gives the super admin only the note, even with an obligation on the session', async () => {
     signInAs('super_admin')
-    // The shape RequireAuth routes here and nowhere else (#101).
     window.localStorage.setItem(
       'gogo.cms.session-hint',
       JSON.stringify({ role: 'super_admin', displayName: 'test.user', mustChangePassword: true }),
     )
     renderWithProviders(<ChangePasswordScreen />)
 
-    // Says what to do, and offers the one action the API accepts in this
-    // state: the Access confirmation.
-    const note = await screen.findByText(/còn nợ một lần đổi mật khẩu/)
-    expect(note).toHaveTextContent(/Tài khoản CMS/)
-    expect(screen.getByText('Xác nhận đăng nhập qua Cloudflare Access')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Xác nhận' })).toBeEnabled()
-    expect(screen.queryByLabelText(/Mật khẩu hiện tại/)).not.toBeInTheDocument()
-  })
-
-  it('offers no confirmation card when nothing is owed — the accounts page has it', async () => {
-    signInAs('super_admin')
-    renderWithProviders(<ChangePasswordScreen />)
-
     expect(await screen.findByText(/không có gì để đổi/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Xác nhận' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/Mật khẩu hiện tại/)).not.toBeInTheDocument()
   })
 })

@@ -15,7 +15,6 @@ import { Skeleton } from '@/shared/ui/State'
 import { useChangeOwnPassword } from './useChangeOwnPassword'
 import { useAuthMethods } from './useAuthMethods'
 import { safeReturnPath, ssoRedirect, ssoStartUrl } from './ssoRedirect'
-import { SsoConfirmCard } from '@/features/admins/ssoConfirm.view'
 import { styles } from './login.style'
 
 // One schema, used by the form resolver. Never duplicated for the request.
@@ -54,24 +53,9 @@ export default function LoginScreen() {
   const { locale, setLocale } = useI18n()
   const navigate = useNavigate()
   const location = useLocation()
-  const {
-    session,
-    login,
-    signInWithAccess,
-    expired,
-    signOutIncomplete,
-    passwordChanged,
-    currentEpoch,
-  } = useSession()
+  const { login, signInWithAccess, expired, signOutIncomplete, passwordChanged, currentEpoch } =
+    useSession()
   const methods = useAuthMethods()
-  /**
-   * Review of PR #235 (round 3, F-02): the forced change after a password
-   * sign-in is a super-admin password action too, and the super admin has no
-   * password (GoGo-BE#687). For it the form is replaced by the one action the
-   * API accepts in this state: the SSO confirmation
-   * (`@AllowWhilePasswordChangePending` on GoGo-BE).
-   */
-  const forcedNoPassword = session?.role === 'super_admin'
   /** Set by a failed exchange; `adminOnly` also offers to switch identity. */
   const [ssoError, setSsoError] = useState<{
     message: string
@@ -124,7 +108,8 @@ export default function LoginScreen() {
     try {
       const session = await login({ email: values.email, password: values.password })
       const destination = returnTo ?? landingPathFor(session.role)
-      if (session.mustChangePassword) {
+      // The super admin has no password to change (GoGo-BE#687).
+      if (session.mustChangePassword && session.role !== 'super_admin') {
         // A temporary password is outstanding: every other CMS route answers
         // 403 until it is replaced, so the console goes here first.
         pendingDestination.current = destination
@@ -341,15 +326,7 @@ export default function LoginScreen() {
             fresh one, so no node ever carries a value typed on the other side of
             a credentials boundary.
           */}
-          {step === 'change-password' && forcedNoPassword ? (
-            <div key="change-password-sso" className="flex flex-col gap-4">
-              <p role="status" className={styles.alert}>
-                <span aria-hidden="true">ℹ</span>
-                <span>{t('account.password.superAdminSsoOnlyForced')}</span>
-              </p>
-              <SsoConfirmCard />
-            </div>
-          ) : step === 'change-password' ? (
+          {step === 'change-password' ? (
             <form key="change-password" onSubmit={submitChangePassword} noValidate>
               <div className={styles.fields}>
                 <TextInput

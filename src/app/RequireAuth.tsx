@@ -18,8 +18,15 @@ export function RequireAuth({ children }: { children: ReactNode }) {
    * by typing a URL, reloading or pressing Back is a dead shell with no way
    * back to the change screen. The obligation is session state, so the guard
    * can send them where the one permitted action lives.
+   *
+   * Not the super admin: it signs in through Cloudflare Access only and has no
+   * password to change (GoGo-BE#687).
    */
-  if (session.mustChangePassword && location.pathname !== CHANGE_PASSWORD_PATH) {
+  if (
+    session.mustChangePassword &&
+    session.role !== 'super_admin' &&
+    location.pathname !== CHANGE_PASSWORD_PATH
+  ) {
     return <Navigate to={CHANGE_PASSWORD_PATH} replace />
   }
   return <>{children}</>
