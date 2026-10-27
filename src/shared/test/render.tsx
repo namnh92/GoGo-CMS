@@ -21,10 +21,21 @@ export function signInAs(role: AdminRole, displayName = 'test.user'): void {
 
 export function renderWithProviders(
   ui: ReactElement,
-  { route = '/', ...options }: RenderOptions & { route?: InitialEntry } = {},
+  {
+    route = '/',
+    staleTime,
+    ...options
+  }: RenderOptions & {
+    route?: InitialEntry
+    /** Pass the app's `staleTime` to exercise code that runs inside the cache window. */
+    staleTime?: number
+  } = {},
 ) {
   const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    defaultOptions: {
+      queries: { retry: false, ...(staleTime === undefined ? {} : { staleTime }) },
+      mutations: { retry: false },
+    },
   })
 
   function Wrapper({ children }: { children: ReactNode }) {

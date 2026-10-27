@@ -15,11 +15,14 @@ onlineManager.setEventListener((setOnline) => {
   return subscribeReachability(setOnline)
 })
 
+/** How long a read is served from cache; code that must see the server's current state opts out. */
+export const QUERY_STALE_TIME = 30_000
+
 function createQueryClient(): QueryClient {
   return new QueryClient({
     defaultOptions: {
       queries: {
-        staleTime: 30_000,
+        staleTime: QUERY_STALE_TIME,
         refetchOnWindowFocus: false,
         retry: (failureCount, error) => {
           // 401/403/404/409 are answers, not blips: never retry them.
