@@ -8,7 +8,6 @@ import { ChevronRightIcon, LockIcon, LogoMark, LogoutIcon } from '@/shared/ui/ic
 import { IconButton } from '@/shared/ui/Button'
 import { EnvBadge } from '@/shared/ui/EnvBadge'
 import { fetchModerationCounts } from '@/features/moderation/api'
-import { useSuperAdminPasswordGate } from '@/features/auth/useSuperAdminPasswordGate'
 import { queryKeys } from '@/shared/api/queryKeys'
 import { cn } from '@/shared/ui/cn'
 
@@ -48,19 +47,9 @@ export function Sidebar() {
   const t = useT()
   const { pathname } = useLocation()
   const { session, can, logout } = useSession()
-  // GoGo-BE#687 — no password to change for the super admin once Access-only,
-  // and nothing to offer it until that is known (review F-01, round 2). The
-  // control's name carries the reason in every state: a nameless disabled
-  // glyph explains nothing.
-  const passwordGate = useSuperAdminPasswordGate(session?.role === 'super_admin')
-  const passwordLabel =
-    passwordGate.state === 'pending'
-      ? t('admins.superAdminPasswordPending')
-      : passwordGate.state === 'unknown'
-        ? t('admins.superAdminPasswordUnknown')
-        : passwordGate.state === 'ssoOnly'
-          ? t('admins.superAdminNoPassword')
-          : t('app.changePassword')
+  // GoGo-BE#687 — the super admin signs in through Access only and has no
+  // password to change, so it is offered no control for one.
+  const hasPassword = session?.role !== 'super_admin'
   const navigate = useNavigate()
   const regionPrefix = useId()
 
@@ -236,15 +225,15 @@ export function Sidebar() {
             {session ? t(`role.${session.role}` as const) : ''}
           </p>
         </div>
-        <IconButton
-          label={passwordLabel}
-          className="h-9 w-9"
-          disabled={passwordGate.state !== 'available'}
-          aria-busy={passwordGate.state === 'pending' || undefined}
-          onClick={() => navigate('/account/password')}
-        >
-          <LockIcon size={15} />
-        </IconButton>
+        {hasPassword ? (
+          <IconButton
+            label={t('app.changePassword')}
+            className="h-9 w-9"
+            onClick={() => navigate('/account/password')}
+          >
+            <LockIcon size={15} />
+          </IconButton>
+        ) : null}
         <IconButton label={t('app.signOut')} className="h-9 w-9" onClick={logout}>
           <LogoutIcon size={15} />
         </IconButton>

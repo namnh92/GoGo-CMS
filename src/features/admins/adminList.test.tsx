@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import userEvent from '@testing-library/user-event'
 import { screen, waitFor, within } from '@testing-library/react'
-import { delay, http, HttpResponse } from 'msw'
+import { http, HttpResponse } from 'msw'
 import { server } from '@/shared/test/server'
 import { renderWithProviders, signInAs } from '@/shared/test/render'
 import { cmsAdmins } from '@/shared/test/fixtures'
@@ -172,7 +172,7 @@ describe('AdminListScreen (CMS-021)', () => {
     )
   })
 
-  it('locks role change and suspend on the super admin row, whoever is signed in', async () => {
+  it('locks role change and suspend and offers no reset on the super admin row, whoever is signed in', async () => {
     // Signed in as a *different* name, so this is the role check and not the
     // SELF_* check that happens to cover the same row for its holder.
     signInAs('super_admin', 'Someone Else')
@@ -185,11 +185,35 @@ describe('AdminListScreen (CMS-021)', () => {
     expect(edit).toBeDisabled()
     expect(suspend).toBeDisabled()
     expect(edit).toHaveAttribute('title', expect.stringContaining('vai cố định'))
-    // Credentials are not frozen: rotating this account's password is supported
-    // — once `methods` has said the switch is off (GoGo-BE#687).
-    await waitFor(() =>
-      expect(within(row).getByRole('button', { name: 'Reset mật khẩu' })).toBeEnabled(),
+    // SSO only, no password (GoGo-BE#687): nothing to reset on this row, while
+    // every other row keeps its reset.
+    expect(within(row).queryByRole('button', { name: 'Reset mật khẩu' })).not.toBeInTheDocument()
+    const ops = within(table).getByText('ops@gogo.vn').closest('tr')!
+    expect(within(ops).getByRole('button', { name: 'Reset mật khẩu' })).toBeEnabled()
+  })
+
+  it('flags an owed password change on other roles, never on the super admin', async () => {
+    signInAs('super_admin', 'Someone Else')
+    const boss = cmsAdmins.find((a) => a.role === 'super_admin')!
+    server.use(
+      http.get('/v1/cms/auth/admins', () =>
+        HttpResponse.json({
+          items: [
+            { ...boss, mustChangePassword: true },
+            ...cmsAdmins.filter((a) => a.role !== 'super_admin'),
+          ],
+          total: cmsAdmins.length,
+          nextCursor: null,
+        }),
+      ),
     )
+    renderWithProviders(<AdminListScreen />)
+
+    const table = await screen.findByRole('table')
+    const editor = within(table).getByText('editor@gogo.vn').closest('tr')!
+    expect(within(editor).getByText('Nợ đổi mật khẩu')).toBeInTheDocument()
+    const bossRow = within(table).getByText('boss@gogo.vn').closest('tr')!
+    expect(within(bossRow).queryByText('Nợ đổi mật khẩu')).not.toBeInTheDocument()
   })
 
   it("offers only assignable roles when changing someone else's role", async () => {
@@ -208,38 +232,16 @@ describe('AdminListScreen (CMS-021)', () => {
     ).toEqual(['editor', 'moderator', 'ops_admin'])
   })
 
-  it('the reset dialog on the super admin is unavailable while methods is pending (PR #235 r3 F-01)', async () => {
-    server.use(http.get('/v1/cms/auth/methods', () => new Promise<Response>(() => {})))
+  it('the reset dialog on the super admin explains it has no password and cannot be submitted', async () => {
+    // Rendered directly: the list does not offer it, and the dialog must refuse
+    // it too — the API answers SUPER_ADMIN_SSO_ONLY (GoGo-BE#687).
     signInAs('super_admin', 'Someone Else')
     const boss = { ...cmsAdmins.find((a) => a.role === 'super_admin')!, lastLoginAt: undefined }
     renderWithProviders(<AdminActionDialog action="reset" admin={boss} onClose={() => {}} />)
-    const dialog = await screen.findByRole('dialog')
-    expect(within(dialog).getByRole('status')).toHaveTextContent(/Đang kiểm tra/)
-    expect(within(dialog).getAllByRole('button', { name: 'Reset mật khẩu' }).at(-1)!).toBeDisabled()
-  })
 
-  it('the reset dialog on the super admin is unavailable when methods fails, with a retry (PR #235 r3 F-01)', async () => {
-    let calls = 0
-    server.use(
-      http.get('/v1/cms/auth/methods', () => {
-        calls += 1
-        return HttpResponse.json(
-          { code: 'INTERNAL', message: 'x', field_errors: [], request_id: 'r', retryable: true },
-          { status: 500 },
-        )
-      }),
-    )
-    signInAs('super_admin', 'Someone Else')
-    const user = userEvent.setup()
-    const boss = { ...cmsAdmins.find((a) => a.role === 'super_admin')!, lastLoginAt: undefined }
-    renderWithProviders(<AdminActionDialog action="reset" admin={boss} onClose={() => {}} />)
     const dialog = await screen.findByRole('dialog')
-    const alert = await within(dialog).findByRole('alert')
-    expect(alert).toHaveTextContent(/Không đọc được/)
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(/không có mật khẩu/)
     expect(within(dialog).getAllByRole('button', { name: 'Reset mật khẩu' }).at(-1)!).toBeDisabled()
-    const before = calls
-    await user.click(within(alert).getByRole('button', { name: 'Thử lại' }))
-    await waitFor(() => expect(calls).toBeGreaterThan(before))
   })
 
   it('the edit dialog on the super admin explains itself and cannot be submitted', async () => {
@@ -296,123 +298,5 @@ describe('AdminListScreen (CMS-021)', () => {
 
     expect(await screen.findByText('Không đủ quyền')).toBeInTheDocument()
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
-  })
-})
-
-/*
- * GoGo-BE#687, review F-01 round 2. With the switch on the API refuses a reset
- * of the super admin's password (SUPER_ADMIN_SSO_ONLY). The first fix disabled
- * the row's reset only on `superAdminSsoOnly === true`, so while `methods` was
- * pending or failed — and after the server had already refused — the button
- * stayed operable. Unknown now reads as unavailable for that one row; every
- * other row keeps its reset.
- */
-describe('super admin reset gate (GoGo-BE#687, review F-01 round 2)', () => {
-  const methodsFailure = () =>
-    HttpResponse.json(
-      { code: 'INTERNAL', message: 'x', request_id: 'r', retryable: true },
-      { status: 500 },
-    )
-  const ssoOnlyRefusal = () =>
-    HttpResponse.json(
-      {
-        code: 'SUPER_ADMIN_SSO_ONLY',
-        message: 'x',
-        field_errors: [],
-        request_id: 'r',
-        retryable: false,
-      },
-      { status: 403 },
-    )
-
-  it('does not offer the super admin reset while methods is pending; other rows keep theirs', async () => {
-    server.use(http.get('/v1/cms/auth/methods', async () => await delay('infinite')))
-    signInAs('super_admin', 'Someone Else')
-    renderWithProviders(<AdminListScreen />)
-
-    const table = await screen.findByRole('table')
-    const boss = within(table).getByText('boss@gogo.vn').closest('tr')!
-    const reset = within(boss).getByRole('button', { name: 'Reset mật khẩu' })
-    expect(reset).toBeDisabled()
-    expect(reset).toHaveAttribute('title', expect.stringContaining('Đang kiểm tra'))
-
-    const ops = within(table).getByText('ops@gogo.vn').closest('tr')!
-    expect(within(ops).getByRole('button', { name: 'Reset mật khẩu' })).toBeEnabled()
-  })
-
-  it('does not offer the super admin reset when methods failed, says why, and can retry', async () => {
-    let answer: 'fail' | 'off' = 'fail'
-    server.use(
-      http.get('/v1/cms/auth/methods', () =>
-        answer === 'fail'
-          ? methodsFailure()
-          : HttpResponse.json({ password: true, accessSso: true, superAdminSsoOnly: false }),
-      ),
-    )
-    signInAs('super_admin', 'Someone Else')
-    const user = userEvent.setup()
-    renderWithProviders(<AdminListScreen />)
-
-    // Re-queried each time: the row re-renders when the gate changes.
-    const bossReset = () =>
-      within(within(screen.getByRole('table')).getByText('boss@gogo.vn').closest('tr')!).getByRole(
-        'button',
-        { name: 'Reset mật khẩu' },
-      )
-    await screen.findByRole('table')
-    await waitFor(() =>
-      expect(bossReset()).toHaveAttribute('title', expect.stringContaining('Không đọc được')),
-    )
-    expect(bossReset()).toBeDisabled()
-    expect(screen.getByRole('alert')).toHaveTextContent(/Không đọc được cách đăng nhập/)
-
-    answer = 'off'
-    await user.click(screen.getByRole('button', { name: 'Thử lại' }))
-    await waitFor(() => expect(bossReset()).toBeEnabled())
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-  })
-
-  it('closes the reset at once on a SUPER_ADMIN_SSO_ONLY refusal and re-reads methods', async () => {
-    // The race: `methods` said "off" when the list opened; the switch flips
-    // before the reset is sent, which the server refuses.
-    let switchOn = false
-    let methodsReads = 0
-    server.use(
-      http.get('/v1/cms/auth/methods', () => {
-        methodsReads += 1
-        return HttpResponse.json({ password: true, accessSso: true, superAdminSsoOnly: switchOn })
-      }),
-      http.post('/v1/cms/auth/admins/:id/reset-password', () => {
-        switchOn = true
-        return ssoOnlyRefusal()
-      }),
-    )
-    signInAs('super_admin', 'Someone Else')
-    const user = userEvent.setup()
-    renderWithProviders(<AdminListScreen />)
-
-    const bossReset = () =>
-      within(within(screen.getByRole('table')).getByText('boss@gogo.vn').closest('tr')!).getByRole(
-        'button',
-        { name: 'Reset mật khẩu' },
-      )
-    await screen.findByRole('table')
-    await waitFor(() => expect(bossReset()).toBeEnabled())
-    await waitFor(() => expect(methodsReads).toBe(1))
-
-    await user.click(bossReset())
-    const dialog = await screen.findByRole('dialog')
-    await user.type(within(dialog).getByLabelText(/Lý do/), 'nghi ngờ lộ mật khẩu')
-    const submit = within(dialog).getAllByRole('button', { name: 'Reset mật khẩu' }).at(-1)!
-    await user.click(submit)
-
-    // The dialog says why and its submit cannot be sent again.
-    expect(await within(dialog).findByRole('alert')).toHaveTextContent(/không có mật khẩu/)
-    expect(submit).toBeDisabled()
-    // The row's button followed from the shared answer, before the re-read.
-    await waitFor(() => expect(bossReset()).toBeDisabled())
-    expect(bossReset()).toHaveAttribute('title', expect.stringContaining('không có mật khẩu'))
-    // And the fact was re-read from the server rather than assumed for good.
-    await waitFor(() => expect(methodsReads).toBeGreaterThanOrEqual(2))
   })
 })

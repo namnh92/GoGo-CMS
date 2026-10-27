@@ -24,25 +24,10 @@ import {
 import { fetchAdmins, type AdminListFilters } from './api'
 import { AdminActionDialog, type AdminAction } from './adminActions.view'
 import { SsoConfirmCard } from './ssoConfirm.view'
-import {
-  useSuperAdminPasswordGate,
-  type SuperAdminPasswordGate,
-} from '@/features/auth/useSuperAdminPasswordGate'
 import { styles } from './adminList.style'
 
 const PAGE_SIZE = 25
 const NEVER = '—'
-
-/** Why the super admin row's reset is not offered, for its title. */
-function superAdminPasswordReason(
-  gate: SuperAdminPasswordGate,
-  t: ReturnType<typeof useT>,
-): string | undefined {
-  if (gate.state === 'pending') return t('admins.superAdminPasswordPending')
-  if (gate.state === 'unknown') return t('admins.superAdminPasswordUnknown')
-  if (gate.state === 'ssoOnly') return t('admins.superAdminNoPassword')
-  return undefined
-}
 
 export default function AdminListScreen() {
   const t = useT()
@@ -63,11 +48,6 @@ export default function AdminListScreen() {
   // courtesy, the API is the control.
   const canRead = can('admin.read')
   const canCreate = can('admin.create')
-  // GoGo-BE#687 — with the switch on the super admin has no password, and the
-  // API refuses a reset of it with SUPER_ADMIN_SSO_ONLY (review F-01). Until
-  // `methods` has answered, the reset on that one row is not offered either
-  // (round 2): unknown reads as unavailable. Every other row keeps its reset.
-  const superAdminPassword = useSuperAdminPasswordGate(true)
 
   const filters: AdminListFilters = {
     q: q || undefined,
@@ -151,7 +131,8 @@ export default function AdminListScreen() {
         id: 'obligation',
         header: () => <span className="sr-only">{t('admins.col.obligation')}</span>,
         cell: ({ row }) =>
-          row.original.mustChangePassword ? (
+          // The super admin has no password to owe (GoGo-BE#687).
+          row.original.mustChangePassword && row.original.role !== 'super_admin' ? (
             <Badge tone="amber">{t('admins.owesPassword')}</Badge>
           ) : null,
         enableSorting: false,
@@ -180,6 +161,10 @@ export default function AdminListScreen() {
            * `LAST_SUPER_ADMIN`, because there is by construction no second
            * holder to administer the console afterwards. Said here rather than
            * discovered from a 409.
+           *
+           * It also has no password: it signs in through Cloudflare Access only
+           * and the API refuses a reset of it with `SUPER_ADMIN_SSO_ONLY`
+           * (GoGo-BE#687). There is nothing to reset, so the row offers none.
            *
            * Independent of `self`, which happens to cover the same row today:
            * that check matches on display name and is about separation of
@@ -219,23 +204,22 @@ export default function AdminListScreen() {
                   {t('admins.action.reactivate')}
                 </Button>
               )}
-              <Button
-                size="sm"
-                variant="ghost"
-                disabled={locked && superAdminPassword.state !== 'available'}
-                aria-busy={(locked && superAdminPassword.state === 'pending') || undefined}
-                title={locked ? superAdminPasswordReason(superAdminPassword, t) : undefined}
-                onClick={() => setDialog({ action: 'reset', admin: row.original })}
-              >
-                {t('admins.action.reset')}
-              </Button>
+              {locked ? null : (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setDialog({ action: 'reset', admin: row.original })}
+                >
+                  {t('admins.action.reset')}
+                </Button>
+              )}
             </div>
           )
         },
         enableSorting: false,
       },
     ],
-    [t, locale, session?.displayName, canCreate, superAdminPassword],
+    [t, locale, session?.displayName, canCreate],
   )
 
   if (!canRead) {
@@ -276,23 +260,6 @@ export default function AdminListScreen() {
       />
       <PageBody>
         {session?.role === 'super_admin' ? <SsoConfirmCard /> : null}
-        {superAdminPassword.state === 'unknown' ? (
-          // The one row whose reset depends on `methods` says so in its title;
-          // this is where the re-read lives, since a row button has no room.
-          <div role="alert" className={styles.methodsAlert}>
-            <span aria-hidden="true">⚠</span>
-            <span className={styles.methodsAlertText}>{t('admins.superAdminPasswordUnknown')}</span>
-            <Button
-              size="sm"
-              variant="secondary"
-              loading={superAdminPassword.retrying}
-              disabled={superAdminPassword.retrying}
-              onClick={superAdminPassword.retry}
-            >
-              {t('state.retry')}
-            </Button>
-          </div>
-        ) : null}
         <Card>
           <div className={styles.filterBar}>
             <SearchInput
