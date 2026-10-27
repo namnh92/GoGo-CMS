@@ -1096,9 +1096,6 @@ export const vi = {
     'Chỉ quản trị tối cao xác nhận được, và chỉ từ phiên còn hiệu lực.',
   'admins.superAdminNoPassword':
     'Quản trị tối cao chỉ đăng nhập qua Cloudflare Access và không có mật khẩu để đặt lại hay đổi.',
-  'admins.superAdminPasswordPending': 'Đang kiểm tra quản trị tối cao còn mật khẩu hay không…',
-  'admins.superAdminPasswordUnknown':
-    'Không đọc được cách đăng nhập của môi trường này, nên thao tác mật khẩu của quản trị tối cao tạm không dùng được cho tới khi đọc được.',
   'account.password.superAdminSsoOnly':
     'Tài khoản quản trị tối cao đăng nhập qua Cloudflare Access và không có mật khẩu; không có gì để đổi ở đây.',
   'account.password.superAdminSsoOnlyForced':

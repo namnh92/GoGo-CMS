@@ -1168,9 +1168,6 @@ export const en: Record<MessageKey, string> = {
     'Only the super admin can confirm, and only from a live session.',
   'admins.superAdminNoPassword':
     'The super admin signs in through Cloudflare Access only and has no password to reset or change.',
-  'admins.superAdminPasswordPending': 'Checking whether the super admin still has a password…',
-  'admins.superAdminPasswordUnknown':
-    'Could not read how this environment signs in, so the super admin’s password actions are unavailable until it answers.',
   'account.password.superAdminSsoOnly':
     'The super admin signs in through Cloudflare Access and has no password; there is nothing to change here.',
   'account.password.superAdminSsoOnlyForced':

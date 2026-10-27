@@ -1,9 +1,7 @@
 import { useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
 import { useT } from '@/shared/i18n/i18n'
 import { ApiError } from '@/shared/api/errors'
 import { changeOwnPassword } from '@/features/admins/api'
-import { markSuperAdminSsoOnly } from './useAuthMethods'
 
 /**
  * `POST /cms/auth/change-password`, and the two rules around it that are the
@@ -28,7 +26,6 @@ import { markSuperAdminSsoOnly } from './useAuthMethods'
  */
 export function useChangeOwnPassword() {
   const t = useT()
-  const queryClient = useQueryClient()
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -61,12 +58,8 @@ export function useChangeOwnPassword() {
       return true
     } catch (cause) {
       if (cause instanceof ApiError && cause.code === 'SUPER_ADMIN_SSO_ONLY') {
-        // The switch turned on while the form was open (review F-01). Every
-        // super-admin password control learns it from the cached `methods`
-        // answer now, and the form this error belongs to goes away with it;
-        // the sentence stays for a caller that keeps its form (the sign-in
-        // screen's forced step).
-        markSuperAdminSsoOnly(queryClient)
+        // The super admin has no password (GoGo-BE#687). No screen offers it
+        // this form; the sentence is for a refusal that arrives anyway.
         setError(t('account.password.superAdminSsoOnly'))
       } else if (cause instanceof ApiError && cause.code === 'PASSWORD_UNCHANGED') {
         setError(t('auth.change.unchanged'))

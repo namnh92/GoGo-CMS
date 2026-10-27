@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import userEvent from '@testing-library/user-event'
-import { screen, waitFor, within } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/shared/test/server'
 import { renderWithProviders, signInAs } from '@/shared/test/render'
@@ -93,18 +93,11 @@ describe('SSO confirmation card (GoGo-BE#687)', () => {
     },
   )
 
-  it('offers no password reset for the super admin once Access-only (review F-01)', async () => {
-    server.use(
-      http.get('/v1/cms/auth/methods', () =>
-        HttpResponse.json({ password: true, accessSso: true, superAdminSsoOnly: true }),
-      ),
-    )
+  it('offers no password reset for the super admin — it signs in through Access only (review F-01)', async () => {
     signInAs('super_admin')
     renderWithProviders(<AdminListScreen />)
     const row = (await screen.findByText('boss@gogo.vn')).closest('tr')!
-    const reset = within(row).getByRole('button', { name: 'Reset mật khẩu' })
-    await waitFor(() => expect(reset).toBeDisabled())
-    expect(reset).toHaveAttribute('title', expect.stringContaining('không có mật khẩu'))
+    expect(within(row).queryByRole('button', { name: 'Reset mật khẩu' })).not.toBeInTheDocument()
     // Other rows keep it.
     const other = (await screen.findByText('editor@gogo.vn')).closest('tr')!
     expect(within(other).getByRole('button', { name: 'Reset mật khẩu' })).toBeEnabled()

@@ -15,7 +15,6 @@ import { Skeleton } from '@/shared/ui/State'
 import { useChangeOwnPassword } from './useChangeOwnPassword'
 import { useAuthMethods } from './useAuthMethods'
 import { safeReturnPath, ssoRedirect, ssoStartUrl } from './ssoRedirect'
-import { useSuperAdminPasswordGate } from './useSuperAdminPasswordGate'
 import { SsoConfirmCard } from '@/features/admins/ssoConfirm.view'
 import { styles } from './login.style'
 
@@ -67,14 +66,12 @@ export default function LoginScreen() {
   const methods = useAuthMethods()
   /**
    * Review of PR #235 (round 3, F-02): the forced change after a password
-   * sign-in is a super-admin password action too. Once the switch is known to
-   * be on — read, or learned from a 403 SUPER_ADMIN_SSO_ONLY to the change,
-   * which `useChangeOwnPassword` writes into the shared `methods` answer — the
-   * form is replaced by the one action the API accepts in this state: the SSO
-   * confirmation (`@AllowWhilePasswordChangePending` on GoGo-BE).
+   * sign-in is a super-admin password action too, and the super admin has no
+   * password (GoGo-BE#687). For it the form is replaced by the one action the
+   * API accepts in this state: the SSO confirmation
+   * (`@AllowWhilePasswordChangePending` on GoGo-BE).
    */
-  const forcedNoPassword =
-    useSuperAdminPasswordGate(session?.role === 'super_admin').state === 'ssoOnly'
+  const forcedNoPassword = session?.role === 'super_admin'
   /** Set by a failed exchange; `adminOnly` also offers to switch identity. */
   const [ssoError, setSsoError] = useState<{
     message: string

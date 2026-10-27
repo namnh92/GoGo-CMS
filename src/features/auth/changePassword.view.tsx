@@ -5,12 +5,10 @@ import { Card, CardBody, CardHeader } from '@/shared/ui/Card'
 import { Button } from '@/shared/ui/Button'
 import { TextInput } from '@/shared/ui/Field'
 import { useToast } from '@/shared/ui/Toast'
-import { LoadingState } from '@/shared/ui/State'
 import { CheckIcon } from '@/shared/ui/icons'
 import { useSession } from '@/shared/auth/session'
 import { SsoConfirmCard } from '@/features/admins/ssoConfirm.view'
 import { useChangeOwnPassword } from './useChangeOwnPassword'
-import { useSuperAdminPasswordGate } from './useSuperAdminPasswordGate'
 import { styles } from './changePassword.style'
 
 /**
@@ -128,17 +126,17 @@ function ChangePasswordForm() {
 }
 
 /**
- * GoGo-BE#687 — the super admin has no password once the switch is on: the API
- * refuses a change with `SUPER_ADMIN_SSO_ONLY`, so a form here would be a dead
- * control (review F-01). Said in words instead.
+ * GoGo-BE#687 — the super admin has no password: it signs in through Access
+ * only and the API refuses a change with `SUPER_ADMIN_SSO_ONLY`, so a form here
+ * would be a dead control (review F-01). The sidebar does not link here for it;
+ * reached by address, this says so in words instead.
  *
  * `forced`: `RequireAuth` sends an account owing a password change here and
- * nowhere else (#101), and with the switch on this account cannot discharge
- * that obligation with a password. The way out the API provides is the Access
- * confirmation (`confirm-sso` is reachable while a change is owed); the next
- * deploy then clears both the password and the obligation. The accounts page
- * where that control normally lives is unreachable from here, so the control
- * is rendered on this screen as well.
+ * nowhere else (#101), and this account cannot discharge that obligation with
+ * a password. The way out the API provides is the Access confirmation
+ * (`confirm-sso` is reachable while a change is owed). The accounts page where
+ * that control normally lives is unreachable from here, so the control is
+ * rendered on this screen as well.
  */
 function SuperAdminSsoOnlyNote({ forced }: { forced: boolean }) {
   const t = useT()
@@ -160,9 +158,6 @@ function SuperAdminSsoOnlyNote({ forced }: { forced: boolean }) {
 export default function ChangePasswordScreen() {
   const t = useT()
   const { session } = useSession()
-  // Unknown reads as unavailable for the super admin (review F-01, round 2): a
-  // form rendered before `methods` answers can only submit into a 403.
-  const gate = useSuperAdminPasswordGate(session?.role === 'super_admin')
   return (
     <>
       <PageHeader
@@ -174,27 +169,7 @@ export default function ChangePasswordScreen() {
         <Card className={styles.panel}>
           <CardHeader title={t('account.password.title')} hint={t('account.password.subtitle')} />
           <CardBody>
-            {gate.state === 'pending' ? (
-              <LoadingState label={t('admins.superAdminPasswordPending')} />
-            ) : gate.state === 'unknown' ? (
-              <div className={styles.form}>
-                <p role="alert" className={styles.alertDanger}>
-                  <span aria-hidden="true">⚠</span>
-                  <span>{t('admins.superAdminPasswordUnknown')}</span>
-                </p>
-                <div className={styles.actions}>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    loading={gate.retrying}
-                    disabled={gate.retrying}
-                    onClick={gate.retry}
-                  >
-                    {t('state.retry')}
-                  </Button>
-                </div>
-              </div>
-            ) : gate.state === 'ssoOnly' ? (
+            {session?.role === 'super_admin' ? (
               <SuperAdminSsoOnlyNote forced={session?.mustChangePassword === true} />
             ) : (
               <ChangePasswordForm />

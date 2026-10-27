@@ -48,9 +48,9 @@ function exchange(answer: () => Response | Promise<Response>) {
   return calls
 }
 
-function session(mustChangePassword = false) {
+function session(mustChangePassword = false, role = 'super_admin') {
   return HttpResponse.json(
-    { accessToken: 'sso-token', role: 'super_admin', displayName: 'owner', mustChangePassword },
+    { accessToken: 'sso-token', role, displayName: 'owner', mustChangePassword },
     { status: 201 },
   )
 }
@@ -297,10 +297,11 @@ describe('single sign-on exchange (GoGo-BE#679)', () => {
    * F-01 of the shape review. The login screen's own change step submits the
    * password typed into its form, and a single sign-on typed none. The account
    * goes to /account/password instead, which asks for the current password.
+   * Not the super admin, which has no password (GoGo-BE#687).
    */
   it('sends an account with a reset outstanding to the change screen, where the obligation can be cleared', async () => {
     methods({ password: false, accessSso: true })
-    exchange(() => session(true))
+    exchange(() => session(true, 'ops_admin'))
     const user = userEvent.setup()
     renderWithProviders(app(), { route: '/sso' })
 
