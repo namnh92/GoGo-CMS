@@ -3875,7 +3875,7 @@ export const en: Record<MessageKey, string> = {
   'assistant.kill.effectOff':
     'The app shows its “not available” state. A reply in progress ends with an error and keeps what it had written. Conversation history is not deleted.',
   'assistant.kill.auditNote':
-    'The change is audited with before, after and who did it. The flag endpoint does not take a reason today.',
+    'The change is audited with before, after, who did it and the reason you enter below.',
   'assistant.kill.savedOn': 'GoGo AI turned on.',
   'assistant.kill.savedOff': 'GoGo AI turned off.',
 }

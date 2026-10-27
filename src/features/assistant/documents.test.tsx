@@ -12,6 +12,7 @@ import {
   simulateColleagueEdit,
 } from '@/shared/test/assistantMock'
 import type { AdminRole } from '@/shared/api/contracts'
+import { QUERY_STALE_TIME } from '@/app/Providers'
 import DocumentListScreen from './documentList.view'
 import DocumentDetailScreen from './documentDetail.view'
 
@@ -205,6 +206,57 @@ describe('GoGo AI document editor (CMS#249)', () => {
     await user.click(within(conflict).getByRole('button', { name: 'Ghi đè bằng nội dung của tôi' }))
     expect(await screen.findByText('Bản nháp v3 · lần sửa 4')).toBeInTheDocument()
     expect(screen.queryByText('Bản nháp đã thay đổi trong lúc bạn sửa')).not.toBeInTheDocument()
+  })
+
+  describe('a conflict inside the app’s cache window (acceptance BUG-1)', () => {
+    /** Loads the screen with the app's real `staleTime`, then loses a race to a colleague. */
+    async function loseTheRace() {
+      signInAs('editor')
+      const patches: Array<{ baseRevision?: number }> = []
+      // Returns nothing, so the request falls through to the regular mock.
+      server.use(
+        http.patch(`${LIST}/:id`, async ({ request }) => {
+          patches.push((await request.clone().json()) as { baseRevision?: number })
+        }),
+      )
+      const user = userEvent.setup()
+      renderWithProviders(<Routed />, { route: VOTING, staleTime: QUERY_STALE_TIME })
+
+      expect(await screen.findByText('Bản nháp v3 · lần sửa 2')).toBeInTheDocument()
+      // Out of band, well inside the stale window: the colleague's save is rev 3.
+      simulateColleagueEdit(assistantFixtureIds.voting, 'Bản của đồng nghiệp.')
+      await user.type(screen.getByLabelText(/^Mô tả/), ' (đã sửa)')
+      await user.click(screen.getByRole('button', { name: 'Lưu bản nháp' }))
+
+      const conflict = (await screen.findByText('Bản nháp đã thay đổi trong lúc bạn sửa')).closest(
+        'section',
+      )!
+      return { user, patches, conflict }
+    }
+
+    it('diffs against the colleague’s revision and overwrites on top of it', async () => {
+      const { user, patches, conflict } = await loseTheRace()
+
+      expect(within(conflict).getByText(/quan\.ops đã lưu lần sửa 3/)).toBeInTheDocument()
+      expect(within(conflict).getByText('Bản của đồng nghiệp.')).toBeInTheDocument()
+
+      await user.click(
+        within(conflict).getByRole('button', { name: 'Ghi đè bằng nội dung của tôi' }),
+      )
+      expect(await screen.findByText('Đã lưu bản nháp.')).toBeInTheDocument()
+      expect(await screen.findByText('Bản nháp v3 · lần sửa 4')).toBeInTheDocument()
+      expect(patches.map((p) => p.baseRevision)).toEqual([2, 3])
+      expect(screen.queryByText('Bản nháp đã thay đổi trong lúc bạn sửa')).not.toBeInTheDocument()
+    })
+
+    it('“use theirs” loads the colleague’s revision, not the stale cache', async () => {
+      const { user, conflict } = await loseTheRace()
+
+      await user.click(within(conflict).getByRole('button', { name: /Dùng bản mới nhất/ }))
+      expect(screen.getByLabelText(/^Nội dung/)).toHaveValue('Bản của đồng nghiệp.')
+      expect(screen.getByText('Bản nháp v3 · lần sửa 3')).toBeInTheDocument()
+      expect(screen.queryByText('Có thay đổi chưa lưu')).not.toBeInTheDocument()
+    })
   })
 
   it('renders the body preview as structure, never as HTML', async () => {

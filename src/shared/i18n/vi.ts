@@ -3907,7 +3907,7 @@ export const vi = {
   'assistant.kill.effectOff':
     'App hiện trạng thái “không khả dụng”. Câu trả lời đang chạy dừng với lỗi và giữ phần đã viết. Lịch sử hội thoại không bị xoá.',
   'assistant.kill.auditNote':
-    'Thay đổi được ghi audit với trước/sau và người thực hiện. Endpoint cờ hiện không nhận lý do.',
+    'Thay đổi được ghi audit với trước/sau, người thực hiện và lý do bạn nhập bên dưới.',
   'assistant.kill.savedOn': 'Đã bật GoGo AI.',
   'assistant.kill.savedOff': 'Đã tắt GoGo AI.',
 } as const

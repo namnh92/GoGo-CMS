@@ -159,9 +159,14 @@ export default function DocumentDetailScreen() {
     onError: async (error) => {
       if (error instanceof ApiError && error.code === 'REVISION_CONFLICT') {
         // Read the draft that won, keep what this editor typed, and show both.
+        // `staleTime: 0` — the cached copy is exactly the one the server just
+        // refused; within the app's stale window `fetchQuery` would hand it
+        // back unread, so the panel, the overwrite base and "use theirs" would
+        // all be the editor's own stale revision.
         const fresh = await queryClient.fetchQuery({
           queryKey: queryKeys.assistant.document(id),
           queryFn: ({ signal }) => fetchDocument(id, signal),
+          staleTime: 0,
         })
         setConflict(fresh.draft)
         return

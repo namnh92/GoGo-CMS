@@ -185,6 +185,20 @@ describe('GoGo AI kill switch — role × state (CMS#249)', () => {
     },
   )
 
+  it('says the reason is audited, not that the endpoint ignores it (acceptance BUG-2)', async () => {
+    signInAs('ops_admin')
+    const user = userEvent.setup()
+    renderWithProviders(<KillSwitchScreen />)
+    await user.click(await screen.findByRole('button', { name: 'Bật trợ lý' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Bật GoGo AI?' })
+    expect(
+      within(dialog).getByText(
+        'Thay đổi được ghi audit với trước/sau, người thực hiện và lý do bạn nhập bên dưới.',
+      ),
+    ).toBeInTheDocument()
+    expect(within(dialog).queryByText(/không nhận lý do/)).not.toBeInTheDocument()
+  })
+
   it('requires a 3–500 character reason and sends it, trimmed, in the PUT body', async () => {
     signInAs('ops_admin')
     const bodies: unknown[] = []
