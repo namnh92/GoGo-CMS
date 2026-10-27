@@ -192,6 +192,30 @@ describe('AdminListScreen (CMS-021)', () => {
     expect(within(ops).getByRole('button', { name: 'Reset mật khẩu' })).toBeEnabled()
   })
 
+  it('flags an owed password change on other roles, never on the super admin', async () => {
+    signInAs('super_admin', 'Someone Else')
+    const boss = cmsAdmins.find((a) => a.role === 'super_admin')!
+    server.use(
+      http.get('/v1/cms/auth/admins', () =>
+        HttpResponse.json({
+          items: [
+            { ...boss, mustChangePassword: true },
+            ...cmsAdmins.filter((a) => a.role !== 'super_admin'),
+          ],
+          total: cmsAdmins.length,
+          nextCursor: null,
+        }),
+      ),
+    )
+    renderWithProviders(<AdminListScreen />)
+
+    const table = await screen.findByRole('table')
+    const editor = within(table).getByText('editor@gogo.vn').closest('tr')!
+    expect(within(editor).getByText('Nợ đổi mật khẩu')).toBeInTheDocument()
+    const bossRow = within(table).getByText('boss@gogo.vn').closest('tr')!
+    expect(within(bossRow).queryByText('Nợ đổi mật khẩu')).not.toBeInTheDocument()
+  })
+
   it("offers only assignable roles when changing someone else's role", async () => {
     signInAs('super_admin', 'Minh Anh Ng.')
     const user = userEvent.setup()
