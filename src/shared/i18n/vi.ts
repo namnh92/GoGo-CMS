@@ -1086,7 +1086,7 @@ export const vi = {
   'auth.sso.changed': 'Cách đăng nhập của môi trường này vừa thay đổi. Màn hình đã được cập nhật.',
   'admins.ssoConfirm.title': 'Xác nhận đăng nhập qua Cloudflare Access',
   'admins.ssoConfirm.hint':
-    'Bấm khi bạn đang trong phiên mở bằng Cloudflare Access. Sau khi xác nhận, lần deploy kế tiếp mới gỡ mật khẩu của tài khoản quản trị tối cao.',
+    'Bấm khi bạn đang trong phiên mở bằng Cloudflare Access để xác nhận địa chỉ hiện tại. Tài khoản quản trị tối cao không còn mật khẩu — chỉ đăng nhập qua Cloudflare Access.',
   'admins.ssoConfirm.action': 'Xác nhận',
   'admins.ssoConfirm.done': 'Đã xác nhận Cloudflare Access cho {email}.',
   'admins.ssoConfirm.already': 'Đã xác nhận trước đó cho {email}.',
@@ -2992,7 +2992,7 @@ export const vi = {
   'admins.error.superAdminSingleton':
     'Mỗi environment chỉ có đúng một super admin. Không tạo mới và không thăng cấp tài khoản nào vào vai này.',
   'admins.superAdminLocked':
-    'Tài khoản super admin: vai cố định, không đình chỉ được. Mật khẩu thì vẫn đổi được — dùng đổi mật khẩu hoặc cấp mật khẩu tạm.',
+    'Tài khoản super admin: vai cố định, không đình chỉ được. Đăng nhập chỉ qua SSO (Cloudflare Access), không dùng mật khẩu.',
   'admins.temp.title': 'Mật khẩu tạm — hiện đúng một lần',
   'admins.temp.warn':
     'Mật khẩu này không xem lại được và không nằm ở đâu khác. Chuyển cho chủ tài khoản qua kênh an toàn trước khi đóng.',

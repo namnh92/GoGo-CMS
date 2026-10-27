@@ -1158,7 +1158,7 @@ export const en: Record<MessageKey, string> = {
     'Sign-in methods for this environment just changed. The screen has been updated.',
   'admins.ssoConfirm.title': 'Confirm sign-in through Cloudflare Access',
   'admins.ssoConfirm.hint':
-    'Use this while in a session Cloudflare Access opened. Only after it does the next deploy remove the super admin password.',
+    'Use this while in a session Cloudflare Access opened, to confirm the current address. The super admin has no password — it signs in through Cloudflare Access only.',
   'admins.ssoConfirm.action': 'Confirm',
   'admins.ssoConfirm.done': 'Cloudflare Access confirmed for {email}.',
   'admins.ssoConfirm.already': 'Already confirmed for {email}.',
@@ -2837,7 +2837,7 @@ export const en: Record<MessageKey, string> = {
   'admins.error.superAdminSingleton':
     'An environment has exactly one super admin. A second cannot be created, and no account can be promoted into the role.',
   'admins.superAdminLocked':
-    'The super admin account: its role is fixed and it cannot be suspended. Its password is not frozen — use a password change or a temporary password.',
+    'The super admin account: its role is fixed and it cannot be suspended. It signs in through SSO (Cloudflare Access) only, never with a password.',
   'admins.temp.title': 'Temporary password — shown exactly once',
   'admins.temp.warn':
     'This password cannot be viewed again and exists nowhere else. Hand it to the account holder over a secure channel before closing.',
