@@ -156,22 +156,20 @@ export default function AdminListScreen() {
           if (!canCreate) return null
           const self = row.original.displayName === session?.displayName
           /**
-           * The bootstrapped `super_admin` (ADR-0018). Its role cannot be given
-           * up and it cannot be suspended — the server refuses both with
-           * `LAST_SUPER_ADMIN`, because there is by construction no second
-           * holder to administer the console afterwards. Said here rather than
-           * discovered from a 409.
-           *
-           * It also has no password: it signs in through Cloudflare Access only
-           * and the API refuses a reset of it with `SUPER_ADMIN_SSO_ONLY`
-           * (GoGo-BE#687). There is nothing to reset, so the row offers none.
+           * The bootstrapped `super_admin` (ADR-0018) has nothing to act on: its
+           * role cannot be given up and it cannot be suspended — the server
+           * refuses both with `LAST_SUPER_ADMIN`, because there is by
+           * construction no second holder to administer the console afterwards
+           * — and it has no password to reset, signing in through Cloudflare
+           * Access only (`SUPER_ADMIN_SSO_ONLY`, GoGo-BE#687). The row offers no
+           * actions rather than controls that can only be refused.
            *
            * Independent of `self`, which happens to cover the same row today:
            * that check matches on display name and is about separation of
            * duties, this one is about the role, and they must not rely on each
            * other.
            */
-          const locked = row.original.role === 'super_admin'
+          if (row.original.role === 'super_admin') return null
           return (
             <div className={styles.actions}>
               <Button
@@ -179,8 +177,7 @@ export default function AdminListScreen() {
                 variant="ghost"
                 // Your own role is changed by another super_admin — the server
                 // refuses SELF_ROLE_CHANGE; the button says so up front.
-                disabled={self || locked}
-                title={locked ? t('admins.superAdminLocked') : undefined}
+                disabled={self}
                 onClick={() => setDialog({ action: 'edit', admin: row.original })}
               >
                 {t('admins.action.edit')}
@@ -189,8 +186,7 @@ export default function AdminListScreen() {
                 <Button
                   size="sm"
                   variant="ghost"
-                  disabled={self || locked}
-                  title={locked ? t('admins.superAdminLocked') : undefined}
+                  disabled={self}
                   onClick={() => setDialog({ action: 'suspend', admin: row.original })}
                 >
                   {t('admins.action.suspend')}
@@ -204,15 +200,13 @@ export default function AdminListScreen() {
                   {t('admins.action.reactivate')}
                 </Button>
               )}
-              {locked ? null : (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setDialog({ action: 'reset', admin: row.original })}
-                >
-                  {t('admins.action.reset')}
-                </Button>
-              )}
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setDialog({ action: 'reset', admin: row.original })}
+              >
+                {t('admins.action.reset')}
+              </Button>
             </div>
           )
         },

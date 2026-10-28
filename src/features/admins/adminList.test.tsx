@@ -99,14 +99,14 @@ describe('AdminListScreen (CMS-021)', () => {
     expect(screen.queryByRole('button', { name: /Xoá/ })).not.toBeInTheDocument()
   })
 
-  it('disables role change and suspend on your own row — the server refuses SELF_*', async () => {
+  it('offers no role change or suspend on your own row — the server refuses SELF_*', async () => {
     signInAs('super_admin', 'Minh Anh Ng.')
     renderWithProviders(<AdminListScreen />)
 
     const table = await screen.findByRole('table')
     const selfRow = within(table).getByText('Bạn').closest('tr')!
-    expect(within(selfRow).getByRole('button', { name: 'Đổi vai' })).toBeDisabled()
-    expect(within(selfRow).getByRole('button', { name: 'Đình chỉ' })).toBeDisabled()
+    expect(within(selfRow).queryByRole('button', { name: 'Đổi vai' })).not.toBeInTheDocument()
+    expect(within(selfRow).queryByRole('button', { name: 'Đình chỉ' })).not.toBeInTheDocument()
   })
 
   it('demands a reason before any mutation is sent', async () => {
@@ -172,7 +172,7 @@ describe('AdminListScreen (CMS-021)', () => {
     )
   })
 
-  it('locks role change and suspend and offers no reset on the super admin row, whoever is signed in', async () => {
+  it('offers no actions on the super admin row, whoever is signed in', async () => {
     // Signed in as a *different* name, so this is the role check and not the
     // SELF_* check that happens to cover the same row for its holder.
     signInAs('super_admin', 'Someone Else')
@@ -180,16 +180,16 @@ describe('AdminListScreen (CMS-021)', () => {
 
     const table = await screen.findByRole('table')
     const row = within(table).getByText('boss@gogo.vn').closest('tr')!
-    const edit = within(row).getByRole('button', { name: 'Đổi vai' })
-    const suspend = within(row).getByRole('button', { name: 'Đình chỉ' })
-    expect(edit).toBeDisabled()
-    expect(suspend).toBeDisabled()
-    expect(edit).toHaveAttribute('title', expect.stringContaining('vai cố định'))
-    // SSO only, no password (GoGo-BE#687): nothing to reset on this row, while
-    // every other row keeps its reset.
-    expect(within(row).queryByRole('button', { name: 'Reset mật khẩu' })).not.toBeInTheDocument()
+    // Role fixed, cannot be suspended, SSO only with no password (GoGo-BE#687):
+    // nothing to act on, so the row offers nothing, while every other row keeps
+    // all three.
+    for (const name of ['Đổi vai', 'Đình chỉ', 'Reset mật khẩu']) {
+      expect(within(row).queryByRole('button', { name })).not.toBeInTheDocument()
+    }
     const ops = within(table).getByText('ops@gogo.vn').closest('tr')!
-    expect(within(ops).getByRole('button', { name: 'Reset mật khẩu' })).toBeEnabled()
+    for (const name of ['Đổi vai', 'Đình chỉ', 'Reset mật khẩu']) {
+      expect(within(ops).getByRole('button', { name })).toBeEnabled()
+    }
   })
 
   it('flags an owed password change on other roles, never on the super admin', async () => {
