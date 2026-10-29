@@ -572,7 +572,7 @@ export interface paths {
         };
         /**
          * GoGo AI: is the assistant available to this account, and how much is left today
-         * @description GoGo-BE#713. **Planned — declared ahead of the module (contract-first); not served until the module PR lands.** Every `/assistant/*` operation carries `x-gogo-planned` until then and answers 404 on a deployed API.
+         * @description GoGo-BE#713. Served since 2.0.0-alpha.4 (ADR-0036: Jev decides, the backend executes and validates, Claude Haiku explains). Every `/assistant/*` operation answers only while the module is deployed; sends additionally need the kill switch on and the environment's limits and spend ceiling configured.
          *
          *     Lets the app decide what the entry point does before the user types: `disabled` means the kill switch is off (feature flag `assistant.enabled`) and the app shows its own "not available" state; `limit_reached` means the per-account daily message budget is spent until `resetsAt`. The server still enforces both on every send — this is a hint for the UI, never an authorization.
          *
@@ -4758,7 +4758,7 @@ export interface paths {
         };
         /**
          * Content: the "GoGo guide" source documents GoGo AI answers from (cursor)
-         * @description GoGo-BE#713, GoGo-CMS#249. **Planned — declared ahead of the module; not served until the module PR lands.**
+         * @description GoGo-BE#713, GoGo-CMS#249. Served since 2.0.0-alpha.4.
          *
          *     The assistant answers product questions only from **published** versions of these documents, and cites them by `title` and `description` — so those strings are what the app shows in `SourceList`, never something the model wrote. Owner decision on GoGo-MobileApp#377 (2026-10-26): the source set lives in the CMS, with versions, publish / unpublish and audit.
          *
@@ -5316,6 +5316,30 @@ export interface paths {
          *     `ops_admin` and above.
          */
         get: operations["cmsOpsSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/ops/config-readiness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ops: which variables this process holds, joined with the deploy readiness snapshot
+         * @description GoGo-BE#727 (OPS-BE-002; GoGo-Infra#309 D-9). Facts only, never a value: for every variable the answer is a boolean — never the value, a prefix, a length or a hash. `process` lists every key of the API's env schema, derived from it; `process_dynamic` the export keyring's open-ended `EXPORT_WRAPPING_KEY_V<n>`, the one loader outside the schema.
+         *
+         *     `infra` is the readiness projection the deploy left beside its env file (GoGo-Infra `ops/secrets-readiness.deploy.json`): a dated snapshot of one deploy, labelled `deploy_snapshot`. Its verdicts are copied, never recomputed here; `deploy_match` says whether it describes the env file this process was started with, and a mismatch is a warning, never readiness. It proves neither the current SSM state nor that a credential works. Nothing here calls AWS.
+         *
+         *     `ops_admin` and above.
+         */
+        get: operations["cmsOpsConfigReadiness"];
         put?: never;
         post?: never;
         delete?: never;
@@ -6369,6 +6393,92 @@ export interface components {
             oldestPendingSeconds?: number | null;
             /** @description Connected consumers. Null when the backend does not report it — null and 0 are different facts, and zero on a queue with work is the alarm. */
             workers?: number | null;
+        };
+        CmsConfigVariable: {
+            /** @example OPENROUTER_ASSISTANT_API_KEY */
+            name: string;
+            /** @description Set and not blank in the raw process environment — presence, not validity. */
+            present: boolean;
+            /** @description The env schema lets it be absent (optional or defaulted). */
+            optional: boolean;
+            /** @description Its requirement is decided by a cross-field rule at boot, not by the field. */
+            conditional: boolean;
+        };
+        CmsConfigInfraRow: {
+            /** @example /gogo/dev/backend/openrouter/assistant-api-key */
+            path: string;
+            env_var: string | null;
+            /** @description required, optional, planned or parked, from the manifest. */
+            lifecycle: string;
+            /**
+             * @description In SSM at deploy time.
+             * @enum {string}
+             */
+            presence: "present" | "absent" | "unknown";
+            findings: string[];
+            verdict: components["schemas"]["CmsReadinessVerdict"];
+            capabilities: string[];
+            /**
+             * @description `api` when the API process reads the variable; `host` for the deploy host's own variables in the same env file (DOMAIN, ACME_EMAIL, TUNNEL_TOKEN …), which never get a process column.
+             * @enum {string}
+             */
+            applicable: "api" | "host";
+            /** @description Whether this process holds it; `null` for a host row. */
+            process_present: boolean | null;
+        };
+        /** @enum {string} */
+        CmsReadinessVerdict: "OK" | "FAIL" | "UNKNOWN";
+        CmsConfigInfra: {
+            /** @enum {string} */
+            label: "deploy_snapshot";
+            /** @enum {integer} */
+            schema_version: 1;
+            /** @example dev */
+            env: string;
+            /** Format: date-time */
+            generated_at: string;
+            manifest_sha: string | null;
+            /** @description `<release commit>-<run id>-<run attempt>`. */
+            deploy_id: string;
+            release_sha: string;
+            run_id: string;
+            run_attempt: string;
+            /** @description This process's APP_DEPLOY_ID, an identifier (not a secret); null when unset. */
+            process_deploy_id: string | null;
+            /** @description The snapshot describes the env file this process was started with. Show false as a warning. */
+            deploy_match: boolean;
+            rows: components["schemas"]["CmsConfigInfraRow"][];
+        };
+        CmsConfigCapability: {
+            /** @example public_catalogue_uploads */
+            name: string;
+            /** @enum {string} */
+            status: "enabled" | "planned";
+            ssm_verdict: components["schemas"]["CmsReadinessVerdict"];
+            /** @description Copied from the snapshot (verdict OK); never recomputed here. */
+            ssm_ready: boolean;
+            ssm_missing: string[];
+            /** @description A count of its rows stored in SSM — shown as a count, never as readiness. */
+            ssm_present: {
+                present: number;
+                total: number;
+            };
+            /** @description Every api-applicable row is present in this process; null when it has none. */
+            process_ready: boolean | null;
+            process_missing: string[];
+            /** @description Host rows, left out of process_ready. */
+            excluded_from_process: string[];
+        };
+        CmsConfigReadiness: {
+            process: components["schemas"]["CmsConfigVariable"][];
+            process_dynamic: components["schemas"]["CmsConfigVariable"][];
+            infra: components["schemas"]["CmsConfigInfra"] | null;
+            /**
+             * @description Why `infra` is null; null when it is not.
+             * @enum {string|null}
+             */
+            reason: "not_configured" | "missing" | "unreadable" | "invalid" | "unknown_schema" | null;
+            capabilities: components["schemas"]["CmsConfigCapability"][];
         };
         CmsOpsEnvelope: {
             /**
@@ -9943,7 +10053,7 @@ export interface components {
             /** Format: date-time */
             exportedAt?: string;
             /**
-             * @description 2.0.0-alpha.3 (GoGo-BE#713, owner-delegated SA decision Q2). The account's retained GoGo AI conversations (90-day retention, so only what still exists). **Absent until the assistant module lands** — the collector populates it then; a client must treat absent and `[]` alike.
+             * @description 2.0.0-alpha.3 (GoGo-BE#713, owner-delegated SA decision Q2). The account's retained GoGo AI conversations (90-day retention, so only what still exists). Populated since 2.0.0-alpha.4, when the module landed; a client must still treat absent and `[]` alike.
              *
              *     Included: conversation titles, each message's role, text, timestamps and terminal status, and the account's own feedback on assistant replies. Excluded: internal prompts and system instructions, retrieval internals (guide sections and versions retrieved, scores, model identifiers), upload keys, and card / proposal internals. **Attachments are excluded pending explicit owner approval** of their portability scope — neither the images nor their metadata are exported in this version.
              */
@@ -20347,6 +20457,28 @@ export interface operations {
                 };
                 content?: never;
             };
+        };
+    };
+    cmsOpsConfigReadiness: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Always 200. A projection that is not configured, missing, unreadable, malformed or of an unknown schema is `infra: null` with `reason`; `process` is complete either way. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsConfigReadiness"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     cmsOpsProviders: {

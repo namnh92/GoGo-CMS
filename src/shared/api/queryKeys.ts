@@ -41,6 +41,7 @@ export const queryKeys = {
   opsKpis: ['ops', 'kpis'] as const,
   opsHealth: ['ops', 'health'] as const,
   opsQueues: ['ops', 'queues'] as const,
+  opsConfigReadiness: ['ops', 'config-readiness'] as const,
   opsSummary: (window: string) => ['ops', 'summary', window] as const,
   opsProviders: (window: string) => ['ops', 'providers', window] as const,
   opsProvider: (provider: string, window: string) => ['ops', 'provider', provider, window] as const,

@@ -170,6 +170,15 @@ const OPERATIONS: NavLeaf[] = [
     match: (p) => p.startsWith('/monitoring'),
   },
   {
+    // GoGo-CMS#264 (GoGo-BE#727). Same `ops.dashboard` gate as Monitoring and
+    // as the server's /cms/ops/*: which keys an environment holds is
+    // operational data, not editorial.
+    to: '/config-readiness',
+    labelKey: 'nav.configReadiness',
+    permission: 'ops.dashboard',
+    match: (p) => p.startsWith('/config-readiness'),
+  },
+  {
     // COST-CMS-009 (GoGo-BE#381): what GoGo spends, what it only estimates,
     // and what nothing measures yet. `cost.read` is the same `ops_admin` gate
     // the server puts on /cms/ops/costs*.

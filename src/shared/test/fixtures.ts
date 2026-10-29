@@ -1,3 +1,4 @@
+import type { ConfigReadiness } from '@/shared/api/contracts-config-readiness'
 import type {
   AuditEntry,
   CmsArea,
@@ -3829,4 +3830,77 @@ export const costTestRunDetails: Record<string, CmsCostTestRunDetail> = {
     actualCostMicros: null,
     unpriced: [],
   },
+}
+
+// GoGo-CMS#264 (GoGo-BE#727). Names and booleans only, like the real response:
+// no fixture carries anything that could pass for a value.
+export const configReadiness: ConfigReadiness = {
+  process: [
+    { name: 'DATABASE_URL', present: true, optional: false, conditional: false },
+    { name: 'GOOGLE_PLACES_API_KEY', present: false, optional: true, conditional: false },
+    { name: 'COOKIE_SECURE', present: true, optional: true, conditional: true },
+  ],
+  process_dynamic: [{ name: 'EXPORT_KEY_V1', present: true, optional: true, conditional: false }],
+  infra: {
+    label: 'deploy_snapshot',
+    schema_version: 1,
+    env: 'dev',
+    generated_at: '2026-10-28T03:00:00Z',
+    manifest_sha: 'abc1234',
+    deploy_id: 'abc1234-998-1',
+    release_sha: 'abc1234',
+    run_id: '998',
+    run_attempt: '1',
+    process_deploy_id: 'abc1234-998-1',
+    deploy_match: true,
+    rows: [
+      {
+        path: '/gogo/dev/api/database-url',
+        env_var: 'DATABASE_URL',
+        lifecycle: 'required',
+        presence: 'present',
+        findings: [],
+        verdict: 'OK',
+        capabilities: [],
+        applicable: 'api',
+        process_present: true,
+      },
+      {
+        path: '/gogo/dev/api/google-places-api-key',
+        env_var: 'GOOGLE_PLACES_API_KEY',
+        lifecycle: 'optional',
+        presence: 'absent',
+        findings: ['declared-absent'],
+        verdict: 'OK',
+        capabilities: ['places-google'],
+        applicable: 'api',
+        process_present: false,
+      },
+      {
+        path: '/gogo/dev/api/maps-server-key',
+        env_var: 'MAPS_SERVER_KEY',
+        lifecycle: 'required',
+        presence: 'present',
+        findings: ['tag-missing', 'future-class'],
+        verdict: 'FAIL',
+        capabilities: ['places-google'],
+        applicable: 'host',
+        process_present: null,
+      },
+    ],
+  },
+  reason: null,
+  capabilities: [
+    {
+      name: 'places-google',
+      status: 'enabled',
+      ssm_verdict: 'FAIL',
+      ssm_ready: false,
+      ssm_missing: ['/gogo/dev/api/google-places-api-key'],
+      ssm_present: { present: 1, total: 2 },
+      process_ready: false,
+      process_missing: ['GOOGLE_PLACES_API_KEY'],
+      excluded_from_process: ['MAPS_SERVER_KEY'],
+    },
+  ],
 }
