@@ -253,6 +253,7 @@ export const PATH_TEMPLATES: readonly string[] = [
   '/cms/ops/costs/manual-items/{id}',
   '/cms/ops/kpis',
   '/cms/ops/summary',
+  '/cms/ops/config-readiness',
   '/cms/ops/providers',
   '/cms/ops/providers/{provider}',
 ]

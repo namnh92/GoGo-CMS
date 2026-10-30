@@ -1,4 +1,8 @@
 import { apiFetch, apiFetchParsed } from '@/shared/api/client'
+import {
+  configReadinessSchema,
+  type ConfigReadiness,
+} from '@/shared/api/contracts-config-readiness'
 import type { RequestBody } from '@/shared/api/generated'
 import {
   cmsCostOverviewSchema,
@@ -62,6 +66,16 @@ export function fetchSearchAnalytics(
  */
 export function fetchOpsHealth(signal?: AbortSignal): Promise<CmsOpsHealth> {
   return apiFetchParsed(cmsOpsHealthSchema, '/cms/ops/health', { signal })
+}
+
+/**
+ * GoGo-CMS#264 (GoGo-BE#727) — which variables the API process holds, joined
+ * with the deploy's readiness snapshot. Names and booleans only: the response
+ * carries no value of any variable, and nothing here asks for one. No AWS, no
+ * PromQL — GoGo-BE reads the projection the deploy left on the host.
+ */
+export function fetchConfigReadiness(signal?: AbortSignal): Promise<ConfigReadiness> {
+  return apiFetchParsed(configReadinessSchema, '/cms/ops/config-readiness', { signal })
 }
 
 /** BullMQ queues plus the Postgres outbox. An unreachable broker contributes no rows. */

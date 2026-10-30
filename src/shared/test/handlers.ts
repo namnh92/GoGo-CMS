@@ -22,6 +22,7 @@ import {
 import { ALLOWED_ACTIONS, ALLOWED_TRIGGERS } from '@/features/safety/conditions'
 import type { ImportRow } from '@/shared/api/contracts-import'
 import {
+  configReadiness,
   costOverview,
   costServiceOperations,
   costServices,
@@ -3684,6 +3685,8 @@ export const handlers = [
       truncated,
     })
   }),
+  // GoGo-CMS#264 (GoGo-BE#727): the deploy snapshot, names and booleans only.
+  http.get(`${BASE}/cms/ops/config-readiness`, () => HttpResponse.json(configReadiness)),
   http.get(`${BASE}/cms/ops/providers`, ({ request }) => {
     const window = new URL(request.url).searchParams.get('window') ?? '24h'
     return HttpResponse.json({ ...opsProviders, window, effectiveWindow: window })

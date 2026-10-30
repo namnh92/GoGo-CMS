@@ -25,7 +25,7 @@ const drift = read('scripts/check-openapi-drift.mjs')
 const generated = read('src/shared/api/schema.d.ts')
 const administrativeContracts = read('src/shared/api/contracts-administrative.ts')
 
-const EXPECTED = '2.0.0-alpha.3'
+const EXPECTED = '2.0.0-alpha.5'
 
 /**
  * The vendored file byte for byte, as GoGo-BE published it.
@@ -35,17 +35,17 @@ const EXPECTED = '2.0.0-alpha.3'
  * hand-edited, and this is what makes that visible rather than invisible. A
  * legitimate re-vendor updates the version above and this digest together.
  */
-const SPEC_SHA256 = 'f785ea6ccc5dbb798d579887ff25af5dd1b41de72d8f1985ca32c80b5e737906'
+const SPEC_SHA256 = '5cdd11f359a813dd726692cb15b7761134c7ebec3a1ff02d1623264b1940d5fd'
 
 /** `pnpm api:routes` on GoGo-BE reports the same number against the real router. */
-const SERVED_OPERATIONS = 269
+const SERVED_OPERATIONS = 294
 
 /**
- * GoGo-BE#713 declares the GoGo AI surface ahead of the module: these
- * operations carry `x-gogo-planned` and answer 404 until it ships, so they are
- * counted apart from what the router serves.
+ * GoGo-BE#713 declared the GoGo AI surface ahead of the module with
+ * `x-gogo-planned`; from 2.0.0-alpha.4 it is served, and no operation is
+ * planned. Counted apart so the next declared-ahead operation shows here.
  */
-const PLANNED_OPERATIONS = 24
+const PLANNED_OPERATIONS = 0
 
 describe('the vendored OpenAPI contract', () => {
   it(`declares ${EXPECTED}, and the drift gate expects the same`, () => {
@@ -65,7 +65,7 @@ describe('the vendored OpenAPI contract', () => {
     // Operations, not paths: a re-vendor that silently drops one fails here
     // rather than at the first request the CMS makes against it.
     expect(spec.match(/^ {6}operationId:/gm)?.length).toBe(SERVED_OPERATIONS + PLANNED_OPERATIONS)
-    expect(spec.match(/^ {6}x-gogo-planned:/gm)?.length).toBe(PLANNED_OPERATIONS)
+    expect(spec.match(/^ {6}x-gogo-planned:/gm)?.length ?? 0).toBe(PLANNED_OPERATIONS)
   })
 
   it('keeps every GoGo AI back-office path the assistant screens call (CMS#249)', () => {
