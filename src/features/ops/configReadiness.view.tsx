@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react'
+import { Fragment, useId, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useI18n, useT } from '@/shared/i18n/i18n'
 import type { MessageKey } from '@/shared/i18n/vi'
@@ -213,7 +213,7 @@ function CapabilityRow({ cap, rows }: { cap: ConfigCapability; rows: ConfigInfra
             />
             {cap.ssm_missing.length > 0 ? (
               <span className="text-caption text-text-muted">
-                {t('configReadiness.missingCount', { count: cap.ssm_missing.length })}
+                {t('configReadiness.blockingCount', { count: cap.ssm_missing.length })}
               </span>
             ) : null}
           </div>
@@ -424,7 +424,7 @@ function ProcessCard({ title, variables }: { title: string; variables: ConfigVar
   const [open, setOpen] = useState(false)
   const present = variables.filter((v) => v.present).length
   const absent = variables.filter((v) => !v.present)
-  const id = `process-${title.length}`
+  const id = useId()
   return (
     <Card>
       <CardHeader

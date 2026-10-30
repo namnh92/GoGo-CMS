@@ -72,14 +72,46 @@ describe('environment config readiness (GoGo-CMS#264)', () => {
     render()
     const row = (await screen.findByRole('rowheader', { name: 'places-google' })).closest('tr')!
     expect(within(row).getByText('Đang bật')).toBeInTheDocument()
-    expect(within(row).getAllByText('Thiếu')).toHaveLength(2)
+    // SSM: the verdict and the rows that block it; process: absence.
+    expect(within(row).getByText('Chưa sẵn sàng')).toBeInTheDocument()
+    expect(within(row).getByText('1 dòng chặn')).toBeInTheDocument()
     expect(within(row).getByText('1/2')).toBeInTheDocument()
-    expect(within(row).getAllByText('1 thiếu')).toHaveLength(2)
+    expect(within(row).getByText('Thiếu')).toBeInTheDocument()
+    expect(within(row).getByText('1 thiếu')).toBeInTheDocument()
     expect(screen.getByText('Môi trường dev')).toBeInTheDocument()
     expect(screen.getByText('abc1234-998-1')).toBeInTheDocument()
     expect(screen.getByText(/không phải trạng thái trực tiếp/)).toBeInTheDocument()
     // Matching deploy ids: no mismatch banner.
     expect(screen.queryByText(/deploy_id khác nhau/)).not.toBeInTheDocument()
+  })
+
+  it('does not call a stored key that fails validation missing', async () => {
+    // ssm_missing is the rows that keep the capability from OK — a wrong type
+    // or tag on a stored key counts — not only the absent ones.
+    server.use(
+      http.get(URL, () =>
+        HttpResponse.json({
+          ...configReadiness,
+          capabilities: [
+            {
+              ...configReadiness.capabilities[0]!,
+              ssm_verdict: 'FAIL',
+              ssm_missing: ['/gogo/dev/api/maps-server-key'],
+              ssm_present: { present: 2, total: 2 },
+              process_ready: true,
+              process_missing: [],
+            },
+          ],
+        }),
+      ),
+    )
+    signInAs('ops_admin')
+    render()
+    const row = (await screen.findByRole('rowheader', { name: 'places-google' })).closest('tr')!
+    expect(within(row).getByText('2/2')).toBeInTheDocument()
+    expect(within(row).getByText('Chưa sẵn sàng')).toBeInTheDocument()
+    expect(within(row).getByText('1 dòng chặn')).toBeInTheDocument()
+    expect(within(row).queryByText(/thiếu/i)).not.toBeInTheDocument()
   })
 
   it('expands a capability into row chips with text, unknown findings by code', async () => {
@@ -192,5 +224,34 @@ describe('environment config readiness (GoGo-CMS#264)', () => {
     // The response has no value field to leak; this pins that the page does
     // not invent one (a length, a prefix) from what it has either.
     expect(document.body.textContent).not.toMatch(/\*{3}|value|giá trị:/i)
+  })
+
+  it('gives each process card its own controlled region, in English too', async () => {
+    // Both English titles are 21 characters; an id derived from the title
+    // collided and left aria-controls pointing at two panels.
+    window.localStorage.setItem('gogo.cms.locale', 'en')
+    try {
+      signInAs('ops_admin')
+      render()
+      const process = (
+        await screen.findByRole('heading', { name: 'API process variables' })
+      ).closest('section')!
+      const dynamic = screen
+        .getByRole('heading', { name: 'Export keys (dynamic)' })
+        .closest('section')!
+      const a = within(process).getByRole('button', { name: 'Show 3 rows' })
+      const b = within(dynamic).getByRole('button', { name: 'Show 1 rows' })
+      await userEvent.click(a)
+      await userEvent.click(b)
+      const idA = a.getAttribute('aria-controls')!
+      const idB = b.getAttribute('aria-controls')!
+      expect(idA).not.toBe(idB)
+      expect(document.querySelectorAll(`[id="${idA}"]`)).toHaveLength(1)
+      expect(document.querySelectorAll(`[id="${idB}"]`)).toHaveLength(1)
+      expect(process.querySelector(`[id="${idA}"]`)).not.toBeNull()
+      expect(dynamic.querySelector(`[id="${idB}"]`)).not.toBeNull()
+    } finally {
+      window.localStorage.removeItem('gogo.cms.locale')
+    }
   })
 })
