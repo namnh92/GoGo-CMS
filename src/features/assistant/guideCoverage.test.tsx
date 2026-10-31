@@ -12,6 +12,7 @@ import {
   simulateColleagueEdit,
 } from '@/shared/test/assistantMock'
 import type { AdminRole } from '@/shared/api/contracts'
+import { QUERY_STALE_TIME } from '@/app/Providers'
 import DocumentListScreen from './documentList.view'
 import DocumentDetailScreen from './documentDetail.view'
 
@@ -33,9 +34,9 @@ const envelope = (status: number, code: string) =>
     { status },
   )
 
-async function ask(question: string) {
+async function ask(question: string, options: { staleTime?: number } = {}) {
   const user = userEvent.setup()
-  renderWithProviders(<Routed />, { route: '/assistant/documents' })
+  renderWithProviders(<Routed />, { route: '/assistant/documents', ...options })
   const panel = (await screen.findByRole('heading', { name: 'Kiểm tra độ phủ' })).closest(
     'section',
   )!
@@ -109,7 +110,7 @@ describe('guide coverage check (GoGo-CMS#266, GoGo-BE#736)', () => {
       }),
     )
     signInAs('editor')
-    const { user, panel } = await ask('Bình chọn thế nào?')
+    const { user, panel } = await ask('Bình chọn thế nào?', { staleTime: QUERY_STALE_TIME })
     expect(await within(panel).findByText(/Chưa có bài nào đang xuất bản/)).toBeInTheDocument()
     expect(calls).toBe(1)
 
@@ -118,6 +119,61 @@ describe('guide coverage check (GoGo-CMS#266, GoGo-BE#736)', () => {
     await user.click(within(panel).getByRole('button', { name: 'Kiểm tra' }))
     expect(await within(panel).findByText(/GoGo AI sẽ trích 1 phần/)).toBeInTheDocument()
     expect(calls).toBe(2)
+  })
+
+  it('A → B → A inside the cache window still reads the server (#269 F-01 round 2)', async () => {
+    const asked: string[] = []
+    let published = false
+    server.use(
+      http.get(COVERAGE, ({ request }) => {
+        const question = new URL(request.url).searchParams.get('question') ?? ''
+        asked.push(question)
+        return HttpResponse.json({
+          outcome: published ? 'no_match' : 'no_published',
+          terms: [],
+          sections: [],
+        })
+      }),
+    )
+    signInAs('editor')
+    const { user, panel } = await ask('Câu A', { staleTime: QUERY_STALE_TIME })
+    const input = within(panel).getByLabelText('Câu hỏi')
+    const run = within(panel).getByRole('button', { name: 'Kiểm tra' })
+    expect(await within(panel).findByText(/Chưa có bài nào đang xuất bản/)).toBeInTheDocument()
+
+    await user.clear(input)
+    await user.type(input, 'Câu B')
+    await user.click(run)
+    await waitFor(() => expect(asked).toEqual(['Câu A', 'Câu B']))
+
+    // A colleague publishes; back to A within 30 s of its first check.
+    published = true
+    await user.clear(input)
+    await user.type(input, 'Câu A')
+    await user.click(run)
+    await waitFor(() => expect(asked).toEqual(['Câu A', 'Câu B', 'Câu A']))
+    expect(await within(panel).findByText(/không phần nào khớp câu hỏi này/)).toBeInTheDocument()
+    expect(within(panel).queryByText(/Chưa có bài nào đang xuất bản/)).not.toBeInTheDocument()
+  })
+
+  it('a different locale is a different check, and so is coming back to it', async () => {
+    const seen: string[] = []
+    server.use(
+      http.get(COVERAGE, ({ request }) => {
+        seen.push(new URL(request.url).searchParams.get('locale') ?? '')
+        return HttpResponse.json({ outcome: 'no_match', terms: [], sections: [] })
+      }),
+    )
+    signInAs('editor')
+    const { user, panel } = await ask('Câu A', { staleTime: QUERY_STALE_TIME })
+    await waitFor(() => expect(seen).toEqual(['vi']))
+    const locale = within(panel).getByLabelText('Ngôn ngữ')
+    const run = within(panel).getByRole('button', { name: 'Kiểm tra' })
+    await user.selectOptions(locale, 'en')
+    await user.click(run)
+    await user.selectOptions(locale, 'vi')
+    await user.click(run)
+    await waitFor(() => expect(seen).toEqual(['vi', 'en', 'vi']))
   })
 
   it('does not send a one-character question', async () => {

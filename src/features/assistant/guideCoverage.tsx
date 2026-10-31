@@ -18,7 +18,8 @@ import { styles } from './assistant.style'
 
 const EXCERPT_CHARS = 240
 
-type Asked = { question: string; locale: AssistantLocale }
+/** `attempt` makes every press its own query: a check always reads the server. */
+type Asked = { question: string; locale: AssistantLocale; attempt: number }
 
 /**
  * GoGo-CMS#266 / GoGo-BE#736 — "would GoGo AI find an answer to this?".
@@ -39,19 +40,24 @@ export function GuideCoveragePanel() {
   const tooShort = trimmed.length < COVERAGE_QUESTION_MIN
 
   const query = useQuery({
-    queryKey: queryKeys.assistant.coverage(asked?.question ?? '', asked?.locale ?? 'vi'),
+    queryKey: queryKeys.assistant.coverage(
+      asked?.question ?? '',
+      asked?.locale ?? 'vi',
+      asked?.attempt ?? 0,
+    ),
     queryFn: ({ signal }) => fetchGuideCoverage(asked!, signal),
     enabled: asked !== null,
     retry: false,
+    // A coverage answer is never reused: a colleague may publish or withdraw a
+    // document between two presses (#269 F-01, A → B → A included).
+    staleTime: 0,
+    gcTime: 0,
   })
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
     if (tooShort || !online) return
-    // The same question again is a fresh check, not the cached answer: a
-    // colleague may have published or withdrawn a document since (#269 F-01).
-    if (asked?.question === trimmed && asked.locale === locale) void query.refetch()
-    else setAsked({ question: trimmed, locale })
+    setAsked((previous) => ({ question: trimmed, locale, attempt: (previous?.attempt ?? 0) + 1 }))
   }
 
   return (
