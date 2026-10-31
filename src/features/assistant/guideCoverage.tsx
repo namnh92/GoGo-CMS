@@ -48,7 +48,10 @@ export function GuideCoveragePanel() {
   const submit = (event: FormEvent) => {
     event.preventDefault()
     if (tooShort || !online) return
-    setAsked({ question: trimmed, locale })
+    // The same question again is a fresh check, not the cached answer: a
+    // colleague may have published or withdrawn a document since (#269 F-01).
+    if (asked?.question === trimmed && asked.locale === locale) void query.refetch()
+    else setAsked({ question: trimmed, locale })
   }
 
   return (

@@ -81,6 +81,45 @@ describe('guide coverage check (GoGo-CMS#266, GoGo-BE#736)', () => {
     expect(await within(panel).findByText(/Chưa có bài nào đang xuất bản/)).toBeInTheDocument()
   })
 
+  it('checks again on a second press, after the server moved on (#269 F-01)', async () => {
+    let calls = 0
+    let outcome: 'no_published' | 'hit' = 'no_published'
+    server.use(
+      http.get(COVERAGE, () => {
+        calls += 1
+        return HttpResponse.json(
+          outcome === 'hit'
+            ? {
+                outcome,
+                terms: ['binh', 'chon'],
+                sections: [
+                  {
+                    documentId: assistantFixtureIds.voting,
+                    versionId: 'v',
+                    slug: 'plans.voting',
+                    title: 'GoGo guide · Kế hoạch',
+                    heading: 'Bình chọn trong kế hoạch',
+                    excerpt: 'Mỗi thành viên bình chọn một lần.',
+                    score: 2,
+                  },
+                ],
+              }
+            : { outcome, terms: ['binh', 'chon'], sections: [] },
+        )
+      }),
+    )
+    signInAs('editor')
+    const { user, panel } = await ask('Bình chọn thế nào?')
+    expect(await within(panel).findByText(/Chưa có bài nào đang xuất bản/)).toBeInTheDocument()
+    expect(calls).toBe(1)
+
+    // A colleague publishes in another session; the same question, pressed again.
+    outcome = 'hit'
+    await user.click(within(panel).getByRole('button', { name: 'Kiểm tra' }))
+    expect(await within(panel).findByText(/GoGo AI sẽ trích 1 phần/)).toBeInTheDocument()
+    expect(calls).toBe(2)
+  })
+
   it('does not send a one-character question', async () => {
     signInAs('editor')
     const user = userEvent.setup()
