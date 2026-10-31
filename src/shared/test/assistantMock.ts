@@ -444,6 +444,51 @@ function actorOf(actor: Actor): CmsAssistantActor {
 
 const SLUG = /^[a-z0-9]+(?:[._-][a-z0-9]+)*$/
 
+const COVERAGE_STOPWORDS = new Set([
+  'la',
+  'cua',
+  'va',
+  'co',
+  'cho',
+  'tren',
+  'the',
+  'nao',
+  'lam',
+  'sao',
+  'de',
+])
+
+const foldText = (text: string) =>
+  text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N} ]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+function splitSections(body: string) {
+  const out: { heading: string | null; text: string }[] = []
+  let heading: string | null = null
+  let buffer: string[] = []
+  const flush = () => {
+    const text = buffer.join('\n').trim()
+    if (text) out.push({ heading, text })
+    buffer = []
+  }
+  for (const line of body.split('\n')) {
+    const match = /^#{1,3}\s+(.+)$/.exec(line.trim())
+    if (match) {
+      flush()
+      heading = match[1]!.trim()
+    } else buffer.push(line)
+  }
+  flush()
+  return out
+}
+
 export function createAssistantHandlers({ base, currentActor, envelope }: Deps) {
   const canDraft = () => ['editor', 'ops_admin', 'super_admin'].includes(currentActor().role)
   const canPublish = () => ['ops_admin', 'super_admin'].includes(currentActor().role)
@@ -619,11 +664,19 @@ export function createAssistantHandlers({ base, currentActor, envelope }: Deps) 
       if (!canPublish()) return envelope(403, 'FORBIDDEN', 'publishing is ops_admin only')
       const doc = findDoc(params.id)
       if (!doc) return envelope(404, 'NOT_FOUND', 'document not found')
-      const body = (await request.json()) as { versionId?: string; reason?: string }
+      const body = (await request.json()) as {
+        versionId?: string
+        revision?: number
+        reason?: string
+      }
       const target = state.versions.find((v) => v.documentId === doc.id && v.id === body.versionId)
       if (!target) return envelope(404, 'VERSION_NOT_FOUND', 'version is not one of this document')
       if (target.state === 'published') {
         return envelope(409, 'VERSION_ALREADY_PUBLISHED', 'already published')
+      }
+      // GoGo-BE#736: a version edited after the publisher's preview is refused.
+      if (body.revision !== undefined && body.revision !== target.revision) {
+        return envelope(409, 'REVISION_CONFLICT', 'the version changed since it was reviewed')
       }
       const previous = state.versions.find(
         (v) => v.documentId === doc.id && v.state === 'published',
@@ -674,6 +727,46 @@ export function createAssistantHandlers({ base, currentActor, envelope }: Deps) 
         body.reason,
       )
       return HttpResponse.json(detailOf(doc))
+    }),
+
+    // GoGo-BE#736 — a stand-in for the server's retrieval: published versions
+    // only, a section counts when it shares two folded terms with the question.
+    // The console never scores anything itself; this only feeds the screen.
+    http.get(`${base}/cms/assistant/guide-coverage`, ({ request }) => {
+      const question = new URL(request.url).searchParams.get('question') ?? ''
+      if (question.trim().length < 2) {
+        return envelope(400, 'VALIDATION_FAILED', 'question needs 2–2000 characters')
+      }
+      const terms = [...new Set(foldText(question).split(' '))].filter(
+        (term) => term.length >= 2 && !COVERAGE_STOPWORDS.has(term),
+      )
+      const live = state.versions.filter((v) => v.state === 'published')
+      if (live.length === 0)
+        return HttpResponse.json({ outcome: 'no_published', terms, sections: [] })
+      const sections = live
+        .flatMap((v) =>
+          splitSections(v.body).map((section) => {
+            const hay = ` ${foldText(`${v.title} ${section.heading ?? ''} ${section.text}`)} `
+            const score = terms.filter((term) => hay.includes(` ${term}`)).length
+            return {
+              documentId: v.documentId,
+              versionId: v.id,
+              slug: state.documents.find((doc) => doc.id === v.documentId)?.slug ?? '',
+              title: v.title,
+              heading: section.heading,
+              excerpt: section.text,
+              score,
+            }
+          }),
+        )
+        .filter((section) => section.score >= Math.min(2, terms.length) && section.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 3)
+      return HttpResponse.json({
+        outcome: sections.length > 0 ? 'hit' : 'no_match',
+        terms,
+        sections,
+      })
     }),
 
     http.get(`${base}/cms/assistant/documents/:id/versions`, ({ params }) => {

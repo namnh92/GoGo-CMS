@@ -3687,6 +3687,26 @@ export const vi = {
   'assistant.locale.vi': 'Tiếng Việt',
   'assistant.locale.en': 'Tiếng Anh',
   'assistant.docs.title': 'Tài liệu nguồn GoGo AI',
+  'assistant.coverage.title': 'Kiểm tra độ phủ',
+  'assistant.coverage.hint':
+    'Nhập một câu người dùng hay hỏi để xem GoGo AI sẽ trích phần nào. Chỉ tính các bài đang xuất bản.',
+  'assistant.coverage.question': 'Câu hỏi',
+  'assistant.coverage.placeholder': 'Ví dụ: Cách tạo phòng trên GoGo?',
+  'assistant.coverage.tooShort': 'Nhập ít nhất 2 ký tự.',
+  'assistant.coverage.run': 'Kiểm tra',
+  'assistant.coverage.idle': 'Chưa kiểm tra câu nào.',
+  'assistant.coverage.terms': 'Từ khoá đã tìm:',
+  'assistant.coverage.noTerms': 'Câu hỏi chỉ gồm từ phổ biến, không còn từ khoá nào để tìm.',
+  'assistant.coverage.hit': 'GoGo AI sẽ trích {count} phần dưới đây làm nguồn.',
+  'assistant.coverage.noHeading': '(trước tiêu đề đầu tiên)',
+  'assistant.coverage.score': 'điểm {score}',
+  'assistant.coverage.noPublished':
+    'Chưa có bài nào đang xuất bản. GoGo AI sẽ trả lời là hướng dẫn chưa có nội dung — cần xuất bản bài trước.',
+  'assistant.coverage.noMatch':
+    'Đã có bài xuất bản nhưng không phần nào khớp câu hỏi này. Thêm một phần dùng đúng cách người dùng hỏi, hoặc sửa tiêu đề phần cho rõ.',
+  'assistant.coverage.unknown': 'Không tìm được phần nào cho câu hỏi này.',
+  'error.ASSISTANT_PUBLISH_STALE':
+    'Bản này đã được sửa sau khi bạn xem nên chưa xuất bản. Màn hình đã tải lại — hãy xem lại rồi xuất bản.',
   'assistant.docs.hint':
     'GoGo AI chỉ trả lời câu hỏi về sản phẩm từ các phiên bản đã xuất bản ở đây, và ghi nguồn bằng đúng tiêu đề và mô tả của tài liệu.',
   'assistant.docs.empty': 'Chưa có tài liệu nguồn',

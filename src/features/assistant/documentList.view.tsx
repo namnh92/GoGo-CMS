@@ -33,6 +33,7 @@ import { createDocument, fetchDocuments, type DocumentFilters } from './api'
 import { DocumentStatusBadge } from './assistantParts'
 import { useActorName } from './useActorName'
 import { styles } from './assistant.style'
+import { GuideCoveragePanel } from './guideCoverage'
 
 const PAGE_SIZE = 25
 const SLUG_PATTERN = /^[a-z0-9]+(?:[._-][a-z0-9]+)*$/
@@ -252,6 +253,7 @@ export default function DocumentListScreen() {
           <span aria-hidden="true">ℹ</span>
           {t('assistant.docs.hint')}
         </p>
+        <GuideCoveragePanel />
         <Card>
           <div className={styles.filterBar}>
             <div className="flex flex-col gap-1">
