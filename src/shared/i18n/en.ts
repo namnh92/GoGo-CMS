@@ -3653,6 +3653,26 @@ export const en: Record<MessageKey, string> = {
   'assistant.locale.vi': 'Vietnamese',
   'assistant.locale.en': 'English',
   'assistant.docs.title': 'GoGo AI source documents',
+  'assistant.coverage.title': 'Coverage check',
+  'assistant.coverage.hint':
+    'Type a question people ask to see which sections GoGo AI would cite. Published documents only.',
+  'assistant.coverage.question': 'Question',
+  'assistant.coverage.placeholder': 'e.g. How do I create a room on GoGo?',
+  'assistant.coverage.tooShort': 'Type at least 2 characters.',
+  'assistant.coverage.run': 'Check',
+  'assistant.coverage.idle': 'No question checked yet.',
+  'assistant.coverage.terms': 'Searched terms:',
+  'assistant.coverage.noTerms': 'The question has only common words; no search terms remain.',
+  'assistant.coverage.hit': 'GoGo AI would cite the {count} sections below.',
+  'assistant.coverage.noHeading': '(before the first heading)',
+  'assistant.coverage.score': 'score {score}',
+  'assistant.coverage.noPublished':
+    'No document is published. GoGo AI will answer that the guide has no content yet — publish a document first.',
+  'assistant.coverage.noMatch':
+    'Documents are published, but no section matches this question. Add a section in the words people use, or make a section heading clearer.',
+  'assistant.coverage.unknown': 'No section was found for this question.',
+  'error.ASSISTANT_PUBLISH_STALE':
+    'This version was edited after you reviewed it, so it was not published. The screen has reloaded — review it and publish again.',
   'assistant.docs.hint':
     "GoGo AI answers product questions only from the versions published here, and cites them by the document's own title and description.",
   'assistant.docs.empty': 'No source documents yet',

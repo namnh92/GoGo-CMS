@@ -56,6 +56,8 @@ const REFRESH_AND_EXPLAIN: Record<string, MessageKey> = {
   VERSION_ALREADY_PUBLISHED: 'error.VERSION_ALREADY_PUBLISHED',
   DOCUMENT_NOT_PUBLISHED: 'error.DOCUMENT_NOT_PUBLISHED',
   VERSION_NOT_FOUND: 'error.VERSION_NOT_FOUND',
+  // GoGo-BE#736: the version moved on after the preview the publisher read.
+  REVISION_CONFLICT: 'error.ASSISTANT_PUBLISH_STALE',
 }
 
 function editableOf(detail: CmsAssistantDocumentDetail): Draft {
@@ -205,7 +207,8 @@ export default function DocumentDetailScreen() {
   }
 
   const publish = useMutation({
-    mutationFn: (input: { versionId: string; reason: string }) => publishVersion(id, input),
+    mutationFn: (input: { versionId: string; revision: number | null; reason: string }) =>
+      publishVersion(id, input),
     onSuccess: (next) => {
       const number = next.published?.number ?? plan?.target.number ?? 0
       toast.success(t('assistant.published', { number }))
@@ -655,7 +658,13 @@ export default function DocumentDetailScreen() {
         loading={publish.isPending}
         confirmDisabled={!online}
         onConfirm={() =>
-          plan && publish.mutate({ versionId: plan.target.id, reason: publishReason })
+          plan &&
+          publish.mutate({
+            versionId: plan.target.id,
+            // The revision the preview above shows — what the publisher read.
+            revision: plan.target.revision ?? null,
+            reason: publishReason,
+          })
         }
       >
         {plan ? (

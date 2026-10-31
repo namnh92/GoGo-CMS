@@ -234,6 +234,7 @@ export const PATH_TEMPLATES: readonly string[] = [
   '/cms/assistant/documents/{id}/unpublish',
   '/cms/assistant/documents/{id}/versions',
   '/cms/assistant/documents/{id}/versions/{versionId}',
+  '/cms/assistant/guide-coverage',
   '/cms/assistant/feedback',
   '/cms/feature-flags',
   '/cms/feature-flags/catalog',

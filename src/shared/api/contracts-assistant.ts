@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { Schemas } from './generated'
+import type { RequestBody, Schemas } from './generated'
 
 /**
  * GoGo-CMS#249 — boundary schemas for the GoGo AI back office (GoGo-BE#713,
@@ -152,9 +152,35 @@ export const cmsAssistantFeedbackPageSchema = z.object({
 })
 export type CmsAssistantFeedbackPage = z.infer<typeof cmsAssistantFeedbackPageSchema>
 
+/**
+ * GoGo-BE#736 / GoGo-CMS#266 — what an assistant turn would retrieve for a
+ * question. `outcome` is extensible in spirit (a plain string), so a new
+ * value renders generically instead of failing the parse.
+ */
+export const GUIDE_COVERAGE_OUTCOMES = ['hit', 'no_match', 'no_published'] as const
+
+export const cmsAssistantGuideSectionSchema = z.object({
+  documentId: z.string(),
+  versionId: z.string(),
+  slug: z.string(),
+  title: z.string(),
+  heading: z.string().nullable(),
+  excerpt: z.string(),
+  score: z.number(),
+})
+export type CmsAssistantGuideSection = z.infer<typeof cmsAssistantGuideSectionSchema>
+
+export const cmsAssistantGuideCoverageSchema = z.object({
+  outcome: z.string(),
+  terms: z.array(z.string()).default([]),
+  sections: z.array(cmsAssistantGuideSectionSchema).default([]),
+})
+export type CmsAssistantGuideCoverage = z.infer<typeof cmsAssistantGuideCoverageSchema>
+
 /** Request bodies come straight from the generated client. */
 export type CmsAssistantDocumentCreateBody = Schemas['CmsAssistantDocumentCreate']
 export type CmsAssistantDocumentDraftPatchBody = Schemas['CmsAssistantDocumentDraftPatch']
+export type CmsAssistantPublishBody = RequestBody<'cmsPublishAssistantDocument'>
 
 /**
  * Compile-time drift checks. Each says: every field the spec requires is one
@@ -180,6 +206,17 @@ export type AssistantContractChecks = [
   Expect<AllTrue<Mirrors<CmsAssistantDocumentDetail, Schemas['CmsAssistantDocumentDetail']>>>,
   Expect<AllTrue<Mirrors<CmsAssistantFeedbackItem, Schemas['CmsAssistantFeedbackItem']>>>,
   Expect<AllTrue<Mirrors<AssistantSource, Schemas['AssistantSource']>>>,
+  Expect<AllTrue<Mirrors<CmsAssistantGuideCoverage, Schemas['CmsAssistantGuideCoverage']>>>,
+  Expect<
+    AllTrue<
+      Mirrors<CmsAssistantGuideSection, Schemas['CmsAssistantGuideCoverage']['sections'][number]>
+    >
+  >,
+  Expect<
+    Schemas['CmsAssistantGuideCoverage']['outcome'] extends (typeof GUIDE_COVERAGE_OUTCOMES)[number]
+      ? true
+      : false
+  >,
   Expect<
     Schemas['AssistantDocumentStatus'] extends AssistantDocumentStatus
       ? AssistantDocumentStatus extends Schemas['AssistantDocumentStatus']

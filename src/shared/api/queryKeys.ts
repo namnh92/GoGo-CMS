@@ -217,6 +217,8 @@ export const queryKeys = {
       ['assistant', 'document', id, 'version', versionId] as const,
     audit: (id: string) => ['assistant', 'document', id, 'audit'] as const,
     feedback: (filters: Record<string, unknown>) => ['assistant', 'feedback', filters] as const,
+    coverage: (question: string, locale: string) =>
+      ['assistant', 'coverage', question, locale] as const,
     killSwitchAudit: ['assistant', 'kill-switch', 'audit'] as const,
   },
 

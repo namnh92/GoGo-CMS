@@ -97,5 +97,10 @@ export const styles = {
   stateOff: 'font-display text-heading font-extrabold text-danger-ink',
   stateMeta: 'text-label text-text-muted',
   links: 'flex flex-wrap items-center gap-3 text-label',
+  // Coverage check (GoGo-CMS#266)
+  coverageForm: 'flex flex-wrap items-end gap-3 border-b border-line px-5 py-4',
+  coverageQuestion: 'min-w-64 flex-1',
+  coverageList: 'flex flex-col divide-y divide-line',
+  coverageItem: 'flex flex-col gap-1 py-3 first:pt-0 last:pb-0',
   link: 'inline-flex min-h-11 items-center font-semibold text-accent-primary underline-offset-2 hover:underline',
 } as const

@@ -4,6 +4,7 @@ import {
   cmsAssistantDocumentPageSchema,
   cmsAssistantDocumentSchema,
   cmsAssistantFeedbackPageSchema,
+  cmsAssistantGuideCoverageSchema,
   cmsAssistantVersionPageSchema,
   cmsAssistantVersionSchema,
   type AssistantDocumentStatus,
@@ -14,6 +15,8 @@ import {
   type CmsAssistantDocumentDraftPatchBody,
   type CmsAssistantDocumentPage,
   type CmsAssistantFeedbackPage,
+  type CmsAssistantGuideCoverage,
+  type CmsAssistantPublishBody,
   type CmsAssistantVersion,
   type CmsAssistantVersionPage,
 } from '@/shared/api/contracts-assistant'
@@ -90,20 +93,48 @@ export function updateDraft(
   )
 }
 
-/** `versionId` is the open draft, or an earlier version to roll back to. */
+/**
+ * `versionId` is the open draft, or an earlier version to roll back to.
+ * `revision` is the revision the publisher reviewed (GoGo-BE#736): if the
+ * draft moved on since, the server answers `409 REVISION_CONFLICT` instead of
+ * shipping text nobody read.
+ */
 export function publishVersion(
   id: string,
-  input: { versionId: string; reason?: string },
+  input: { versionId: string; revision?: number | null; reason?: string },
 ): Promise<CmsAssistantDocumentDetail> {
   const reason = input.reason?.trim()
+  const body: CmsAssistantPublishBody = {
+    versionId: input.versionId,
+    ...(typeof input.revision === 'number' ? { revision: input.revision } : {}),
+    ...(reason ? { reason } : {}),
+  }
   return apiFetchParsed(
     cmsAssistantDocumentDetailSchema,
     `/cms/assistant/documents/${encodeURIComponent(id)}/publish`,
-    {
-      method: 'POST',
-      body: { versionId: input.versionId, ...(reason ? { reason } : {}) },
-    },
+    { method: 'POST', body },
   )
+}
+
+/** The server wants 2–2000 characters; shorter is not sent at all. */
+export const COVERAGE_QUESTION_MIN = 2
+export const COVERAGE_QUESTION_MAX = 2000
+
+/**
+ * GoGo-BE#736 — which published sections an assistant turn would retrieve for
+ * `question`, through the same path, and why it found none. Read-only.
+ */
+export function fetchGuideCoverage(
+  input: { question: string; locale: AssistantLocale },
+  signal?: AbortSignal,
+): Promise<CmsAssistantGuideCoverage> {
+  return apiFetchParsed(cmsAssistantGuideCoverageSchema, '/cms/assistant/guide-coverage', {
+    query: {
+      question: input.question.trim().slice(0, COVERAGE_QUESTION_MAX),
+      locale: input.locale,
+    },
+    signal,
+  })
 }
 
 export function unpublishDocument(id: string, reason: string): Promise<CmsAssistantDocumentDetail> {
