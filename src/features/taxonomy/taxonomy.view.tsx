@@ -22,7 +22,9 @@ import {
 import { useToast } from '@/shared/ui/Toast'
 import { PlusIcon } from '@/shared/ui/icons'
 import type { Taxonomy, TaxonomyKind } from '@/shared/api/contracts'
+import { ApiError } from '@/shared/api/errors'
 import { addSynonym, createTaxonomy, fetchTaxonomies, updateTaxonomy } from './api'
+import { labelBreaksRule } from './labelRule'
 import { styles } from './taxonomy.style'
 
 const KINDS: TaxonomyKind[] = [
@@ -51,6 +53,8 @@ export default function TaxonomyScreen() {
   const [stateFilter, setStateFilter] = useState<StateFilter>('all')
   const [deactivating, setDeactivating] = useState<Taxonomy | null>(null)
   const [draft, setDraft] = useState({ key: '', labelVi: '', labelEn: '' })
+  // Labels the API refused on the last send (GoGo-BE#737), by locale.
+  const [refused, setRefused] = useState<{ vi?: boolean; en?: boolean }>({})
   const [synonymDraft, setSynonymDraft] = useState<{ taxonomyId: string; term: string }>({
     taxonomyId: '',
     term: '',
@@ -91,11 +95,25 @@ export default function TaxonomyScreen() {
       }),
     onSuccess: () => {
       setDraft({ key: '', labelVi: '', labelEn: '' })
+      setRefused({})
       toast.success(t('taxonomy.add'))
       invalidate()
     },
-    onError: (error) => toast.error(describeError(error)),
+    onError: (error) => {
+      const labels =
+        error instanceof ApiError && error.code === 'VALIDATION_FAILED'
+          ? error.fieldErrors.map((f) => f.field).filter((f) => f.startsWith('labels.'))
+          : []
+      if (labels.length === 0) {
+        toast.error(describeError(error))
+        return
+      }
+      setRefused({ vi: labels.includes('labels.vi'), en: labels.includes('labels.en') })
+      toast.error(t('taxonomy.labelRule'))
+    },
   })
+  const viBad = refused.vi === true || labelBreaksRule(draft.labelVi)
+  const enBad = refused.en === true || labelBreaksRule(draft.labelEn)
 
   const synonym = useMutation({
     mutationFn: () => addSynonym(synonymDraft.taxonomyId, synonymDraft.term, locale),
@@ -332,16 +350,20 @@ export default function TaxonomyScreen() {
                   <TextInput
                     label={t('taxonomy.col.labelVi')}
                     value={draft.labelVi}
-                    onChange={(event) =>
+                    error={viBad ? t('taxonomy.labelRule') : undefined}
+                    onChange={(event) => {
+                      setRefused((current) => ({ ...current, vi: false }))
                       setDraft((current) => ({ ...current, labelVi: event.target.value }))
-                    }
+                    }}
                   />
                   <TextInput
                     label={t('taxonomy.col.labelEn')}
                     value={draft.labelEn}
-                    onChange={(event) =>
+                    error={enBad ? t('taxonomy.labelRule') : undefined}
+                    onChange={(event) => {
+                      setRefused((current) => ({ ...current, en: false }))
                       setDraft((current) => ({ ...current, labelEn: event.target.value }))
-                    }
+                    }}
                   />
                 </div>
                 <div className="flex justify-end">
@@ -353,7 +375,9 @@ export default function TaxonomyScreen() {
                       !canManage ||
                       !online ||
                       !/^[a-z0-9_]{2,40}$/.test(draft.key) ||
-                      draft.labelVi.trim() === ''
+                      draft.labelVi.trim() === '' ||
+                      viBad ||
+                      enBad
                     }
                     loading={create.isPending}
                     onClick={() => create.mutate()}
