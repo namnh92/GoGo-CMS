@@ -1871,6 +1871,8 @@ export const en: Record<MessageKey, string> = {
     'This place is already in the catalog with the “User-submitted” status. The queue of unprocessed submissions — with approve, reject and merge — is on the “App submissions” screen.',
   'moderation.openPlace': 'Open place',
   'taxonomy.title': 'Taxonomy system',
+  'taxonomy.labelRule':
+    'One line of letters, digits, spaces and the marks \' " ‘ ’ “ ” ( ) & + , . / - – —, at most 80 characters.',
   'taxonomy.breadcrumb': 'Settings / Taxonomy',
   'taxonomy.focus': 'Taxonomy group',
   'taxonomy.add': 'Add taxonomy key',

@@ -2000,6 +2000,8 @@ export const vi = {
   'taxonomy.synonymsHint':
     'Ánh xạ biến thể người dùng gõ về khoá chuẩn; dùng cho mở rộng truy vấn.',
   'taxonomy.addSynonym': 'Thêm từ đồng nghĩa',
+  'taxonomy.labelRule':
+    'Nhãn trên một dòng, chỉ gồm chữ, số, khoảng trắng và các dấu \' " ‘ ’ “ ” ( ) & + , . / - – —, tối đa 80 ký tự.',
   'taxonomy.synonymTerm': 'Từ khoá',
   'taxonomy.synonymLocale': 'Ngôn ngữ',
   'taxonomy.newKey': 'Khoá (a–z, 0–9, gạch dưới)',
