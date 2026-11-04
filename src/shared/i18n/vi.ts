@@ -2707,6 +2707,8 @@ export const vi = {
   'campaigns.deviceFailedShort': '{count} thiết bị lỗi',
   'campaigns.publicDevicesOff':
     'Môi trường này đang tắt gửi tới thiết bị chưa đăng nhập: chiến dịch chỉ tới các tài khoản. Không chọn lại được đối tượng này sau khi đổi.',
+  'campaigns.error.publicUnavailable':
+    'Môi trường này không còn chọn được đối tượng này. Chọn đối tượng khác.',
   'campaigns.noDeviceHalf': 'Chưa có lượt gửi tới thiết bị',
   'campaigns.error.noSubscriptionAccepted':
     'Không thiết bị nào nhận được: provider không tạo bản gửi nào cho danh sách người nhận.',

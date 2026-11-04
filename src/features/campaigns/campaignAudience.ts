@@ -5,8 +5,9 @@ import { fetchCampaignCapabilities } from './api'
 
 /**
  * NTF-BE-017: whether `public` reaches devices in this environment. `undefined`
- * until the server has answered — a refused or failed read included — so the
- * option stays hidden unless the server said yes.
+ * unless the latest read answered, so the option stays hidden unless the server
+ * said yes: a failed re-read keeps its old data in the cache, and that old yes
+ * is no longer one.
  */
 export function usePublicAudience(enabled: boolean): boolean | undefined {
   const query = useQuery({
@@ -14,7 +15,7 @@ export function usePublicAudience(enabled: boolean): boolean | undefined {
     queryFn: ({ signal }) => fetchCampaignCapabilities(signal),
     enabled,
   })
-  return query.data?.publicAudience
+  return query.isError ? undefined : query.data?.publicAudience
 }
 
 /**

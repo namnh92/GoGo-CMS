@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { screen, waitFor, within } from '@testing-library/react'
 import { Route, Routes } from 'react-router-dom'
+import { focusManager } from '@tanstack/react-query'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/shared/test/server'
 import { renderWithProviders, signInAs } from '@/shared/test/render'
@@ -571,6 +572,110 @@ describe('audience public (CMS-056)', () => {
 
     const { audience } = await openComposer(user)
     expect(optionValues(audience)).not.toContain('public')
+  })
+
+  describe('capability changing under an open form', () => {
+    async function reread(user: ReturnType<typeof userEvent.setup>) {
+      // A focus event is what re-reads a query in the running console.
+      await user.click(document.body)
+      focusManager.setFocused(false)
+      focusManager.setFocused(true)
+    }
+
+    afterEach(() => focusManager.setFocused(undefined))
+
+    it('stops offering public when a re-read fails', async () => {
+      signInAs('ops_admin')
+      const user = userEvent.setup()
+      renderWithProviders(<Routed />, { route: '/campaigns' })
+      const { audience } = await openComposer(user)
+      await waitFor(() => expect(optionValues(audience)).toContain('public'))
+
+      server.use(
+        http.get('*/cms/campaigns/capabilities', () => new HttpResponse(null, { status: 500 })),
+      )
+      await reread(user)
+
+      await waitFor(() => expect(optionValues(audience)).not.toContain('public'))
+    })
+
+    it('refuses to create public once the flag is withdrawn', async () => {
+      signInAs('ops_admin')
+      const user = userEvent.setup()
+      let posted = false
+      server.use(
+        http.post('*/cms/campaigns', () => {
+          posted = true
+          return undefined
+        }),
+      )
+      renderWithProviders(<Routed />, { route: '/campaigns' })
+      const { drawer, audience } = await openComposer(user)
+      await waitFor(() => expect(optionValues(audience)).toContain('public'))
+      await user.selectOptions(audience, 'public')
+      await user.type(within(drawer).getByLabelText(/Tên chiến dịch/), 'Chào mọi người')
+      await user.type(within(drawer).getByLabelText(/Tiêu đề/), 'Xin chào')
+      await user.type(within(drawer).getByLabelText(/Nội dung/), 'Một lời chào')
+
+      flagOff()
+      await reread(user)
+      expect(await within(drawer).findByText(/không còn chọn được/)).toBeInTheDocument()
+      await user.click(within(drawer).getByRole('button', { name: 'Tạo' }))
+
+      expect(posted).toBe(false)
+    })
+
+    it('refuses to move a draft to public once the flag is withdrawn', async () => {
+      signInAs('ops_admin')
+      serveDraftAt('place', PLACE_ID)
+      const user = userEvent.setup()
+      let patched = false
+      server.use(
+        http.patch(`*/cms/campaigns/${draft.id}`, () => {
+          patched = true
+          return undefined
+        }),
+      )
+      renderWithProviders(<Routed />, { route: `/campaigns/${draft.id}` })
+      const audience = (await screen.findByLabelText(/Đối tượng/)) as HTMLSelectElement
+      await waitFor(() => expect(optionValues(audience)).toContain('public'))
+      await user.selectOptions(audience, 'public')
+
+      flagOff()
+      await reread(user)
+      expect(await screen.findByText(/không còn chọn được/)).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Lưu' }))
+
+      expect(patched).toBe(false)
+    })
+
+    it('still saves a draft that was already public', async () => {
+      flagOff()
+      server.use(
+        http.get(`*/cms/campaigns/${draft.id}`, () =>
+          HttpResponse.json({
+            ...draft,
+            audienceType: 'public',
+            destinationType: 'place',
+            destinationValue: PLACE_ID,
+          }),
+        ),
+      )
+      signInAs('ops_admin')
+      const user = userEvent.setup()
+      let body: Record<string, unknown> | undefined
+      server.use(
+        http.patch(`*/cms/campaigns/${draft.id}`, async ({ request }) => {
+          body = (await request.clone().json()) as Record<string, unknown>
+          return undefined
+        }),
+      )
+      renderWithProviders(<Routed />, { route: `/campaigns/${draft.id}` })
+      await screen.findByText(/chỉ tới các tài khoản/)
+      await user.click(screen.getByRole('button', { name: 'Lưu' }))
+
+      await waitFor(() => expect(body).toMatchObject({ audienceType: 'public' }))
+    })
   })
 
   it('keeps a saved public draft as it is and says why when the flag is off', async () => {

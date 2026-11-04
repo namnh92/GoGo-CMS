@@ -126,6 +126,11 @@ export default function CampaignDetailScreen() {
 
   const editable = campaign ? EDITABLE.has(campaign.status) : false
 
+  // Moving a draft onto `public` after it was withdrawn is refused. A draft
+  // already there may still be saved: the server sends its account half.
+  const publicWithdrawn =
+    form.audienceType === 'public' && savedAudience !== 'public' && publicAudience !== true
+
   /*
    * GoGo-BE#604 (c). Judged on what is *saved*, not on the form: a send uses
    * the stored destination, so an unsaved switch to an allowed one does not
@@ -210,6 +215,7 @@ export default function CampaignDetailScreen() {
   }
 
   const submit = () => {
+    if (publicWithdrawn) return
     const next: typeof errors = {}
     if (form.name.trim().length < 3) next.name = true
     if (form.title.trim() === '') next.title = true
@@ -374,6 +380,7 @@ export default function CampaignDetailScreen() {
                     <div className={styles.formGrid}>
                       <Select
                         label={t('campaigns.field.audienceType')}
+                        error={publicWithdrawn ? t('campaigns.error.publicUnavailable') : undefined}
                         value={form.audienceType}
                         disabled={!canManage || !editable}
                         onChange={(event) =>
@@ -391,7 +398,9 @@ export default function CampaignDetailScreen() {
                           ),
                         )}
                       </Select>
-                      {form.audienceType === 'public' && publicAudience === false ? (
+                      {form.audienceType === 'public' &&
+                      savedAudience === 'public' &&
+                      publicAudience === false ? (
                         <p className={`${styles.formNote} ${styles.formFull}`}>
                           <span aria-hidden="true">⚠</span>
                           {t('campaigns.publicDevicesOff')}

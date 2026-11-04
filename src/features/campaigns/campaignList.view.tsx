@@ -109,7 +109,11 @@ export default function CampaignListScreen() {
     onError: (error) => toast.error(describeError(error)),
   })
 
+  // Chosen while it was on, withdrawn since: this draft must not be created.
+  const publicWithdrawn = form.audienceType === 'public' && publicAudience !== true
+
   const submit = () => {
+    if (publicWithdrawn) return
     const next: typeof errors = {}
     if (form.name.trim().length < 3) next.name = true
     if (form.title.trim() === '') next.title = true
@@ -378,6 +382,7 @@ export default function CampaignListScreen() {
           <Select
             label={t('campaigns.field.audienceType')}
             required
+            error={publicWithdrawn ? t('campaigns.error.publicUnavailable') : undefined}
             value={form.audienceType}
             onChange={(event) =>
               setForm((current) => ({
@@ -392,12 +397,6 @@ export default function CampaignListScreen() {
               </option>
             ))}
           </Select>
-          {form.audienceType === 'public' && publicAudience === false ? (
-            <p className={`${styles.formNote} ${styles.formFull}`}>
-              <span aria-hidden="true">⚠</span>
-              {t('campaigns.publicDevicesOff')}
-            </p>
-          ) : null}
           {form.audienceType === 'platform' ? (
             <Select
               label={t('campaigns.field.platform')}

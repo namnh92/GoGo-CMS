@@ -2551,6 +2551,8 @@ export const en: Record<MessageKey, string> = {
   'campaigns.deviceFailedShort': '{count} devices failed',
   'campaigns.publicDevicesOff':
     'Sending to signed-out devices is off in this environment: this campaign reaches accounts only. Once changed, this audience cannot be chosen again.',
+  'campaigns.error.publicUnavailable':
+    'This audience can no longer be chosen in this environment. Pick another.',
   'campaigns.noDeviceHalf': 'No device send yet',
   'campaigns.error.noSubscriptionAccepted':
     'No device could be reached: the provider created no message for any recipient.',
