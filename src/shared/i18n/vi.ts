@@ -2296,6 +2296,8 @@ export const vi = {
   'error.UNAUTHORIZED': 'Phiên làm việc không hợp lệ.',
   'error.FORBIDDEN': 'Bạn không có quyền thực hiện thao tác này.',
   'error.NOT_FOUND': 'Không tìm thấy bản ghi.',
+  'error.CAMPAIGN_ALREADY_DELIVERED':
+    'Chiến dịch đã tới ít nhất một người nhận hoặc thiết bị nên không đổi được tiêu đề, nội dung, ảnh, nút, đối tượng hay điểm đến. Gửi lại nguyên bản, hoặc tạo chiến dịch mới.',
   'error.CONFLICT': 'Bản ghi đã thay đổi ở nơi khác. Tải lại rồi thử lại.',
   'error.RATE_LIMITED':
     'Quá nhiều yêu cầu. Với gỡ khẩn cấp, giới hạn là 20 lượt/giờ và 5 lượt/phút mỗi tài khoản.',
@@ -2697,6 +2699,17 @@ export const vi = {
   'campaigns.failedShort': '{count} lỗi',
   'campaigns.estimate': 'Ước tính {count} người nhận (tại {at}).',
   'campaigns.estimateShort': 'Ước tính {count} người nhận',
+  'campaigns.estimatePublic':
+    'Ước tính {count} người nhận: {accounts} tài khoản + {devices} thiết bị (tại {at}).',
+  'campaigns.estimatePublicShort':
+    'Ước tính {count} người nhận: {accounts} tài khoản + {devices} thiết bị',
+  'campaigns.deviceSentShort': '{count} thiết bị',
+  'campaigns.deviceFailedShort': '{count} thiết bị lỗi',
+  'campaigns.publicDevicesOff':
+    'Môi trường này đang tắt gửi tới thiết bị chưa đăng nhập: chiến dịch chỉ tới các tài khoản. Không chọn lại được đối tượng này sau khi đổi.',
+  'campaigns.error.publicUnavailable':
+    'Môi trường này không còn chọn được đối tượng này. Chọn đối tượng khác.',
+  'campaigns.noDeviceHalf': 'Chưa có lượt gửi tới thiết bị',
   'campaigns.error.noSubscriptionAccepted':
     'Không thiết bị nào nhận được: provider không tạo bản gửi nào cho danh sách người nhận.',
   'campaigns.error.emptyAudience':
@@ -2718,6 +2731,8 @@ export const vi = {
     'Gửi thử chỉ tới đúng tài khoản của bạn, khớp bằng email đã xác thực. Nó không đổi trạng thái chiến dịch.',
   'campaigns.sendingNote':
     'Worker đang gửi. Một số thông báo đã nằm trên máy người dùng nên không huỷ được nữa.',
+  'campaigns.sentCountNotePublic':
+    '“Số người nhận”, “Provider đã nhận” và “Gửi lỗi” chỉ tính tài khoản; thiết bị chưa đăng nhập đếm riêng. “Đã nhận” là số bản provider nhận, không phải số người đã xem, và cũng không đảm bảo đã tới máy.',
   'campaigns.sentCountNote':
     '“Đã gửi” là số bản provider nhận, không phải số người đã xem, và cũng không đảm bảo đã tới máy.',
 
@@ -2752,6 +2767,9 @@ export const vi = {
   'campaigns.field.recipientCount': 'Số người nhận',
   'campaigns.field.sentCount': 'Provider đã nhận',
   'campaigns.field.failedCount': 'Gửi lỗi',
+  'campaigns.field.deviceRecipientCount': 'Thiết bị cần gửi',
+  'campaigns.field.deviceSentCount': 'Thiết bị provider đã nhận',
+  'campaigns.field.deviceFailedCount': 'Thiết bị gửi lỗi',
 
   'campaigns.error.name': 'Tên chiến dịch cần tối thiểu 3 ký tự.',
   'campaigns.error.required': 'Trường này bắt buộc.',
@@ -2774,6 +2792,7 @@ export const vi = {
   'campaigns.audience.couple': 'Nhóm đôi',
   'campaigns.audience.group': 'Nhóm nhiều người',
   'campaigns.audience.platform': 'Theo nền tảng',
+  'campaigns.audience.public': 'Mọi người, kể cả chưa đăng nhập',
 
   'campaigns.platform.ios': 'iOS',
   'campaigns.platform.android': 'Android',

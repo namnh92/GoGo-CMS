@@ -1522,7 +1522,7 @@ export type CampaignStatus = z.infer<typeof campaignStatusSchema>
  * server has to guess at reaches the wrong people — the one failure with no
  * undo.
  */
-export const campaignAudienceSchema = z.enum(['all', 'couple', 'group', 'platform'])
+export const campaignAudienceSchema = z.enum(['all', 'couple', 'group', 'platform', 'public'])
 export type CampaignAudience = z.infer<typeof campaignAudienceSchema>
 
 /** `platform` is the only audience carrying a filter, and this is its shape. */
@@ -1558,7 +1558,12 @@ export const cmsCampaignSchema = z.object({
    */
   imageUrl: z.string().nullish(),
   ctaLabel: z.string().nullish(),
-  audienceType: campaignAudienceSchema,
+  /**
+   * A plain string on the way in: 4.0.0 showed the server can add a value here,
+   * and a closed enum would turn one such row into an error for the whole list.
+   * The closed set above is what this console can write.
+   */
+  audienceType: z.string(),
   audienceFilter: z.record(z.string(), z.unknown()).default({}),
   destinationType: campaignDestinationSchema,
   destinationValue: z.string().nullish(),
@@ -1574,6 +1579,13 @@ export const cmsCampaignSchema = z.object({
    */
   sentCount: z.number().int(),
   failedCount: z.number().int(),
+  /**
+   * The device half of a `public` send, never mixed into the counts above.
+   * Absent when no device half ran, which is not the same as zero.
+   */
+  deviceRecipientCount: z.number().int().nullish(),
+  deviceSentCount: z.number().int().optional(),
+  deviceFailedCount: z.number().int().optional(),
   lastError: z.string().nullish(),
   testSendRequestedAt: z.string().nullish(),
   testSendCompletedAt: z.string().nullish(),
@@ -1593,15 +1605,24 @@ export type CmsCampaignPage = z.infer<typeof cmsCampaignPageSchema>
 /**
  * A read with no side effect. The number is a snapshot: the audience is
  * resolved again at send time by the same predicate, so it can move between
- * the estimate and the send. Counts only accounts with a registered device.
+ * the estimate and the send. Counts only accounts with a registered device,
+ * plus devices with no account when the audience is `public`.
  */
 export const cmsCampaignAudienceEstimateSchema = z.object({
   campaignId: z.string(),
-  audienceType: campaignAudienceSchema,
+  audienceType: z.string(),
   estimatedRecipients: z.number().int(),
+  estimatedAccounts: z.number().int(),
+  estimatedDevices: z.number().int(),
   estimatedAt: z.string(),
 })
 export type CmsCampaignAudienceEstimate = z.infer<typeof cmsCampaignAudienceEstimateSchema>
+
+/** NTF-BE-017: which audiences this environment can actually reach. */
+export const cmsCampaignCapabilitiesSchema = z.object({
+  publicAudience: z.boolean(),
+})
+export type CmsCampaignCapabilities = z.infer<typeof cmsCampaignCapabilitiesSchema>
 
 export const cmsCampaignTestSendSchema = z.object({
   campaignId: z.string(),

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
-import { useI18n, useT } from '@/shared/i18n/i18n'
+import { useI18n, useLabel, useT } from '@/shared/i18n/i18n'
 import { queryKeys } from '@/shared/api/queryKeys'
 import { useSession } from '@/shared/auth/session'
 import { formatDateTime, formatNumber } from '@/shared/format'
@@ -30,6 +30,7 @@ import {
   type CmsCampaign,
 } from '@/shared/api/contracts'
 import { createCampaign, fetchCampaigns, type CampaignFilters } from './api'
+import { audienceOptions, usePublicAudience } from './campaignAudience'
 import { CampaignStatusBadge } from './campaignStatus'
 import { styles } from './campaign.style'
 
@@ -46,6 +47,7 @@ const PAGE_SIZE = 25
  */
 export default function CampaignListScreen() {
   const t = useT()
+  const label = useLabel()
   const { locale } = useI18n()
   const navigate = useNavigate()
   const toast = useToast()
@@ -62,6 +64,7 @@ export default function CampaignListScreen() {
 
   const canRead = can('campaign.read')
   const canManage = can('campaign.manage')
+  const publicAudience = usePublicAudience(canManage)
 
   const filters: CampaignFilters = {
     ...(status ? { status: status as CampaignStatus } : {}),
@@ -106,7 +109,11 @@ export default function CampaignListScreen() {
     onError: (error) => toast.error(describeError(error)),
   })
 
+  // Chosen while it was on, withdrawn since: this draft must not be created.
+  const publicWithdrawn = form.audienceType === 'public' && publicAudience !== true
+
   const submit = () => {
+    if (publicWithdrawn) return
     const next: typeof errors = {}
     if (form.name.trim().length < 3) next.name = true
     if (form.title.trim() === '') next.title = true
@@ -141,7 +148,7 @@ export default function CampaignListScreen() {
         header: () => t('campaigns.col.audience'),
         cell: ({ row }) => (
           <span className={styles.muted}>
-            {t(`campaigns.audience.${row.original.audienceType}` as const)}
+            {label(`campaigns.audience.${row.original.audienceType}`, row.original.audienceType)}
             {row.original.audienceType === 'platform' && row.original.audienceFilter.platform
               ? ` · ${String(row.original.audienceFilter.platform)}`
               : ''}
@@ -178,6 +185,17 @@ export default function CampaignListScreen() {
                     count: formatNumber(row.original.failedCount, locale),
                   })}`
                 : ''}
+              {row.original.deviceRecipientCount !== null &&
+              row.original.deviceRecipientCount !== undefined
+                ? ` · ${t('campaigns.deviceSentShort', {
+                    count: formatNumber(row.original.deviceSentCount ?? 0, locale),
+                  })}`
+                : ''}
+              {(row.original.deviceFailedCount ?? 0) > 0
+                ? ` · ${t('campaigns.deviceFailedShort', {
+                    count: formatNumber(row.original.deviceFailedCount ?? 0, locale),
+                  })}`
+                : ''}
             </span>
           ) : (
             <span className={styles.muted}>{t('campaigns.notSentYet')}</span>
@@ -199,7 +217,7 @@ export default function CampaignListScreen() {
         enableSorting: false,
       },
     ],
-    [t, locale],
+    [t, label, locale],
   )
 
   if (!canRead) {
@@ -364,6 +382,7 @@ export default function CampaignListScreen() {
           <Select
             label={t('campaigns.field.audienceType')}
             required
+            error={publicWithdrawn ? t('campaigns.error.publicUnavailable') : undefined}
             value={form.audienceType}
             onChange={(event) =>
               setForm((current) => ({
@@ -372,9 +391,9 @@ export default function CampaignListScreen() {
               }))
             }
           >
-            {campaignAudienceSchema.options.map((value) => (
-              <option key={value} value={value}>
-                {t(`campaigns.audience.${value}` as const)}
+            {audienceOptions(publicAudience, form.audienceType).map(({ value, disabled }) => (
+              <option key={value} value={value} disabled={disabled}>
+                {label(`campaigns.audience.${value}`, value)}
               </option>
             ))}
           </Select>

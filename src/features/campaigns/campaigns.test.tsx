@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { screen, waitFor, within } from '@testing-library/react'
 import { Route, Routes } from 'react-router-dom'
+import { focusManager } from '@tanstack/react-query'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/shared/test/server'
 import { renderWithProviders, signInAs } from '@/shared/test/render'
@@ -93,6 +94,7 @@ describe('campaign list (CMS-029)', () => {
       'couple',
       'group',
       'platform',
+      'public',
     ])
   })
 
@@ -491,5 +493,362 @@ describe('destinations the app cannot open (GoGo-BE#604)', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Gửi ngay' }))
 
     await expectTypeRefused()
+  })
+})
+
+/*
+ * CMS-056 (#270) — audience `public`: accounts plus devices with no account.
+ * Offered only when the server says a device half would run; device counts stay
+ * apart from account counts; an audience this console has not learned yet must
+ * not take the screen down.
+ */
+describe('audience public (CMS-056)', () => {
+  const publicSent = cmsCampaigns.find((campaign) => campaign.id === 'cp-cong-khai')!
+
+  const flagOff = () =>
+    server.use(
+      http.get('*/cms/campaigns/capabilities', () => HttpResponse.json({ publicAudience: false })),
+    )
+
+  async function openComposer(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(await screen.findByRole('button', { name: 'Tạo chiến dịch' }))
+    const drawer = await screen.findByRole('dialog')
+    return {
+      drawer,
+      audience: within(drawer).getByLabelText(/Đối tượng/) as HTMLSelectElement,
+    }
+  }
+
+  const optionValues = (select: HTMLSelectElement) =>
+    Array.from(select.options).map((option) => option.value)
+
+  it('is selectable with the flag on and goes out with an empty filter', async () => {
+    signInAs('ops_admin')
+    const user = userEvent.setup()
+    let body: Record<string, unknown> | undefined
+    server.use(
+      http.post('*/cms/campaigns', async ({ request }) => {
+        body = (await request.clone().json()) as Record<string, unknown>
+        return undefined
+      }),
+    )
+    renderWithProviders(<Routed />, { route: '/campaigns' })
+
+    const { drawer, audience } = await openComposer(user)
+    await waitFor(() => expect(optionValues(audience)).toContain('public'))
+    await user.selectOptions(audience, 'public')
+    await user.type(within(drawer).getByLabelText(/Tên chiến dịch/), 'Chào mọi người')
+    await user.type(within(drawer).getByLabelText(/Tiêu đề/), 'Xin chào')
+    await user.type(within(drawer).getByLabelText(/Nội dung/), 'Một lời chào')
+    await user.click(within(drawer).getByRole('button', { name: 'Tạo' }))
+
+    await waitFor(() => expect(body).toBeDefined())
+    expect(body).toMatchObject({ audienceType: 'public', audienceFilter: {} })
+  })
+
+  it('is not offered with the flag off', async () => {
+    flagOff()
+    signInAs('ops_admin')
+    const user = userEvent.setup()
+    let capabilityRead = false
+    server.events.on('request:start', ({ request }) => {
+      if (request.url.endsWith('/cms/campaigns/capabilities')) capabilityRead = true
+    })
+    renderWithProviders(<Routed />, { route: '/campaigns' })
+
+    const { audience } = await openComposer(user)
+    await waitFor(() => expect(capabilityRead).toBe(true))
+    expect(optionValues(audience)).toEqual(['all', 'couple', 'group', 'platform'])
+    server.events.removeAllListeners()
+  })
+
+  it('stays hidden while the capability cannot be read', async () => {
+    server.use(
+      http.get('*/cms/campaigns/capabilities', () => new HttpResponse(null, { status: 500 })),
+    )
+    signInAs('ops_admin')
+    const user = userEvent.setup()
+    renderWithProviders(<Routed />, { route: '/campaigns' })
+
+    const { audience } = await openComposer(user)
+    expect(optionValues(audience)).not.toContain('public')
+  })
+
+  describe('capability changing under an open form', () => {
+    async function reread(user: ReturnType<typeof userEvent.setup>) {
+      // Stands in for any re-read: the test provider refetches on focus, the
+      // running console does not, and re-reads when the screen mounts again.
+      await user.click(document.body)
+      focusManager.setFocused(false)
+      focusManager.setFocused(true)
+    }
+
+    afterEach(() => focusManager.setFocused(undefined))
+
+    it('stops offering public when a re-read fails', async () => {
+      signInAs('ops_admin')
+      const user = userEvent.setup()
+      renderWithProviders(<Routed />, { route: '/campaigns' })
+      const { audience } = await openComposer(user)
+      await waitFor(() => expect(optionValues(audience)).toContain('public'))
+
+      server.use(
+        http.get('*/cms/campaigns/capabilities', () => new HttpResponse(null, { status: 500 })),
+      )
+      await reread(user)
+
+      await waitFor(() => expect(optionValues(audience)).not.toContain('public'))
+    })
+
+    it('refuses to create public once the flag is withdrawn', async () => {
+      signInAs('ops_admin')
+      const user = userEvent.setup()
+      let posted = false
+      server.use(
+        http.post('*/cms/campaigns', () => {
+          posted = true
+          return undefined
+        }),
+      )
+      renderWithProviders(<Routed />, { route: '/campaigns' })
+      const { drawer, audience } = await openComposer(user)
+      await waitFor(() => expect(optionValues(audience)).toContain('public'))
+      await user.selectOptions(audience, 'public')
+      await user.type(within(drawer).getByLabelText(/Tên chiến dịch/), 'Chào mọi người')
+      await user.type(within(drawer).getByLabelText(/Tiêu đề/), 'Xin chào')
+      await user.type(within(drawer).getByLabelText(/Nội dung/), 'Một lời chào')
+
+      flagOff()
+      await reread(user)
+      expect(await within(drawer).findByText(/không còn chọn được/)).toBeInTheDocument()
+      await user.click(within(drawer).getByRole('button', { name: 'Tạo' }))
+
+      expect(posted).toBe(false)
+    })
+
+    it('refuses to move a draft to public once the flag is withdrawn', async () => {
+      signInAs('ops_admin')
+      serveDraftAt('place', PLACE_ID)
+      const user = userEvent.setup()
+      let patched = false
+      server.use(
+        http.patch(`*/cms/campaigns/${draft.id}`, () => {
+          patched = true
+          return undefined
+        }),
+      )
+      renderWithProviders(<Routed />, { route: `/campaigns/${draft.id}` })
+      const audience = (await screen.findByLabelText(/Đối tượng/)) as HTMLSelectElement
+      await waitFor(() => expect(optionValues(audience)).toContain('public'))
+      await user.selectOptions(audience, 'public')
+
+      flagOff()
+      await reread(user)
+      expect(await screen.findByText(/không còn chọn được/)).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Lưu' }))
+
+      expect(patched).toBe(false)
+    })
+
+    it('still saves a draft that was already public', async () => {
+      flagOff()
+      server.use(
+        http.get(`*/cms/campaigns/${draft.id}`, () =>
+          HttpResponse.json({
+            ...draft,
+            audienceType: 'public',
+            destinationType: 'place',
+            destinationValue: PLACE_ID,
+          }),
+        ),
+      )
+      signInAs('ops_admin')
+      const user = userEvent.setup()
+      let body: Record<string, unknown> | undefined
+      server.use(
+        http.patch(`*/cms/campaigns/${draft.id}`, async ({ request }) => {
+          body = (await request.clone().json()) as Record<string, unknown>
+          return undefined
+        }),
+      )
+      renderWithProviders(<Routed />, { route: `/campaigns/${draft.id}` })
+      await screen.findByText(/chỉ tới các tài khoản/)
+      await user.click(screen.getByRole('button', { name: 'Lưu' }))
+
+      await waitFor(() => expect(body).toMatchObject({ audienceType: 'public' }))
+    })
+  })
+
+  it('keeps a saved public draft as it is and says why when the flag is off', async () => {
+    flagOff()
+    server.use(
+      http.get(`*/cms/campaigns/${draft.id}`, () =>
+        HttpResponse.json({ ...draft, audienceType: 'public' }),
+      ),
+    )
+    signInAs('ops_admin')
+    renderWithProviders(<Routed />, { route: `/campaigns/${draft.id}` })
+
+    expect(await screen.findByText(/chỉ tới các tài khoản/)).toBeInTheDocument()
+    const audience = screen.getByLabelText(/Đối tượng/) as HTMLSelectElement
+    expect(audience.value).toBe('public')
+    const option = Array.from(audience.options).find((item) => item.value === 'public')!
+    expect(option.disabled).toBe(true)
+  })
+
+  it('shows the estimate as accounts plus devices', async () => {
+    server.use(
+      http.get(`*/cms/campaigns/${draft.id}`, () =>
+        HttpResponse.json({ ...draft, audienceType: 'public' }),
+      ),
+      http.get(`*/cms/campaigns/${draft.id}/audience-estimate`, () =>
+        HttpResponse.json({
+          campaignId: draft.id,
+          audienceType: 'public',
+          estimatedRecipients: 130,
+          estimatedAccounts: 100,
+          estimatedDevices: 30,
+          estimatedAt: new Date().toISOString(),
+        }),
+      ),
+    )
+    signInAs('ops_admin')
+    renderWithProviders(<Routed />, { route: `/campaigns/${draft.id}` })
+
+    expect(
+      await screen.findByText(/Ước tính 130 người nhận: 100 tài khoản \+ 30 thiết bị/),
+    ).toBeInTheDocument()
+  })
+
+  it('names the saved audience in the send dialog, not an unsaved choice', async () => {
+    signInAs('ops_admin')
+    serveDraftAt('place', PLACE_ID)
+    const user = userEvent.setup()
+    renderWithProviders(<Routed />, { route: `/campaigns/${draft.id}` })
+
+    const audience = (await screen.findByLabelText(/Đối tượng/)) as HTMLSelectElement
+    await waitFor(() => expect(optionValues(audience)).toContain('public'))
+    await user.selectOptions(audience, 'public')
+    await user.click(screen.getByRole('button', { name: 'Gửi ngay' }))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('Tất cả người dùng')).toBeInTheDocument()
+    expect(within(dialog).queryByText(/kể cả chưa đăng nhập/)).not.toBeInTheDocument()
+  })
+
+  it('reports device counts apart from account counts', async () => {
+    signInAs('ops_admin')
+    renderWithProviders(<Routed />, { route: `/campaigns/${publicSent.id}` })
+
+    const deviceSent = await screen.findByText('Thiết bị provider đã nhận')
+    expect(deviceSent.nextElementSibling).toHaveTextContent('612')
+    expect(screen.getByText('Thiết bị cần gửi').nextElementSibling).toHaveTextContent('640')
+    expect(screen.getByText('Thiết bị gửi lỗi').nextElementSibling).toHaveTextContent('28')
+    // The account half keeps its own number, with no device folded in.
+    expect(screen.getByText('Provider đã nhận').nextElementSibling).toHaveTextContent(/2[.,]050/)
+  })
+
+  it('shows device counts on the list row', async () => {
+    signInAs('ops_admin')
+    renderWithProviders(<Routed />, { route: '/campaigns' })
+
+    const table = await screen.findByRole('table')
+    const row = within(table).getByText(publicSent.name).closest('tr')!
+    expect(within(row).getByText(/612 thiết bị · 28 thiết bị lỗi/)).toBeInTheDocument()
+  })
+
+  it('says no device half ran rather than showing zero', async () => {
+    const noHalf = {
+      ...publicSent,
+      deviceRecipientCount: undefined,
+      deviceSentCount: undefined,
+      deviceFailedCount: undefined,
+    }
+    server.use(http.get(`*/cms/campaigns/${publicSent.id}`, () => HttpResponse.json(noHalf)))
+    signInAs('ops_admin')
+    renderWithProviders(<Routed />, { route: `/campaigns/${publicSent.id}` })
+
+    expect(await screen.findByText('Chưa có lượt gửi tới thiết bị')).toBeInTheDocument()
+    expect(screen.queryByText('Thiết bị provider đã nhận')).not.toBeInTheDocument()
+  })
+
+  it('says why content is frozen after a device-only delivery', async () => {
+    const deviceOnly = {
+      ...publicSent,
+      status: 'failed',
+      sentCount: 0,
+      failedCount: 0,
+      deviceSentCount: 5,
+    }
+    let refused = false
+    server.use(
+      http.get(`*/cms/campaigns/${publicSent.id}`, () => HttpResponse.json(deviceOnly)),
+      http.patch(`*/cms/campaigns/${publicSent.id}`, () => {
+        refused = true
+        return HttpResponse.json(
+          {
+            code: 'CAMPAIGN_ALREADY_DELIVERED',
+            message: 'This campaign has already been delivered to 5 recipient(s)',
+            field_errors: [],
+            request_id: 'r',
+            retryable: false,
+          },
+          { status: 409 },
+        )
+      }),
+    )
+    signInAs('ops_admin')
+    const user = userEvent.setup()
+    renderWithProviders(<Routed />, { route: `/campaigns/${publicSent.id}` })
+
+    const title = (await screen.findByLabelText(/Tiêu đề/)) as HTMLInputElement
+    await waitFor(() => expect(title.value).toBe(publicSent.title))
+    await user.type(title, ' mới')
+    await user.click(screen.getByRole('button', { name: 'Lưu' }))
+
+    await waitFor(() => expect(refused).toBe(true))
+    expect(await screen.findByText(/người nhận hoặc thiết bị/)).toBeInTheDocument()
+  })
+
+  it('survives an audience this console has not learned yet', async () => {
+    const future = { ...draft, id: 'cp-tuong-lai', audienceType: 'future_segment' }
+    server.use(
+      http.get('*/cms/campaigns', () =>
+        HttpResponse.json({ items: [future], nextCursor: null, totalCount: 1 }),
+      ),
+      http.get('*/cms/campaigns/cp-tuong-lai', () => HttpResponse.json(future)),
+      http.get('*/cms/campaigns/cp-tuong-lai/audience-estimate', () =>
+        HttpResponse.json({
+          campaignId: future.id,
+          audienceType: 'future_segment',
+          estimatedRecipients: 1,
+          estimatedAccounts: 1,
+          estimatedDevices: 0,
+          estimatedAt: new Date().toISOString(),
+        }),
+      ),
+    )
+    signInAs('ops_admin')
+    const list = renderWithProviders(<Routed />, { route: '/campaigns' })
+
+    const table = await screen.findByRole('table')
+    expect(within(table).getByText('future_segment')).toBeInTheDocument()
+    list.unmount()
+
+    renderWithProviders(<Routed />, { route: '/campaigns/cp-tuong-lai' })
+    const audience = (await screen.findByLabelText(/Đối tượng/)) as HTMLSelectElement
+    await waitFor(() => expect(audience.value).toBe('future_segment'))
+  })
+
+  it('filters the list by public', async () => {
+    signInAs('ops_admin')
+    const user = userEvent.setup()
+    renderWithProviders(<Routed />, { route: '/campaigns' })
+
+    await screen.findByText(sent.name)
+    const filter = screen.getAllByLabelText(/Đối tượng/)[0] as HTMLSelectElement
+    await user.selectOptions(filter, 'public')
+    await waitFor(() => expect(screen.queryByText(sent.name)).not.toBeInTheDocument())
+    expect(await screen.findByText(publicSent.name)).toBeInTheDocument()
   })
 })

@@ -1,6 +1,7 @@
 import { apiFetchParsed } from '@/shared/api/client'
 import {
   cmsCampaignAudienceEstimateSchema,
+  cmsCampaignCapabilitiesSchema,
   cmsCampaignPageSchema,
   cmsCampaignSchema,
   cmsCampaignTestSendSchema,
@@ -9,6 +10,7 @@ import {
   type CampaignStatus,
   type CmsCampaign,
   type CmsCampaignAudienceEstimate,
+  type CmsCampaignCapabilities,
   type CmsCampaignPage,
   type CmsCampaignTestSend,
 } from '@/shared/api/contracts'
@@ -89,6 +91,11 @@ export function estimateCampaignAudience(
     `/cms/campaigns/${id}/audience-estimate`,
     { signal },
   )
+}
+
+/** Asked before offering `public`: off, a device half would not run. */
+export function fetchCampaignCapabilities(signal?: AbortSignal): Promise<CmsCampaignCapabilities> {
+  return apiFetchParsed(cmsCampaignCapabilitiesSchema, '/cms/campaigns/capabilities', { signal })
 }
 
 /**

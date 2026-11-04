@@ -2886,6 +2886,13 @@ export const handlers = [
     return HttpResponse.json(created, { status: 201 })
   }),
 
+  // Before `:id`, as in GoGo-BE, so the word is not read as an id.
+  http.get(`${BASE}/cms/campaigns/capabilities`, () => {
+    const denied = requireOpsAdmin('campaigns are ops_admin only')
+    if (denied) return denied
+    return HttpResponse.json({ publicAudience: true })
+  }),
+
   http.get(`${BASE}/cms/campaigns/:id`, ({ params }) => {
     const denied = requireOpsAdmin('campaigns are ops_admin only')
     if (denied) return denied
@@ -2905,6 +2912,18 @@ export const handlers = [
       return envelope(409, 'CAMPAIGN_NOT_EDITABLE', 'not in an editable state')
     }
     const body = (await request.json()) as Record<string, unknown>
+    // Once anyone holds the message, account or device, what reaches a phone
+    // is frozen. `name` never does.
+    const frozen = ['title', 'body', 'imageKey', 'ctaLabel', 'audienceType', 'destinationType']
+    const delivered = row.sentCount + (row.deviceSentCount ?? 0)
+    if (
+      delivered > 0 &&
+      frozen.some(
+        (key) => body[key] !== undefined && body[key] !== (row as Record<string, unknown>)[key],
+      )
+    ) {
+      return envelope(409, 'CAMPAIGN_ALREADY_DELIVERED', 'already delivered')
+    }
     for (const key of [
       'name',
       'title',
@@ -2929,11 +2948,21 @@ export const handlers = [
     if (!row) return envelope(404, 'NOT_FOUND', 'campaign not found')
     // A read with no side effect. Counts only accounts with a registered
     // device, which is why it is smaller than any "total users" number.
-    const base = { all: 21480, couple: 9260, group: 6140, platform: 11890 }
+    const base: Record<string, number> = {
+      all: 21480,
+      couple: 9260,
+      group: 6140,
+      platform: 11890,
+      public: 21480,
+    }
+    const accounts = base[row.audienceType] ?? 0
+    const devices = row.audienceType === 'public' ? 3200 : 0
     return HttpResponse.json({
       campaignId: row.id,
       audienceType: row.audienceType,
-      estimatedRecipients: base[row.audienceType],
+      estimatedRecipients: accounts + devices,
+      estimatedAccounts: accounts,
+      estimatedDevices: devices,
       estimatedAt: new Date().toISOString(),
     })
   }),

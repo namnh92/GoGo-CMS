@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useI18n, useT } from '@/shared/i18n/i18n'
+import { useI18n, useLabel, useT } from '@/shared/i18n/i18n'
 import { queryKeys } from '@/shared/api/queryKeys'
 import { useSession } from '@/shared/auth/session'
 import { useOnline } from '@/shared/ui/useOnline'
@@ -21,7 +21,6 @@ import { useToast } from '@/shared/ui/Toast'
 import { ImageUploadField } from '@/features/media/imageUpload.view'
 import { checkDestination, toIso, toLocalInput } from '@/shared/api/destination'
 import {
-  campaignAudienceSchema,
   campaignDestinationSchema,
   campaignPlatformSchema,
   type CampaignAudience,
@@ -38,6 +37,7 @@ import {
 } from './api'
 import { campaignErrorMessage } from './campaignError'
 import { isInvalidDestinationError, isOpenableDestination } from './campaignDestination'
+import { audienceOptions, usePublicAudience } from './campaignAudience'
 import { CampaignStatusBadge } from './campaignStatus'
 import { styles } from './campaign.style'
 
@@ -49,6 +49,7 @@ const EDITABLE = new Set(['draft', 'cancelled', 'failed'])
 
 export default function CampaignDetailScreen() {
   const t = useT()
+  const label = useLabel()
   const { locale } = useI18n()
   const { id = '' } = useParams()
   const toast = useToast()
@@ -59,6 +60,7 @@ export default function CampaignDetailScreen() {
 
   const canRead = can('campaign.read')
   const canManage = can('campaign.manage')
+  const publicAudience = usePublicAudience(canManage)
 
   const query = useQuery({
     queryKey: queryKeys.campaigns.detail(id),
@@ -66,6 +68,8 @@ export default function CampaignDetailScreen() {
     enabled: canRead && Boolean(id),
   })
   const campaign = query.data
+  const savedAudience = campaign?.audienceType ?? ''
+  const savedPlatform = (campaign?.audienceFilter.platform as CampaignPlatform) ?? 'ios'
 
   const [form, setForm] = useState({
     name: '',
@@ -97,7 +101,9 @@ export default function CampaignDetailScreen() {
       title: campaign.title,
       body: campaign.body,
       ctaLabel: campaign.ctaLabel ?? '',
-      audienceType: campaign.audienceType,
+      // Sent back as it came: an audience this console does not know yet is the
+      // server's value, and the select shows it disabled rather than replacing it.
+      audienceType: campaign.audienceType as CampaignAudience,
       platform: (campaign.audienceFilter.platform as CampaignPlatform) ?? 'ios',
       destinationType: campaign.destinationType,
       destinationValue: campaign.destinationValue ?? '',
@@ -119,6 +125,11 @@ export default function CampaignDetailScreen() {
   }
 
   const editable = campaign ? EDITABLE.has(campaign.status) : false
+
+  // Moving a draft onto `public` after it was withdrawn is refused. A draft
+  // already there may still be saved: the server sends its account half.
+  const publicWithdrawn =
+    form.audienceType === 'public' && savedAudience !== 'public' && publicAudience !== true
 
   /*
    * GoGo-BE#604 (c). Judged on what is *saved*, not on the form: a send uses
@@ -204,6 +215,7 @@ export default function CampaignDetailScreen() {
   }
 
   const submit = () => {
+    if (publicWithdrawn) return
     const next: typeof errors = {}
     if (form.name.trim().length < 3) next.name = true
     if (form.title.trim() === '') next.title = true
@@ -368,6 +380,7 @@ export default function CampaignDetailScreen() {
                     <div className={styles.formGrid}>
                       <Select
                         label={t('campaigns.field.audienceType')}
+                        error={publicWithdrawn ? t('campaigns.error.publicUnavailable') : undefined}
                         value={form.audienceType}
                         disabled={!canManage || !editable}
                         onChange={(event) =>
@@ -377,12 +390,22 @@ export default function CampaignDetailScreen() {
                           }))
                         }
                       >
-                        {campaignAudienceSchema.options.map((value) => (
-                          <option key={value} value={value}>
-                            {t(`campaigns.audience.${value}` as const)}
-                          </option>
-                        ))}
+                        {audienceOptions(publicAudience, form.audienceType).map(
+                          ({ value, disabled }) => (
+                            <option key={value} value={value} disabled={disabled}>
+                              {label(`campaigns.audience.${value}`, value)}
+                            </option>
+                          ),
+                        )}
                       </Select>
+                      {form.audienceType === 'public' &&
+                      savedAudience === 'public' &&
+                      publicAudience === false ? (
+                        <p className={`${styles.formNote} ${styles.formFull}`}>
+                          <span aria-hidden="true">⚠</span>
+                          {t('campaigns.publicDevicesOff')}
+                        </p>
+                      ) : null}
                       {form.audienceType === 'platform' ? (
                         <Select
                           label={t('campaigns.field.platform')}
@@ -555,10 +578,17 @@ export default function CampaignDetailScreen() {
 
                       {estimate.data ? (
                         <p className={styles.deliveryNote}>
-                          {t('campaigns.estimate', {
-                            count: formatNumber(estimate.data.estimatedRecipients, locale),
-                            at: formatDateTime(estimate.data.estimatedAt, locale),
-                          })}
+                          {estimate.data.audienceType === 'public'
+                            ? t('campaigns.estimatePublic', {
+                                count: formatNumber(estimate.data.estimatedRecipients, locale),
+                                accounts: formatNumber(estimate.data.estimatedAccounts, locale),
+                                devices: formatNumber(estimate.data.estimatedDevices, locale),
+                                at: formatDateTime(estimate.data.estimatedAt, locale),
+                              })
+                            : t('campaigns.estimate', {
+                                count: formatNumber(estimate.data.estimatedRecipients, locale),
+                                at: formatDateTime(estimate.data.estimatedAt, locale),
+                              })}
                         </p>
                       ) : null}
                     </div>
@@ -660,8 +690,48 @@ export default function CampaignDetailScreen() {
                           : t('campaigns.notSentYet')}
                       </p>
                     </div>
+                    {item!.startedAt &&
+                    item!.deviceRecipientCount !== null &&
+                    item!.deviceRecipientCount !== undefined ? (
+                      <>
+                        <div>
+                          <p className={styles.factLabel}>
+                            {t('campaigns.field.deviceRecipientCount')}
+                          </p>
+                          <p className={styles.factValue}>
+                            {formatNumber(item!.deviceRecipientCount, locale)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className={styles.factLabel}>{t('campaigns.field.deviceSentCount')}</p>
+                          <p className={styles.factValue}>
+                            {formatNumber(item!.deviceSentCount ?? 0, locale)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className={styles.factLabel}>
+                            {t('campaigns.field.deviceFailedCount')}
+                          </p>
+                          <p className={styles.factValue}>
+                            {formatNumber(item!.deviceFailedCount ?? 0, locale)}
+                          </p>
+                        </div>
+                      </>
+                    ) : item!.startedAt && item!.audienceType === 'public' ? (
+                      /* Absent means no device half ran, which a zero would hide. */
+                      <div>
+                        <p className={styles.factLabel}>
+                          {t('campaigns.field.deviceRecipientCount')}
+                        </p>
+                        <p className={styles.factValue}>{t('campaigns.noDeviceHalf')}</p>
+                      </div>
+                    ) : null}
                   </div>
-                  <p className={styles.hint}>{t('campaigns.sentCountNote')}</p>
+                  <p className={styles.hint}>
+                    {item!.audienceType === 'public'
+                      ? t('campaigns.sentCountNotePublic')
+                      : t('campaigns.sentCountNote')}
+                  </p>
                 </Card>
               </div>
             </div>
@@ -679,15 +749,23 @@ export default function CampaignDetailScreen() {
         changes={[
           {
             label: t('campaigns.field.audienceType'),
-            to: `${t(`campaigns.audience.${form.audienceType}` as const)}${
-              form.audienceType === 'platform'
-                ? ` · ${t(`campaigns.platform.${form.platform}` as const)}`
+            // The saved audience, because that is who a send reaches: `public`
+            // on an unsaved form must not read as going out, nor the reverse.
+            to: `${label(`campaigns.audience.${savedAudience}`, savedAudience)}${
+              savedAudience === 'platform'
+                ? ` · ${t(`campaigns.platform.${savedPlatform}` as const)}`
                 : ''
             }`,
             note: estimate.data
-              ? t('campaigns.estimateShort', {
-                  count: formatNumber(estimate.data.estimatedRecipients, locale),
-                })
+              ? estimate.data.audienceType === 'public'
+                ? t('campaigns.estimatePublicShort', {
+                    count: formatNumber(estimate.data.estimatedRecipients, locale),
+                    accounts: formatNumber(estimate.data.estimatedAccounts, locale),
+                    devices: formatNumber(estimate.data.estimatedDevices, locale),
+                  })
+                : t('campaigns.estimateShort', {
+                    count: formatNumber(estimate.data.estimatedRecipients, locale),
+                  })
               : t('campaigns.resolvedAtSend'),
           },
           {

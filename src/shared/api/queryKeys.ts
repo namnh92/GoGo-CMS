@@ -77,6 +77,7 @@ export const queryKeys = {
     list: (filters: Record<string, unknown>) => ['campaigns', 'list', filters] as const,
     detail: (id: string) => ['campaigns', 'detail', id] as const,
     estimate: (id: string) => ['campaigns', 'estimate', id] as const,
+    capabilities: ['campaigns', 'capabilities'] as const,
   },
 
   banners: {
