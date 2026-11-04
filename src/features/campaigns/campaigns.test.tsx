@@ -576,7 +576,8 @@ describe('audience public (CMS-056)', () => {
 
   describe('capability changing under an open form', () => {
     async function reread(user: ReturnType<typeof userEvent.setup>) {
-      // A focus event is what re-reads a query in the running console.
+      // Stands in for any re-read: the test provider refetches on focus, the
+      // running console does not, and re-reads when the screen mounts again.
       await user.click(document.body)
       focusManager.setFocused(false)
       focusManager.setFocused(true)
