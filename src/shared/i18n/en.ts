@@ -2115,6 +2115,8 @@ export const en: Record<MessageKey, string> = {
   'error.UNAUTHORIZED': 'Your session is not valid.',
   'error.FORBIDDEN': 'You do not have permission to do this.',
   'error.NOT_FOUND': 'Record not found.',
+  'error.CAMPAIGN_ALREADY_DELIVERED':
+    'This campaign has reached at least one recipient or device, so its title, body, image, button, audience and destination can no longer change. Retry it as it stands, or create a new campaign.',
   'error.CONFLICT': 'The record was changed elsewhere. Reload and try again.',
   'error.RATE_LIMITED':
     'Too many requests. For emergency takedowns the limit is 20 per hour and 5 per minute per account.',
@@ -2541,6 +2543,15 @@ export const en: Record<MessageKey, string> = {
   'campaigns.failedShort': '{count} failed',
   'campaigns.estimate': 'About {count} recipients (as of {at}).',
   'campaigns.estimateShort': 'About {count} recipients',
+  'campaigns.estimatePublic':
+    'About {count} recipients: {accounts} accounts + {devices} devices (as of {at}).',
+  'campaigns.estimatePublicShort':
+    'About {count} recipients: {accounts} accounts + {devices} devices',
+  'campaigns.deviceSentShort': '{count} devices',
+  'campaigns.deviceFailedShort': '{count} devices failed',
+  'campaigns.publicDevicesOff':
+    'Sending to signed-out devices is off in this environment: this campaign reaches accounts only. Once changed, this audience cannot be chosen again.',
+  'campaigns.noDeviceHalf': 'No device send yet',
   'campaigns.error.noSubscriptionAccepted':
     'No device could be reached: the provider created no message for any recipient.',
   'campaigns.error.emptyAudience':
@@ -2562,6 +2573,8 @@ export const en: Record<MessageKey, string> = {
     'A test reaches exactly your own account, matched on a verified email. It never changes the campaign status.',
   'campaigns.sendingNote':
     'The worker is sending. Some notifications are already on phones, so there is nothing left to recall.',
+  'campaigns.sentCountNotePublic':
+    '"Recipients", "Accepted by provider" and "Failed" count accounts only; signed-out devices are counted separately. "Accepted" is how many the provider accepted — not how many were seen, and not a guarantee of delivery to a device.',
   'campaigns.sentCountNote':
     '"Sent" is how many the provider accepted — not how many were seen, and not a guarantee of delivery to a device.',
 
@@ -2596,6 +2609,9 @@ export const en: Record<MessageKey, string> = {
   'campaigns.field.recipientCount': 'Recipients',
   'campaigns.field.sentCount': 'Accepted by provider',
   'campaigns.field.failedCount': 'Failed',
+  'campaigns.field.deviceRecipientCount': 'Devices to reach',
+  'campaigns.field.deviceSentCount': 'Devices accepted by provider',
+  'campaigns.field.deviceFailedCount': 'Devices failed',
 
   'campaigns.error.name': 'A campaign name needs at least 3 characters.',
   'campaigns.error.required': 'This field is required.',
@@ -2617,6 +2633,7 @@ export const en: Record<MessageKey, string> = {
   'campaigns.audience.all': 'Everyone',
   'campaigns.audience.couple': 'Couple rooms',
   'campaigns.audience.group': 'Group rooms',
+  'campaigns.audience.public': 'Everyone, including signed-out devices',
   'campaigns.audience.platform': 'By platform',
 
   'campaigns.platform.ios': 'iOS',
