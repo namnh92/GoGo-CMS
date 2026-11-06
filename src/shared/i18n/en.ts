@@ -7,6 +7,29 @@ import type { MessageKey } from './vi'
  * English text a type error, and `i18n.test.tsx` checks the placeholders.
  */
 export const en: Record<MessageKey, string> = {
+  'venueVerification.coordinates': 'Venue coordinates',
+  'venueVerification.title': 'Venue verification',
+  'venueVerification.scope':
+    'Verification confirms venue identity and location only; it does not certify quality or safety. A material name, address or location change revokes verification.',
+  'venueVerification.verified': 'Verified',
+  'venueVerification.unverified': 'Unverified',
+  'venueVerification.unavailable':
+    'The API has not provided verification state and revision. Decisions are unavailable.',
+  'venueVerification.reload': 'Reload venue',
+  'venueVerification.stale':
+    'This revision can no longer be used. Reload the venue and check its identity and location before deciding again.',
+  'venueVerification.evidenceType': 'Evidence type',
+  'venueVerification.reference': 'Evidence reference',
+  'venueVerification.referenceHint':
+    'Independently approved evidence establishing both identity and location. Enter a case ID or internal reference; up to 500 characters.',
+  'venueVerification.reason': 'Decision reason',
+  'venueVerification.verify': 'Verify venue',
+  'venueVerification.revoke': 'Revoke verification',
+  'venueVerification.confirm': 'Confirm decision',
+  'venueVerification.saved': 'Verification decision saved.',
+  'venueVerification.evidence.site_visit': 'Site visit',
+  'venueVerification.evidence.official_registry': 'Official registry',
+  'venueVerification.evidence.venue_document': 'Venue document',
   'app.name': 'GoGo',
   'app.suffix': 'CMS',
   'app.searchPlaceholder': 'Search places, reviews, logs…',

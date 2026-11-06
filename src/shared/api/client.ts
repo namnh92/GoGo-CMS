@@ -65,6 +65,8 @@ export type RequestOptions = {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
   query?: Record<string, string | number | boolean | undefined | null>
   body?: unknown
+  /** Opaque resource ETag, including quotes, supplied by the BFF. */
+  ifMatch?: string
   /** Set on retryable mutations so a repeat never applies the change twice. */
   idempotencyKey?: string
   signal?: AbortSignal
@@ -164,7 +166,7 @@ export async function apiFetch<T = unknown>(
   /** Internal: a request that already retried after a refresh does not retry again. */
   allowRefresh = true,
 ): Promise<T> {
-  const { method = 'GET', query, body, idempotencyKey, signal, raw } = options
+  const { method = 'GET', query, body, idempotencyKey, ifMatch, signal, raw } = options
 
   const headers = new Headers({ Accept: raw ? 'text/csv' : 'application/json' })
   let payload: BodyInit | undefined
@@ -175,6 +177,7 @@ export async function apiFetch<T = unknown>(
     payload = JSON.stringify(body)
   }
   if (idempotencyKey) headers.set('Idempotency-Key', idempotencyKey)
+  if (ifMatch) headers.set('If-Match', ifMatch)
   // Cookie first; the in-memory bearer only covers split-origin dev.
   const bearer = getAccessToken()
   if (bearer) headers.set('Authorization', `Bearer ${bearer}`)

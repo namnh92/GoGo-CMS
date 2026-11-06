@@ -33,6 +33,7 @@ kết luận đã làm phẳng — bản phẳng chính là thứ đã lệch l�
 
 | Controller                         | Route                                                                                                               | `@RequireRole`                     |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| Venue verification (contract 6.0)  | `PUT /cms/places/{id}/verification`                                                                                 | `moderator` (hoặc `super_admin`)   |
 | `CmsCatalogController`             | `/cms/places/**`                                                                                                    | `editor`                           |
 | `CmsContentController`             | `/cms/taxonomies/**`, `/cms/collections/**`                                                                         | `editor`, `ops_admin`              |
 | `CmsModerationController`          | `/cms/moderation/**`                                                                                                | `moderator`                        |

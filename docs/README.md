@@ -4,6 +4,7 @@ Tài liệu thuộc riêng GoGo-CMS. Tài liệu sản phẩm và kiến trúc c
 workspace GoGo (`GOGO_SRS.md`, `GOGO_IMPLEMENTATION_WBS.md`,
 `GOGO_PLACE_INGESTION_SPEC.md`…).
 
+- [`place-verification.md`](place-verification.md) — verify/revoke địa điểm, bằng chứng, concurrency và bàn giao AC #275.
 - [`permissions.md`](permissions.md) — ma trận quyền và cách `RoleGate` map sang từng endpoint.
 - [`ui-conventions.md`](ui-conventions.md) — token, cấu trúc màn, DataTable, form, drawer, trạng thái dùng chung.
 - [`adr/0001-cms-stack.md`](adr/0001-cms-stack.md) — stack và cấu trúc thư mục.

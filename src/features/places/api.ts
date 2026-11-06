@@ -1,5 +1,5 @@
 import { apiFetch, apiFetchParsed, newIdempotencyKey } from '@/shared/api/client'
-import type { CmsCreatePlaceBody } from '@/shared/api/generated'
+import type { CmsCreatePlaceBody, RequestBody, operations } from '@/shared/api/generated'
 import type { ContactProvenanceWire } from './contactEvidence'
 import {
   CREATE_SOURCE_REFERENCE_KEYS,
@@ -10,6 +10,7 @@ import {
   attachableMediaListSchema,
   auditPageSchema,
   cmsPlaceDetailSchema,
+  cmsVenueVerificationSchema,
   duplicateListSchema,
   placeListSchema,
   placeMediaSchema,
@@ -465,4 +466,23 @@ export function mergePlace(id: string, duplicateId: string) {
     body: { duplicateId },
     idempotencyKey: newIdempotencyKey(),
   })
+}
+
+/** Generated 6.0 contract; the ETag binds venue identity AND verification. */
+export function setVenueVerification(
+  id: string,
+  body: RequestBody<'setVenueVerification'>,
+  ifMatch: operations['setVenueVerification']['parameters']['header']['If-Match'],
+  idempotencyKey: string,
+) {
+  return apiFetchParsed(
+    cmsVenueVerificationSchema,
+    `/cms/places/${encodeURIComponent(id)}/verification`,
+    {
+      method: 'PUT',
+      body,
+      ifMatch,
+      idempotencyKey,
+    },
+  )
 }

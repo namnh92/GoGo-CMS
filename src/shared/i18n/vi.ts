@@ -3,6 +3,29 @@
  * resolves through a key here — display labels never live in business data.
  */
 export const vi = {
+  'venueVerification.coordinates': 'Toạ độ địa điểm',
+  'venueVerification.title': 'Xác minh địa điểm',
+  'venueVerification.scope':
+    'Xác minh chỉ xác nhận danh tính và vị trí địa điểm, không chứng nhận chất lượng hay an toàn. Đổi tên, địa chỉ hoặc vị trí đáng kể sẽ thu hồi xác minh.',
+  'venueVerification.verified': 'Đã xác minh',
+  'venueVerification.unverified': 'Chưa xác minh',
+  'venueVerification.unavailable':
+    'API chưa cung cấp trạng thái và phiên bản xác minh. Không thể quyết định.',
+  'venueVerification.reload': 'Tải lại địa điểm',
+  'venueVerification.stale':
+    'Phiên bản hiện tại không còn dùng được. Tải lại địa điểm và kiểm tra danh tính, vị trí trước khi quyết định tiếp.',
+  'venueVerification.evidenceType': 'Loại bằng chứng',
+  'venueVerification.reference': 'Tham chiếu bằng chứng',
+  'venueVerification.referenceHint':
+    'Bằng chứng đã được duyệt độc lập, xác nhận cả danh tính và vị trí. Nhập mã hồ sơ hoặc tham chiếu nội bộ; tối đa 500 ký tự.',
+  'venueVerification.reason': 'Lý do quyết định',
+  'venueVerification.verify': 'Xác minh địa điểm',
+  'venueVerification.revoke': 'Thu hồi xác minh',
+  'venueVerification.confirm': 'Xác nhận quyết định',
+  'venueVerification.saved': 'Đã lưu quyết định xác minh.',
+  'venueVerification.evidence.site_visit': 'Khảo sát thực địa',
+  'venueVerification.evidence.official_registry': 'Hồ sơ đăng ký chính thức',
+  'venueVerification.evidence.venue_document': 'Tài liệu địa điểm',
   'app.name': 'GoGo',
   'app.suffix': 'CMS',
   'app.searchPlaceholder': 'Tìm địa điểm, đánh giá, nhật ký…',

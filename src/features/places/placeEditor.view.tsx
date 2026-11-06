@@ -618,6 +618,9 @@ export default function PlaceEditorScreen() {
         showSearch={false}
         actions={
           <div className="flex items-center gap-2">
+            <Button size="sm" onClick={() => navigate(`/places/${id}/verification`)}>
+              {t('venueVerification.title')}
+            </Button>
             <Button size="sm" variant="secondary" onClick={() => setAuditOpen(true)}>
               {t('action.viewAudit')}
             </Button>
