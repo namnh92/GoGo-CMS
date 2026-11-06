@@ -2204,9 +2204,20 @@ export const en: Record<MessageKey, string> = {
   'submissions.field.vibes': 'Vibes the submitter picked',
   'submissions.field.reason': 'Recorded reason',
   'submissions.openResult': 'Open place: {name}',
+  'submissions.rejectionReason.label': 'Rejection reason',
+  'submissions.rejectionReason.placeholder': 'Choose a rejection reason',
+  'submissions.rejectionReason.hint':
+    'Required for rejection. The contributor will see this reason.',
+  'submissions.rejectionReason.invalid': 'Choose a valid rejection reason.',
+  'submissions.rejectionReason.duplicate_place': 'Duplicate place',
+  'submissions.rejectionReason.incorrect_location': 'Incorrect location',
+  'submissions.rejectionReason.permanently_closed': 'Permanently closed',
+  'submissions.rejectionReason.not_public_place': 'Not a public place',
+  'submissions.rejectionReason.inappropriate_content': 'Inappropriate content',
+  'submissions.rejectionReason.other': 'Other',
   'submissions.reason': 'Reason for the decision',
   'submissions.reasonHint':
-    'Required, at least 3 characters. The reason is saved to the audit log.',
+    'Internal note: required for approve/merge; optional for rejection (3–500 characters if entered). Never shared with the contributor.',
   'submissions.mergeTarget': 'ID of the place to merge into',
   'submissions.mergeTargetHint':
     'Only needed when you choose “Merge”. The server refuses a merge without this ID.',

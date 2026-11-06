@@ -8,6 +8,7 @@ import { server } from '@/shared/test/server'
 import { mockDb, resetMockDb } from '@/shared/test/handlers'
 import { giveEvidence } from '@/features/places/contactEvidence.testkit'
 import SubmissionQueueScreen from './submissionQueue.view'
+import { SubmissionReviewDrawer } from './submissionReview.view'
 
 /**
  * GoGo-CMS#194 / GoGo-BE#528 — the review surface.
@@ -346,4 +347,195 @@ describe('contact value refusals in the UI language', () => {
     ).toBeInTheDocument()
     expect(within(dialog).queryByText('Website không được chứa tài khoản')).not.toBeInTheDocument()
   })
+})
+
+it('requires a rejection key even when an internal note is written', async () => {
+  signInAs('moderator')
+  const user = userEvent.setup()
+  renderWithProviders(<SubmissionRoutes />, { route: FRESH })
+  const dialog = await openDrawer()
+  await user.type(within(dialog).getByLabelText(/^Lý do quyết định/), 'Ghi chú nội bộ')
+  expect(within(dialog).getByRole('button', { name: 'Từ chối' })).toBeDisabled()
+  const select = within(dialog).getByRole('combobox', { name: /Lý do từ chối/ })
+  await user.selectOptions(select, 'incorrect_location')
+  await user.click(within(dialog).getByRole('button', { name: 'Từ chối' }))
+  await waitFor(() => expect(mockDb.decisions).toHaveLength(1))
+  expect(mockDb.decisions[0]).toMatchObject({
+    decision: 'rejected',
+    rejectionReason: 'incorrect_location',
+  })
+})
+
+const REASONS = [
+  ['duplicate_place', 'Trùng địa điểm', 'Duplicate place'],
+  ['incorrect_location', 'Sai vị trí', 'Incorrect location'],
+  ['permanently_closed', 'Đã đóng cửa vĩnh viễn', 'Permanently closed'],
+  ['not_public_place', 'Không phải địa điểm công cộng', 'Not a public place'],
+  ['inappropriate_content', 'Nội dung không phù hợp', 'Inappropriate content'],
+  ['other', 'Khác', 'Other'],
+] as const
+
+it.each(['vi', 'en'] as const)(
+  'labels every rejection key in %s and rejects without a note',
+  async (locale) => {
+    window.localStorage.setItem('gogo.cms.locale', locale)
+    signInAs('editor')
+    const user = userEvent.setup()
+    renderWithProviders(<SubmissionRoutes />, { route: FRESH })
+    const dialog = await screen.findByRole('dialog', { name: /Review submission|Kiểm duyệt/ })
+    const select = await within(dialog).findByRole('combobox', {
+      name: /Rejection reason|Lý do từ chối/,
+    })
+    for (const [key, vi, en] of REASONS) {
+      expect(within(select).getByRole('option', { name: locale === 'vi' ? vi : en })).toHaveValue(
+        key,
+      )
+    }
+    await user.selectOptions(select, 'other')
+    // Approving/merging still require an internal note.
+    expect(within(dialog).getByRole('button', { name: /^(Approve|Duyệt)$/ })).toBeDisabled()
+    await user.click(within(dialog).getByRole('button', { name: /^(Reject|Từ chối)$/ }))
+    await waitFor(() => expect(mockDb.decisions).toHaveLength(1))
+    expect(mockDb.decisions[0]).toEqual({
+      id: FRESH.split('/').at(-1),
+      decision: 'rejected',
+      rejectionReason: 'other',
+    })
+    // The refetched detail and audit history both retain the public key.
+    await waitFor(() =>
+      expect(
+        within(dialog).queryByRole('button', { name: /^(Reject|Từ chối)$/ }),
+      ).not.toBeInTheDocument(),
+    )
+    expect(within(dialog).getByText(locale === 'vi' ? 'Khác' : 'Other')).toBeInTheDocument()
+    expect(
+      within(dialog).getByText(locale === 'vi' ? 'Lý do từ chối: Khác' : 'Rejection reason: Other'),
+    ).toBeInTheDocument()
+  },
+)
+
+it.each(['ops_admin'] as const)('hides decisions for read-only %s', async (role) => {
+  signInAs(role)
+  renderWithProviders(<SubmissionRoutes />, { route: FRESH })
+  const dialog = await openDrawer()
+  expect(within(dialog).queryByRole('combobox', { name: /Lý do từ chối/ })).not.toBeInTheDocument()
+  expect(within(dialog).queryByRole('button', { name: 'Từ chối' })).not.toBeInTheDocument()
+})
+
+function refuseDecision(status: number, fieldErrors: unknown[] = []) {
+  server.use(
+    http.post('*/cms/place-submissions/:id/decide', () =>
+      HttpResponse.json(
+        {
+          code: status === 403 ? 'FORBIDDEN' : status === 400 ? 'VALIDATION_FAILED' : 'INTERNAL',
+          message: 'Request refused',
+          field_errors: fieldErrors,
+          request_id: 'req-reject-281',
+          retryable: status === 500,
+        },
+        { status },
+      ),
+    ),
+  )
+}
+
+it('associates a BE key validation error with the selector and keeps the selection', async () => {
+  signInAs('moderator')
+  refuseDecision(400, [{ field: 'rejectionReason', code: 'invalid_enum', message: 'Invalid key' }])
+  const user = userEvent.setup()
+  renderWithProviders(<SubmissionRoutes />, { route: FRESH })
+  const dialog = await openDrawer()
+  const select = within(dialog).getByRole('combobox', { name: /Lý do từ chối/ })
+  await user.selectOptions(select, 'incorrect_location')
+  await user.click(within(dialog).getByRole('button', { name: 'Từ chối' }))
+  expect(await within(dialog).findByText('Chọn một lý do từ chối hợp lệ.')).toBeInTheDocument()
+  expect(select).toHaveAttribute('aria-invalid', 'true')
+  expect(select).toHaveAccessibleDescription('Chọn một lý do từ chối hợp lệ.')
+  expect(select).toHaveValue('incorrect_location')
+  expect(await within(dialog).findByText(/req-reject-281/)).toBeInTheDocument()
+  await user.selectOptions(select, 'other')
+  expect(select).not.toHaveAttribute('aria-invalid', 'true')
+  expect(mockDb.decisions).toHaveLength(0)
+})
+
+it('shows permission denied and removes decision controls after a mid-session 403', async () => {
+  signInAs('moderator')
+  refuseDecision(403)
+  const user = userEvent.setup()
+  renderWithProviders(<SubmissionRoutes />, { route: FRESH })
+  const dialog = await openDrawer()
+  await user.selectOptions(
+    within(dialog).getByRole('combobox', { name: /Lý do từ chối/ }),
+    'duplicate_place',
+  )
+  await user.click(within(dialog).getByRole('button', { name: 'Từ chối' }))
+  expect(await within(dialog).findByText('Không đủ quyền')).toBeInTheDocument()
+  expect(within(dialog).queryByRole('button', { name: 'Từ chối' })).not.toBeInTheDocument()
+  expect(mockDb.decisions).toHaveLength(0)
+})
+
+it.each(['server', 'network'])('keeps the reason for retry after a %s error', async (failure) => {
+  signInAs('moderator')
+  if (failure === 'server') refuseDecision(500)
+  else server.use(http.post('*/cms/place-submissions/:id/decide', () => HttpResponse.error()))
+  const user = userEvent.setup()
+  renderWithProviders(<SubmissionRoutes />, { route: FRESH })
+  const dialog = await openDrawer()
+  const select = within(dialog).getByRole('combobox', { name: /Lý do từ chối/ })
+  await user.selectOptions(select, 'permanently_closed')
+  await user.click(within(dialog).getByRole('button', { name: 'Từ chối' }))
+  await screen.findByText('Không lưu được quyết định.')
+  expect(select).toHaveValue('permanently_closed')
+  expect(within(dialog).getByRole('button', { name: 'Từ chối' })).toBeEnabled()
+  expect(mockDb.decisions).toHaveLength(0)
+})
+
+it('blocks a second reject while the first is pending', async () => {
+  signInAs('moderator')
+  let calls = 0
+  server.use(
+    http.post('*/cms/place-submissions/:id/decide', async () => {
+      calls++
+      await delay('infinite')
+    }),
+  )
+  const user = userEvent.setup()
+  renderWithProviders(<SubmissionRoutes />, { route: FRESH })
+  const dialog = await openDrawer()
+  const select = within(dialog).getByRole('combobox', { name: /Lý do từ chối/ })
+  await user.selectOptions(select, 'other')
+  const reject = within(dialog).getByRole('button', { name: 'Từ chối' })
+  await user.dblClick(reject)
+  await waitFor(() => expect(calls).toBe(1))
+  expect(reject).toBeDisabled()
+  expect(select).toBeDisabled()
+})
+
+it('clears the chosen reason when switching to another submission', async () => {
+  signInAs('moderator')
+  const user = userEvent.setup()
+  const { rerender } = renderWithProviders(
+    <SubmissionReviewDrawer submissionId={FRESH.split('/').at(-1)!} onClose={() => {}} />,
+  )
+  let dialog = await openDrawer()
+  await user.selectOptions(within(dialog).getByRole('combobox', { name: /Lý do từ chối/ }), 'other')
+  rerender(<SubmissionReviewDrawer submissionId={REVIEWED.split('/').at(-1)!} onClose={() => {}} />)
+  dialog = await openDrawer()
+  expect(within(dialog).getByRole('combobox', { name: /Lý do từ chối/ })).toHaveValue('')
+  expect(within(dialog).getByRole('button', { name: 'Từ chối' })).toBeDisabled()
+})
+
+it('requires three characters if an optional rejection note is entered', async () => {
+  signInAs('super_admin')
+  const user = userEvent.setup()
+  renderWithProviders(<SubmissionRoutes />, { route: FRESH })
+  const dialog = await openDrawer()
+  await user.selectOptions(within(dialog).getByRole('combobox', { name: /Lý do từ chối/ }), 'other')
+  const reject = within(dialog).getByRole('button', { name: 'Từ chối' })
+  const note = within(dialog).getByLabelText(/^Lý do quyết định/)
+  expect(reject).toBeEnabled()
+  await user.type(note, 'ab')
+  expect(reject).toBeDisabled()
+  await user.type(note, 'c')
+  expect(reject).toBeEnabled()
 })

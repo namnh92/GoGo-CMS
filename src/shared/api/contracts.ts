@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { Schemas } from './generated'
 
 /*
  * Boundary schemas for the `/v1/cms/*` surface.
@@ -1174,6 +1175,21 @@ export const auditPageSchema = z.object({
 })
 export type AuditPage = z.infer<typeof auditPageSchema>
 
+/** GoGo-BE#787: public keys; the free-text decisionReason stays internal. */
+export const submissionRejectionReasonSchema = z.enum([
+  'duplicate_place',
+  'incorrect_location',
+  'permanently_closed',
+  'not_public_place',
+  'inappropriate_content',
+  'other',
+] as const satisfies readonly Schemas['SubmissionRejectionReason'][])
+
+/** Audit detail is extensible; only render a validated public reason key. */
+export const submissionHistoryReasonSchema = z.object({
+  rejectionReason: submissionRejectionReasonSchema,
+})
+
 /**
  * PI-CMS-007 — `GET /cms/place-submissions`.
  *
@@ -1199,6 +1215,7 @@ export const placeSubmissionSchema = z.object({
   updatedAt: z.string().nullish(),
   decidedAt: z.string().nullish(),
   decisionReason: z.string().nullish(),
+  rejectionReason: submissionRejectionReasonSchema.nullish(),
   /**
    * GoGo-BE#528 — a name for the row, when GoGo actually has one.
    *
@@ -1270,6 +1287,7 @@ export const placeSubmissionDetailSchema = z.object({
   updatedAt: z.string(),
   decidedAt: z.string().nullish(),
   decisionReason: z.string().nullish(),
+  rejectionReason: submissionRejectionReasonSchema.nullish(),
   contribution: z
     .object({
       categoryKey: z.string().nullish(),

@@ -1,3 +1,4 @@
+import type { DecidePlaceSubmissionBody } from '@/shared/api/generated'
 import { apiFetch, apiFetchParsed, newIdempotencyKey } from '@/shared/api/client'
 import {
   placeSubmissionDetailSchema,
@@ -11,7 +12,7 @@ import {
 } from '@/shared/api/contracts'
 
 export type SubmissionStatus = 'pending' | 'approved' | 'rejected' | 'merged'
-export type SubmissionDecision = 'approved' | 'rejected' | 'merged'
+export type SubmissionDecision = DecidePlaceSubmissionBody['decision']
 
 /**
  * PI-CMS-007. Keyset paging, newest first — proposals keep arriving while a
@@ -66,23 +67,11 @@ export function saveSubmissionReview(
   })
 }
 
-/**
- * `mergeIntoPlaceId` is required by the server for a merge and meaningless
- * otherwise, so it is only sent for that decision.
- */
-export function decideSubmission(
-  id: string,
-  decision: SubmissionDecision,
-  reason: string,
-  mergeIntoPlaceId?: string,
-) {
+/** The generated union requires a public key for rejection, a note otherwise. */
+export function decideSubmission(id: string, body: DecidePlaceSubmissionBody) {
   return apiFetch(`/cms/place-submissions/${id}/decide`, {
     method: 'POST',
-    body: {
-      decision,
-      reason,
-      ...(decision === 'merged' && mergeIntoPlaceId ? { mergeIntoPlaceId } : {}),
-    },
+    body,
     idempotencyKey: newIdempotencyKey(),
   })
 }

@@ -380,3 +380,27 @@ cho nghiệm thu cms-dev.
 ### Chưa dựng UI
 
 - Đăng nhập: Cloudflare Access (SSO) hoặc mật khẩu kèm assertion Access cùng email (GoGo-BE#687); không còn TOTP.
+
+### Lý do từ chối đóng góp (GoGo-CMS#281)
+
+Contract tạm vendor nguyên byte từ GoGo-BE PR #790 head `e89e494`, phiên bản
+`6.3.0-alpha.1`; thay bằng bản merged khi BE hoàn tất. Types sinh bằng
+`pnpm api:types`; drift gate và SHA-256 trong contract test pin cùng bản này.
+Đã đối chiếu `PATH_TEMPLATES`: tập path và thứ tự không đổi trong lần bump này.
+
+Ở **Đề xuất từ app → Kiểm duyệt**, editor/moderator (và super_admin) chọn một
+`rejectionReason` trước khi từ chối: trùng địa điểm, sai vị trí, đã đóng cửa
+vĩnh viễn, không phải địa điểm công cộng, nội dung không phù hợp hoặc khác.
+Nhãn vi/en lấy từ i18n. `reason` là ghi chú nội bộ, tùy chọn khi từ chối
+(3–500 ký tự nếu nhập), vẫn bắt buộc khi duyệt/gộp. Key đã chọn xuất hiện ở
+chi tiết và lịch sử audit; lịch sử cũ không có key không suy diễn lý do.
+
+Lỗi validation hiển thị cạnh selector; 403 trong phiên gỡ quyền thao tác;
+lỗi server/mạng giữ lựa chọn để thử lại. Request và audit dùng cơ chế
+observability hiện có; không thêm ghi chú nội bộ vào telemetry. Rollback UI
+cần đi cùng contract tương thích: CMS cũ chỉ gửi ghi chú sẽ bị BE mới từ chối.
+
+Acceptance còn cần đo trên cms-dev và app với BE chứa PR #790: từ chối một
+submission thuộc tài khoản app bằng từng reason key, kiểm tra polling chỉ trả
+key công khai và app hiển thị đúng nhãn vi/en, không lộ ghi chú nội bộ.
+Local Vitest không thay cho acceptance này.

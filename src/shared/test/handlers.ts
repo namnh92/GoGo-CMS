@@ -1,5 +1,6 @@
 import { http, HttpResponse } from 'msw'
 import { z } from 'zod'
+import { submissionRejectionReasonSchema } from '@/shared/api/contracts'
 import type { AdminRole, AuditEntry, CollectionStatus, PlaceStatus } from '@/shared/api/contracts'
 import {
   cmsPlaceEditMockSchema,
@@ -2620,12 +2621,37 @@ export const handlers = [
   }),
 
   http.post(`${BASE}/cms/place-submissions/:id/decide`, async ({ params, request }) => {
+    const { role } = currentActor()
+    if (!['moderator', 'editor', 'super_admin'].includes(role)) {
+      return envelope(403, 'FORBIDDEN', 'submission decisions require moderator/editor')
+    }
     const body = (await request.json()) as {
       decision: string
-      reason: string
+      reason?: string
+      rejectionReason?: string
       mergeIntoPlaceId?: string
     }
-    if (!body.reason || body.reason.trim().length < 3) {
+    if (
+      body.decision === 'rejected' &&
+      !submissionRejectionReasonSchema.safeParse(body.rejectionReason).success
+    ) {
+      return HttpResponse.json(
+        {
+          code: 'VALIDATION_FAILED',
+          message: 'Invalid rejection reason',
+          field_errors: [
+            { field: 'rejectionReason', code: 'invalid_enum', message: 'Invalid key' },
+          ],
+          request_id: 'mock-rejection-reason',
+          retryable: false,
+        },
+        { status: 400 },
+      )
+    }
+    if (
+      (body.decision !== 'rejected' || body.reason !== undefined) &&
+      (!body.reason || body.reason.trim().length < 3 || body.reason.trim().length > 500)
+    ) {
       return envelope(400, 'REASON_REQUIRED', 'reason is mandatory')
     }
     // GoGo-BE#528 — a merge target must exist, and the server says which
@@ -2661,6 +2687,27 @@ export const handlers = [
           { status: 409 },
         )
       }
+    }
+    const detail = db.submissionDetails[String(params.id)] as Record<string, unknown> | undefined
+    if (detail) {
+      if (detail.status !== 'pending') return envelope(409, 'ALREADY_DECIDED', 'Already decided')
+      detail.status = body.decision
+      detail.rejectionReason = body.decision === 'rejected' ? body.rejectionReason : undefined
+      detail.decisionReason = body.reason
+      detail.decidedAt = new Date().toISOString()
+      detail.history = [
+        ...(Array.isArray(detail.history) ? detail.history : []),
+        {
+          action: 'place_submission.decided',
+          at: detail.decidedAt,
+          actorName: currentActor().displayName,
+          detail: {
+            decision: body.decision,
+            reason: body.reason,
+            ...(body.decision === 'rejected' ? { rejectionReason: body.rejectionReason } : {}),
+          },
+        },
+      ]
     }
     db.decisions.push({ id: String(params.id), ...body })
     db.communityPlaces = db.communityPlaces.filter((item) => item.id !== params.id)
