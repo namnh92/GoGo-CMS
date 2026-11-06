@@ -1307,6 +1307,15 @@ export const vi = {
   'places.stale.hint': 'Địa điểm đã xuất bản nhưng dữ liệu vượt ngưỡng tươi mới.',
   'places.stale.verify': 'Đánh dấu đã xác minh',
   'places.stale.days': 'Quá {days} ngày',
+  'places.filter.amenities': 'Tiện ích',
+  'places.filter.amenitiesCountsHint':
+    'Số lượng theo địa giới chưa áp dụng bộ lọc tiện ích. Danh sách bên cạnh khớp tất cả bộ lọc đã chọn.',
+  'places.filter.amenitiesHint':
+    'Kết quả phải khớp tất cả tiện ích đã chọn (tối đa 10). Thanh toán không tiền mặt khớp thẻ hoặc QR.',
+  'places.filter.amenitiesEmpty': 'Chưa có tiện ích đang hoạt động',
+  'places.filter.amenitiesActive': 'Tiện ích đang lọc',
+  'places.filter.removeAmenity': 'Bỏ tiện ích {label}',
+  'places.filter.clearAmenities': 'Xoá lọc tiện ích',
   'places.filter.category': 'Khoá nhóm',
   'places.filter.categoryHint': 'Khoá phân loại kind=category',
   'places.filter.source': 'Nguồn dữ liệu',

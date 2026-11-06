@@ -38,6 +38,7 @@ import {
   type AdministrativeSelection,
 } from './administrativeTree.view'
 import { DuplicateQueue } from './duplicateQueue.view'
+import { AmenityFilter } from './amenityFilter.view'
 import { styles } from './placeList.style'
 
 type TabId = PlaceStatus | 'all' | 'stale' | 'duplicates'
@@ -80,6 +81,7 @@ export default function PlaceListScreen() {
    */
   const [unit, setUnit] = useState<AdministrativeSelection>(NO_SELECTION)
   const [category, setCategory] = useState('')
+  const [amenities, setAmenities] = useState<string[]>([])
   const [source, setSource] = useState<PlaceSourceFilter | 'all'>('all')
   const [sort, setSort] = useState<PlaceSort>('updated_at')
   const [direction, setDirection] = useState<'asc' | 'desc'>('desc')
@@ -107,6 +109,7 @@ export default function PlaceListScreen() {
 
   const filters = {
     ...shared,
+    amenities: amenities.length ? [...amenities].sort().join(',') : undefined,
     // The tree's selection and the table's filter are one value, so a count an
     // editor clicked returns exactly the rows it promised.
     provinceCode: unit.provinceCode || undefined,
@@ -547,15 +550,28 @@ export default function PlaceListScreen() {
               </InlineSelect>
             </div>
 
+            <AmenityFilter
+              value={amenities}
+              onChange={(keys) => {
+                setAmenities(keys)
+                resetPaging()
+              }}
+            />
+
             <div className={styles.hierarchyLayout}>
-              <AdministrativeTree
-                filters={shared}
-                value={unit}
-                onChange={(next) => {
-                  setUnit(next)
-                  resetPaging()
-                }}
-              />
+              <div>
+                {amenities.length > 0 && (
+                  <p className={styles.muted}>{t('places.filter.amenitiesCountsHint')}</p>
+                )}
+                <AdministrativeTree
+                  filters={shared}
+                  value={unit}
+                  onChange={(next) => {
+                    setUnit(next)
+                    resetPaging()
+                  }}
+                />
+              </div>
 
               <Card className={styles.tableCard}>
                 <AsyncBoundary

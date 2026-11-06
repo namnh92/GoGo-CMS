@@ -361,6 +361,22 @@ Dialog nêu rõ chuyển trạng thái, bắt lý do ≥ 10 ký tự (đúng ng�
 nói thẳng rằng thao tác được ghi audit kèm vai/IP/request id và bắn cảnh báo.
 `409 NOT_TAKEDOWNABLE` và `429` (20/giờ, burst 5/phút) đều có thông điệp riêng.
 
+### Xem trước lọc tiện ích (GoGo-CMS#276)
+
+Danh sách địa điểm dùng `GET /cms/taxonomies?kind=amenity&isActive=true` làm
+nguồn lựa chọn; nhãn theo ngôn ngữ giao diện, gửi khoá ổn định trong tham số
+`amenities` của `GET /cms/places` (OpenAPI 6.2.0-alpha.1, GoGo-BE `e2e8595`).
+Chọn tối đa 10 tiện ích, kết quả phải khớp **tất cả**; thanh toán không tiền mặt
+khớp thẻ hoặc QR theo API. Chip cho phép bỏ từng mục hoặc xoá toàn bộ tiện ích.
+Đổi tiện ích về trang đầu và bỏ chọn hàng, giữ các bộ lọc còn lại.
+
+Số lượng trong cây địa giới **chưa lọc tiện ích**, có ghi chú khi đang chọn
+tiện ích vì API đếm không nhận tham số này. CMS không lọc lại hay đếm dữ liệu
+phân trang ở client. Lỗi, mất mạng và 403 dùng trạng thái chung của CMS.
+QA trên cms-dev cần bản BE có contract trên; kiểm tra chọn nhiều tiện ích,
+kết quả giao nhau, chip/xoá lọc và trang kế tiếp. Kiểm thử local không thay
+cho nghiệm thu cms-dev.
+
 ### Chưa dựng UI
 
 - Đăng nhập: Cloudflare Access (SSO) hoặc mật khẩu kèm assertion Access cùng email (GoGo-BE#687); không còn TOTP.

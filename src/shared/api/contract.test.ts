@@ -25,7 +25,7 @@ const drift = read('scripts/check-openapi-drift.mjs')
 const generated = read('src/shared/api/schema.d.ts')
 const administrativeContracts = read('src/shared/api/contracts-administrative.ts')
 
-const EXPECTED = '6.1.0-alpha.1'
+const EXPECTED = '6.2.0-alpha.1'
 
 /**
  * The vendored file byte for byte, as GoGo-BE published it.
@@ -35,7 +35,7 @@ const EXPECTED = '6.1.0-alpha.1'
  * hand-edited, and this is what makes that visible rather than invisible. A
  * legitimate re-vendor updates the version above and this digest together.
  */
-const SPEC_SHA256 = 'ff33f8e5c6458ec39d049e845dfc49737e9882e56ffd7f5ab361e51e8bb9338c'
+const SPEC_SHA256 = '890a0e091da8368b0a598b9d38d76434a055a0bdf3bf2e3154eb7c3e125f2203'
 
 /** `pnpm api:routes` on GoGo-BE reports the same number against the real router. */
 const SERVED_OPERATIONS = 305
@@ -48,6 +48,24 @@ const SERVED_OPERATIONS = 305
 const PLANNED_OPERATIONS = 0
 
 describe('the vendored OpenAPI contract', () => {
+  it('carries the CMS amenity ALL filter and the additive assistant credits surface (6.2)', () => {
+    const list = spec.slice(
+      spec.indexOf('      operationId: cmsListPlaces'),
+      spec.indexOf('      operationId: cmsCreatePlace'),
+    )
+    expect(list).toContain('name: amenities')
+    expect(list).toContain('Comma-separated taxonomy keys of kind `amenity`, ALL required.')
+    expect(list).toContain('at most 10 distinct keys')
+    expect(list).toContain('INVALID_TAXONOMY_KEYS')
+    expect(list).toContain('`cashless_payment` means `card_payment` OR `qr_payment`.')
+    const operation = generated.slice(
+      generated.indexOf('    cmsListPlaces: {'),
+      generated.indexOf('    cmsCreatePlace: {'),
+    )
+    expect(operation).toContain('amenities?: string')
+    expect(spec).toContain('/cms/users/{id}/assistant-credits:')
+  })
+
   it(`declares ${EXPECTED}, and the drift gate expects the same`, () => {
     expect(/^ {2}version: (\S+)$/m.exec(spec)?.[1]).toBe(EXPECTED)
     expect(drift).toContain(`?? '${EXPECTED}'`)

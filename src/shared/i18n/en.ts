@@ -1449,6 +1449,15 @@ export const en: Record<MessageKey, string> = {
   'places.stale.hint': 'Published places whose data is past the freshness threshold.',
   'places.stale.verify': 'Mark as verified',
   'places.stale.days': 'Over {days} days',
+  'places.filter.amenities': 'Amenities',
+  'places.filter.amenitiesCountsHint':
+    'Administrative counts exclude the amenity filter. The place list matches all selected filters.',
+  'places.filter.amenitiesHint':
+    'Results must match all selected amenities (up to 10). Cashless payment matches card or QR.',
+  'places.filter.amenitiesEmpty': 'No active amenities',
+  'places.filter.amenitiesActive': 'Active amenity filters',
+  'places.filter.removeAmenity': 'Remove amenity {label}',
+  'places.filter.clearAmenities': 'Clear amenities',
   'places.filter.category': 'Category key',
   'places.filter.categoryHint': 'Taxonomy key with kind=category',
 

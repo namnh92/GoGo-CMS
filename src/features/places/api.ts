@@ -38,6 +38,7 @@ export type PlaceListFilters = {
   status?: PlaceStatus | 'all'
   q?: string
   category?: string
+  amenities?: NonNullable<operations['cmsListPlaces']['parameters']['query']>['amenities']
   source?: PlaceSourceFilter | 'all'
   staleDays?: number
   /**
@@ -95,6 +96,7 @@ export function fetchPlaces(filters: PlaceListFilters, signal?: AbortSignal) {
       status: filters.status && filters.status !== 'all' ? filters.status : undefined,
       q: filters.q,
       category: filters.category,
+      amenities: filters.amenities || undefined,
       source: filters.source && filters.source !== 'all' ? filters.source : undefined,
       staleDays: filters.staleDays,
       provinceCode: filters.provinceCode,
