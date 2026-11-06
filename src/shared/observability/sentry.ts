@@ -569,10 +569,69 @@ function isIgnoredEvent(event: ErrorEvent, hint: EventHint | undefined): boolean
   )
 }
 
+// ---------------------------------------------------------------------------
+// The screen an error happened on (GoGo-CMS#241, D-7 record addition 3)
+// ---------------------------------------------------------------------------
+
+/**
+ * The shapes a react-router path definition here has: a lowercase word
+ * (`test-runs`), `:param`, or the `*` splat — and `403`, the one status page,
+ * only as that exact screen. No other digit is allowed, so a UUID, a numeric
+ * id or a hex token is never a segment.
+ */
+const ROUTE_SEGMENT = /^(?:[a-z]+(?:-[a-z]+)*|:[A-Za-z][A-Za-z0-9]*|\*)$/
+const STATUS_ROUTES: ReadonlySet<string> = new Set(['/403'])
+
+/**
+ * A route template (`/places/:id`), or `null` when the value is not one;
+ * anything the ADR-0011 text rules would change is refused outright rather
+ * than sent redacted. Exported for tests: the only way a value reaches the tag
+ * is {@link trackSentryRoute}, from route definitions (Sol #243 F-02).
+ */
+export function asRouteTemplate(value: string): string | null {
+  if (value === '/' || STATUS_ROUTES.has(value)) return value
+  if (!value.startsWith('/') || value.length > 120) return null
+  const segments = value.slice(1).split('/')
+  if (!segments.every((segment) => ROUTE_SEGMENT.test(segment))) return null
+  return redactText(value) === value ? value : null
+}
+
+type RouteMatch = { route: { path?: string } }
+
+/** The `path` of each matched route, outermost first, joined: `/` + `places/:id` → `/places/:id`. */
+export function routeTemplateOf(matches: readonly RouteMatch[]): string | null {
+  const parts = matches
+    .map((match) => (match.route.path ?? '').replace(/^\/+|\/+$/g, ''))
+    .filter((part) => part !== '')
+  return asRouteTemplate(`/${parts.join('/')}`)
+}
+
+let currentRoute: string | null = null
+
+/** What `createBrowserRouter` returns, as far as the tag needs it. */
+export type RouteSource = {
+  state: { matches: readonly RouteMatch[] }
+  subscribe: (listener: (state: { matches: readonly RouteMatch[] }) => void) => unknown
+}
+
+/**
+ * GoGo-CMS#241 — keep `tags.route` on the screen the router is showing: set
+ * now, and again after every navigation. The value is derived here from the
+ * route *definitions* in `matches`, never from a location, a pathname or a
+ * caller's string.
+ */
+export function trackSentryRoute(router: RouteSource): void {
+  currentRoute = routeTemplateOf(router.state.matches)
+  router.subscribe((state) => {
+    currentRoute = routeTemplateOf(state.matches)
+  })
+}
+
 export function beforeSend(event: ErrorEvent, hint?: EventHint): ErrorEvent | null {
   if (isIgnoredEvent(event, hint)) return null
   const { request, user, breadcrumbs, ...rest } = event
   const out = redactDeep(rest) as ErrorEvent
+  if (currentRoute) out.tags = { ...out.tags, route: currentRoute }
   const rebuiltRequest = rebuildRequest(request)
   if (rebuiltRequest) out.request = rebuiltRequest
   const rebuiltUser = rebuildUser(user)

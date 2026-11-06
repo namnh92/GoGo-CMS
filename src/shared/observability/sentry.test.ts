@@ -470,3 +470,88 @@ describe('F-07 SA ruling', () => {
     expect(sentry.toPathTemplate('/cms/nowhere/abc/search')).toBe('/cms/{id}/{id}/search')
   })
 })
+
+/**
+ * GoGo-CMS#241 (D-7 record addition 3) — the screen an error happened on, as a
+ * route template and nothing else.
+ */
+describe('route tag', () => {
+  const event = () =>
+    ({ exception: { values: [{ type: 'TypeError', value: 'x' }] } }) as unknown as ErrorEvent
+  const send = () => sentry.beforeSend(event(), { originalException: new TypeError('x') })
+
+  type Match = { route: { path?: string } }
+  function fakeRouter(matches: Match[]) {
+    let listener: ((state: { matches: Match[] }) => void) | undefined
+    return {
+      state: { matches },
+      subscribe: (fn: (state: { matches: Match[] }) => void) => {
+        listener = fn
+        return () => undefined
+      },
+      go: (next: Match[]) => listener?.({ matches: next }),
+    }
+  }
+
+  it('tags the event with the route the router shows, and follows navigation', () => {
+    const router = fakeRouter([
+      { route: { path: '/' } },
+      { route: {} },
+      { route: { path: 'places' } },
+    ])
+    sentry.trackSentryRoute(router)
+    expect(send()?.tags).toEqual({ route: '/places' })
+    router.go([{ route: { path: '/' } }, { route: {} }, { route: { path: 'places/:id' } }])
+    expect(send()?.tags).toEqual({ route: '/places/:id' })
+  })
+
+  it('keeps the tags the event already had', () => {
+    sentry.trackSentryRoute(fakeRouter([{ route: { path: '/login' } }]))
+    const tagged = { ...event(), tags: { kind: 'boundary' } } as ErrorEvent
+    expect(sentry.beforeSend(tagged, { originalException: new TypeError('x') })?.tags).toEqual({
+      kind: 'boundary',
+      route: '/login',
+    })
+  })
+
+  it('a definition that is no template clears the tag', () => {
+    const router = fakeRouter([{ route: { path: '/login' } }])
+    sentry.trackSentryRoute(router)
+    router.go([{ route: { path: 'places/3f2504e0-4f89-11d3-9a0c-0305e82c3301' } }])
+    expect(send()?.tags).toBeUndefined()
+  })
+
+  it.each([
+    ['a real path with a uuid', '/places/3f2504e0-4f89-11d3-9a0c-0305e82c3301'],
+    ['a numeric id', '/costs/test-runs/42'],
+    ['a status code where an id belongs', '/places/403'],
+    ['a query', '/places?lat=10.7'],
+    ['an invite path', '/r/YDi_00PB1z4FSQZjpLbgdw'],
+    ['an email', '/users/a.b@example.com'],
+    ['a full URL', 'https://cms-dev.gogo.id.vn/places'],
+    ['upper case or underscores', '/Places/some_slug'],
+  ])('refuses %s', (_label, value) => {
+    expect(sentry.asRouteTemplate(value)).toBeNull()
+  })
+
+  it('builds the template from route definitions, outermost first', () => {
+    expect(
+      sentry.routeTemplateOf([
+        { route: { path: '/' } },
+        { route: {} },
+        { route: { path: 'places/:id' } },
+      ]),
+    ).toBe('/places/:id')
+    expect(sentry.routeTemplateOf([{ route: { path: '/' } }, { route: {} }, { route: {} }])).toBe(
+      '/',
+    )
+    expect(sentry.routeTemplateOf([{ route: { path: '/' } }, { route: { path: '*' } }])).toBe('/*')
+    expect(sentry.routeTemplateOf([{ route: { path: '/' } }, { route: { path: '403' } }])).toBe(
+      '/403',
+    )
+  })
+
+  it('keeps a template the redaction would touch out entirely, never sends it redacted', () => {
+    expect(sentry.asRouteTemplate('/r/abcdefghijklmnopqrstuv')).toBeNull()
+  })
+})
