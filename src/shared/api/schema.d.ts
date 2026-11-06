@@ -114,6 +114,64 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/password-recovery/request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Request an in-app password recovery code
+         * @description Always returns the same 202 shape for eligible, missing, guest,
+         *     passwordless, disabled and deleted accounts. No code is returned.
+         *     Active password accounts may recover even if email was unverified.
+         *     Six-digit code expires after 300 seconds; resend replaces the proof.
+         *     Limits count all requests, including replays: 1/minute + 3/hour/email,
+         *     10/minute + 50/hour/IP. Cooldown is 60 seconds, also on replay.
+         *     Idempotency is scoped to IP + operation + key for 24 hours; same key
+         *     and normalized body replays the original result even after resend.
+         *     A changed body returns 422. Account-specific delivery failure still
+         *     returns 202 and invalidates the affected challenge internally.
+         *     Production is disabled until mail and shared fail-closed quotas exist.
+         */
+        post: operations["requestPasswordRecovery"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/password-recovery/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Consume a recovery code and replace the password
+         * @description Single-use proof, at most five failed attempts. Invalid, expired,
+         *     exhausted, superseded, consumed or ineligible proofs return the same
+         *     400 RECOVERY_INVALID. Limits: 10/15 minutes/email, 30/15 minutes/IP.
+         *     Success verifies the account email if needed, revokes every consumer
+         *     session and refresh token, and clears login lockout. No new session is
+         *     issued; sign in again. No history is moved or merged.
+         *     Idempotency is scoped to IP + operation + key for 24 hours. Completion
+         *     replay commits with the reset; a matching retry returns 204 without
+         *     resetting again. A changed body returns 422. Limits apply to retries.
+         */
+        post: operations["completePasswordRecovery"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/refresh": {
         parameters: {
             query?: never;
@@ -239,7 +297,7 @@ export interface paths {
         };
         /**
          * Rooms the caller belongs to, most recently active first
-         * @description A room used to be reachable only by id, so a client that lost the id lost the room — closing the app mid-flow was enough. Keyset paging on `(updatedAt, id)` because a room's timestamp moves while the list is being read: one vote is enough. Each row carries the progress needed to draw it, so a "your rooms" screen makes one call, not one per room. The invite code is deliberately absent — a list screen has no reason to hand one out.
+         * @description A room used to be reachable only by id, so a client that lost the id lost the room — closing the app mid-flow was enough. Keyset paging on `(updatedAt, id)` because a room's timestamp moves while the list is being read: one vote is enough. Each row carries the progress needed to draw it, so a "your rooms" screen makes one call, not one per room. The invite code is deliberately absent — a list screen has no reason to hand one out. view=home selects at most one room across all eligible memberships; nextCursor is always null and cursor/status overrides are rejected (400). Active rooms with no past explicit end come first, ordered by absolute proximity of effective start to now (future active starts allowed; unknown start last). Then collecting/matching/ready with future start, earliest first. UUID descending breaks ties. Terminal/draft and unscheduled non-active rooms are excluded; no persisted status changes on read.
          */
         get: operations["listRooms"];
         put?: never;
@@ -392,6 +450,26 @@ export interface paths {
         post?: never;
         /** Host-only: remove a member (revokes guest session if guest) */
         delete: operations["removeRoomMember"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/rooms/invites/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview the inviter and appointment facts before joining
+         * @description Public because the recipient may not have an account; the high-entropy invite code is the credential and is accepted only in the request body, never in the URL. A usable code reveals only what the invitation screen needs: the inviter's room display name, public avatar and verified-email fact, plus aggregate room type/count and current time, area and budget. It never returns the code, room/member/user ids, title, member list, preferences, exact origin text/coordinates or any email address. The preview does not consume an invite use.
+         */
+        post: operations["previewRoomInvite"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1568,7 +1646,7 @@ export interface paths {
         };
         /**
          * Place search — Vietnamese-normalized text, filters, ranking, cursor
-         * @description FR-SEARCH-001..004/009 + SE-010. Accent-insensitive FTS + trigram typo tolerance + synonym expansion; hard filters in SQL; weighted versioned ranking (meta.weightsVersion); stable keyset cursor. Lodging excluded unless requested. Zero-results emit telemetry without raw PII. ADM-021: scope by a position (lat/lng, radiusM defaults to 10 km) or by a canonical area (datasetVersion + provinceCode, optional communeCode for a single commune). A position wins when both are sent; the two are never intersected, and meta.location says which one scoped the results. An area matches only places with a VERIFIED mapping from the same dataset. A code that is not current or not under its province is 400; a dataset that is not the published one is 409 ADMINISTRATIVE_VERSION_CHANGED.
+         * @description FR-SEARCH-001..004/009 + SE-010. Accent-insensitive FTS + trigram typo tolerance + synonym expansion; hard filters in SQL; weighted versioned ranking (meta.weightsVersion); stable keyset cursor. Lodging excluded unless requested. Zero-results emit telemetry without raw PII. ADM-021: scope by a position (lat/lng, radiusM defaults to 10 km) or by a canonical area (datasetVersion + provinceCode, optional communeCode for a single commune). A position wins when both are sent; the two are never intersected, and meta.location says which one scoped the results. An area matches only places with a VERIFIED mapping from the same dataset. A code that is not current or not under its province is 400; a dataset that is not the published one is 409 ADMINISTRATIVE_VERSION_CHANGED. Filter dimensions intersect (AND); categories/moods/settings/suitability match any selected value (OR); dietary/accessibility/amenities require ALL. Lists are deduplicated; more than ten distinct values and unknown/inactive or wrong-kind keys are 400. Incomplete lat/lng and inverted prices are 400. includeTotal=true returns exact meta.totalCount under the same statement snapshot as the page, including empty pages. Omitted otherwise. Counts can change between requests. Configurable counted-request rate/concurrency and whole-statement timeout apply; retryable 503 SEARCH_COUNT_UNAVAILABLE means retry without totals. Defaults are 20/min/IP, 4 concurrent/process, 500ms.
          */
         get: operations["searchPlaces"];
         put?: never;
@@ -1607,8 +1685,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Latest or most helpful published GoGo reviews of a place (at most three)
-         * @description BE-BFF-018. GoGo community reviews only, never Google's: the provider rating stays on `PlaceDetail.rating`/`ratingCount` with its attribution and is never merged with these. Only reviews a moderator published are listed; `pending`, `rejected`, `removed` and emergency-`hidden` reviews never appear. Ordered newest first by `createdAt`, ties broken by `id` descending, so repeated reads agree. Answers for the same places `getPlaceDetail` does (404 otherwise) and is served `Cache-Control: no-store`, so a takedown holds on the next read.
+         * Published GoGo reviews of a place, with aggregate and cursor pagination
+         * @description BE-BFF-018 / GoGo-BE#754. GoGo community reviews only, never Google's: the provider rating stays on `PlaceDetail.rating`/`ratingCount` with its attribution and is never merged with these. Only reviews a moderator published are listed; `pending`, `rejected`, `removed` and emergency-`hidden` reviews never appear. Ordered newest first by `createdAt`, ties broken by `id` descending, so repeated reads agree. With no pagination parameters the legacy preview remains at most three rows. Send `limit` and then the opaque `nextCursor` to traverse the full published list in `items`; the legacy `reviews` property remains capped at three rows. Answers for the same places `getPlaceDetail` does (404 otherwise) and is served `Cache-Control: no-store`, so a takedown holds on the next read.
          *
          *     BE-BFF-019 (ADR-0026, proposal): `order=helpful` ranks by `helpfulCount` descending, then the same newest-first order, so with no reactions it answers exactly what `latest` does. Counts only; no response names who reacted.
          */
@@ -3629,6 +3707,26 @@ export interface paths {
         head?: never;
         /** Editor: place workflow transition (draft→review→published→suspended) */
         patch: operations["cmsTransitionPlace"];
+        trace?: never;
+    };
+    "/cms/places/{id}/verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Verify or revoke independently checked venue identity and location
+         * @description Moderator or super_admin. Evidence type and reference required for verified. If-Match binds both identity and verification revisions from CMS detail. Equivalent repeat decisions preserve verifiedAt; audit and ETag advance atomically. Quality and safety are never certified.
+         */
+        put: operations["setVenueVerification"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/cms/places/{id}/hours": {
@@ -6350,6 +6448,36 @@ export interface components {
             joinedAt?: string;
             avatarUrl?: string | null;
         };
+        /** @description GoGo-BE#758 — facts for the pre-join invitation screen. Optional appointment properties are absent when the host did not set them. `emailVerified` means the account verified its email; it is not an identity/KYC claim. No property carries the invite credential or an id. */
+        InvitePreview: {
+            inviter: {
+                displayName: string;
+                /** @description Public avatar URL, or null when absent or media hosting is unavailable. */
+                avatarUrl: string | null;
+                emailVerified: boolean;
+            };
+            /** @enum {string} */
+            roomType: "couple" | "group";
+            participantCount: number;
+            /** Format: date-time */
+            startAt?: string;
+            /** Format: date-time */
+            endAt?: string;
+            area?: {
+                /** @enum {string} */
+                source: "administrative_area" | "service_area";
+                /** @description Verified administrative-unit or active curated service-area name. */
+                name: string;
+                city?: string;
+            };
+            budget?: {
+                /** @enum {string} */
+                mode: "total" | "per_person";
+                /** @description Integer minor units. */
+                amount: number;
+                currency: string;
+            };
+        };
         /** @description Facts only — audience copy is composed client-side from type/participantCount/budgetMode. */
         RoomSummary: {
             /** Format: uuid */
@@ -6389,7 +6517,47 @@ export interface components {
                 name?: string;
             }[];
         };
+        /** @description Venue identity and location independently checked by a CMS admin; never certifies quality or safety. Revoked on material name/address/location change; requires re-verification. No evidence or actor exposed publicly. */
+        VenueVerification: {
+            /** @enum {string} */
+            status: "unverified" | "verified";
+            /** Format: date-time */
+            verifiedAt?: string;
+        };
+        CmsVenueVerification: components["schemas"]["VenueVerification"] & {
+            identityRevision: number;
+            version: number;
+            /** @example "1:0" */
+            etag: string;
+        };
+        SetVenueVerification: {
+            /** @enum {string} */
+            status: "unverified" | "verified";
+            /**
+             * @description Independently approved evidence establishing BOTH venue identity and location; required for verified.
+             * @enum {string}
+             */
+            evidenceType?: "site_visit" | "official_registry" | "venue_document";
+            /** @description Required for verified; CMS-only evidence reference. */
+            evidenceReference?: string;
+            reason: string;
+        };
         PlaceSearchResult: {
+            taxonomies: {
+                /** @enum {string} */
+                kind: "category" | "mood" | "setting" | "amenity";
+                key: string;
+            }[];
+            /** @description Current VERIFIED administrative mapping only; commune preferred, province fallback; actual label locale reported. */
+            areaSummary?: {
+                datasetVersion: string;
+                provinceCode: string;
+                communeCode: string | null;
+                label: string;
+                /** @enum {string} */
+                locale: "vi" | "en";
+            };
+            verification: components["schemas"]["VenueVerification"];
             /** Format: uuid */
             id: string;
             name: string;
@@ -6400,6 +6568,10 @@ export interface components {
             lng: number;
             rating?: number;
             ratingCount?: number;
+            /** @description GoGo community mean; omitted below the five-review sample threshold. Never merged with `rating`. */
+            gogoRating?: number;
+            /** @description Published GoGo review count, including zero; the client uses words rather than a score below five. */
+            gogoRatingCount?: number;
             avgVisitMinutes?: number;
             suitability?: {
                 [key: string]: number;
@@ -7580,6 +7752,7 @@ export interface components {
             placeId?: string;
             /** Format: uuid */
             planId?: string;
+            /** @description The current stored score; always present in create and update responses. */
             rating: number;
             text?: string;
             /**
@@ -7590,6 +7763,40 @@ export interface components {
             /** Format: date-time */
             createdAt?: string;
         };
+        /** @description A review written by the caller, with factual context for the My Reviews list. Target facts are optional because a review has either a place or a plan, and place names or historical addresses without verified GoGo provenance are not returned. Private room title and date are returned only while the caller has an active room membership. */
+        MyReview: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            placeId?: string;
+            /** Format: uuid */
+            planId?: string;
+            /** @description The current stored score; always present in create and update responses. */
+            rating: number;
+            text?: string;
+            /**
+             * @description New and edited reviews start at `pending` until moderation.
+             * @enum {string}
+             */
+            status: "pending" | "published" | "rejected" | "removed";
+            /** Format: date-time */
+            createdAt?: string;
+            /** @description Independently sourced GoGo catalogue name of the reviewed place. */
+            placeName?: string;
+            /** @description Verified GoGo-owned address of the reviewed place. */
+            placeAddressText?: string;
+            /** @description Title of the room whose plan was reviewed, when set and the caller is an active member. */
+            planTitle?: string;
+            /**
+             * Format: date-time
+             * @description Scheduled UTC date of the room whose plan was reviewed, when set and the caller is an active member.
+             */
+            planScheduledDate?: string;
+            /** @description How many accounts marked this review helpful; derived from reactions. */
+            helpfulCount: number;
+            /** @description Present only when status is `rejected` and moderation recorded a reason. */
+            rejectionReason?: string;
+        };
         SavedItem: {
             /** @enum {string} */
             targetType: "place" | "plan";
@@ -7598,6 +7805,16 @@ export interface components {
             /** Format: date-time */
             savedAt: string;
             area: components["schemas"]["SavedItemArea"];
+            /** @description Place items only; omitted below the five-review sample threshold. Never merged with the provider score. */
+            gogoRating?: number;
+            /** @description Place items only; published GoGo review count, including zero. */
+            gogoRatingCount?: number;
+            /** @description Plan items only; true when the room's current constraint version is newer than the version used to build this saved plan. Omitted when the target is not a readable plan. */
+            conditionsChanged?: boolean;
+            /** @description Plan items only; constraint version used to build this saved plan. */
+            planConstraintVersion?: number;
+            /** @description Plan items only; the room's current constraint version. */
+            currentConstraintVersion?: number;
         };
         /** @description ADM-022 (#569) — facts to group a saved item by, never a composed label. A place is `commune` only through a VERIFIED mapping in the published dataset. A plan is `commune` when every stop is in one commune, `province` when every stop is in one province across communes, `multiple_provinces` when stops span provinces, and `unknown` when any stop has no such mapping (a plan is never placed by its first stop). Labels come from the published dataset. */
         SavedItemArea: {
@@ -7703,6 +7920,42 @@ export interface components {
                 entityType?: string;
                 /** Format: uuid */
                 entityId?: string;
+                /** @description Room title, when the room has one. */
+                roomName?: string;
+                /** @description Display name of the room member who created the invite used to join. */
+                inviterName?: string;
+                /** @description Aggregate completion only; never contains a member's private selections. */
+                preferenceProgress?: {
+                    completedCount: number;
+                    memberCount: number;
+                };
+                /** @description Number of stops in the current plan at notification fan-out. */
+                stopCount?: number;
+                /** @description Structured plan-change facts; the client composes the sentence. */
+                planChange?: {
+                    /** @enum {string} */
+                    action: "edit" | "regenerate";
+                    /** @description Stops in the event-time plan version, or in the current plan at fan-out for a legacy event with no stored counts. */
+                    stopCount?: number;
+                    /** @description Optional stops in the same plan version as `stopCount`; never combined with a count from another version. */
+                    optionalStopCount?: number;
+                    /** @description Stops whose place was not present in the previous plan version. */
+                    addedStopCount?: number;
+                    /** @description Stops whose place is absent from the new plan version. */
+                    removedStopCount?: number;
+                    /** @description Retained stops whose position changed. */
+                    movedStopCount?: number;
+                    /** @description Retained stops whose visit duration changed. */
+                    durationChangedStopCount?: number;
+                    /** @description Retained stops whose lock flag changed. */
+                    lockChangedStopCount?: number;
+                    /** @description Retained stops whose optional flag changed. */
+                    optionalChangedStopCount?: number;
+                };
+                /** @description CMS-authored campaign title; present only for campaign rows. */
+                title?: string;
+                /** @description CMS-authored campaign body; present only for campaign rows. */
+                body?: string;
             } & {
                 [key: string]: unknown;
             };
@@ -7767,6 +8020,7 @@ export interface components {
             photoUri: string | null;
         };
         PlaceDetail: {
+            verification?: components["schemas"]["VenueVerification"];
             /** Format: uuid */
             id?: string;
             name?: string;
@@ -7888,8 +8142,17 @@ export interface components {
             /** Format: uuid */
             placeId?: string;
             name?: string;
+            /** @description GoGo community mean; omitted below the five-review sample threshold. Never merged with provider quality used for ranking. */
+            gogoRating?: number;
+            /** @description Published GoGo review count, including zero. */
+            gogoRatingCount?: number;
             rank?: number;
+            /** @description Normalized match score from the deterministic ranking pipeline. */
             score?: number;
+            /** @description The same normalized ranking fact as `score`, named explicitly for match-result option rows. */
+            matchScore?: number;
+            /** @description Members whose current vote for this option is `yes` or `star`; zero when nobody liked it. */
+            likedByCount?: number;
             /** @description Explainable score parts — drives the "Vì sao phù hợp" UI. */
             components?: {
                 [key: string]: number;
@@ -7900,6 +8163,10 @@ export interface components {
             /** @enum {string} */
             myVote?: "yes" | "no" | "star";
             points?: number;
+            /** @description Driving minutes from the room origin to this candidate; omitted when the room has no origin. */
+            travelMinutesFromOrigin?: number;
+            /** @description Driving distance in metres from the room origin to this candidate; omitted when the room has no origin. */
+            travelDistanceMFromOrigin?: number;
         };
         SuggestionsCurrent: {
             run?: {
@@ -7914,6 +8181,8 @@ export interface components {
             } | null;
             /** @enum {string} */
             decisionMode?: "match" | "vote" | "host";
+            /** @description True when at least one candidate leg is a straight-line estimate rather than a routed driving result. Omitted when the room has no origin. */
+            travelEstimated?: boolean;
             candidates?: components["schemas"]["SuggestionCandidate"][];
             votes?: {
                 mine?: {
@@ -7926,6 +8195,13 @@ export interface components {
                     yes?: number;
                     star?: number;
                     no?: number;
+                }[];
+                /** @description Active room members and whether each has cast at least one vote represented by `progress`. Ballot choices remain private; only the display name already visible to co-members is included. */
+                members?: {
+                    /** Format: uuid */
+                    memberId: string;
+                    displayName: string;
+                    hasVoted: boolean;
                 }[];
             };
         };
@@ -7971,6 +8247,10 @@ export interface components {
             durationMinutes?: number;
             travelMinutesFromPrev?: number | null;
             travelDistanceMFromPrev?: number | null;
+            /** @description The next stop's stored driving minutes; null on the final stop. */
+            travelMinutesToNext?: number | null;
+            /** @description The next stop's stored driving distance in metres; null on the final stop. */
+            travelDistanceMToNext?: number | null;
             /** @description Lower price bound per `costScope`. `null` means the place has no price in that scope — unknown, not free; a free place is `0`. */
             costMin?: number | null;
             /** @description Upper price bound per `costScope`, under the same rule as `costMin`. */
@@ -8623,7 +8903,16 @@ export interface components {
              * @enum {string}
              */
             source: "gogo";
+            /** @description Mean of all published GoGo reviews; omitted below the five-review sample threshold. */
+            gogoRating?: number;
+            /** @description Count of all published GoGo reviews, not merely this page. */
+            gogoRatingCount?: number;
+            /** @description Opaque cursor for the next page; null at the end. The legacy three-row preview may ignore it. */
+            nextCursor?: string | null;
+            /** @description Backward-compatible preview containing at most the first three rows of this response. */
             reviews: components["schemas"]["PublicPlaceReview"][];
+            /** @description Page rows returned when `limit` or `cursor` is sent; omitted for a legacy preview request. */
+            items?: components["schemas"]["PublicPlaceReview"][];
         };
         /** @description A published review as anyone may read it. Carries no user id, email or avatar. */
         PublicPlaceReview: {
@@ -8643,6 +8932,8 @@ export interface components {
                 /** @description The name the author shows other people; `null` once the account is deleted (ADR-0023). Clients render their own label for it. */
                 displayName: string | null;
             };
+            /** @description True only when this author has an approved GoGo check-in at this place; review moderation alone is not visit verification. */
+            verifiedVisit?: boolean;
         };
         PlacePhoto: {
             /** Format: uuid */
@@ -8670,6 +8961,10 @@ export interface components {
             decisionMode: "match" | "vote" | "host";
             participantCount: number;
             title?: string;
+            /** Format: date-time */
+            startAt?: string | null;
+            /** Format: date-time */
+            endAt?: string | null;
             /** Format: date-time */
             scheduledDate?: string;
             /** Format: date-time */
@@ -8761,6 +9056,7 @@ export interface components {
             } | null;
         };
         CmsPlaceDetail: {
+            verification?: components["schemas"]["CmsVenueVerification"];
             /** Format: uuid */
             id: string;
             name: string;
@@ -8883,7 +9179,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             /** @enum {string} */
-            kind: "mood" | "category" | "setting" | "dietary" | "accessibility" | "spending_style" | "suitability" | "checkin_tag";
+            kind: "mood" | "category" | "setting" | "dietary" | "accessibility" | "spending_style" | "suitability" | "checkin_tag" | "amenity";
             key: string;
             /** @description Locale to label. Business data stores the key; the label is presentation. */
             labels: {
@@ -9752,7 +10048,9 @@ export interface components {
             }[];
         };
         AssistantStatus: {
-            /** @description `enabled` — sending works. `disabled` — kill switch off (`assistant.enabled`), or the environment cannot take new replies (for example its spending limit is reached). `limit_reached` — this account's daily messages are spent until `resetsAt`. Unknown values mean "cannot send now". */
+            /** @description No-expiry contributor credits. Prospective registered-user submission approval grants +50 once. Daily allowance first, then one credit per accepted user send (202), including later provider failure. Replay/rejection costs zero; credits never bypass burst/readiness/budget gates. */
+            creditBalance: number;
+            /** @description `enabled` — sending works. `disabled` — kill switch off (`assistant.enabled`), or the environment cannot take new replies (for example its spending limit is reached). `limit_reached` — this account's daily messages and contributor credits are both spent until `resetsAt`. Unknown values mean "cannot send now". */
             state: string;
             /** @description Accepted messages this account may send per day (default **30**; provisional and configurable — read it from here, never hardcode it). Only an accepted send (`202`) counts; an idempotent replay (`x-idempotent-replay: true`) consumes nothing. A limit that is not configured refuses (`503 ASSISTANT_DISABLED`), it never means unlimited. */
             dailyMessageLimit: number;
@@ -10186,6 +10484,7 @@ export interface components {
         };
         /** @description The allowlisted export document served by `GET /me/export` and by a redeemed secure export (`POST /me/exports/{id}/download`) — one shared collector, so both carry the same sections. Only the sections whose shape this contract pins are listed here; the rest of the allowlist (profile, memberships, preferences, votes, saved, reviews, reviewReactions, notificationSettings) is described on `exportMyData`. Unknown sections may appear; ignore them. */
         UserExportDocument: {
+            assistantCreditBalance?: number;
             /** Format: date-time */
             exportedAt?: string;
             /**
@@ -10482,6 +10781,15 @@ export interface components {
         };
     };
     responses: {
+        /** @description SERVICE_UNAVAILABLE (retryable true) — the authoritative consumer session lookup encountered an operational database connection, pool or query timeout/unavailability. Retry with backoff; cached state cannot authorize access. SQL/schema/permission/configuration errors retain existing error handling. */
+        SessionLookupUnavailable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorEnvelope"];
+            };
+        };
         /** @description The client's ETag still matches. No body, by definition — this is the whole saving the tag exists for. */
         NotModified: {
             headers: {
@@ -10741,6 +11049,7 @@ export interface operations {
                 "application/json": {
                     /** Format: email */
                     email: string;
+                    /** @description 8 to 128 UTF-16 code units (the existing login length cap), without trimming or normalization. Supplementary characters such as emoji occupy two units. Requires at least one Unicode uppercase letter (Lu), one Unicode lowercase letter (Ll), one ASCII digit (0-9), and one special character outside Unicode letters, numbers and combining marks (L, N, M). Vietnamese letters such as Đ and ă satisfy the respective case requirements. Whitespace and emoji count as special characters. Policy failures return BadRequest with code VALIDATION_FAILED and a field_errors entry whose field is password; the password is never echoed. */
                     password: string;
                     displayName: string;
                     /** @description Opaque guest token to re-parent guest history (FR-AUTH-003). */
@@ -10799,6 +11108,124 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             429: components["responses"]["RateLimited"];
+        };
+    };
+    requestPasswordRecovery: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client-generated key for retryable mutations. Repeating a request with the same key returns the original result instead of re-applying it. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: email */
+                    email: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Accepted without confirming account eligibility or delivery */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        challengeId: string;
+                        /** Format: date-time */
+                        expiresAt: string;
+                        /** Format: date-time */
+                        resendAvailableAt: string;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description IDEMPOTENCY_KEY_REUSED — key was used with a different normalized body */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            /** @description RECOVERY_MAIL_NOT_CONFIGURED (retryable false), or global RECOVERY_UNAVAILABLE (retryable true) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    completePasswordRecovery: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client-generated key for retryable mutations. Repeating a request with the same key returns the original result instead of re-applying it. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: email */
+                    email: string;
+                    /** Format: uuid */
+                    challengeId: string;
+                    code: string;
+                    /** @description Same registration policy: Unicode uppercase and lowercase, ASCII digit, and a character outside Unicode L/N/M. Failures use VALIDATION_FAILED with field_errors[].field=password. */
+                    password: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Password replaced; sign in again */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description RECOVERY_INVALID, VALIDATION_FAILED, or INVALID_IDEMPOTENCY_KEY */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description IDEMPOTENCY_KEY_REUSED */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            /** @description RECOVERY_MAIL_NOT_CONFIGURED (retryable false), or RECOVERY_UNAVAILABLE (retryable true) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
         };
     };
     refreshSession: {
@@ -10904,6 +11331,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     getMe: {
@@ -10925,6 +11353,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     deleteAccount: {
@@ -10943,6 +11372,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     updateProfile: {
@@ -10971,6 +11401,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             429: components["responses"]["RateLimited"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     setAvatar: {
@@ -11044,11 +11475,13 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             429: components["responses"]["RateLimited"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     listRooms: {
         parameters: {
             query?: {
+                view?: "home";
                 /** @description Repeatable or comma-separated; unknown values are ignored. */
                 status?: string;
                 limit?: number;
@@ -11074,6 +11507,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     createRoom: {
@@ -11117,6 +11551,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             403: components["responses"]["Forbidden"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     getRoom: {
@@ -11141,6 +11576,7 @@ export interface operations {
             };
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     updateRoomConstraints: {
@@ -11181,6 +11617,7 @@ export interface operations {
             };
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     transitionRoom: {
@@ -11214,6 +11651,7 @@ export interface operations {
             };
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     renameRoom: {
@@ -11246,6 +11684,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     streamRoomEvents: {
@@ -11312,6 +11751,7 @@ export interface operations {
                     "application/json": components["schemas"]["RoomMember"][];
                 };
             };
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     removeRoomMember: {
@@ -11335,6 +11775,45 @@ export interface operations {
             };
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["SessionLookupUnavailable"];
+        };
+    };
+    previewRoomInvite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    inviteCode: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Minimal invitation facts; copy and money formatting are client-owned. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitePreview"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            /** @description Invite expired/revoked/spent (`INVITE_NOT_USABLE`), room no longer taking members (`ROOM_NOT_JOINABLE`) or room expired (`ROOM_EXPIRED`). */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
         };
     };
     listRoomInvites: {
@@ -11355,6 +11834,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     createRoomInvite: {
@@ -11390,6 +11870,7 @@ export interface operations {
                     };
                 };
             };
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     revokeRoomInvite: {
@@ -11411,6 +11892,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     joinRoom: {
@@ -11470,6 +11952,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     joinRoomAsGuest: {
@@ -11540,6 +12023,7 @@ export interface operations {
                 content?: never;
             };
             400: components["responses"]["BadRequest"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     removeRoomSeedPlace: {
@@ -11561,6 +12045,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     getMyPreferences: {
@@ -11595,6 +12080,7 @@ export interface operations {
                     };
                 };
             };
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     saveMyPreferences: {
@@ -11635,6 +12121,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             409: components["responses"]["Conflict"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     completeMyPreferences: {
@@ -11666,6 +12153,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     createUpload: {
@@ -11741,6 +12229,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["AssistantUserOnly"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     listAssistantConversations: {
@@ -11769,6 +12258,7 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["AssistantUserOnly"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     createAssistantConversation: {
@@ -11844,6 +12334,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["AssistantUserOnly"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     deleteAssistantConversation: {
@@ -11866,6 +12357,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["AssistantUserOnly"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     renameAssistantConversation: {
@@ -11899,6 +12391,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["AssistantUserOnly"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     listAssistantMessages: {
@@ -11927,6 +12420,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["AssistantUserOnly"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     sendAssistantMessage: {
@@ -12063,6 +12557,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["AssistantUserOnly"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     setAssistantMessageFeedback: {
@@ -12094,6 +12589,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["AssistantUserOnly"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     clearAssistantMessageFeedback: {
@@ -12118,6 +12614,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["AssistantUserOnly"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     getAssistantProposal: {
@@ -12143,6 +12640,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["AssistantUserOnly"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     confirmAssistantProposal: {
@@ -12236,6 +12734,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["AssistantUserOnly"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     getAdministrativeVersion: {
@@ -13390,7 +13889,7 @@ export interface operations {
     listTaxonomies: {
         parameters: {
             query?: {
-                /** @description Comma-separated kind filter (mood,category,setting,dietary,accessibility,spending_style,suitability,checkin_tag) */
+                /** @description Comma-separated kind filter (mood,category,setting,dietary,accessibility,spending_style,suitability,checkin_tag,amenity) */
                 kinds?: string;
             };
             header?: never;
@@ -13421,7 +13920,17 @@ export interface operations {
                 openAt?: string;
                 /** @description CSV */
                 categories?: string;
-                suitedFor?: "couple" | "group" | "family";
+                /** @description CSV suitability keys (couple, group, family, work_reading); OR, score >=0.5 */
+                suitedFor?: string;
+                /** @description CSV; ALL required. cashless_payment expands to card_payment OR qr_payment; wifi,power_outlets requires both. */
+                amenities?: string;
+                /** @description CSV active mood keys; OR */
+                moods?: string;
+                /** @description CSV active setting keys; OR */
+                settings?: string;
+                locale?: "vi" | "en";
+                /** @description Exact matching count before cursor/limit; full count cost even with limit=1. */
+                includeTotal?: boolean;
                 priceMinPerPerson?: number;
                 priceMaxPerPerson?: number;
                 minRating?: number;
@@ -13460,6 +13969,9 @@ export interface operations {
                             weightsVersion?: string;
                             sort?: string;
                             location?: components["schemas"]["SearchLocation"];
+                            totalCount?: number;
+                            /** @enum {string} */
+                            totalCountAccuracy?: "exact";
                         };
                     };
                 };
@@ -13467,6 +13979,13 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             409: components["responses"]["Conflict"];
             429: components["responses"]["RateLimited"];
+            /** @description Retryable SEARCH_COUNT_UNAVAILABLE; retry without includeTotal. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     getPlaceDetail: {
@@ -13498,6 +14017,10 @@ export interface operations {
         parameters: {
             query?: {
                 order?: "latest" | "helpful";
+                /** @description Opaque cursor from a previous page. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description Omit for the backward-compatible three-review preview. */
+                limit?: number;
             };
             header?: never;
             path: {
@@ -13507,7 +14030,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Up to three reviews; an empty list when none is published */
+            /** @description GoGo aggregate plus a page of reviews; an empty list when none is published */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -13587,6 +14110,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["RateLimited"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     generateSuggestions: {
@@ -13611,6 +14135,7 @@ export interface operations {
             };
             409: components["responses"]["Conflict"];
             429: components["responses"]["RateLimited"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     getCurrentSuggestions: {
@@ -13633,6 +14158,7 @@ export interface operations {
                     "application/json": components["schemas"]["SuggestionsCurrent"];
                 };
             };
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     castVote: {
@@ -13670,6 +14196,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             409: components["responses"]["Conflict"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     finalizeVotes: {
@@ -13712,6 +14239,7 @@ export interface operations {
             };
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     getCurrentPlan: {
@@ -13735,6 +14263,7 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     getPlan: {
@@ -13757,6 +14286,7 @@ export interface operations {
                     "application/json": components["schemas"]["Plan"];
                 };
             };
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     editPlanStops: {
@@ -13795,6 +14325,7 @@ export interface operations {
                 };
             };
             409: components["responses"]["Conflict"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     regeneratePlan: {
@@ -13828,6 +14359,7 @@ export interface operations {
                 };
             };
             409: components["responses"]["Conflict"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     lockPlanStop: {
@@ -13858,6 +14390,7 @@ export interface operations {
                 };
             };
             409: components["responses"]["Conflict"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     completePlanStop: {
@@ -13880,6 +14413,7 @@ export interface operations {
                 content?: never;
             };
             409: components["responses"]["Conflict"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     checkinPlanStop: {
@@ -13964,6 +14498,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             429: components["responses"]["RateLimited"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     getPlaceImport: {
@@ -13985,6 +14520,7 @@ export interface operations {
                 content?: never;
             };
             403: components["responses"]["Forbidden"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     listServiceAreas: {
@@ -14053,6 +14589,7 @@ export interface operations {
                     "application/json": components["schemas"]["SavedItem"][];
                 };
             };
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     saveItem: {
@@ -14074,6 +14611,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     unsaveItem: {
@@ -14095,6 +14633,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     createReview: {
@@ -14117,7 +14656,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Review created; awaits moderation */
+            /** @description Review created with its stored rating; awaits moderation */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -14126,6 +14665,7 @@ export interface operations {
                     "application/json": components["schemas"]["Review"];
                 };
             };
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     exportMyData: {
@@ -14147,6 +14687,7 @@ export interface operations {
                 };
             };
             429: components["responses"]["RateLimited"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     requestSecureExport: {
@@ -14249,6 +14790,7 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     downloadSecureExport: {
@@ -14357,6 +14899,7 @@ export interface operations {
                     };
                 };
             };
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     registerPushSubscription: {
@@ -14512,6 +15055,7 @@ export interface operations {
                 };
             };
             429: components["responses"]["RateLimited"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     getPlaceSubmission: {
@@ -14548,6 +15092,7 @@ export interface operations {
                 };
             };
             403: components["responses"]["Forbidden"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     cmsListPlaceSubmissions: {
@@ -15180,9 +15725,10 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Review"][];
+                    "application/json": components["schemas"]["MyReview"][];
                 };
             };
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     updateReview: {
@@ -15203,7 +15749,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Updated; status returns to `pending` */
+            /** @description Updated with its current stored rating; status returns to `pending` */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -15214,6 +15760,7 @@ export interface operations {
             };
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     markReviewHelpful: {
@@ -15240,6 +15787,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["RateLimited"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     unmarkReviewHelpful: {
@@ -15266,6 +15814,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["RateLimited"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     listMyReviewReactions: {
@@ -15290,6 +15839,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     markNotificationRead: {
@@ -15310,6 +15860,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     getPushIdentityToken: {
@@ -15695,6 +16246,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["RateLimited"];
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     getNotificationPreferences: {
@@ -15720,6 +16272,7 @@ export interface operations {
                     }[];
                 };
             };
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     setNotificationPreference: {
@@ -15747,6 +16300,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     getNotificationSettings: {
@@ -15774,6 +16328,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     setNotificationSettings: {
@@ -15808,6 +16363,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     getDocsPage: {
@@ -17396,6 +17952,56 @@ export interface operations {
             409: components["responses"]["Conflict"];
         };
     };
+    setVenueVerification: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description CMS detail verification.etag */
+                "If-Match": string;
+                /** @description Client-generated key for retryable mutations. Repeating a request with the same key returns the original result instead of re-applying it. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetVenueVerification"];
+            };
+        };
+        responses: {
+            /** @description Verification decision; same ETag in body and header */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsVenueVerification"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description PRECONDITION_FAILED; reload identity and verification */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description PRECONDITION_REQUIRED; If-Match missing */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            429: components["responses"]["RateLimited"];
+        };
+    };
     cmsSetPlaceHours: {
         parameters: {
             query?: never;
@@ -17708,7 +18314,7 @@ export interface operations {
     cmsListTaxonomies: {
         parameters: {
             query?: {
-                kind?: "mood" | "category" | "setting" | "dietary" | "accessibility" | "spending_style" | "suitability" | "checkin_tag";
+                kind?: "mood" | "category" | "setting" | "dietary" | "accessibility" | "spending_style" | "suitability" | "checkin_tag" | "amenity";
                 isActive?: boolean;
             };
             header?: never;
@@ -17739,7 +18345,7 @@ export interface operations {
             content: {
                 "application/json": {
                     /** @enum {string} */
-                    kind: "mood" | "category" | "setting" | "dietary" | "accessibility" | "spending_style" | "suitability" | "checkin_tag";
+                    kind: "mood" | "category" | "setting" | "dietary" | "accessibility" | "spending_style" | "suitability" | "checkin_tag" | "amenity";
                     key: string;
                     /** @description Locale → label. Each label is one line of plain text (GoGo-BE#737). The pattern states the characters a label may contain as sent: letters, combining marks, digits, space separators and ' " ‘ ’ “ ” ( ) & + , . / - – —. The server then normalises it (NFC, every space separator to one ASCII space, runs collapsed, leading and trailing spaces removed) and requires 1–80 code points after normalisation. A label outside the rule is refused (400), never stripped or truncated. */
                     labels: {

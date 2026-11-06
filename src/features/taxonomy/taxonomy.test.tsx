@@ -5,6 +5,45 @@ import { http, HttpResponse } from 'msw'
 import { server } from '@/shared/test/server'
 import { renderWithProviders, signInAs } from '@/shared/test/render'
 import TaxonomyScreen from './taxonomy.view'
+import { taxonomyListSchema } from '@/shared/api/contracts'
+import { taxonomies } from '@/shared/test/fixtures'
+
+const amenity = {
+  ...taxonomies[0]!,
+  id: 'amenity-fixture',
+  kind: 'amenity',
+  key: 'wifi',
+  labels: { vi: 'Wi-Fi', en: 'Wi-Fi' },
+  isActive: false,
+}
+
+describe('amenity taxonomy contract (CMS#273)', () => {
+  it('parses the entire mixed list, including an inactive amenity', () => {
+    const parsed = taxonomyListSchema.parse([...taxonomies, amenity])
+    expect(parsed).toHaveLength(taxonomies.length + 1)
+    expect(parsed.at(-1)).toMatchObject({ kind: 'amenity', isActive: false })
+  })
+
+  it.each([
+    ['vi', 'Tiện ích', 'Nhóm'],
+    ['en', 'Amenities', 'Group'],
+  ])('renders the %s amenity selector and its rows', async (locale, label, groupLabel) => {
+    window.localStorage.setItem('gogo.cms.locale', locale)
+    server.use(http.get('*/cms/taxonomies', () => HttpResponse.json([...taxonomies, amenity])))
+    signInAs('editor')
+    const user = userEvent.setup()
+    renderWithProviders(<TaxonomyScreen />)
+
+    expect(await screen.findByText('quiet_peaceful')).toBeInTheDocument()
+    await user.selectOptions(screen.getByLabelText(groupLabel), 'amenity')
+    expect(await screen.findByText('wifi')).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: label })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: new RegExp(label) })).toHaveAttribute(
+      'aria-current',
+      'true',
+    )
+  })
+})
 
 describe('TaxonomyScreen', () => {
   it('shows usage, which is what makes the never-delete rule checkable', async () => {

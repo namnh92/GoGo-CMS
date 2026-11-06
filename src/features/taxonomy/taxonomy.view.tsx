@@ -36,6 +36,7 @@ const KINDS: TaxonomyKind[] = [
   'spending_style',
   'suitability',
   'checkin_tag',
+  'amenity',
 ]
 
 type StateFilter = 'all' | 'active' | 'inactive'

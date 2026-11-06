@@ -417,8 +417,19 @@ export const placeProviderStatusSchema = z.object({
 })
 export type PlaceProviderStatus = z.infer<typeof placeProviderStatusSchema>
 
+/** Independent venue identity/location evidence, separate from administrative mapping. */
+export const cmsVenueVerificationSchema = z.object({
+  status: z.enum(['unverified', 'verified']),
+  verifiedAt: z.string().optional(),
+  identityRevision: z.number().int().min(1),
+  version: z.number().int().min(0),
+  etag: z.string(),
+})
+
 /** `CmsPlaceDetail` (GoGo-BE#157) — every field `cmsUpdatePlace` accepts, plus relations. */
 export const cmsPlaceDetailSchema = z.object({
+  /** Optional in 6.0; retain the ETag for future verification decisions. */
+  verification: cmsVenueVerificationSchema.nullish(),
   id: z.string(),
   name: z.string(),
   description: z.string().nullish(),
@@ -533,6 +544,7 @@ export const taxonomyKindSchema = z.enum([
   'spending_style',
   'suitability',
   'checkin_tag',
+  'amenity',
 ])
 export type TaxonomyKind = z.infer<typeof taxonomyKindSchema>
 

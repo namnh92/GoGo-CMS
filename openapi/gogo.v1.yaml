@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: GoGo API
-  version: 4.0.0-alpha.1
+  version: 6.0.0-alpha.1
   description: |
     Public contract for GoGo clients (Mobile, Web, Mini App). This page is the
     integration guide — every rule below is enforced by the API, not advisory.
@@ -30,6 +30,13 @@ info:
        detection) — the user is logged out everywhere. Serialise refresh calls
        behind one mutex; parallel refreshes will log the user out.
     5. `DELETE /sessions/current` with `{ "allDevices": true|false }` to log out.
+
+    Every protected consumer route performs an authoritative session lookup.
+    Operational database connection/pool/query failures return `503
+    SERVICE_UNAVAILABLE` with `retryable: true`; retry with backoff. A cached
+    negative revocation result never authorizes during an outage. Missing,
+    wrong-owner or revoked sessions return `401 SESSION_REVOKED`. Superseded
+    access sessions remain valid. Guest and CMS session handling is unchanged.
 
     ### Guest sessions (no account)
 
@@ -249,7 +256,22 @@ paths:
               required: [email, password, displayName]
               properties:
                 email: { type: string, format: email, maxLength: 254 }
-                password: { type: string, minLength: 10, maxLength: 128 }
+                password:
+                  type: string
+                  minLength: 8
+                  maxLength: 128
+                  description: >-
+                    8 to 128 UTF-16 code units (the existing login length cap),
+                    without trimming or normalization. Supplementary characters
+                    such as emoji occupy two units.
+                    Requires at least one Unicode uppercase letter (Lu), one
+                    Unicode lowercase letter (Ll), one ASCII digit (0-9), and
+                    one special character outside Unicode letters, numbers and
+                    combining marks (L, N, M). Vietnamese letters such as Đ and
+                    ă satisfy the respective case requirements. Whitespace and
+                    emoji count as special characters. Policy failures return
+                    BadRequest with code VALIDATION_FAILED and a field_errors
+                    entry whose field is password; the password is never echoed.
                 displayName: { type: string, minLength: 1, maxLength: 50 }
                 claimGuestToken:
                   type: string
@@ -292,6 +314,116 @@ paths:
               schema: { $ref: '#/components/schemas/TokenGrant' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '429': { $ref: '#/components/responses/RateLimited' }
+
+  /auth/password-recovery/request:
+    post:
+      operationId: requestPasswordRecovery
+      tags: [sessions]
+      summary: Request an in-app password recovery code
+      security: []
+      description: |
+        Always returns the same 202 shape for eligible, missing, guest,
+        passwordless, disabled and deleted accounts. No code is returned.
+        Active password accounts may recover even if email was unverified.
+        Six-digit code expires after 300 seconds; resend replaces the proof.
+        Limits count all requests, including replays: 1/minute + 3/hour/email,
+        10/minute + 50/hour/IP. Cooldown is 60 seconds, also on replay.
+        Idempotency is scoped to IP + operation + key for 24 hours; same key
+        and normalized body replays the original result even after resend.
+        A changed body returns 422. Account-specific delivery failure still
+        returns 202 and invalidates the affected challenge internally.
+        Production is disabled until mail and shared fail-closed quotas exist.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email, maxLength: 254 }
+      responses:
+        '202':
+          description: Accepted without confirming account eligibility or delivery
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [challengeId, expiresAt, resendAvailableAt]
+                properties:
+                  challengeId: { type: string, format: uuid }
+                  expiresAt: { type: string, format: date-time }
+                  resendAvailableAt: { type: string, format: date-time }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '422':
+          description: IDEMPOTENCY_KEY_REUSED — key was used with a different normalized body
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503':
+          description: RECOVERY_MAIL_NOT_CONFIGURED (retryable false), or global RECOVERY_UNAVAILABLE (retryable true)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /auth/password-recovery/complete:
+    post:
+      operationId: completePasswordRecovery
+      tags: [sessions]
+      summary: Consume a recovery code and replace the password
+      security: []
+      description: |
+        Single-use proof, at most five failed attempts. Invalid, expired,
+        exhausted, superseded, consumed or ineligible proofs return the same
+        400 RECOVERY_INVALID. Limits: 10/15 minutes/email, 30/15 minutes/IP.
+        Success verifies the account email if needed, revokes every consumer
+        session and refresh token, and clears login lockout. No new session is
+        issued; sign in again. No history is moved or merged.
+        Idempotency is scoped to IP + operation + key for 24 hours. Completion
+        replay commits with the reset; a matching retry returns 204 without
+        resetting again. A changed body returns 422. Limits apply to retries.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, challengeId, code, password]
+              properties:
+                email: { type: string, format: email, maxLength: 254 }
+                challengeId: { type: string, format: uuid }
+                code: { type: string, pattern: '^[0-9]{6}$' }
+                password:
+                  type: string
+                  minLength: 8
+                  maxLength: 128
+                  description: >
+                    Same registration policy: Unicode uppercase and lowercase,
+                    ASCII digit, and a character outside Unicode L/N/M.
+                    Failures use VALIDATION_FAILED with field_errors[].field=password.
+      responses:
+        '204': { description: Password replaced; sign in again }
+        '400':
+          description: RECOVERY_INVALID, VALIDATION_FAILED, or INVALID_IDEMPOTENCY_KEY
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '422':
+          description: IDEMPOTENCY_KEY_REUSED
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503':
+          description: RECOVERY_MAIL_NOT_CONFIGURED (retryable false), or RECOVERY_UNAVAILABLE (retryable true)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
 
   /auth/refresh:
     post:
@@ -372,6 +504,7 @@ paths:
               properties:
                 allDevices: { type: boolean, default: false }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: Session revoked; cookies cleared.
           content:
@@ -395,6 +528,7 @@ paths:
         this environment can take an avatar at all. A guest receives its
         session facts: `roomId`, `displayName`, `expiresAt`.
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: Actor profile (shape depends on actorType)
           content:
@@ -423,6 +557,7 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/ProfilePatch' }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: The updated profile
           content:
@@ -457,6 +592,7 @@ paths:
         Irreversible from the application. Idempotent on an account already
         deleted.
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200': { description: '{ deleted: true }' }
 
   /me/avatar:
@@ -525,6 +661,7 @@ paths:
         device already holds; what is guaranteed is that no new fetch of the
         old URL succeeds once the edge cache lifetime (one day) has passed.
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: 'The profile with `avatarUrl: null`'
           content:
@@ -546,8 +683,15 @@ paths:
         being read: one vote is enough. Each row carries the progress needed to
         draw it, so a "your rooms" screen makes one call, not one per room. The
         invite code is deliberately absent — a list screen has no reason to hand
-        one out.
+        one out. view=home selects at most one room across all eligible memberships;
+        nextCursor is always null and cursor/status overrides are rejected (400).
+        Active rooms with no past explicit end come first, ordered by absolute
+        proximity of effective start to now (future active starts allowed; unknown
+        start last). Then collecting/matching/ready with future start, earliest
+        first. UUID descending breaks ties. Terminal/draft and unscheduled non-active
+        rooms are excluded; no persisted status changes on read.
       parameters:
+        - { name: view, in: query, schema: { type: string, enum: [home] } }
         - name: status
           in: query
           description: Repeatable or comma-separated; unknown values are ignored.
@@ -561,6 +705,7 @@ paths:
           }
         - { name: cursor, in: query, schema: { type: string, maxLength: 512 } }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: One page of room summaries
           content:
@@ -603,6 +748,7 @@ paths:
                   maxItems: 10
                   items: { type: string, format: uuid }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '201':
           description: Room created (creator becomes host)
           content:
@@ -619,6 +765,7 @@ paths:
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: Room summary
           content:
@@ -655,6 +802,7 @@ paths:
                     expectedConstraintVersion: { type: integer, minimum: 1 }
                     participantCount: { type: integer, minimum: 2, maximum: 20 }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: Updated summary with bumped constraintVersion
           content:
@@ -699,6 +847,7 @@ paths:
                   type: string
                   enum: [draft, collecting, matching, ready, active, completed, cancelled, expired]
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: Transitioned
           content:
@@ -733,6 +882,7 @@ paths:
               properties:
                 title: { type: string, nullable: true, maxLength: 80 }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: Renamed; the updated summary
           content:
@@ -876,6 +1026,7 @@ paths:
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: Members
           content:
@@ -893,9 +1044,52 @@ paths:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
         - { name: memberId, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200': { description: Removed }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+
+  /rooms/invites/preview:
+    post:
+      operationId: previewRoomInvite
+      tags: [rooms]
+      summary: Preview the inviter and appointment facts before joining
+      description: >
+        Public because the recipient may not have an account; the high-entropy
+        invite code is the credential and is accepted only in the request body,
+        never in the URL. A usable code reveals only what the invitation screen
+        needs: the inviter's room display name, public avatar and verified-email
+        fact, plus aggregate room type/count and current time, area and budget.
+        It never returns the code, room/member/user ids, title, member list,
+        preferences, exact origin text/coordinates or any email address. The
+        preview does not consume an invite use.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [inviteCode]
+              properties:
+                inviteCode: { type: string, minLength: 10, maxLength: 128 }
+      responses:
+        '200':
+          description: Minimal invitation facts; copy and money formatting are client-owned.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InvitePreview' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '410':
+          description: >
+            Invite expired/revoked/spent (`INVITE_NOT_USABLE`), room no longer
+            taking members (`ROOM_NOT_JOINABLE`) or room expired (`ROOM_EXPIRED`).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429': { $ref: '#/components/responses/RateLimited' }
 
   /rooms/{id}/invites:
     post:
@@ -912,6 +1106,7 @@ paths:
               properties:
                 maxUses: { type: integer, minimum: 1, maximum: 100 }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '201':
           description: Invite created — plaintext code returned exactly once, only hash stored.
           content:
@@ -931,6 +1126,7 @@ paths:
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200': { description: Invites }
 
   /rooms/{id}/invites/{inviteId}:
@@ -942,6 +1138,7 @@ paths:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
         - { name: inviteId, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200': { description: Revoked }
 
   /rooms/join:
@@ -959,6 +1156,7 @@ paths:
               properties:
                 inviteCode: { type: string }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '201':
           description: |
             Joined (idempotent — re-joining returns the existing membership).
@@ -1046,6 +1244,7 @@ paths:
                   maxItems: 10
                   items: { type: string, format: uuid }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200': { description: Updated seed list }
         '400': { $ref: '#/components/responses/BadRequest' }
 
@@ -1058,6 +1257,7 @@ paths:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
         - { name: placeId, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200': { description: Updated seed list }
 
   /rooms/{roomId}/preferences/me:
@@ -1068,6 +1268,7 @@ paths:
       parameters:
         - { name: roomId, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: Own preferences with version
           content:
@@ -1113,6 +1314,7 @@ paths:
                   additionalProperties: { type: number }
                 expectedVersion: { type: integer, minimum: 0 }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: Autosaved
           content:
@@ -1133,6 +1335,7 @@ paths:
       parameters:
         - { name: roomId, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: Completed; room flips to `matching` when everyone is done
           content:
@@ -1270,6 +1473,7 @@ paths:
         shows the entry and asks the guest to sign in (owner decision on
         GoGo-MobileApp#377, 2026-10-26).
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: Current availability for the caller
           content:
@@ -1319,6 +1523,7 @@ paths:
           }
         - { name: cursor, in: query, schema: { type: string, maxLength: 512 } }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: One page of conversations
           content:
@@ -1387,6 +1592,7 @@ paths:
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: The conversation
           content:
@@ -1419,6 +1625,7 @@ paths:
                   maxLength: 80
                   description: Trimmed server-side; blank after trimming is a 400.
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: Renamed
           content:
@@ -1442,6 +1649,7 @@ paths:
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '204': { description: Deleted (or already absent) }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/AssistantUserOnly' }
@@ -1476,6 +1684,7 @@ paths:
           }
         - { name: cursor, in: query, schema: { type: string, maxLength: 512 } }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: One page of messages
           content:
@@ -1792,6 +2001,7 @@ paths:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
         - { name: messageId, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: The assistant message after stopping
           content:
@@ -1819,6 +2029,7 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/AssistantFeedbackInput' }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: Recorded
           content:
@@ -1836,6 +2047,7 @@ paths:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
         - { name: messageId, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '204': { description: Cleared (or there was none) }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/AssistantUserOnly' }
@@ -1853,6 +2065,7 @@ paths:
       parameters:
         - { name: proposalId, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: The proposal
           content:
@@ -1960,6 +2173,7 @@ paths:
       parameters:
         - { name: proposalId, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: The proposal after dismissal
           content:
@@ -3313,7 +3527,7 @@ paths:
         - name: kinds
           in: query
           schema: { type: string }
-          description: Comma-separated kind filter (mood,category,setting,dietary,accessibility,spending_style,suitability,checkin_tag)
+          description: Comma-separated kind filter (mood,category,setting,dietary,accessibility,spending_style,suitability,checkin_tag,amenity)
       responses:
         '200':
           description: Taxonomy keys with i18n labels
@@ -3338,6 +3552,15 @@ paths:
         area matches only places with a VERIFIED mapping from the same dataset.
         A code that is not current or not under its province is 400; a dataset
         that is not the published one is 409 ADMINISTRATIVE_VERSION_CHANGED.
+        Filter dimensions intersect (AND); categories/moods/settings/suitability
+        match any selected value (OR); dietary/accessibility/amenities require ALL.
+        Lists are deduplicated; more than ten distinct values and unknown/inactive
+        or wrong-kind keys are 400. Incomplete lat/lng and inverted prices are 400.
+        includeTotal=true returns exact meta.totalCount under the same statement
+        snapshot as the page, including empty pages. Omitted otherwise. Counts can
+        change between requests. Configurable counted-request rate/concurrency and
+        whole-statement timeout apply; retryable 503 SEARCH_COUNT_UNAVAILABLE means
+        retry without totals. Defaults are 20/min/IP, 4 concurrent/process, 500ms.
       security: []
       parameters:
         - { name: q, in: query, schema: { type: string, maxLength: 200 } }
@@ -3346,7 +3569,37 @@ paths:
         - { name: radiusM, in: query, schema: { type: integer, minimum: 100, maximum: 100000 } }
         - { name: openAt, in: query, schema: { type: string }, description: "'now' or ISO-8601" }
         - { name: categories, in: query, schema: { type: string }, description: CSV, multi-select }
-        - { name: suitedFor, in: query, schema: { type: string, enum: [couple, group, family] } }
+        - {
+            name: suitedFor,
+            in: query,
+            schema: { type: string },
+            description: 'CSV suitability keys (couple, group, family, work_reading); OR, score >=0.5',
+          }
+        - {
+            name: amenities,
+            in: query,
+            schema: { type: string },
+            description: 'CSV; ALL required. cashless_payment expands to card_payment OR qr_payment; wifi,power_outlets requires both.',
+          }
+        - {
+            name: moods,
+            in: query,
+            schema: { type: string },
+            description: CSV active mood keys; OR,
+          }
+        - {
+            name: settings,
+            in: query,
+            schema: { type: string },
+            description: CSV active setting keys; OR,
+          }
+        - { name: locale, in: query, schema: { type: string, enum: [vi, en], default: vi } }
+        - {
+            name: includeTotal,
+            in: query,
+            schema: { type: boolean, default: false },
+            description: Exact matching count before cursor/limit; full count cost even with limit=1.,
+          }
         - { name: priceMinPerPerson, in: query, schema: { type: integer, minimum: 0 } }
         - { name: priceMaxPerPerson, in: query, schema: { type: integer, minimum: 0 } }
         - { name: minRating, in: query, schema: { type: number, minimum: 0, maximum: 5 } }
@@ -3400,8 +3653,12 @@ paths:
                       weightsVersion: { type: string }
                       sort: { type: string }
                       location: { $ref: '#/components/schemas/SearchLocation' }
+                      totalCount: { type: integer, minimum: 0 }
+                      totalCountAccuracy: { type: string, enum: [exact] }
         '400': { $ref: '#/components/responses/BadRequest' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '503':
+          description: Retryable SEARCH_COUNT_UNAVAILABLE; retry without includeTotal.
         '429': { $ref: '#/components/responses/RateLimited' }
 
   /places/{id}:
@@ -3493,14 +3750,17 @@ paths:
     get:
       operationId: listPlaceReviews
       tags: [places]
-      summary: Latest or most helpful published GoGo reviews of a place (at most three)
+      summary: Published GoGo reviews of a place, with aggregate and cursor pagination
       description: >
-        BE-BFF-018. GoGo community reviews only, never Google's: the provider
+        BE-BFF-018 / GoGo-BE#754. GoGo community reviews only, never Google's: the provider
         rating stays on `PlaceDetail.rating`/`ratingCount` with its attribution
         and is never merged with these. Only reviews a moderator published are
         listed; `pending`, `rejected`, `removed` and emergency-`hidden` reviews
         never appear. Ordered newest first by `createdAt`, ties broken by `id`
-        descending, so repeated reads agree. Answers for the same places
+        descending, so repeated reads agree. With no pagination parameters the
+        legacy preview remains at most three rows. Send `limit` and then the
+        opaque `nextCursor` to traverse the full published list in `items`;
+        the legacy `reviews` property remains capped at three rows. Answers for the same places
         `getPlaceDetail` does (404 otherwise) and is served
         `Cache-Control: no-store`, so a takedown holds on the next read.
 
@@ -3516,9 +3776,15 @@ paths:
           in: query
           required: false
           schema: { type: string, enum: [latest, helpful], default: latest }
+        - $ref: '#/components/parameters/Cursor'
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 20 }
+          description: Omit for the backward-compatible three-review preview.
       responses:
         '200':
-          description: Up to three reviews; an empty list when none is published
+          description: GoGo aggregate plus a page of reviews; an empty list when none is published
           content:
             application/json:
               schema: { $ref: '#/components/schemas/PlaceReviewPreview' }
@@ -3603,6 +3869,7 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/PlaceReportRequest' }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: This actor's open report of the same reason, unchanged
           content:
@@ -3628,6 +3895,7 @@ paths:
       parameters:
         - { name: roomId, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '201':
           description: Ranked candidates with explainable components + reason codes
           content:
@@ -3644,6 +3912,7 @@ paths:
       parameters:
         - { name: roomId, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: Current run, candidates and vote progress
           content:
@@ -3669,6 +3938,7 @@ paths:
               properties:
                 value: { type: string, enum: [yes, no, star] }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: Vote recorded (idempotent). Couple `match` mode may auto-create the plan.
           content:
@@ -3700,6 +3970,7 @@ paths:
                   format: uuid
                   description: Optional explicit winner (host mode / tie-break) — must be a current candidate.
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '201':
           description: Decision applied and the first plan version created
           content:
@@ -3724,6 +3995,7 @@ paths:
       parameters:
         - { name: roomId, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: Current plan version with stops and totals
           content:
@@ -3739,6 +4011,7 @@ paths:
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: Plan with stops
           content:
@@ -3797,6 +4070,7 @@ paths:
                           Omitted keeps the retained place's value; a new place
                           starts required; `false` clears it (ADR-0029).
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: New plan version (times, travel and totals recalculated server-side)
           content:
@@ -3855,6 +4129,7 @@ paths:
                   maxLength: 500
                   description: Free text, e.g. "rẻ hơn và gần hơn".
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '201':
           description: New plan version — every locked stop is preserved verbatim
           content:
@@ -3888,6 +4163,7 @@ paths:
               properties:
                 locked: { type: boolean }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: Updated plan
           content:
@@ -3904,6 +4180,7 @@ paths:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
         - { name: stopId, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '201': { description: '{ completed: true }' }
         '409': { $ref: '#/components/responses/Conflict' }
 
@@ -3978,6 +4255,7 @@ paths:
                 url: { type: string, format: uri, maxLength: 2000 }
                 roomId: { type: string, format: uuid }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '201':
           description: >
             Import result: pending → verified | rejected. Rejections carry a
@@ -3997,6 +4275,7 @@ paths:
       parameters:
         - { name: importId, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200': { description: '{ id, status, reasonCode?, placeId? }' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
@@ -4054,6 +4333,7 @@ paths:
         SavedItemArea). Grouping and ordering are the client's, over the full
         list rather than a page.
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: Saved items
           content:
@@ -4071,6 +4351,7 @@ paths:
         - { name: type, in: path, required: true, schema: { type: string, enum: [place, plan] } }
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200': { description: Saved }
     delete:
       operationId: unsaveItem
@@ -4080,6 +4361,7 @@ paths:
         - { name: type, in: path, required: true, schema: { type: string, enum: [place, plan] } }
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200': { description: Removed }
 
   /reviews:
@@ -4100,8 +4382,9 @@ paths:
                 rating: { type: integer, minimum: 1, maximum: 5 }
                 text: { type: string, maxLength: 2000 }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '201':
-          description: Review created; awaits moderation
+          description: Review created with its stored rating; awaits moderation
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Review' }
@@ -4126,6 +4409,7 @@ paths:
         Kept for compatibility (GoGo-BE#256). New clients use the secure,
         asynchronous flow under `/me/exports`.
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: JSON export; audit-logged
           content:
@@ -4211,6 +4495,7 @@ paths:
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: Current status
           content:
@@ -4306,6 +4591,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/Cursor'
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: Notification inbox page
           content:
@@ -4481,6 +4767,7 @@ paths:
                     without it the server verifies the place with the provider
                     again, which is the behaviour before this field existed.
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '201':
           description: Proposal accepted (or the place already exists)
           content:
@@ -4510,6 +4797,7 @@ paths:
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: Submission status
           content:
@@ -5301,13 +5589,14 @@ paths:
       tags: [me]
       summary: Reviews written by the caller, with moderation status
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: Own reviews
           content:
             application/json:
               schema:
                 type: array
-                items: { $ref: '#/components/schemas/Review' }
+                items: { $ref: '#/components/schemas/MyReview' }
 
   /reviews/{id}:
     patch:
@@ -5326,8 +5615,9 @@ paths:
                 rating: { type: integer, minimum: 1, maximum: 5 }
                 text: { type: string, maxLength: 2000 }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
-          description: Updated; status returns to `pending`
+          description: Updated with its current stored rating; status returns to `pending`
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Review' }
@@ -5348,6 +5638,7 @@ paths:
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: The state this request produced
           content:
@@ -5367,6 +5658,7 @@ paths:
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: The state this request produced
           content:
@@ -5389,6 +5681,7 @@ paths:
       parameters:
         - { name: placeId, in: query, required: true, schema: { type: string, format: uuid } }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: Review ids, most recent mark first
           content:
@@ -5405,6 +5698,7 @@ paths:
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '201':
           description: '{ read: true }'
 
@@ -5744,6 +6038,7 @@ paths:
             schema: { type: string, pattern: '^[A-Za-z0-9_-]{6,64}$' },
           }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: '{ revoked: true }'
           content:
@@ -5769,6 +6064,7 @@ paths:
         push kind here reports that switch's value; email rows are returned as
         stored. New clients read the settings resource instead.
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: Every push kind carrying the switch's value, then stored email rows
           content:
@@ -5803,6 +6099,7 @@ paths:
                 kind: { $ref: '#/components/schemas/NotificationPreferenceKind' }
                 enabled: { type: boolean }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: '{ updated: true }'
 
@@ -5818,6 +6115,7 @@ paths:
         evidence that anything was delivered. The in-app inbox is written
         whatever it says.
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: The switch as the server applies it
           content:
@@ -5846,6 +6144,7 @@ paths:
               properties:
                 pushEnabled: { type: boolean }
       responses:
+        '503': { $ref: '#/components/responses/SessionLookupUnavailable' }
         '200':
           description: The switch as stored
           content:
@@ -7906,6 +8205,43 @@ paths:
         '200': { description: Transitioned; suspended places leave search immediately }
         '409': { $ref: '#/components/responses/Conflict' }
 
+  /cms/places/{id}/verification:
+    put:
+      operationId: setVenueVerification
+      tags: [cms]
+      summary: Verify or revoke independently checked venue identity and location
+      description: Moderator or super_admin. Evidence type and reference required for verified. If-Match binds both identity and verification revisions from CMS detail. Equivalent repeat decisions preserve verifiedAt; audit and ETag advance atomically. Quality and safety are never certified.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - {
+            name: If-Match,
+            in: header,
+            required: true,
+            schema: { type: string },
+            description: CMS detail verification.etag,
+          }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SetVenueVerification' }
+      responses:
+        '200':
+          description: Verification decision; same ETag in body and header
+          headers:
+            ETag:
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CmsVenueVerification' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '412': { description: PRECONDITION_FAILED; reload identity and verification }
+        '428': { description: PRECONDITION_REQUIRED; If-Match missing }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
   /cms/places/{id}/hours:
     put:
       operationId: cmsSetPlaceHours
@@ -8264,6 +8600,7 @@ paths:
                 spending_style,
                 suitability,
                 checkin_tag,
+                amenity,
               ]
         - { name: isActive, in: query, schema: { type: boolean } }
       responses:
@@ -8298,6 +8635,7 @@ paths:
                       spending_style,
                       suitability,
                       checkin_tag,
+                      amenity,
                     ]
                 key: { type: string, pattern: '^[a-z0-9_]{2,40}$' }
                 labels:
@@ -13021,6 +13359,47 @@ components:
         isGuest: { type: boolean }
         joinedAt: { type: string, format: date-time }
         avatarUrl: { type: string, nullable: true }
+    InvitePreview:
+      type: object
+      description: >
+        GoGo-BE#758 — facts for the pre-join invitation screen. Optional
+        appointment properties are absent when the host did not set them.
+        `emailVerified` means the account verified its email; it is not an
+        identity/KYC claim. No property carries the invite credential or an id.
+      required: [inviter, roomType, participantCount]
+      properties:
+        inviter:
+          type: object
+          required: [displayName, avatarUrl, emailVerified]
+          properties:
+            displayName: { type: string }
+            avatarUrl:
+              type: [string, 'null']
+              description: Public avatar URL, or null when absent or media hosting is unavailable.
+            emailVerified: { type: boolean }
+        roomType: { type: string, enum: [couple, group] }
+        participantCount: { type: integer, minimum: 2, maximum: 20 }
+        startAt: { type: string, format: date-time }
+        endAt: { type: string, format: date-time }
+        area:
+          type: object
+          required: [source, name]
+          properties:
+            source: { type: string, enum: [administrative_area, service_area] }
+            name:
+              type: string
+              description: Verified administrative-unit or active curated service-area name.
+            city: { type: string }
+        budget:
+          type: object
+          required: [mode, amount, currency]
+          properties:
+            mode: { type: string, enum: [total, per_person] }
+            amount:
+              type: integer
+              minimum: 0
+              description: Integer minor units.
+            currency: { type: string, minLength: 3, maxLength: 3 }
     RoomSummary:
       type: object
       description: Facts only — audience copy is composed client-side from type/participantCount/budgetMode.
@@ -13067,10 +13446,63 @@ components:
             properties:
               placeId: { type: string, format: uuid }
               name: { type: string }
+    VenueVerification:
+      type: object
+      description: Venue identity and location independently checked by a CMS admin; never certifies quality or safety. Revoked on material name/address/location change; requires re-verification. No evidence or actor exposed publicly.
+      required: [status]
+      properties:
+        status: { type: string, enum: [unverified, verified] }
+        verifiedAt: { type: string, format: date-time }
+    CmsVenueVerification:
+      allOf:
+        - $ref: '#/components/schemas/VenueVerification'
+        - type: object
+          required: [identityRevision, version, etag]
+          properties:
+            identityRevision: { type: integer, minimum: 1 }
+            version: { type: integer, minimum: 0 }
+            etag: { type: string, example: '"1:0"' }
+    SetVenueVerification:
+      type: object
+      required: [status, reason]
+      properties:
+        status: { type: string, enum: [unverified, verified] }
+        evidenceType:
+          type: string
+          enum: [site_visit, official_registry, venue_document]
+          description: Independently approved evidence establishing BOTH venue identity and location; required for verified.
+        evidenceReference:
+          {
+            type: string,
+            minLength: 1,
+            maxLength: 500,
+            description: Required for verified; CMS-only evidence reference.,
+          }
+        reason: { type: string, minLength: 1, maxLength: 500 }
     PlaceSearchResult:
       type: object
-      required: [id, name, lat, lng, isLodging, open, reasonCodes, confidence]
+      required:
+        [id, name, lat, lng, isLodging, open, reasonCodes, confidence, verification, taxonomies]
       properties:
+        taxonomies:
+          type: array
+          items:
+            type: object
+            required: [kind, key]
+            properties:
+              kind: { type: string, enum: [category, mood, setting, amenity] }
+              key: { type: string }
+        areaSummary:
+          type: object
+          description: Current VERIFIED administrative mapping only; commune preferred, province fallback; actual label locale reported.
+          required: [datasetVersion, provinceCode, communeCode, label, locale]
+          properties:
+            datasetVersion: { type: string }
+            provinceCode: { type: string }
+            communeCode: { type: [string, 'null'] }
+            label: { type: string }
+            locale: { type: string, enum: [vi, en] }
+        verification: { $ref: '#/components/schemas/VenueVerification' }
         id: { type: string, format: uuid }
         name: { type: string }
         addressText: { type: string }
@@ -13080,6 +13512,15 @@ components:
         lng: { type: number }
         rating: { type: number }
         ratingCount: { type: integer }
+        gogoRating:
+          type: number
+          minimum: 1
+          maximum: 5
+          description: GoGo community mean; omitted below the five-review sample threshold. Never merged with `rating`.
+        gogoRatingCount:
+          type: integer
+          minimum: 0
+          description: Published GoGo review count, including zero; the client uses words rather than a score below five.
         avgVisitMinutes: { type: integer }
         suitability:
           type: object
@@ -15056,6 +15497,7 @@ components:
           plan_changed,
           date_reminder,
           moderation_update,
+          campaign,
           privacy_export_ready,
         ]
     NotificationPreferenceKind:
@@ -15074,13 +15516,61 @@ components:
         id: { type: string, format: uuid }
         placeId: { type: string, format: uuid }
         planId: { type: string, format: uuid }
-        rating: { type: integer, minimum: 1, maximum: 5 }
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: The current stored score; always present in create and update responses.
         text: { type: string }
         status:
           type: string
           enum: [pending, published, rejected, removed]
           description: New and edited reviews start at `pending` until moderation.
         createdAt: { type: string, format: date-time }
+    MyReview:
+      type: object
+      required: [id, rating, status, helpfulCount]
+      description: >
+        A review written by the caller, with factual context for the My
+        Reviews list. Target facts are optional because a review has either
+        a place or a plan, and place names or historical addresses without
+        verified GoGo provenance are not returned. Private room title and
+        date are returned only while the caller has an active room membership.
+      properties:
+        id: { type: string, format: uuid }
+        placeId: { type: string, format: uuid }
+        planId: { type: string, format: uuid }
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: The current stored score; always present in create and update responses.
+        text: { type: string }
+        status:
+          type: string
+          enum: [pending, published, rejected, removed]
+          description: New and edited reviews start at `pending` until moderation.
+        createdAt: { type: string, format: date-time }
+        placeName:
+          type: string
+          description: Independently sourced GoGo catalogue name of the reviewed place.
+        placeAddressText:
+          type: string
+          description: Verified GoGo-owned address of the reviewed place.
+        planTitle:
+          type: string
+          description: Title of the room whose plan was reviewed, when set and the caller is an active member.
+        planScheduledDate:
+          type: string
+          format: date-time
+          description: Scheduled UTC date of the room whose plan was reviewed, when set and the caller is an active member.
+        helpfulCount:
+          type: integer
+          minimum: 0
+          description: How many accounts marked this review helpful; derived from reactions.
+        rejectionReason:
+          type: string
+          description: Present only when status is `rejected` and moderation recorded a reason.
     SavedItem:
       type: object
       required: [targetType, targetId, savedAt, area]
@@ -15089,6 +15579,29 @@ components:
         targetId: { type: string, format: uuid }
         savedAt: { type: string, format: date-time }
         area: { $ref: '#/components/schemas/SavedItemArea' }
+        gogoRating:
+          type: number
+          minimum: 1
+          maximum: 5
+          description: Place items only; omitted below the five-review sample threshold. Never merged with the provider score.
+        gogoRatingCount:
+          type: integer
+          minimum: 0
+          description: Place items only; published GoGo review count, including zero.
+        conditionsChanged:
+          type: boolean
+          description: >
+            Plan items only; true when the room's current constraint version is
+            newer than the version used to build this saved plan. Omitted when
+            the target is not a readable plan.
+        planConstraintVersion:
+          type: integer
+          minimum: 1
+          description: Plan items only; constraint version used to build this saved plan.
+        currentConstraintVersion:
+          type: integer
+          minimum: 1
+          description: Plan items only; the room's current constraint version.
     SavedItemArea:
       type: object
       description: >
@@ -15223,6 +15736,71 @@ components:
               description: Grows with push data v1; route an unknown value by `roomId`.
               x-extensible-enum: [room, plan]
             entityId: { type: string, format: uuid }
+            roomName:
+              type: string
+              description: Room title, when the room has one.
+            inviterName:
+              type: string
+              description: Display name of the room member who created the invite used to join.
+            preferenceProgress:
+              type: object
+              required: [completedCount, memberCount]
+              description: Aggregate completion only; never contains a member's private selections.
+              properties:
+                completedCount: { type: integer, minimum: 0 }
+                memberCount: { type: integer, minimum: 0 }
+            stopCount:
+              type: integer
+              minimum: 0
+              description: Number of stops in the current plan at notification fan-out.
+            planChange:
+              type: object
+              required: [action]
+              description: Structured plan-change facts; the client composes the sentence.
+              properties:
+                action: { type: string, enum: [edit, regenerate] }
+                stopCount:
+                  type: integer
+                  minimum: 0
+                  description: >-
+                    Stops in the event-time plan version, or in the current plan at fan-out for a
+                    legacy event with no stored counts.
+                optionalStopCount:
+                  type: integer
+                  minimum: 0
+                  description: >-
+                    Optional stops in the same plan version as `stopCount`; never combined with a
+                    count from another version.
+                addedStopCount:
+                  type: integer
+                  minimum: 0
+                  description: Stops whose place was not present in the previous plan version.
+                removedStopCount:
+                  type: integer
+                  minimum: 0
+                  description: Stops whose place is absent from the new plan version.
+                movedStopCount:
+                  type: integer
+                  minimum: 0
+                  description: Retained stops whose position changed.
+                durationChangedStopCount:
+                  type: integer
+                  minimum: 0
+                  description: Retained stops whose visit duration changed.
+                lockChangedStopCount:
+                  type: integer
+                  minimum: 0
+                  description: Retained stops whose lock flag changed.
+                optionalChangedStopCount:
+                  type: integer
+                  minimum: 0
+                  description: Retained stops whose optional flag changed.
+            title:
+              type: string
+              description: CMS-authored campaign title; present only for campaign rows.
+            body:
+              type: string
+              description: CMS-authored campaign body; present only for campaign rows.
         readAt: { type: string, format: date-time }
         createdAt: { type: string, format: date-time }
     OpenState:
@@ -15309,6 +15887,7 @@ components:
       type: object
       required: [gogoRatingCount]
       properties:
+        verification: { $ref: '#/components/schemas/VenueVerification' }
         id: { type: string, format: uuid }
         name: { type: string }
         description: { type: string }
@@ -15558,8 +16137,30 @@ components:
       properties:
         placeId: { type: string, format: uuid }
         name: { type: string }
+        gogoRating:
+          type: number
+          minimum: 1
+          maximum: 5
+          description: GoGo community mean; omitted below the five-review sample threshold. Never merged with provider quality used for ranking.
+        gogoRatingCount:
+          type: integer
+          minimum: 0
+          description: Published GoGo review count, including zero.
         rank: { type: integer }
-        score: { type: number, minimum: 0, maximum: 1 }
+        score:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Normalized match score from the deterministic ranking pipeline.
+        matchScore:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: The same normalized ranking fact as `score`, named explicitly for match-result option rows.
+        likedByCount:
+          type: integer
+          minimum: 0
+          description: Members whose current vote for this option is `yes` or `star`; zero when nobody liked it.
         components:
           type: object
           description: Explainable score parts — drives the "Vì sao phù hợp" UI.
@@ -15582,6 +16183,14 @@ components:
           description: True after a constraint edit — regenerate before showing as current.
         myVote: { type: string, enum: [yes, no, star] }
         points: { type: integer }
+        travelMinutesFromOrigin:
+          type: integer
+          minimum: 0
+          description: Driving minutes from the room origin to this candidate; omitted when the room has no origin.
+        travelDistanceMFromOrigin:
+          type: integer
+          minimum: 0
+          description: Driving distance in metres from the room origin to this candidate; omitted when the room has no origin.
     SuggestionsCurrent:
       type: object
       properties:
@@ -15595,6 +16204,11 @@ components:
             weightsVersion: { type: string }
             stale: { type: boolean }
         decisionMode: { type: string, enum: [match, vote, host] }
+        travelEstimated:
+          type: boolean
+          description: >
+            True when at least one candidate leg is a straight-line estimate rather than a routed
+            driving result. Omitted when the room has no origin.
         candidates:
           type: array
           items: { $ref: '#/components/schemas/SuggestionCandidate' }
@@ -15614,6 +16228,19 @@ components:
                   yes: { type: integer }
                   star: { type: integer }
                   no: { type: integer }
+            members:
+              type: array
+              description: >
+                Active room members and whether each has cast at least one vote represented by
+                `progress`. Ballot choices remain private; only the display name already visible
+                to co-members is included.
+              items:
+                type: object
+                required: [memberId, displayName, hasVoted]
+                properties:
+                  memberId: { type: string, format: uuid }
+                  displayName: { type: string }
+                  hasVoted: { type: boolean }
     PlanTotals:
       type: object
       description: >
@@ -15691,6 +16318,12 @@ components:
         durationMinutes: { type: integer }
         travelMinutesFromPrev: { type: [integer, 'null'] }
         travelDistanceMFromPrev: { type: [integer, 'null'] }
+        travelMinutesToNext:
+          type: [integer, 'null']
+          description: The next stop's stored driving minutes; null on the final stop.
+        travelDistanceMToNext:
+          type: [integer, 'null']
+          description: The next stop's stored driving distance in metres; null on the final stop.
         costMin:
           type: [integer, 'null']
           description: >
@@ -16839,9 +17472,27 @@ components:
           description: >
             Always `gogo`. These are GoGo community reviews; they never share a
             number with a provider rating.
+        gogoRating:
+          type: number
+          minimum: 1
+          maximum: 5
+          description: Mean of all published GoGo reviews; omitted below the five-review sample threshold.
+        gogoRatingCount:
+          type: integer
+          minimum: 0
+          description: Count of all published GoGo reviews, not merely this page.
+        nextCursor:
+          type: [string, 'null']
+          description: Opaque cursor for the next page; null at the end. The legacy three-row preview may ignore it.
         reviews:
           type: array
           maxItems: 3
+          description: Backward-compatible preview containing at most the first three rows of this response.
+          items: { $ref: '#/components/schemas/PublicPlaceReview' }
+        items:
+          type: array
+          maxItems: 20
+          description: Page rows returned when `limit` or `cursor` is sent; omitted for a legacy preview request.
           items: { $ref: '#/components/schemas/PublicPlaceReview' }
     PublicPlaceReview:
       type: object
@@ -16869,6 +17520,9 @@ components:
               description: >
                 The name the author shows other people; `null` once the account
                 is deleted (ADR-0023). Clients render their own label for it.
+        verifiedVisit:
+          type: boolean
+          description: True only when this author has an approved GoGo check-in at this place; review moderation alone is not visit verification.
     PlacePhoto:
       type: object
       required: [id, url, source]
@@ -16903,6 +17557,8 @@ components:
         decisionMode: { type: string, enum: [match, vote, host] }
         participantCount: { type: integer }
         title: { type: string }
+        startAt: { type: [string, 'null'], format: date-time }
+        endAt: { type: [string, 'null'], format: date-time }
         scheduledDate: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
         myRole: { type: string, enum: [host, member, guest] }
@@ -17072,6 +17728,7 @@ components:
           updatedAt,
         ]
       properties:
+        verification: { $ref: '#/components/schemas/CmsVenueVerification' }
         id: { type: string, format: uuid }
         name: { type: string }
         description: { type: [string, 'null'] }
@@ -17272,6 +17929,7 @@ components:
               spending_style,
               suitability,
               checkin_tag,
+              amenity,
             ]
         key: { type: string }
         labels:
@@ -18597,15 +19255,19 @@ components:
     # ── GoGo AI assistant (GoGo-BE#713) ───────────────────────────────────────
     AssistantStatus:
       type: object
-      required: [state, dailyMessageLimit, remainingToday, resetsAt]
+      required: [state, dailyMessageLimit, remainingToday, resetsAt, creditBalance]
       properties:
+        creditBalance:
+          type: integer
+          minimum: 0
+          description: 'No-expiry contributor credits. Prospective registered-user submission approval grants +50 once. Daily allowance first, then one credit per accepted user send (202), including later provider failure. Replay/rejection costs zero; credits never bypass burst/readiness/budget gates.'
         state:
           type: string
           description: >
             `enabled` — sending works. `disabled` — kill switch off
             (`assistant.enabled`), or the environment cannot take new replies
             (for example its spending limit is reached). `limit_reached` — this account's daily
-            messages are spent until `resetsAt`. Unknown values mean "cannot
+            messages and contributor credits are both spent until `resetsAt`. Unknown values mean "cannot
             send now".
           x-extensible-enum: [enabled, disabled, limit_reached]
         dailyMessageLimit:
@@ -19134,6 +19796,7 @@ components:
         reviews, reviewReactions, notificationSettings) is described on
         `exportMyData`. Unknown sections may appear; ignore them.
       properties:
+        assistantCreditBalance: { type: integer, minimum: 0 }
         exportedAt: { type: string, format: date-time }
         assistantConversations:
           type: array
@@ -19553,6 +20216,16 @@ components:
       schema: { type: integer, minimum: 1 }
 
   responses:
+    SessionLookupUnavailable:
+      description: >
+        SERVICE_UNAVAILABLE (retryable true) — the authoritative consumer
+        session lookup encountered an operational database connection, pool or
+        query timeout/unavailability. Retry with backoff; cached state cannot
+        authorize access. SQL/schema/permission/configuration errors retain
+        existing error handling.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
     NotModified:
       description: >
         The client's ETag still matches. No body, by definition — this is the
