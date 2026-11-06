@@ -1,0 +1,16 @@
+export const styles = {
+  srOnly: 'sr-only',
+  summary: 'rounded-card border border-line bg-surface-card p-4',
+  name: 'text-body font-semibold text-text-primary',
+  identifier: 'break-all font-mono text-caption text-text-secondary',
+  balance: 'mt-3 font-display text-display font-bold tabular-nums text-text-primary',
+  note: 'mt-2 text-body text-text-secondary',
+  tableWrap: 'overflow-x-auto rounded-card border border-line bg-surface-card',
+  table: 'w-full text-left text-body text-text-primary',
+  heading: 'whitespace-nowrap border-b border-line bg-surface-muted px-4 py-3 font-semibold',
+  cell: 'border-b border-line px-4 py-3 align-top',
+  delta: 'whitespace-nowrap font-semibold tabular-nums',
+  references: 'flex flex-col gap-1 break-all font-mono text-caption',
+  link: 'inline-flex min-h-11 items-center text-text-primary underline focus-visible:outline-2 focus-visible:outline-offset-2',
+  footer: 'flex items-center justify-between gap-3 text-body text-text-secondary',
+} as const

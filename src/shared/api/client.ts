@@ -72,6 +72,8 @@ export type RequestOptions = {
   signal?: AbortSignal
   /** Skip JSON parsing — used by the CSV error-report download. */
   raw?: boolean
+  /** Sensitive read endpoints may prohibit browser caching. */
+  cache?: RequestCache
 }
 
 function buildUrl(path: string, query?: RequestOptions['query']): string {
@@ -196,6 +198,7 @@ export async function apiFetch<T = unknown>(
       body: payload,
       // The staff session is an HttpOnly cookie. No token ever reaches JS.
       credentials: 'include',
+      ...(options.cache ? { cache: options.cache } : {}),
       signal,
     })
   } catch (cause) {

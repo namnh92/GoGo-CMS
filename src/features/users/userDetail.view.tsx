@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useI18n, useT } from '@/shared/i18n/i18n'
 import { queryKeys } from '@/shared/api/queryKeys'
@@ -97,6 +98,17 @@ export function UserDetailDrawer({ user, onClose }: { user: CmsAppUser; onClose:
                 </p>
               ) : null}
             </div>
+
+            {can('user.assistantCredits') ? (
+              <div className={styles.drawerSection}>
+                <Link
+                  className={styles.creditLink}
+                  to={`/users/${encodeURIComponent(user.id)}/assistant-credits`}
+                >
+                  {t('credits.title')}
+                </Link>
+              </div>
+            ) : null}
 
             <div className={styles.drawerSection}>
               <p className={styles.drawerLabel}>{t('users.activity')}</p>
