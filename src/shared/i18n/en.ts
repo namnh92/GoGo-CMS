@@ -1901,6 +1901,7 @@ export const en: Record<MessageKey, string> = {
   'taxonomyKind.spending_style': 'Spending level',
   'taxonomyKind.suitability': 'Good for',
   'taxonomyKind.checkin_tag': 'Check-in tag',
+  'taxonomyKind.amenity': 'Amenities',
   'collections.title': 'Collections & banners',
   'collections.breadcrumb': 'Collections',
   'collections.list': 'Existing collections',

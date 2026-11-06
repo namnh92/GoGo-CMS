@@ -2015,6 +2015,7 @@ export const vi = {
   'taxonomyKind.spending_style': 'Mức chi tiêu',
   'taxonomyKind.suitability': 'Phù hợp với',
   'taxonomyKind.checkin_tag': 'Nhãn check-in',
+  'taxonomyKind.amenity': 'Tiện ích',
 
   'collections.title': 'Bộ sưu tập và banner',
   'collections.breadcrumb': 'Bộ sưu tập',
