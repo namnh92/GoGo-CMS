@@ -150,6 +150,49 @@ describe('venue verification decisions (CMS#275)', () => {
     expect(screen.getByLabelText(/Lý do quyết định/)).toHaveValue('')
   })
 
+  it('discards a 428 decision and restores editing after reloading the same ETag', async () => {
+    let reads = 0
+    let writes = 0
+    server.use(
+      http.get(path, () => {
+        reads++
+        return HttpResponse.json({ ...place, verification: initial })
+      }),
+      http.put(`${path}/verification`, () => {
+        writes++
+        return HttpResponse.json(
+          { code: 'PRECONDITION_REQUIRED', message: 'Reload required' },
+          { status: 428 },
+        )
+      }),
+    )
+    open()
+    await userEvent.selectOptions(await screen.findByLabelText(/Loại bằng chứng/), 'venue_document')
+    const dialog = await fillEvidence()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Xác nhận quyết định' }))
+    await screen.findByText(/Phiên bản hiện tại không còn dùng được/)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/Lý do quyết định/)).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Xác minh địa điểm' })).toBeDisabled()
+    const readsBeforeReload = reads
+    await userEvent.click(screen.getByRole('button', { name: 'Tải lại địa điểm' }))
+    await waitFor(() =>
+      expect(screen.queryByText(/Phiên bản hiện tại không còn dùng được/)).not.toBeInTheDocument(),
+    )
+    expect(reads).toBeGreaterThan(readsBeforeReload)
+    expect(screen.queryByText('Reload required')).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/Loại bằng chứng/)).toHaveValue('site_visit')
+    expect(screen.getByLabelText(/Tham chiếu bằng chứng/)).toHaveValue('')
+    expect(screen.getByLabelText(/Tham chiếu bằng chứng/)).toBeEnabled()
+    expect(screen.getByLabelText(/Lý do quyết định/)).toHaveValue('')
+    expect(screen.getByLabelText(/Lý do quyết định/)).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Xác minh địa điểm' })).toBeDisabled()
+    const freshDialog = await fillEvidence()
+    expect(within(freshDialog).getByText('Khảo sát thực địa')).toBeInTheDocument()
+    expect(within(freshDialog).getByRole('button', { name: 'Xác nhận quyết định' })).toBeEnabled()
+    expect(writes).toBe(1)
+  })
+
   it('retries the same preview with the same idempotency key after a network failure', async () => {
     mockDetail()
     const keys: (string | null)[] = []

@@ -73,7 +73,7 @@ export default function PlaceVerificationScreen() {
                 key={`${id}:${detail.verification?.etag ?? 'missing'}`}
                 detail={detail}
                 refreshing={place.isFetching}
-                reload={() => void place.refetch()}
+                reload={async () => (await place.refetch()).isSuccess}
               />
             )}
           </AsyncBoundary>
@@ -90,7 +90,7 @@ function VerificationForm({
 }: {
   detail: CmsPlaceDetail
   refreshing: boolean
-  reload: () => void
+  reload: () => Promise<boolean>
 }) {
   const t = useT()
   const { locale } = useI18n()
@@ -102,7 +102,7 @@ function VerificationForm({
   const [reference, setReference] = useState('')
   const [reason, setReason] = useState('')
   const [preview, setPreview] = useState<{ body: Decision; etag: string; key: string } | null>(null)
-  const [stale, setStale] = useState(false)
+  const [stale, setStale] = useState<'conflict' | 'saved' | null>(null)
   const [auditOpen, setAuditOpen] = useState(false)
   const verification = detail.verification
   const verified = verification?.status === 'verified'
@@ -119,7 +119,7 @@ function VerificationForm({
       setReason('')
       setReference('')
       // A successful write cannot be repeated against the old identity.
-      setStale(true)
+      setStale('saved')
       toast.success(t('venueVerification.saved'))
       await client.invalidateQueries({ queryKey: queryKeys.places.all })
     },
@@ -127,16 +127,27 @@ function VerificationForm({
       const status = toApiError(error).status
       if (status === 412 || status === 428) {
         setPreview(null)
-        setStale(true)
+        setStale('conflict')
       }
     },
   })
   const forbidden = mutation.isError && toApiError(mutation.error).isForbidden
-  const disabled = !online || refreshing || stale || mutation.isPending
+  const disabled = !online || refreshing || stale !== null || mutation.isPending
   const valid =
     reason.trim().length > 0 &&
     reason.trim().length <= 500 &&
     (verified || (reference.trim().length > 0 && reference.trim().length <= 500))
+
+  async function reloadDetail() {
+    if (!(await reload())) return
+    setPreview(null)
+    setEvidenceType('site_visit')
+    setReference('')
+    setReason('')
+    mutation.reset()
+    // Conflict recovery may keep the ETag; a saved write still needs a new revision.
+    setStale((current) => (current === 'conflict' ? null : current))
+  }
 
   function review() {
     if (!verification?.etag || disabled || !valid || !can('place.verifyVenue')) return
@@ -172,7 +183,10 @@ function VerificationForm({
           ) : null}
         </dl>
         <p className={styles.text}>{t('venueVerification.scope')}</p>
-        <Button onClick={reload} disabled={mutation.isPending || refreshing || !online}>
+        <Button
+          onClick={() => void reloadDetail()}
+          disabled={mutation.isPending || refreshing || !online}
+        >
           {t('venueVerification.reload')}
         </Button>
         {!verification?.etag ? (
