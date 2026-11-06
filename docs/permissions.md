@@ -67,6 +67,14 @@ kết luận đã làm phẳng — bản phẳng chính là thứ đã lệch l�
 | Gỡ khẩn cấp place/review/check-in                                 |   ✅   |    ✅     |    ✅     |     ✅      |
 | Tạo admin                                                         |   ❌   |    ❌     |    ❌     |     ✅      |
 
+## Credit GoGo AI (GoGo-CMS#277, GoGo-BE#778)
+
+Quyền `user.assistantCredits` chỉ cho `ops_admin` và `super_admin`, khớp
+`GET /v1/cms/users/{id}/assistant-credits`. Editor và moderator không được gọi API.
+Đi từ chi tiết người dùng sang `/users/:id/assistant-credits`; màn credit chỉ hiển
+thị ID, tên, số dư và ledger, không tải hồ sơ/email. Máy chủ audit mỗi lần xem;
+CMS không ghi payload credit hoặc thêm telemetry chứa dữ liệu người dùng.
+
 ## Quy tắc không nằm trong bảng
 
 - **Publish import tách khỏi import.** Biên tập viên chuẩn bị lô, vận hành mới

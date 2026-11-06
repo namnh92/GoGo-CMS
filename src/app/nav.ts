@@ -235,6 +235,7 @@ const USERS: NavLeaf[] = [
     to: '/users',
     labelKey: 'nav.appUsers',
     permission: 'user.read',
+    // Includes the per-user assistant credit ledger opened from the user drawer.
     match: (p) => p.startsWith('/users'),
   },
   {

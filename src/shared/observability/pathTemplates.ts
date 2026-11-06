@@ -152,6 +152,7 @@ export const PATH_TEMPLATES: readonly string[] = [
   '/cms/auth/admins',
   '/cms/users',
   '/cms/users/{id}',
+  '/cms/users/{id}/assistant-credits',
   '/cms/users/{id}/suspend',
   '/cms/users/{id}/ban',
   '/cms/users/{id}/reactivate',

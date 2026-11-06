@@ -52,6 +52,7 @@ const SafetyRuleListScreen = lazy(() => import('@/features/safety/safetyRuleList
 const SafetyRuleDetailScreen = lazy(() => import('@/features/safety/safetyRuleDetail.view'))
 const PrivacyListScreen = lazy(() => import('@/features/privacy/privacyList.view'))
 const UserListScreen = lazy(() => import('@/features/users/userList.view'))
+const AssistantCreditsScreen = lazy(() => import('@/features/users/assistantCredits.view'))
 const RoomListScreen = lazy(() => import('@/features/users/roomList.view'))
 const PlanListScreen = lazy(() => import('@/features/users/planList.view'))
 const AppControlScreen = lazy(() => import('@/features/appControl/appControl.view'))
@@ -167,6 +168,7 @@ export const router = createBrowserRouter([
           { path: 'safety-rules', element: <SafetyRuleListScreen /> },
           { path: 'safety-rules/:id', element: <SafetyRuleDetailScreen /> },
           { path: 'users', element: <UserListScreen /> },
+          { path: 'users/:id/assistant-credits', element: <AssistantCreditsScreen /> },
           { path: 'privacy-requests', element: <PrivacyListScreen /> },
           { path: 'rooms', element: <RoomListScreen /> },
           { path: 'plans', element: <PlanListScreen /> },

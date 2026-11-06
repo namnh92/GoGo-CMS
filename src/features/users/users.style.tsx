@@ -1,4 +1,6 @@
 export const styles = {
+  creditLink:
+    'inline-flex min-h-11 items-center rounded-compact px-3 text-body font-semibold text-text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2',
   filterBar: 'flex flex-wrap items-end gap-3 border-b border-line px-4 py-3',
   search: 'w-64',
   name: 'text-body font-semibold text-text-primary',

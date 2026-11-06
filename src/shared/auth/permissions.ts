@@ -209,6 +209,8 @@ const PERMISSIONS = {
   // App users — ops support surface. Delete alone is super_admin: it is the
   // one action with no undo, and the account belongs to someone else.
   'user.read': ['users', 'read'],
+  // GoGo-BE#778: private credit facts, ops_admin and super_admin only.
+  'user.assistantCredits': ['users', 'read'],
   'user.manage': ['users', 'write'],
   'user.delete': ['admins', 'write'],
 
