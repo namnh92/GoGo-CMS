@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cmsPlaceDetailSchema } from './contracts'
+import { cmsPlaceDetailSchema, cmsVenueVerificationSchema } from './contracts'
 import type { Schemas } from './generated'
 import { places } from '@/shared/test/fixtures'
 
@@ -29,5 +29,20 @@ describe('CMS venue verification boundary (6.0)', () => {
 
   it('accepts existing detail responses without the optional verification', () => {
     expect(cmsPlaceDetailSchema.safeParse(places[0]).success).toBe(true)
+  })
+})
+
+describe('verification mutation response boundary', () => {
+  it('retains the next opaque ETag for a subsequent revoke', () => {
+    expect(cmsVenueVerificationSchema.parse(verification)).toEqual(verification)
+  })
+
+  it.each([
+    { ...verification, etag: undefined },
+    { ...verification, identityRevision: 0 },
+    { ...verification, version: -1 },
+    { ...verification, status: 'approved' },
+  ])('refuses malformed concurrency/state facts: %j', (response) => {
+    expect(cmsVenueVerificationSchema.safeParse(response).success).toBe(false)
   })
 })

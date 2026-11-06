@@ -26,6 +26,34 @@ afterEach(() => {
 })
 
 describe('apiFetch', () => {
+  it('preserves opaque If-Match and idempotency headers across session refresh', async () => {
+    signedInByCookie()
+    const requests: Headers[] = []
+    server.use(
+      http.put('/v1/cms/probe', ({ request }) => {
+        requests.push(request.headers)
+        return requests.length === 1
+          ? HttpResponse.json({ code: 'UNAUTHORIZED', message: 'expired' }, { status: 401 })
+          : HttpResponse.json({ ok: true })
+      }),
+      http.post('/v1/cms/auth/refresh', () => HttpResponse.json({ ok: true })),
+    )
+    await expect(
+      apiFetch('/cms/probe', {
+        method: 'PUT',
+        body: { status: 'verified' },
+        ifMatch: '"2:1"',
+        idempotencyKey: 'decision-275',
+      }),
+    ).resolves.toEqual({ ok: true })
+    expect(requests).toHaveLength(2)
+    for (const headers of requests) {
+      expect(headers.get('If-Match')).toBe('"2:1"')
+      expect(headers.get('Idempotency-Key')).toBe('decision-275')
+      expect(headers.get('x-gogo-csrf')).toBe('mock-csrf-token')
+    }
+  })
+
   it('echoes the CSRF cookie on a mutation, which is what GoGo-BE checks', async () => {
     signedInByCookie()
     let seen: string | null = null

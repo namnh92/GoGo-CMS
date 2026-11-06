@@ -7,6 +7,16 @@ import { canAccess, landingPathFor, roleCan } from './permissions'
  * source of truth, this file is the copy.
  */
 describe('read is hierarchical, write is exact', () => {
+  it('keeps venue verification moderator/super-admin only, separate from freshness', () => {
+    expect(roleCan('moderator', 'place.verifyVenue')).toBe(true)
+    expect(roleCan('super_admin', 'place.verifyVenue')).toBe(true)
+    expect(roleCan('editor', 'place.verifyVenue')).toBe(false)
+    expect(roleCan('ops_admin', 'place.verifyVenue')).toBe(false)
+    expect(roleCan(null, 'place.verifyVenue')).toBe(false)
+    expect(roleCan('moderator', 'place.verifyFreshness')).toBe(false)
+    expect(roleCan('editor', 'place.verifyFreshness')).toBe(true)
+  })
+
   it('lets every staff role read the catalog, and only the editor write it', () => {
     for (const role of ['editor', 'moderator', 'ops_admin', 'super_admin'] as const) {
       expect(roleCan(role, 'place.read')).toBe(true)

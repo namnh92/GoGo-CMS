@@ -14,6 +14,7 @@ const CostCenterScreen = lazy(() => import('@/features/ops/costCenter.view'))
 const CostTestRunScreen = lazy(() => import('@/features/ops/costTestRun.view'))
 const ManualCostsScreen = lazy(() => import('@/features/ops/manualCosts.view'))
 const PlaceListScreen = lazy(() => import('@/features/places/placeList.view'))
+const PlaceVerificationScreen = lazy(() => import('@/features/places/placeVerification.view'))
 const PlaceEditorScreen = lazy(() => import('@/features/places/placeEditor.view'))
 const PlaceCreateScreen = lazy(() => import('@/features/places/placeCreate.view'))
 const ImportListScreen = lazy(() => import('@/features/imports/importList.view'))
@@ -124,6 +125,7 @@ export const router = createBrowserRouter([
           // opening the editor with the id "new" (GoGo-CMS#128).
           { path: 'places/new', element: <PlaceCreateScreen /> },
           { path: 'places/:id', element: <PlaceEditorScreen /> },
+          { path: 'places/:id/verification', element: <PlaceVerificationScreen /> },
           { path: 'imports', element: <ImportListScreen /> },
           { path: 'imports/new', element: <ImportWizardScreen /> },
           { path: 'imports/:jobId', element: <ImportJobScreen /> },

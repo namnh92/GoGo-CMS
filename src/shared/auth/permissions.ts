@@ -35,6 +35,8 @@ const ROUTE_ROLES = {
   content: ['editor', 'ops_admin'],
   /** `CmsModerationController` — @RequireRole('moderator') */
   moderation: ['moderator'],
+  /** PUT /cms/places/{id}/verification — contract 6.0. */
+  venueVerification: ['moderator'],
   /** `CmsSubmissionController` — @RequireRole('moderator', 'editor') */
   submissions: ['moderator', 'editor'],
   /** `CmsOpsController` + ranking/flags — @RequireRole('ops_admin') */
@@ -140,6 +142,7 @@ const PERMISSIONS = {
   'place.transition': ['catalog', 'write'],
   'place.merge': ['catalog', 'write'],
   'place.verifyFreshness': ['catalog', 'write'],
+  'place.verifyVenue': ['venueVerification', 'write'],
 
   // GoGo-BE#462 — mapping moderation. Reading is rank-open (an editor may look
   // at why a place cannot be approved); verifying, rejecting, rematching and
