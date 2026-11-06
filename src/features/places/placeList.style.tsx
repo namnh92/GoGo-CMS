@@ -1,5 +1,10 @@
 export const styles = {
   toolbar: 'flex flex-wrap items-center gap-2',
+  amenityFilter: 'rounded-card border border-line bg-surface-card p-3 space-y-3',
+  amenityLegend: 'px-1 text-label font-semibold text-text-primary',
+  amenityOptions: 'flex flex-wrap items-center gap-3',
+  amenityOption: 'flex min-h-11 items-center gap-2 text-body text-text-primary',
+  amenityChip: 'rounded-pill whitespace-nowrap',
   search: 'w-full max-w-xs',
   filterInput:
     'min-h-11 w-40 rounded-compact border border-line-strong bg-surface-card px-3 text-body text-text-primary placeholder:text-text-secondary',
