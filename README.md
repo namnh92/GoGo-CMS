@@ -383,8 +383,8 @@ cho nghiệm thu cms-dev.
 
 ### Lý do từ chối đóng góp (GoGo-CMS#281)
 
-Contract vendor nguyên byte từ GoGo-BE `origin/re-design` tại `1ee7544` sau
-PR #790, phiên bản `7.0.0-alpha.1`. Types sinh bằng
+Contract hiện tại vendor nguyên byte từ GoGo-BE `origin/re-design` tại
+`c42e25b` (gồm #794), phiên bản `7.2.0-alpha.1`. Types sinh bằng
 `pnpm api:types`; drift gate và SHA-256 trong contract test pin cùng bản này.
 Đã cập nhật `PATH_TEMPLATES` với route ảnh provider mới, giữ thứ tự của contract.
 
@@ -404,3 +404,21 @@ Acceptance còn cần đo trên cms-dev và app với BE chứa PR #790: từ ch
 submission thuộc tài khoản app bằng từng reason key, kiểm tra polling chỉ trả
 key công khai và app hiển thị đúng nhãn vi/en, không lộ ghi chú nội bộ.
 Local Vitest không thay cho acceptance này.
+
+### Ảnh đóng góp (GoGo-CMS#283)
+
+Trong màn kiểm duyệt, ảnh riêng tư được lấy qua API CMS có xác thực, chỉ là
+WebP đã loại EXIF/GPS; không tải ảnh gốc hay dùng public asset host. Bấm ảnh
+để xem lớn. Bỏ chọn từng ô “Giữ ảnh” trước khi duyệt hoặc gộp; các ảnh còn chọn
+được gửi bằng `approvedPhotoIds`. Bỏ chọn tất cả gửi `[]` để từ chối toàn bộ.
+Lựa chọn áp dụng khi ra quyết định, không nằm trong bản nháp bổ sung; từ chối
+đề xuất vẫn dùng luồng cũ. 409 `PHOTO_REVIEW_REQUIRED` tải lại chi tiết và yêu
+cầu kiểm tra/chọn lại ảnh. Có trạng thái tải/rỗng/không còn ảnh/lỗi/403/mất mạng
+và thử lại; blob riêng tư bị huỷ khi đóng, đổi đề xuất hoặc quyết định thành công.
+
+Các route ảnh mới được chuẩn hoá trong telemetry bằng path template; không ghi
+ID ảnh, URL hay nội dung ảnh vào sự kiện mới. Kiểm thử local không thay nghiệm
+thu cms-dev: cần moderator mở đóng góp có ảnh, xem lớn, bỏ một ảnh, duyệt/gộp
+và xác nhận chỉ ảnh đã chọn xuất hiện trong catalogue; thử bỏ toàn bộ và từ chối.
+Rollback UI cần giữ contract mới: console cũ không chọn ảnh sẽ bị BE chặn với
+`PHOTO_REVIEW_REQUIRED` khi còn ảnh chờ duyệt.

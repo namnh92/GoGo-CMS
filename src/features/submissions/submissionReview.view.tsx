@@ -51,6 +51,7 @@ import {
   type ReviewForm,
 } from './reviewForm'
 import { styles } from './submissionReview.style'
+import { SubmissionPhotos } from './submissionPhotos.view'
 
 const REJECTION_LABELS = {
   duplicate_place: 'submissions.rejectionReason.duplicate_place',
@@ -133,6 +134,11 @@ export function SubmissionReviewDrawer({
   const [mergeQuery, setMergeQuery] = useState('')
   const [mergeTarget, setMergeTarget] = useState<{ id: string; name: string } | null>(null)
   const [leaving, setLeaving] = useState(false)
+  const [photoSelection, setPhotoSelection] = useState<{ key: string; excluded: string[] }>({
+    key: '',
+    excluded: [],
+  })
+  const [photoReviewRequired, setPhotoReviewRequired] = useState(false)
 
   const detail = useQuery({
     queryKey: queryKeys.submissions.detail(submissionId ?? ''),
@@ -152,6 +158,11 @@ export function SubmissionReviewDrawer({
   )
 
   const savedDraft = detail.data?.review?.draft ?? null
+  const photos = detail.data?.photos ?? []
+  // Scope choices to this exact pending photo set. New contributions need a fresh review.
+  const photoKey = JSON.stringify([submissionId, photos.map(({ id, status }) => [id, status])])
+  const excludedPhotoIds = photoSelection.key === photoKey ? photoSelection.excluded : []
+  const photoDirty = excludedPhotoIds.length > 0
 
   // Seed the boxes from the stored draft, once per submission and once per
   // save — never on every render, or a reviewer's typing would be reset by a
@@ -283,10 +294,15 @@ export function SubmissionReviewDrawer({
       return decideSubmission(submissionId!, {
         decision,
         reason: reason.trim(),
+        approvedPhotoIds: photos
+          .filter((photo) => photo.status === 'pending' && !excludedPhotoIds.includes(photo.id))
+          .map((photo) => photo.id),
         ...(decision === 'merged' && mergeTarget ? { mergeIntoPlaceId: mergeTarget.id } : {}),
       })
     },
     onSuccess: (_result, decision) => {
+      setPhotoReviewRequired(false)
+      setPhotoSelection({ key: '', excluded: [] })
       toast.success(t(`submissions.decided.${decision}`))
       setReason('')
       setRejectionReason('')
@@ -303,6 +319,13 @@ export function SubmissionReviewDrawer({
        * older console) is refused at approval, naming the fields. The draft is
        * what is wrong, so the boxes say so and the reviewer re-saves it.
        */
+      if (apiError.code === 'PHOTO_REVIEW_REQUIRED') {
+        setPhotoReviewRequired(true)
+        setPhotoSelection({ key: '', excluded: [] })
+        void detail.refetch()
+        toast.error(t('submissions.photos.reviewRequired'), apiError.requestId || undefined)
+        return
+      }
       if (apiError.code === 'REVIEW_EVIDENCE_REQUIRED') {
         setFieldErrors(apiError.fieldErrors)
         toast.error(t('submissions.review.evidenceRequired'), apiError.requestId || undefined)
@@ -315,6 +338,8 @@ export function SubmissionReviewDrawer({
 
   const resetDecision = decide.reset
   useEffect(() => {
+    setPhotoReviewRequired(false)
+    setPhotoSelection({ key: '', excluded: [] })
     setReason('')
     setRejectionReason('')
     setRejectionError(false)
@@ -339,7 +364,7 @@ export function SubmissionReviewDrawer({
   const decisionPending = decide.isPending || save.isPending
 
   const close = () => {
-    if (dirty) {
+    if (dirty || photoDirty) {
       setLeaving(true)
       return
     }
@@ -502,6 +527,31 @@ export function SubmissionReviewDrawer({
                   <p className={styles.note}>{submission.contribution.note}</p>
                 ) : null}
               </section>
+
+              <SubmissionPhotos
+                key={photoKey}
+                submissionId={submission.id}
+                photos={photos}
+                canPreview={
+                  can('submission.read') && submission.status === 'pending' && !decide.isSuccess
+                }
+                canSelect={Boolean(canDecide) && !decide.isSuccess}
+                disabled={decisionPending}
+                excludedIds={excludedPhotoIds}
+                onToggle={(id) =>
+                  setPhotoSelection({
+                    key: photoKey,
+                    excluded: excludedPhotoIds.includes(id)
+                      ? excludedPhotoIds.filter((value) => value !== id)
+                      : [...excludedPhotoIds, id],
+                  })
+                }
+              />
+              {photoReviewRequired ? (
+                <p role="alert" className={styles.warn}>
+                  {t('submissions.photos.reviewRequired')}
+                </p>
+              ) : null}
 
               {canDecide ? (
                 <section className={styles.section}>
@@ -701,7 +751,9 @@ export function SubmissionReviewDrawer({
                   <div className={styles.footer}>
                     <Button
                       variant="success"
-                      disabled={reasonTooShort || decisionPending}
+                      disabled={
+                        reasonTooShort || decisionPending || detail.isFetching || detail.isError
+                      }
                       loading={decide.isPending && decide.variables === 'approved'}
                       onClick={() => decide.mutate('approved')}
                     >
@@ -720,7 +772,13 @@ export function SubmissionReviewDrawer({
                       // The server requires a target for a merge and refuses
                       // without one; and a target is chosen from the catalogue,
                       // never typed as a UUID.
-                      disabled={reasonTooShort || mergeTarget === null || decisionPending}
+                      disabled={
+                        reasonTooShort ||
+                        mergeTarget === null ||
+                        decisionPending ||
+                        detail.isFetching ||
+                        detail.isError
+                      }
                       loading={decide.isPending && decide.variables === 'merged'}
                       onClick={() => decide.mutate('merged')}
                     >
@@ -737,7 +795,9 @@ export function SubmissionReviewDrawer({
                 </p>
               )}
 
-              {decide.isError ? <ErrorState error={decide.error} /> : null}
+              {decide.isError && toApiError(decide.error).code !== 'PHOTO_REVIEW_REQUIRED' ? (
+                <ErrorState error={decide.error} />
+              ) : null}
 
               {submission.history.length > 0 ? (
                 <section className={styles.section}>
@@ -774,6 +834,7 @@ export function SubmissionReviewDrawer({
         open={leaving}
         pending={[
           ...dirtyFields.map((field) => t(REVIEW_FIELD_LABEL[field])),
+          ...(photoDirty ? [t('submissions.photos.title')] : []),
           ...(evidenceDirty ? [t('placeEditor.provenance')] : []),
         ]}
         onStay={() => setLeaving(false)}

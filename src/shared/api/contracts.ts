@@ -1288,6 +1288,18 @@ export const placeSubmissionDetailSchema = z.object({
   decidedAt: z.string().nullish(),
   decisionReason: z.string().nullish(),
   rejectionReason: submissionRejectionReasonSchema.nullish(),
+  photos: z
+    .array(
+      z.object({
+        id: z.string(),
+        mediaId: z.string(),
+        width: z.number(),
+        height: z.number(),
+        status: z.enum(['pending', 'approved', 'rejected']),
+        url: z.string().nullable(),
+      }),
+    )
+    .optional(),
   contribution: z
     .object({
       categoryKey: z.string().nullish(),

@@ -2424,6 +2424,20 @@ export const vi = {
   'submissions.identityConflictHint':
     'Hai địa điểm GoGo cùng nhận Google ID này. Cần gộp trước khi duyệt.',
   'submissions.open': 'Mở để kiểm duyệt',
+  'error.PHOTO_UNAVAILABLE': 'Không thể tải ảnh. Hãy thử lại hoặc bỏ chọn ảnh này.',
+  'submissions.photos.title': 'Ảnh đóng góp',
+  'submissions.photos.hint':
+    'Bỏ chọn ảnh không giữ lại khi duyệt hoặc gộp. Bỏ chọn tất cả để từ chối toàn bộ ảnh. Lựa chọn áp dụng cùng quyết định, không lưu cùng nội dung bổ sung.',
+  'submissions.photos.empty': 'Không có ảnh đóng góp.',
+  'submissions.photos.image': 'Ảnh đóng góp {n}',
+  'submissions.photos.enlarge': 'Xem lớn ảnh {n}',
+  'submissions.photos.keep': 'Giữ ảnh {n}',
+  'submissions.photos.loading': 'Đang tải ảnh riêng tư…',
+  'submissions.photos.unavailable': 'Không thể xem ảnh này.',
+  'submissions.photos.approved': 'Ảnh đã được duyệt.',
+  'submissions.photos.rejected': 'Ảnh đã bị từ chối.',
+  'submissions.photos.reviewRequired':
+    'Cần kiểm duyệt ảnh trước khi duyệt hoặc gộp. Đã tải lại đề xuất; hãy xem ảnh và chọn lại những ảnh cần giữ trước khi thử lại.',
   'submissions.reviewTitle': 'Kiểm duyệt đề xuất',
   'submissions.section.identity': 'Định danh',
   'submissions.section.provider': 'Dữ liệu Google',

@@ -72,6 +72,8 @@ export type RequestOptions = {
   signal?: AbortSignal
   /** Skip JSON parsing — used by the CSV error-report download. */
   raw?: boolean
+  /** Binary endpoints may need a media-specific Accept header. */
+  accept?: string
   /** Sensitive read endpoints may prohibit browser caching. */
   cache?: RequestCache
 }
@@ -170,7 +172,7 @@ export async function apiFetch<T = unknown>(
 ): Promise<T> {
   const { method = 'GET', query, body, idempotencyKey, ifMatch, signal, raw } = options
 
-  const headers = new Headers({ Accept: raw ? 'text/csv' : 'application/json' })
+  const headers = new Headers({ Accept: options.accept ?? (raw ? 'text/csv' : 'application/json') })
   let payload: BodyInit | undefined
   if (body instanceof FormData) {
     payload = body
