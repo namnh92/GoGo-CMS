@@ -134,11 +134,16 @@ export function SubmissionReviewDrawer({
   const [mergeQuery, setMergeQuery] = useState('')
   const [mergeTarget, setMergeTarget] = useState<{ id: string; name: string } | null>(null)
   const [leaving, setLeaving] = useState(false)
-  const [photoSelection, setPhotoSelection] = useState<{ key: string; excluded: string[] }>({
-    key: '',
+  const [photoSelection, setPhotoSelection] = useState<{
+    submissionId: string | null
+    reviewedIds: string[]
+    excluded: string[]
+  }>({
+    submissionId: null,
+    reviewedIds: [],
     excluded: [],
   })
-  const [photoReviewRequired, setPhotoReviewRequired] = useState(false)
+  const [photoReviewRequested, setPhotoReviewRequested] = useState(false)
 
   const detail = useQuery({
     queryKey: queryKeys.submissions.detail(submissionId ?? ''),
@@ -159,10 +164,31 @@ export function SubmissionReviewDrawer({
 
   const savedDraft = detail.data?.review?.draft ?? null
   const photos = detail.data?.photos ?? []
-  // Scope choices to this exact pending photo set. New contributions need a fresh review.
+  // Choices belong to the submission, not a snapshot of its photo set.
   const photoKey = JSON.stringify([submissionId, photos.map(({ id, status }) => [id, status])])
-  const excludedPhotoIds = photoSelection.key === photoKey ? photoSelection.excluded : []
+  const pendingPhotoIds = photos.filter((photo) => photo.status === 'pending').map(({ id }) => id)
+  const samePhotoSubmission = photoSelection.submissionId === submissionId
+  const excludedPhotoIds = samePhotoSubmission
+    ? photoSelection.excluded.filter((id) => pendingPhotoIds.includes(id))
+    : []
+  const photoReviewRequired =
+    photoReviewRequested ||
+    (samePhotoSubmission && pendingPhotoIds.some((id) => !photoSelection.reviewedIds.includes(id)))
   const photoDirty = excludedPhotoIds.length > 0
+
+  useEffect(() => {
+    if (!detail.data) return
+    const pendingIds = (detail.data.photos ?? [])
+      .filter((photo) => photo.status === 'pending')
+      .map(({ id }) => id)
+    setPhotoSelection((previous) => {
+      if (previous.submissionId !== submissionId) {
+        return { submissionId, reviewedIds: pendingIds, excluded: [] }
+      }
+      const excluded = previous.excluded.filter((id) => pendingIds.includes(id))
+      return excluded.length === previous.excluded.length ? previous : { ...previous, excluded }
+    })
+  }, [detail.data, submissionId])
 
   // Seed the boxes from the stored draft, once per submission and once per
   // save — never on every render, or a reviewer's typing would be reset by a
@@ -301,8 +327,7 @@ export function SubmissionReviewDrawer({
       })
     },
     onSuccess: (_result, decision) => {
-      setPhotoReviewRequired(false)
-      setPhotoSelection({ key: '', excluded: [] })
+      setPhotoReviewRequested(false)
       toast.success(t(`submissions.decided.${decision}`))
       setReason('')
       setRejectionReason('')
@@ -320,8 +345,7 @@ export function SubmissionReviewDrawer({
        * what is wrong, so the boxes say so and the reviewer re-saves it.
        */
       if (apiError.code === 'PHOTO_REVIEW_REQUIRED') {
-        setPhotoReviewRequired(true)
-        setPhotoSelection({ key: '', excluded: [] })
+        setPhotoReviewRequested(true)
         void detail.refetch()
         toast.error(t('submissions.photos.reviewRequired'), apiError.requestId || undefined)
         return
@@ -338,8 +362,7 @@ export function SubmissionReviewDrawer({
 
   const resetDecision = decide.reset
   useEffect(() => {
-    setPhotoReviewRequired(false)
-    setPhotoSelection({ key: '', excluded: [] })
+    setPhotoReviewRequested(false)
     setReason('')
     setRejectionReason('')
     setRejectionError(false)
@@ -540,7 +563,7 @@ export function SubmissionReviewDrawer({
                 excludedIds={excludedPhotoIds}
                 onToggle={(id) =>
                   setPhotoSelection({
-                    key: photoKey,
+                    ...photoSelection,
                     excluded: excludedPhotoIds.includes(id)
                       ? excludedPhotoIds.filter((value) => value !== id)
                       : [...excludedPhotoIds, id],
@@ -548,9 +571,27 @@ export function SubmissionReviewDrawer({
                 }
               />
               {photoReviewRequired ? (
-                <p role="alert" className={styles.warn}>
-                  {t('submissions.photos.reviewRequired')}
-                </p>
+                <div className={styles.section}>
+                  <p role="alert" className={styles.warn}>
+                    {t('submissions.photos.reviewRequired')}
+                  </p>
+                  {canDecide ? (
+                    <Button
+                      variant="secondary"
+                      disabled={decisionPending || detail.isFetching || detail.isError}
+                      onClick={() => {
+                        setPhotoSelection({
+                          submissionId,
+                          reviewedIds: pendingPhotoIds,
+                          excluded: excludedPhotoIds,
+                        })
+                        setPhotoReviewRequested(false)
+                      }}
+                    >
+                      {t('submissions.photos.confirmReview')}
+                    </Button>
+                  ) : null}
+                </div>
               ) : null}
 
               {canDecide ? (
@@ -752,7 +793,11 @@ export function SubmissionReviewDrawer({
                     <Button
                       variant="success"
                       disabled={
-                        reasonTooShort || decisionPending || detail.isFetching || detail.isError
+                        reasonTooShort ||
+                        photoReviewRequired ||
+                        decisionPending ||
+                        detail.isFetching ||
+                        detail.isError
                       }
                       loading={decide.isPending && decide.variables === 'approved'}
                       onClick={() => decide.mutate('approved')}
@@ -775,6 +820,7 @@ export function SubmissionReviewDrawer({
                       disabled={
                         reasonTooShort ||
                         mergeTarget === null ||
+                        photoReviewRequired ||
                         decisionPending ||
                         detail.isFetching ||
                         detail.isError

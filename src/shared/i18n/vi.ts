@@ -2437,7 +2437,8 @@ export const vi = {
   'submissions.photos.approved': 'Ảnh đã được duyệt.',
   'submissions.photos.rejected': 'Ảnh đã bị từ chối.',
   'submissions.photos.reviewRequired':
-    'Cần kiểm duyệt ảnh trước khi duyệt hoặc gộp. Đã tải lại đề xuất; hãy xem ảnh và chọn lại những ảnh cần giữ trước khi thử lại.',
+    'Cần kiểm duyệt ảnh trước khi duyệt hoặc gộp. Đã tải lại đề xuất; lựa chọn trước đó được giữ lại. Hãy xem ảnh mới, chọn ảnh cần giữ và xác nhận đã kiểm duyệt.',
+  'submissions.photos.confirmReview': 'Đã kiểm duyệt ảnh',
   'submissions.reviewTitle': 'Kiểm duyệt đề xuất',
   'submissions.section.identity': 'Định danh',
   'submissions.section.provider': 'Dữ liệu Google',

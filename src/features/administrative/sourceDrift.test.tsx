@@ -248,7 +248,7 @@ describe('deciding', () => {
       http.post(
         `${BASE}/cms/administrative-datasets/:id/quarantine/:rowId/accept`,
         async ({ request }) => {
-          bodies.push((await request.json()) as Record<string, unknown>)
+          bodies.push((await request.clone().json()) as Record<string, unknown>)
           return undefined
         },
       ),
@@ -264,6 +264,8 @@ describe('deciding', () => {
       targetEffectiveFrom: '2025-07-01',
       expectedRevision: 0,
     })
+    // The observer must leave the body readable by the shared decision handler.
+    await screen.findByText(/Đã ghi quyết định chấp nhận/)
   })
 
   it('keeps two candidates with one code apart, and sends the period of the one chosen (#205)', async () => {
@@ -272,7 +274,7 @@ describe('deciding', () => {
       http.post(
         `${BASE}/cms/administrative-datasets/:id/quarantine/:rowId/accept`,
         async ({ request }) => {
-          bodies.push((await request.json()) as Record<string, unknown>)
+          bodies.push((await request.clone().json()) as Record<string, unknown>)
           return undefined
         },
       ),
@@ -442,7 +444,7 @@ describe('the override set', () => {
       http.post(
         `${BASE}/cms/administrative-datasets/:id/override-set/materialize`,
         async ({ request }) => {
-          bodies.push((await request.json()) as Record<string, unknown>)
+          bodies.push((await request.clone().json()) as Record<string, unknown>)
           return undefined
         },
       ),
@@ -465,6 +467,7 @@ describe('the override set', () => {
 
     await waitFor(() => expect(bodies).toHaveLength(1))
     expect(bodies[0]).toMatchObject({ reason: 'gộp quyết định đợt 1', expectedRevision: 1 })
+    await screen.findByText(/Đã tạo phiên bản dẫn xuất/)
   })
 
   it('links the derived version and names the sequence that is left', async () => {

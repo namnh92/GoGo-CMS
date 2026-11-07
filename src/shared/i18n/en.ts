@@ -3668,7 +3668,8 @@ export const en: Record<MessageKey, string> = {
   'submissions.photos.approved': 'Photo approved.',
   'submissions.photos.rejected': 'Photo rejected.',
   'submissions.photos.reviewRequired':
-    'Photo review is required before approval or merge. The submission has been reloaded; review the photos and select which to keep before trying again.',
+    'Photo review is required before approval or merge. The submission has been reloaded; your previous choices are preserved. Review new photos, select which to keep and confirm your review.',
+  'submissions.photos.confirmReview': 'Confirm photo review',
   'submissions.reviewTitle': 'Review submission',
   'submissions.section.identity': 'Identity',
   'submissions.section.provider': 'Google data',

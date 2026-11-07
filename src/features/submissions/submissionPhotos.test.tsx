@@ -173,6 +173,49 @@ describe('submission photo review', () => {
     await waitFor(() => expect(mockDb.decisions[0]).toMatchObject({ approvedPhotoIds: [] }))
   })
 
+  it.each(['approved', 'merged'] as const)(
+    'preserves exclusions after saving and requires review of added photos before %s',
+    async (decision) => {
+      const { user, keep } = await open()
+      await user.click(keep)
+      await reason(user)
+      if (decision === 'merged') {
+        await user.type(screen.getByLabelText(/Tìm địa điểm để gộp vào/), 'Chào')
+        await user.click(await screen.findByRole('button', { name: /Chào Bạn/ }))
+      }
+
+      // Another contributor adds C while this moderator edits the review.
+      const added = { ...photos[0]!, id: 'a0000000-0000-4000-8000-000000000003' }
+      detail().photos = [...photos, added]
+      await user.type(screen.getByLabelText('Tên hiển thị'), 'Tên đã kiểm tra')
+      await user.click(screen.getByRole('button', { name: 'Lưu bổ sung' }))
+      await screen.findByRole('checkbox', { name: 'Giữ ảnh 3' })
+
+      expect(screen.getByRole('checkbox', { name: 'Giữ ảnh 1' })).not.toBeChecked()
+      expect(screen.getByRole('checkbox', { name: 'Giữ ảnh 2' })).toBeChecked()
+      expect(screen.getByRole('button', { name: 'Duyệt' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Gộp' })).toBeDisabled()
+      expect(mockDb.decisions).toHaveLength(0)
+
+      // The reviewer can exclude C or keep it, then explicitly confirm the new set.
+      if (decision === 'merged') {
+        await user.click(screen.getByRole('checkbox', { name: 'Giữ ảnh 3' }))
+        expect(screen.getByRole('button', { name: 'Gộp' })).toBeDisabled()
+      }
+      await user.click(screen.getByRole('button', { name: 'Đã kiểm duyệt ảnh' }))
+      const submit = screen.getByRole('button', {
+        name: decision === 'approved' ? 'Duyệt' : 'Gộp',
+      })
+      expect(submit).toBeEnabled()
+      await user.click(submit)
+      await waitFor(() => expect(mockDb.decisions).toHaveLength(1))
+      expect(mockDb.decisions[0]).toMatchObject({
+        decision,
+        approvedPhotoIds: decision === 'approved' ? [photos[1]!.id, added.id] : [photos[1]!.id],
+      })
+    },
+  )
+
   it('leaves rejection unchanged even with pending photos', async () => {
     const { user, keep } = await open()
     await user.click(keep)
@@ -184,7 +227,34 @@ describe('submission photo review', () => {
     expect(mockDb.decisions[0]).not.toHaveProperty('approvedPhotoIds')
   })
 
-  it('reloads on PHOTO_REVIEW_REQUIRED and includes new photos on retry', async () => {
+  it('keeps exclusions through reordering and removal without requiring a new-photo review', async () => {
+    const { user, keep } = await open()
+    await user.click(keep)
+    await reason(user)
+    detail().photos = [...photos].reverse()
+    await user.type(screen.getByLabelText('Tên hiển thị'), 'Tên đã kiểm tra')
+    await user.click(screen.getByRole('button', { name: 'Lưu bổ sung' }))
+    await waitFor(() =>
+      expect(screen.getByRole('checkbox', { name: 'Giữ ảnh 2' })).not.toBeChecked(),
+    )
+    expect(screen.getByRole('checkbox', { name: 'Giữ ảnh 1' })).toBeChecked()
+    expect(screen.queryByRole('button', { name: 'Đã kiểm duyệt ảnh' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('checkbox', { name: 'Giữ ảnh 1' }))
+
+    // B disappears; A's exclusion survives and only pending IDs may be sent.
+    detail().photos = [photos[0]]
+    await user.type(screen.getByLabelText('Tên hiển thị'), ' mới')
+    await user.click(screen.getByRole('button', { name: 'Lưu bổ sung' }))
+    await waitFor(() =>
+      expect(screen.queryByRole('checkbox', { name: 'Giữ ảnh 2' })).not.toBeInTheDocument(),
+    )
+    expect(screen.getByRole('checkbox', { name: 'Giữ ảnh 1' })).not.toBeChecked()
+    expect(screen.getByRole('button', { name: 'Duyệt' })).toBeEnabled()
+    await user.click(screen.getByRole('button', { name: 'Duyệt' }))
+    await waitFor(() => expect(mockDb.decisions[0]).toMatchObject({ approvedPhotoIds: [] }))
+  })
+
+  it('preserves exclusions on PHOTO_REVIEW_REQUIRED and requires explicit review before retry', async () => {
     let calls = 0
     const bodies: unknown[] = []
     const added = { ...photos[0]!, id: 'a0000000-0000-4000-8000-000000000003' }
@@ -214,11 +284,14 @@ describe('submission photo review', () => {
     expect(
       within(screen.getByRole('dialog', { name: 'Kiểm duyệt đề xuất' })).getByRole('alert'),
     ).toHaveTextContent('Cần kiểm duyệt ảnh')
-    expect(screen.getByRole('checkbox', { name: 'Giữ ảnh 1' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Giữ ảnh 1' })).not.toBeChecked()
+    expect(screen.getByRole('button', { name: 'Duyệt' })).toBeDisabled()
     await user.click(screen.getByRole('checkbox', { name: 'Giữ ảnh 3' }))
+    expect(screen.getByRole('button', { name: 'Duyệt' })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'Đã kiểm duyệt ảnh' }))
     await user.click(screen.getByRole('button', { name: 'Duyệt' }))
     await waitFor(() => expect(bodies).toHaveLength(2))
-    expect(bodies[1]).toMatchObject({ approvedPhotoIds: photos.map((photo) => photo.id) })
+    expect(bodies[1]).toMatchObject({ approvedPhotoIds: [photos[1]!.id] })
   })
 
   it('resets choices and revokes previews when switching submissions', async () => {
