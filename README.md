@@ -384,7 +384,7 @@ cho nghiệm thu cms-dev.
 ### Lý do từ chối đóng góp (GoGo-CMS#281)
 
 Contract hiện tại vendor nguyên byte từ GoGo-BE `origin/re-design` tại
-`6cee137` (gồm #802), phiên bản `7.5.0-alpha.1`. Types sinh bằng
+`0d238eb` (BE #807), phiên bản `7.6.0-alpha.1`. Types sinh bằng
 `pnpm api:types`; drift gate và SHA-256 trong contract test pin cùng bản này.
 Đã cập nhật `PATH_TEMPLATES` với route ảnh provider mới, giữ thứ tự của contract.
 
@@ -410,7 +410,8 @@ Local Vitest không thay cho acceptance này.
 Trong màn kiểm duyệt, ảnh riêng tư được lấy qua API CMS có xác thực, chỉ là
 WebP đã loại EXIF/GPS; không tải ảnh gốc hay dùng public asset host. Bấm ảnh
 để xem lớn. Bỏ chọn từng ô “Giữ ảnh” trước khi duyệt hoặc gộp; các ảnh còn chọn
-được gửi bằng `approvedPhotoIds`. Bỏ chọn tất cả gửi `[]` để từ chối toàn bộ.
+được gửi bằng `enrichmentSelection.keptPhotoMediaIds` cho ảnh wizard và
+`approvedPhotoIds` cho ảnh thường. Bỏ chọn tất cả gửi các mảng `[]`.
 Lựa chọn áp dụng khi ra quyết định, không nằm trong bản nháp bổ sung; từ chối
 đề xuất vẫn dùng luồng cũ. 409 `PHOTO_REVIEW_REQUIRED` tải lại chi tiết và yêu
 cầu kiểm tra/chọn lại ảnh. Có trạng thái tải/rỗng/không còn ảnh/lỗi/403/mất mạng
@@ -430,6 +431,12 @@ Rollback UI cần giữ contract mới: console cũ không chọn ảnh sẽ b�
 
 ### Phiên bản phân loại (GoGo-CMS#285)
 
-Contract hiện tại: `7.5.0-alpha.1` từ BE `origin/re-design` gồm #802.
+Contract hiện tại: `7.6.0-alpha.1` từ BE #807 (`0d238eb`).
 Màn Phân loại hiện phiên bản toàn cục và lần thay đổi cuối; mỗi write cập nhật
 metadata từ response. Chi tiết và nghiệm thu: [Phiên bản phân loại](docs/taxonomy-version.md).
+
+### Giữ/bỏ dữ liệu wizard (GoGo-CMS#284 phần 2)
+
+Duyệt/gộp dùng stable fact keys và media ids từ detail; thông tin không chọn
+sẽ bị loại. Tín dụng dự kiến lấy từ BE cho lựa chọn hiện tại, không tính ở CMS.
+Xem [hợp đồng, trạng thái và rollback](docs/wizard-moderation.md).

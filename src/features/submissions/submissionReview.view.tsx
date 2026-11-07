@@ -35,6 +35,7 @@ import {
   decideSubmission,
   fetchSubmission,
   previewSubmissionProvider,
+  previewSubmissionCredit,
   saveSubmissionReview,
   type SubmissionDecision,
 } from './api'
@@ -53,7 +54,6 @@ import {
 import { styles } from './submissionReview.style'
 import { SubmissionPhotos } from './submissionPhotos.view'
 import { SubmissionEnrichment } from './submissionEnrichment.view'
-import { submissionCreditPreview } from './submissionCredits'
 import { useOnline } from '@/shared/ui/useOnline'
 
 const REJECTION_LABELS = {
@@ -157,6 +157,7 @@ function SubmissionReviewSession({
     excluded: string[]
   } | null>(null)
   const [photoReviewRequested, setPhotoReviewRequested] = useState(false)
+  const [excludedFactKeys, setExcludedFactKeys] = useState<string[]>([])
 
   const detail = useQuery({
     queryKey: queryKeys.submissions.detail(submissionId ?? ''),
@@ -187,6 +188,23 @@ function SubmissionReviewSession({
     (photoSelection !== null &&
       pendingPhotoIds.some((id) => !photoSelection.reviewedIds.includes(id)))
   const photoDirty = excludedPhotoIds.length > 0
+  const factKeys = detail.data?.enrichmentItems?.factKeys ?? []
+  const wizardMediaIds = detail.data?.enrichmentItems?.photoMediaIds ?? []
+  const enrichmentSelection: Schemas['EnrichmentSelection'] | undefined = detail.data
+    ?.enrichmentItems
+    ? {
+        keptFactKeys: factKeys.filter((key) => !excludedFactKeys.includes(key)),
+        keptPhotoMediaIds: wizardMediaIds.filter((mediaId) =>
+          photos.some(
+            (photo) =>
+              photo.mediaId === mediaId &&
+              photo.status === 'pending' &&
+              !excludedPhotoIds.includes(photo.id),
+          ),
+        ),
+      }
+    : undefined
+  const factDirty = excludedFactKeys.some((key) => factKeys.includes(key))
 
   useEffect(() => {
     if (!detail.data) return
@@ -329,15 +347,23 @@ function SubmissionReviewSession({
           ...(reason.trim() ? { reason: reason.trim() } : {}),
         })
       }
-      // 7.5.0-alpha.1 cannot persist per-fact selections; never silently approve wizard claims.
-      if (detail.data?.contribution.enrichment) {
-        throw new Error(t('submissions.wizard.contractGap'))
+      if (!can('submission.decide')) {
+        throw new ApiError({ code: 'FORBIDDEN', message: 'Permission denied', status: 403 })
+      }
+      if (detail.data?.contribution.enrichment && (!enrichmentSelection || !taxonomies.isSuccess)) {
+        throw new Error(t('submissions.wizard.selectionUnavailable'))
       }
       return decideSubmission(submissionId!, {
         decision,
         reason: reason.trim(),
+        ...(enrichmentSelection ? { enrichmentSelection } : {}),
         approvedPhotoIds: photos
-          .filter((photo) => photo.status === 'pending' && !excludedPhotoIds.includes(photo.id))
+          .filter(
+            (photo) =>
+              photo.status === 'pending' &&
+              !excludedPhotoIds.includes(photo.id) &&
+              (!enrichmentSelection || !wizardMediaIds.includes(photo.mediaId)),
+          )
           .map((photo) => photo.id),
         ...(decision === 'merged' && mergeTarget ? { mergeIntoPlaceId: mergeTarget.id } : {}),
       })
@@ -390,16 +416,23 @@ function SubmissionReviewSession({
     !submissionRejectionReasonSchema.safeParse(rejectionReason).success ||
     (reason.trim().length > 0 && reasonTooShort)
   const decisionPending = decide.isPending || save.isPending
-  const wizardApprovalBlocked = Boolean(data?.contribution.enrichment)
-  const credits = submissionCreditPreview(
-    data?.fromRegisteredUser ?? false,
-    data?.contribution.enrichment,
-    photos,
-    excludedPhotoIds,
+  const wizardApprovalBlocked = Boolean(data?.contribution.enrichment && !enrichmentSelection)
+  const creditPreview = useQuery({
+    queryKey: ['submissions', submissionId, 'credit-preview', enrichmentSelection, data?.updatedAt],
+    queryFn: ({ signal }) => previewSubmissionCredit(submissionId, enrichmentSelection!, signal),
+    enabled: Boolean(canDecide && enrichmentSelection && online && !decide.isSuccess),
+    retry: false,
+  })
+  const credits = enrichmentSelection ? creditPreview.data?.expectedCredit : data?.expectedCredit
+  const creditForbidden = creditPreview.isError && toApiError(creditPreview.error).isForbidden
+  const creditUnavailable = Boolean(
+    enrichmentSelection &&
+    (creditPreview.isPending || creditPreview.isFetching || creditPreview.isError),
   )
+  const factLabelsUnavailable = Boolean(data?.contribution.enrichment && !taxonomies.isSuccess)
 
   const close = () => {
-    if (dirty || photoDirty) {
+    if (dirty || photoDirty || factDirty) {
       setLeaving(true)
       return
     }
@@ -572,7 +605,23 @@ function SubmissionReviewSession({
                 ) : null}
               </section>
 
-              <SubmissionEnrichment enrichment={submission.contribution.enrichment} />
+              <SubmissionEnrichment
+                enrichment={submission.contribution.enrichment}
+                factKeys={factKeys}
+                excludedKeys={excludedFactKeys}
+                canSelect={Boolean(canDecide) && !decide.isSuccess && !creditForbidden}
+                disabled={decisionPending || !online || detail.isFetching || detail.isError}
+                onToggle={(key) =>
+                  setExcludedFactKeys((keys) =>
+                    keys.includes(key) ? keys.filter((item) => item !== key) : [...keys, key],
+                  )
+                }
+              />
+              {wizardApprovalBlocked ? (
+                <p role="alert" className={styles.warn}>
+                  {t('submissions.wizard.selectionUnavailable')}
+                </p>
+              ) : null}
 
               <SubmissionPhotos
                 key={photoKey}
@@ -582,7 +631,7 @@ function SubmissionReviewSession({
                 canPreview={
                   can('submission.read') && submission.status === 'pending' && !decide.isSuccess
                 }
-                canSelect={Boolean(canDecide) && !decide.isSuccess}
+                canSelect={Boolean(canDecide) && !decide.isSuccess && !creditForbidden}
                 disabled={decisionPending || !online}
                 excludedIds={excludedPhotoIds}
                 onToggle={(id) =>
@@ -812,20 +861,31 @@ function SubmissionReviewSession({
                     </div>
                   ) : null}
 
-                  <p className={styles.note} aria-live="polite">
-                    {submission.fromRegisteredUser
-                      ? t('submissions.wizard.credit', credits)
-                      : t('submissions.wizard.guestCredit')}
-                  </p>
-                  {submission.fromRegisteredUser ? (
-                    <p className={styles.hint}>{t('submissions.wizard.creditHint')}</p>
+                  {enrichmentSelection ? (
+                    <AsyncBoundary
+                      status={creditPreview.isFetching ? 'pending' : creditPreview.status}
+                      error={creditPreview.error}
+                      data={creditPreview.data}
+                      onRetry={() => void creditPreview.refetch()}
+                    >
+                      {(preview) => (
+                        <p className={styles.note} aria-live="polite">
+                          {t('submissions.wizard.credit', preview.expectedCredit)}
+                        </p>
+                      )}
+                    </AsyncBoundary>
+                  ) : credits ? (
+                    <p className={styles.note}>{t('submissions.wizard.credit', credits)}</p>
                   ) : null}
+                  <p className={styles.hint}>{t('submissions.wizard.creditHint')}</p>
                   <div className={styles.footer}>
                     <Button
                       variant="success"
                       disabled={
                         !online ||
                         wizardApprovalBlocked ||
+                        creditUnavailable ||
+                        factLabelsUnavailable ||
                         reasonTooShort ||
                         photoReviewRequired ||
                         decisionPending ||
@@ -853,6 +913,8 @@ function SubmissionReviewSession({
                       disabled={
                         !online ||
                         wizardApprovalBlocked ||
+                        creditUnavailable ||
+                        factLabelsUnavailable ||
                         reasonTooShort ||
                         mergeTarget === null ||
                         photoReviewRequired ||
@@ -915,6 +977,7 @@ function SubmissionReviewSession({
         open={leaving}
         pending={[
           ...dirtyFields.map((field) => t(REVIEW_FIELD_LABEL[field])),
+          ...(factDirty ? [t('submissions.wizard.title')] : []),
           ...(photoDirty ? [t('submissions.photos.title')] : []),
           ...(evidenceDirty ? [t('placeEditor.provenance')] : []),
         ]}

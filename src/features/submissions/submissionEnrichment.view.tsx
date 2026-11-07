@@ -8,11 +8,20 @@ import { fetchTaxonomies } from '@/features/taxonomy/api'
 import { queryKeys } from '@/shared/api/queryKeys'
 import { styles } from './submissionEnrichment.style'
 
-/** Read-only until BE declares a per-fact selection on review/decide (#284). */
 export function SubmissionEnrichment({
   enrichment,
+  factKeys = [],
+  excludedKeys = [],
+  canSelect = false,
+  disabled = false,
+  onToggle,
 }: {
   enrichment?: Schemas['ContributionEnrichment']
+  factKeys?: string[]
+  excludedKeys?: string[]
+  canSelect?: boolean
+  disabled?: boolean
+  onToggle?: (key: string) => void
 }) {
   const { t, locale } = useI18n()
   const taxonomy = useQuery({
@@ -27,92 +36,89 @@ export function SubmissionEnrichment({
       item?.labels[locale] ?? item?.labels.vi ?? t('submissions.wizard.unknownTaxonomy', { key })
     )
   }
-  const chips = (kind: Schemas['CmsTaxonomy']['kind'], keys: string[]) => (
-    <div className={styles.chips}>
-      {keys.map((key) => (
-        <span className={styles.chip} key={key}>
-          {label(kind, key)}
-        </span>
-      ))}
-    </div>
-  )
-  const row = (title: string, value: ReactNode, key?: string) => (
-    <div className={styles.row} key={key}>
-      <dt className={styles.label}>{title}</dt>
-      <dd>{value}</dd>
-    </div>
-  )
+  const facts: { key: string; title: string; value: ReactNode }[] = []
+  const add = (key: string, title: string, value: ReactNode) => facts.push({ key, title, value })
+  if (enrichment) {
+    if (enrichment.price) {
+      const price = enrichment.price
+      add(
+        'price',
+        t('submissions.wizard.price'),
+        price.unit === 'free'
+          ? t('priceUnit.free')
+          : `${formatNumber(price.min, locale)}–${formatNumber(price.max, locale)} ${price.currency} / ${t(`priceUnit.${price.unit}`)}`,
+      )
+    }
+    for (const key of enrichment.purposeKeys)
+      add(`purposeKeys:${key}`, t('submissions.wizard.purposes'), label('suitability', key))
+    for (const key of enrichment.vibeKeys)
+      add(`vibeKeys:${key}`, t('submissions.wizard.vibes'), label('mood', key))
+    for (const [key, present] of Object.entries(enrichment.amenities ?? {}))
+      add(
+        `amenities:${key}`,
+        label('amenity', key),
+        t(present ? 'submissions.wizard.yes' : 'submissions.wizard.no'),
+      )
+    if (enrichment.recommendedDishes)
+      add('recommendedDishes', t('submissions.wizard.dishes'), enrichment.recommendedDishes)
+    if (enrichment.visitTips) add('visitTips', t('submissions.wizard.tips'), enrichment.visitTips)
+    for (const kind of ['service', 'space'] as const) {
+      const rating = enrichment[kind]
+      if (!rating) continue
+      add(
+        `${kind}.rating`,
+        t(`submissions.wizard.${kind}`),
+        `${formatNumber(rating.rating, locale)} / 5`,
+      )
+      for (const key of rating.chipKeys)
+        add(
+          `${kind}.chipKeys:${key}`,
+          `${t(`submissions.wizard.${kind}`)}: ${label('checkin_tag', key)}`,
+          label('checkin_tag', key),
+        )
+    }
+  }
   return (
     <section className={styles.section} aria-label={t('submissions.wizard.title')}>
       <h3 className={styles.title}>{t('submissions.wizard.title')}</h3>
-      {!enrichment ? (
+      {!enrichment || facts.length === 0 ? (
         <EmptyState title={t('submissions.wizard.empty')} hint={null} />
       ) : (
-        <>
-          <p className={styles.warning} role="note">
-            {t('submissions.wizard.contractGap')}
-          </p>
-          <AsyncBoundary
-            status={taxonomy.status}
-            error={taxonomy.error}
-            data={taxonomy.data}
-            onRetry={() => void taxonomy.refetch()}
-          >
-            {() => (
+        <AsyncBoundary
+          status={taxonomy.status}
+          error={taxonomy.error}
+          data={taxonomy.data}
+          onRetry={() => void taxonomy.refetch()}
+        >
+          {() => (
+            <>
+              {canSelect ? <p>{t('submissions.wizard.selectionHint')}</p> : null}
               <dl className={styles.facts}>
-                {enrichment.price
-                  ? row(
-                      t('submissions.wizard.price'),
-                      enrichment.price.unit === 'free'
-                        ? t('priceUnit.free')
-                        : `${formatNumber(enrichment.price.min, locale)}–${formatNumber(enrichment.price.max, locale)} ${enrichment.price.currency} / ${t(`priceUnit.${enrichment.price.unit}`)}`,
-                    )
-                  : null}
-                {enrichment.purposeKeys.length
-                  ? row(
-                      t('submissions.wizard.purposes'),
-                      chips('suitability', enrichment.purposeKeys),
-                    )
-                  : null}
-                {enrichment.vibeKeys.length
-                  ? row(t('submissions.wizard.vibes'), chips('mood', enrichment.vibeKeys))
-                  : null}
-                {Object.entries(enrichment.amenities ?? {}).map(([key, present]) =>
-                  row(
-                    label('amenity', key),
-                    t(present ? 'submissions.wizard.yes' : 'submissions.wizard.no'),
-                    key,
-                  ),
-                )}
-                {enrichment.recommendedDishes
-                  ? row(
-                      t('submissions.wizard.dishes'),
-                      <p className={styles.note}>{enrichment.recommendedDishes}</p>,
-                    )
-                  : null}
-                {enrichment.visitTips
-                  ? row(
-                      t('submissions.wizard.tips'),
-                      <p className={styles.note}>{enrichment.visitTips}</p>,
-                    )
-                  : null}
-                {(['service', 'space'] as const).map((kind) => {
-                  const rating = enrichment[kind]
-                  return rating
-                    ? row(
-                        t(`submissions.wizard.${kind}`),
-                        <>
-                          {formatNumber(rating.rating, locale)} / 5{' '}
-                          {chips('checkin_tag', rating.chipKeys)}
-                        </>,
-                        kind,
-                      )
-                    : null
-                })}
+                {facts.map(({ key, title, value }) => (
+                  <div className={styles.row} key={key}>
+                    <dt className={styles.label}>{title}</dt>
+                    <dd className={styles.note}>{value}</dd>
+                    {canSelect && factKeys.includes(key) ? (
+                      <dd>
+                        <label className={styles.selection}>
+                          <input
+                            type="checkbox"
+                            checked={!excludedKeys.includes(key)}
+                            disabled={disabled}
+                            onChange={() => onToggle?.(key)}
+                          />
+                          {t('submissions.wizard.keepFact', {
+                            fact: typeof value === 'string' ? `${title}: ${value}` : title,
+                          })}
+                        </label>
+                      </dd>
+                    ) : null}
+                  </div>
+                ))}
               </dl>
-            )}
-          </AsyncBoundary>
-        </>
+            </>
+          )}
+        </AsyncBoundary>
       )}
     </section>
   )

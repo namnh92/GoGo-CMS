@@ -1,7 +1,8 @@
-import type { DecidePlaceSubmissionBody } from '@/shared/api/generated'
+import type { Schemas, DecidePlaceSubmissionBody } from '@/shared/api/generated'
 import { apiFetch, apiFetchParsed, newIdempotencyKey } from '@/shared/api/client'
 import {
   placeSubmissionDetailSchema,
+  submissionCreditPreviewSchema,
   placeSubmissionListSchema,
   submissionReviewSavedSchema,
   resolveLinkResultSchema,
@@ -81,5 +82,22 @@ export function fetchSubmissionPhoto(id: string, photoId: string, signal?: Abort
   return apiFetch<Blob>(
     `/cms/place-submissions/${encodeURIComponent(id)}/photos/${encodeURIComponent(photoId)}/content`,
     { raw: true, accept: 'image/webp', cache: 'no-store', signal },
+  )
+}
+
+/** Read-only server calculation for this exact explicit selection. */
+export function previewSubmissionCredit(
+  id: string,
+  enrichmentSelection: Schemas['EnrichmentSelection'],
+  signal?: AbortSignal,
+) {
+  return apiFetchParsed(
+    submissionCreditPreviewSchema,
+    `/cms/place-submissions/${id}/credit-preview`,
+    {
+      method: 'POST',
+      body: { enrichmentSelection },
+      signal,
+    },
   )
 }
