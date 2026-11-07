@@ -148,6 +148,7 @@ function seedDb() {
   return {
     places: places.map((place) => ({ ...place, media: place.media.map((row) => ({ ...row })) })),
     areas: cmsAreas.map((area) => ({ ...area })),
+    taxonomyVersion: { version: 1, updatedAt: '2026-11-07T00:00:00.000Z' },
     taxonomies: taxonomies.map((item) => ({ ...item })),
     collections: collections.map((item) => ({ ...item })),
     flags: featureFlags.map((flag) => ({ ...flag })),
@@ -203,6 +204,14 @@ function seedDb() {
 }
 
 let db = seedDb()
+
+function nextTaxonomyVersion() {
+  db.taxonomyVersion = {
+    version: db.taxonomyVersion.version + 1,
+    updatedAt: new Date().toISOString(),
+  }
+  return db.taxonomyVersion
+}
 
 /**
  * Put the mock catalogue back to the fixtures.
@@ -2248,6 +2257,8 @@ export const handlers = [
     return HttpResponse.json({ merged: true }, { status: 201 })
   }),
 
+  http.get(`${BASE}/cms/taxonomies/version`, () => HttpResponse.json(db.taxonomyVersion)),
+
   // A bare array, and inactive keys are included unless asked otherwise.
   http.get(`${BASE}/cms/taxonomies`, ({ request }) => {
     const url = new URL(request.url)
@@ -2276,14 +2287,14 @@ export const handlers = [
       synonyms: [],
     }
     db.taxonomies = [...db.taxonomies, created]
-    return HttpResponse.json(created, { status: 201 })
+    return HttpResponse.json({ id: created.id, ...nextTaxonomyVersion() }, { status: 201 })
   }),
 
   http.patch(`${BASE}/cms/taxonomies/:id`, async ({ params, request }) => {
     const taxonomy = db.taxonomies.find((item) => item.id === params.id)
     if (!taxonomy) return envelope(404, 'NOT_FOUND', 'taxonomy not found')
     Object.assign(taxonomy, await request.json())
-    return HttpResponse.json(taxonomy)
+    return HttpResponse.json({ updated: true, ...nextTaxonomyVersion() })
   }),
 
   http.post(`${BASE}/cms/taxonomies/:id/synonyms`, async ({ params, request }) => {
@@ -2298,7 +2309,7 @@ export const handlers = [
         locale: body.locale ?? 'vi',
       },
     ]
-    return HttpResponse.json(taxonomy, { status: 201 })
+    return HttpResponse.json({ added: true, ...nextTaxonomyVersion() }, { status: 201 })
   }),
 
   http.get(`${BASE}/cms/collections`, ({ request }) => {

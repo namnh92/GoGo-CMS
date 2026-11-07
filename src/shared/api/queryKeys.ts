@@ -147,6 +147,8 @@ export const queryKeys = {
     list: (filters: Record<string, unknown>) => ['areas', 'list', filters] as const,
   },
 
+  taxonomyVersion: ['taxonomy-version'] as const,
+
   taxonomies: {
     all: ['taxonomies'] as const,
     byKind: (kind: TaxonomyKind) => ['taxonomies', kind] as const,

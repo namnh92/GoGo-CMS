@@ -2037,6 +2037,9 @@ export const vi = {
   'moderation.communityHint':
     'Đây là địa điểm đã ở trong catalog với trạng thái “Người dùng gửi”. Hàng chờ đề xuất chưa xử lý — kèm nút duyệt/từ chối/gộp — nằm ở màn “Đề xuất từ app”.',
   'moderation.openPlace': 'Mở địa điểm',
+  'taxonomy.version': 'Phiên bản phân loại',
+  'taxonomy.lastChanged': 'Thay đổi lần cuối',
+  'taxonomy.edit': 'Sửa khoá phân loại',
   'taxonomy.title': 'Hệ thống phân loại',
   'taxonomy.breadcrumb': 'Cấu hình / Phân loại',
   'taxonomy.focus': 'Nhóm phân loại',

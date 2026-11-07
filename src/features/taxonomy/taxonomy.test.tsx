@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import userEvent from '@testing-library/user-event'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/shared/test/server'
 import { renderWithProviders, signInAs } from '@/shared/test/render'
+import { formatDateTime } from '@/shared/format'
 import TaxonomyScreen from './taxonomy.view'
 import { taxonomyListSchema } from '@/shared/api/contracts'
 import { taxonomies } from '@/shared/test/fixtures'
@@ -96,6 +97,11 @@ describe('TaxonomyScreen', () => {
 
     expect(await screen.findByText('quiet_peaceful')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Thêm khoá phân loại' })).toBeDisabled()
+    expect(
+      screen
+        .getAllByRole('button', { name: 'Sửa' })
+        .every((button) => button.hasAttribute('disabled')),
+    ).toBe(true)
   })
 
   /*
@@ -155,5 +161,179 @@ describe('TaxonomyScreen', () => {
       expect(await screen.findAllByText(/tối đa 80 ký tự/)).not.toHaveLength(0)
       expect(screen.queryByText('Request validation failed')).not.toBeInTheDocument()
     })
+  })
+})
+
+describe('taxonomy generation (CMS#285)', () => {
+  const initial = { version: 41, updatedAt: '2026-11-06T10:00:00.000Z' }
+  const changed = { version: 49, updatedAt: '2026-11-07T11:30:00.000Z' }
+
+  it.each([
+    ['vi', 'Phiên bản phân loại', 'Thay đổi lần cuối'],
+    ['en', 'Taxonomy version', 'Last changed'],
+  ])('shows server version and last changed time in %s', async (locale, version, lastChanged) => {
+    window.localStorage.setItem('gogo.cms.locale', locale)
+    server.use(http.get('*/cms/taxonomies/version', () => HttpResponse.json(initial)))
+    signInAs('editor')
+    renderWithProviders(<TaxonomyScreen />)
+    expect(await screen.findByText('41')).toBeInTheDocument()
+    expect(screen.getAllByText(version).length).toBeGreaterThan(0)
+    expect(screen.getByText(lastChanged)).toBeInTheDocument()
+    expect(document.querySelector('time')).toHaveAttribute('datetime', initial.updatedAt)
+    expect(document.querySelector('time')).toHaveTextContent(
+      formatDateTime(initial.updatedAt, locale as 'vi' | 'en'),
+    )
+  })
+
+  it('shows loading, then an independent version error and retry', async () => {
+    let release!: () => void
+    server.use(
+      http.get('*/cms/taxonomies/version', async () => {
+        await new Promise<void>((resolve) => {
+          release = resolve
+        })
+        return new HttpResponse(null, { status: 503 })
+      }),
+    )
+    signInAs('editor')
+    const user = userEvent.setup()
+    renderWithProviders(<TaxonomyScreen />)
+    await screen.findByText('quiet_peaceful')
+    expect(screen.getByRole('status')).toHaveTextContent('Đang tải')
+    release()
+    const retry = await screen.findByRole('button', { name: 'Thử lại' })
+    expect(screen.getByText('quiet_peaceful')).toBeInTheDocument()
+    server.use(http.get('*/cms/taxonomies/version', () => HttpResponse.json(initial)))
+    await user.click(retry)
+    expect(await screen.findByText('41')).toBeInTheDocument()
+  })
+
+  it.each(['create', 'label', 'order', 'enable', 'disable', 'synonym'] as const)(
+    'uses the %s write response without relying on a version refetch',
+    async (operation) => {
+      let reads = 0
+      server.use(
+        http.get('*/cms/taxonomies/version', () => {
+          reads++
+          return HttpResponse.json(initial)
+        }),
+      )
+      const writes: unknown[] = []
+      const respond = async ({ request }: { request: Request }) => {
+        writes.push(await request.json())
+        return HttpResponse.json(changed)
+      }
+      server.use(
+        http.post('*/cms/taxonomies', respond),
+        http.patch('*/cms/taxonomies/:id', respond),
+        http.post('*/cms/taxonomies/:id/synonyms', respond),
+      )
+      signInAs('editor')
+      const user = userEvent.setup()
+      renderWithProviders(<TaxonomyScreen />)
+      await screen.findByText('41')
+      await screen.findByText('quiet_peaceful')
+      if (operation === 'create') {
+        await user.type(screen.getByLabelText(/^Khoá \(a–z/), 'new_key')
+        await user.type(screen.getByLabelText('Nhãn (vi)'), 'Mới')
+        await user.click(screen.getByRole('button', { name: 'Thêm khoá phân loại' }))
+        expect(writes[0]).toMatchObject({ key: 'new_key', labels: { vi: 'Mới' } })
+      } else if (operation === 'label' || operation === 'order') {
+        await user.click(
+          within(screen.getByText('quiet_peaceful').closest('tr')!).getByRole('button', {
+            name: 'Sửa',
+          }),
+        )
+        const dialog = within(screen.getByRole('dialog'))
+        const field = dialog.getByLabelText(operation === 'label' ? 'Nhãn (vi)' : 'Thứ tự')
+        await user.clear(field)
+        await user.type(field, operation === 'label' ? 'Yên tĩnh mới' : '7')
+        await user.click(dialog.getByRole('button', { name: 'Lưu' }))
+        expect(writes[0]).toMatchObject(
+          operation === 'label' ? { labels: { vi: 'Yên tĩnh mới' } } : { sortOrder: 7 },
+        )
+      } else if (operation === 'enable' || operation === 'disable') {
+        await user.click(
+          screen.getByRole('switch', {
+            name: operation === 'enable' ? /chill_lounge/ : /quiet_peaceful/,
+          }),
+        )
+        if (operation === 'disable')
+          await user.click(
+            within(screen.getByRole('dialog')).getByRole('button', { name: 'Xác nhận' }),
+          )
+        expect(writes[0]).toMatchObject({ isActive: operation === 'enable' })
+      } else {
+        await user.click(
+          within(screen.getByText('quiet_peaceful').closest('tr')!).getByRole('button', {
+            name: 'Thêm từ đồng nghĩa',
+          }),
+        )
+        await user.type(screen.getByLabelText('Từ khoá'), 'thư giãn')
+        await user.click(screen.getAllByRole('button', { name: 'Thêm từ đồng nghĩa' }).at(-1)!)
+        expect(writes[0]).toMatchObject({ term: 'thư giãn', locale: 'vi' })
+      }
+      expect(await screen.findByText('49')).toBeInTheDocument()
+      expect(document.querySelector('time')).toHaveAttribute('datetime', changed.updatedAt)
+      expect(reads).toBe(1)
+    },
+  )
+
+  it('does not regress when an older write response arrives after a newer one', async () => {
+    let release!: () => void
+    server.use(
+      http.get('*/cms/taxonomies/version', () => HttpResponse.json(initial)),
+      http.post('*/cms/taxonomies', async () => {
+        await new Promise<void>((resolve) => {
+          release = resolve
+        })
+        return HttpResponse.json({ ...changed, version: 48 })
+      }),
+      http.patch('*/cms/taxonomies/:id', () => HttpResponse.json(changed)),
+    )
+    signInAs('editor')
+    const user = userEvent.setup()
+    renderWithProviders(<TaxonomyScreen />)
+    await screen.findByText('41')
+    await user.type(screen.getByLabelText(/^Khoá \(a–z/), 'new_key')
+    await user.type(screen.getByLabelText('Nhãn (vi)'), 'Mới')
+    await user.click(screen.getByRole('button', { name: 'Thêm khoá phân loại' }))
+    await waitFor(() => expect(release).toBeTypeOf('function'))
+    await user.click(screen.getByRole('switch', { name: /chill_lounge/ }))
+    expect(await screen.findByText('49')).toBeInTheDocument()
+    release()
+    await waitFor(() => expect(screen.getByLabelText(/^Khoá \(a–z/)).toHaveValue(''))
+    expect(screen.getByText('49')).toBeInTheDocument()
+    expect(document.querySelector('time')).toHaveAttribute('datetime', changed.updatedAt)
+  })
+
+  it('does not silently discard an emptied English label in the edit dialog', async () => {
+    signInAs('editor')
+    const user = userEvent.setup()
+    renderWithProviders(<TaxonomyScreen />)
+    await user.click(
+      within((await screen.findByText('quiet_peaceful')).closest('tr')!).getByRole('button', {
+        name: 'Sửa',
+      }),
+    )
+    const dialog = within(screen.getByRole('dialog'))
+    await user.clear(dialog.getByLabelText('Nhãn (en)'))
+    expect(dialog.getByLabelText('Nhãn (en)')).toHaveAttribute('aria-invalid', 'true')
+    expect(dialog.getByRole('button', { name: 'Lưu' })).toBeDisabled()
+  })
+
+  it('keeps the confirmed generation when a write fails', async () => {
+    server.use(
+      http.get('*/cms/taxonomies/version', () => HttpResponse.json(initial)),
+      http.patch('*/cms/taxonomies/:id', () => new HttpResponse(null, { status: 503 })),
+    )
+    signInAs('editor')
+    const user = userEvent.setup()
+    renderWithProviders(<TaxonomyScreen />)
+    await screen.findByText('41')
+    await user.click(await screen.findByRole('switch', { name: /chill_lounge/ }))
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+    expect(screen.getByText('41')).toBeInTheDocument()
+    expect(document.querySelector('time')).toHaveAttribute('datetime', initial.updatedAt)
   })
 })

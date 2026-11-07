@@ -5,13 +5,13 @@ import { useI18n, useT } from '@/shared/i18n/i18n'
 import { queryKeys } from '@/shared/api/queryKeys'
 import { useSession } from '@/shared/auth/session'
 import { useOnline } from '@/shared/ui/useOnline'
-import { formatNumber } from '@/shared/format'
+import { formatDateTime, formatNumber } from '@/shared/format'
 import { PageBody, PageHeader } from '@/app/PageHeader'
 import { Card, CardBody, CardHeader } from '@/shared/ui/Card'
 import { Button } from '@/shared/ui/Button'
 import { InlineSelect, Select, TextInput, Toggle } from '@/shared/ui/Field'
 import { Badge } from '@/shared/ui/Badge'
-import { ConfirmDialog } from '@/shared/ui/Overlay'
+import { ConfirmDialog, Modal } from '@/shared/ui/Overlay'
 import { DataTable } from '@/shared/ui/DataTable'
 import {
   AsyncBoundary,
@@ -23,7 +23,14 @@ import { useToast } from '@/shared/ui/Toast'
 import { PlusIcon } from '@/shared/ui/icons'
 import type { Taxonomy, TaxonomyKind } from '@/shared/api/contracts'
 import { ApiError } from '@/shared/api/errors'
-import { addSynonym, createTaxonomy, fetchTaxonomies, updateTaxonomy } from './api'
+import {
+  addSynonym,
+  createTaxonomy,
+  fetchTaxonomies,
+  fetchTaxonomyVersion,
+  updateTaxonomy,
+  type TaxonomyVersion,
+} from './api'
 import { labelBreaksRule } from './labelRule'
 import { styles } from './taxonomy.style'
 
@@ -53,6 +60,12 @@ export default function TaxonomyScreen() {
   const [kind, setKind] = useState<TaxonomyKind>('mood')
   const [stateFilter, setStateFilter] = useState<StateFilter>('all')
   const [deactivating, setDeactivating] = useState<Taxonomy | null>(null)
+  const [editing, setEditing] = useState<{
+    id: string
+    labels: Record<string, string>
+    sortOrder: string
+  } | null>(null)
+  const [editRefused, setEditRefused] = useState<{ vi?: boolean; en?: boolean }>({})
   const [draft, setDraft] = useState({ key: '', labelVi: '', labelEn: '' })
   // Labels the API refused on the last send (GoGo-BE#737), by locale.
   const [refused, setRefused] = useState<{ vi?: boolean; en?: boolean }>({})
@@ -74,7 +87,24 @@ export default function TaxonomyScreen() {
   const query = useQuery({
     queryKey: queryKeys.taxonomies.all,
     queryFn: ({ signal }) => fetchTaxonomies({}, signal),
+    enabled: canRead,
   })
+
+  const versionQuery = useQuery({
+    queryKey: queryKeys.taxonomyVersion,
+    queryFn: ({ signal }) => fetchTaxonomyVersion(signal),
+    enabled: canRead,
+    staleTime: 0,
+  })
+
+  // A slow read or an older concurrent write must not replace a newer generation.
+  const acceptVersion = async (result: TaxonomyVersion) => {
+    await queryClient.cancelQueries({ queryKey: queryKeys.taxonomyVersion })
+    queryClient.setQueryData<TaxonomyVersion>(queryKeys.taxonomyVersion, (previous) =>
+      previous && previous.version > result.version ? previous : result,
+    )
+    invalidate()
+  }
 
   const invalidate = () =>
     void queryClient.invalidateQueries({ queryKey: queryKeys.taxonomies.all })
@@ -82,7 +112,7 @@ export default function TaxonomyScreen() {
   const toggleActive = useMutation({
     mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
       updateTaxonomy(id, { isActive }),
-    onSuccess: invalidate,
+    onSuccess: acceptVersion,
     onError: (error) => toast.error(describeError(error)),
   })
 
@@ -94,11 +124,11 @@ export default function TaxonomyScreen() {
         // vi is the source label; en is stored alongside, never instead.
         labels: { vi: draft.labelVi, ...(draft.labelEn ? { en: draft.labelEn } : {}) },
       }),
-    onSuccess: () => {
+    onSuccess: async (result) => {
+      await acceptVersion(result)
       setDraft({ key: '', labelVi: '', labelEn: '' })
       setRefused({})
       toast.success(t('taxonomy.add'))
-      invalidate()
     },
     onError: (error) => {
       const labels =
@@ -118,12 +148,34 @@ export default function TaxonomyScreen() {
 
   const synonym = useMutation({
     mutationFn: () => addSynonym(synonymDraft.taxonomyId, synonymDraft.term, locale),
-    onSuccess: () => {
+    onSuccess: async (result) => {
+      await acceptVersion(result)
       setSynonymDraft({ taxonomyId: '', term: '' })
       toast.success(t('taxonomy.addSynonym'))
-      invalidate()
     },
     onError: (error) => toast.error(describeError(error)),
+  })
+
+  const edit = useMutation({
+    mutationFn: (input: NonNullable<typeof editing>) =>
+      updateTaxonomy(input.id, {
+        labels: Object.fromEntries(
+          Object.entries(input.labels).filter(([, label]) => label.trim() !== ''),
+        ),
+        sortOrder: Number(input.sortOrder),
+      }),
+    onSuccess: async (result) => {
+      await acceptVersion(result)
+      setEditing(null)
+      setEditRefused({})
+    },
+    onError: (error) => {
+      if (error instanceof ApiError && error.code === 'VALIDATION_FAILED') {
+        const fields = error.fieldErrors.map((field) => field.field)
+        setEditRefused({ vi: fields.includes('labels.vi'), en: fields.includes('labels.en') })
+      }
+      toast.error(describeError(error))
+    },
   })
 
   const all = useMemo(() => query.data ?? [], [query.data])
@@ -195,7 +247,7 @@ export default function TaxonomyScreen() {
           <Toggle
             label={`${row.original.key} ${t('taxonomy.col.active')}`}
             checked={row.original.isActive}
-            disabled={!canManage || !online}
+            disabled={!canManage || !online || toggleActive.isPending}
             onChange={(checked) => {
               // Switching a referenced key off changes what every picker in the
               // product offers, so it is confirmed with its usage count rather
@@ -235,6 +287,21 @@ export default function TaxonomyScreen() {
             <Button
               size="sm"
               variant="ghost"
+              disabled={!canManage || !online}
+              onClick={() => {
+                setEditRefused({})
+                setEditing({
+                  id: row.original.id,
+                  labels: { ...row.original.labels },
+                  sortOrder: String(row.original.sortOrder),
+                })
+              }}
+            >
+              {t('action.edit')}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
               disabled={!canManage}
               onClick={() => setSynonymDraft({ taxonomyId: row.original.id, term: '' })}
             >
@@ -268,6 +335,34 @@ export default function TaxonomyScreen() {
         title={t('taxonomy.title')}
       />
       <PageBody>
+        <Card>
+          <CardHeader title={t('taxonomy.version')} />
+          <AsyncBoundary
+            status={versionQuery.status}
+            error={versionQuery.error}
+            data={versionQuery.data}
+            onRetry={() => void versionQuery.refetch()}
+          >
+            {(metadata) => (
+              <CardBody>
+                <dl className={styles.metadata} aria-live="polite">
+                  <div>
+                    <dt>{t('taxonomy.version')}</dt>
+                    <dd>{formatNumber(metadata.version, locale)}</dd>
+                  </div>
+                  <div>
+                    <dt>{t('taxonomy.lastChanged')}</dt>
+                    <dd>
+                      <time dateTime={metadata.updatedAt}>
+                        {formatDateTime(metadata.updatedAt, locale)}
+                      </time>
+                    </dd>
+                  </div>
+                </dl>
+              </CardBody>
+            )}
+          </AsyncBoundary>
+        </Card>
         <div className={styles.layout}>
           <nav className={styles.nav} aria-label={t('taxonomy.focus')}>
             <p className={styles.navTitle}>{t('taxonomy.focus')}</p>
@@ -460,6 +555,72 @@ export default function TaxonomyScreen() {
           </div>
         </div>
       </PageBody>
+
+      <Modal
+        open={editing !== null}
+        onClose={() => {
+          if (!edit.isPending) setEditing(null)
+        }}
+        title={t('taxonomy.edit')}
+        footer={
+          <Button
+            onClick={() => {
+              if (editing) edit.mutate(editing)
+            }}
+            loading={edit.isPending}
+            disabled={
+              !canManage ||
+              !online ||
+              !editing ||
+              !editing.labels.vi?.trim() ||
+              (editing.labels.en !== undefined && !editing.labels.en.trim()) ||
+              labelBreaksRule(editing.labels.vi ?? '') ||
+              labelBreaksRule(editing.labels.en ?? '') ||
+              editRefused.vi ||
+              editRefused.en ||
+              editing.sortOrder.trim() === '' ||
+              !Number.isSafeInteger(Number(editing.sortOrder))
+            }
+          >
+            {t('action.save')}
+          </Button>
+        }
+      >
+        {editing ? (
+          <div className={styles.editFields}>
+            {(['vi', 'en'] as const).map((language) => (
+              <TextInput
+                key={language}
+                label={t(language === 'vi' ? 'taxonomy.col.labelVi' : 'taxonomy.col.labelEn')}
+                value={editing.labels[language] ?? ''}
+                disabled={edit.isPending}
+                error={
+                  editRefused[language] ||
+                  (editing.labels[language] !== undefined && !editing.labels[language].trim()) ||
+                  labelBreaksRule(editing.labels[language] ?? '')
+                    ? t('taxonomy.labelRule')
+                    : undefined
+                }
+                onChange={(event) => {
+                  setEditRefused((current) => ({ ...current, [language]: false }))
+                  setEditing({
+                    ...editing,
+                    labels: { ...editing.labels, [language]: event.target.value },
+                  })
+                }}
+              />
+            ))}
+            <TextInput
+              label={t('taxonomy.col.order')}
+              type="number"
+              step="1"
+              value={editing.sortOrder}
+              disabled={edit.isPending}
+              onChange={(event) => setEditing({ ...editing, sortOrder: event.target.value })}
+            />
+          </div>
+        ) : null}
+      </Modal>
 
       <ConfirmDialog
         open={deactivating !== null}

@@ -1,4 +1,6 @@
 export const styles = {
+  metadata: 'flex flex-wrap gap-6 text-body text-text-muted',
+  editFields: 'flex flex-col gap-3',
   layout: 'grid gap-5 xl:grid-cols-4',
   nav: 'h-fit rounded-card border border-line bg-surface-card p-3',
   navTitle: 'mb-2 px-2 text-caption font-bold uppercase tracking-widest text-text-secondary',
