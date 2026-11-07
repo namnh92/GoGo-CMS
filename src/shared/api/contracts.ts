@@ -1274,6 +1274,32 @@ export const submissionReviewDraftSchema = z.object({
 })
 export type SubmissionReviewDraft = z.infer<typeof submissionReviewDraftSchema>
 
+/** Wizard response validation, checked against the generated BE schema. */
+const contributionRatingSchema = z.object({
+  rating: z.number().int().min(1).max(5),
+  chipKeys: z.array(z.string()),
+}) satisfies z.ZodType<Schemas['ContributionRating']>
+
+export const contributionEnrichmentSchema = z.object({
+  price: z
+    .object({
+      min: z.number().int().nonnegative(),
+      max: z.number().int().nonnegative(),
+      currency: z.literal('VND'),
+      unit: z.enum(['per_person', 'per_group', 'per_item', 'per_hour', 'per_night', 'free']),
+    })
+    .optional(),
+  purposeKeys: z.array(z.string()),
+  vibeKeys: z.array(z.string()),
+  amenities: z.record(z.boolean()).optional(),
+  billPhotoPublicConsent: z.boolean().optional(),
+  photos: z.array(z.object({ mediaId: z.string(), kind: z.enum(['menu', 'bill']) })).optional(),
+  recommendedDishes: z.string().optional(),
+  visitTips: z.string().optional(),
+  service: contributionRatingSchema.optional(),
+  space: contributionRatingSchema.optional(),
+}) satisfies z.ZodType<Schemas['ContributionEnrichment']>
+
 /** `GET /cms/place-submissions/{id}` — everything a decision needs, no provider call. */
 export const placeSubmissionDetailSchema = z.object({
   id: z.string(),
@@ -1302,6 +1328,8 @@ export const placeSubmissionDetailSchema = z.object({
     .optional(),
   contribution: z
     .object({
+      enrichment: contributionEnrichmentSchema.optional(),
+      verificationStatus: z.literal('unverified').optional(),
       categoryKey: z.string().nullish(),
       estimatedPrice: z.object({ min: z.number(), max: z.number(), unit: z.string() }).nullish(),
       vibeKeys: z.array(z.string()).default([]),

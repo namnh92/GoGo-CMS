@@ -11,6 +11,7 @@ import { styles } from './submissionPhotos.style'
 export function SubmissionPhotos({
   submissionId,
   photos,
+  enrichment,
   canPreview,
   canSelect,
   disabled,
@@ -19,6 +20,7 @@ export function SubmissionPhotos({
 }: {
   submissionId: string
   photos: Schemas['SubmissionPhoto'][]
+  enrichment?: Schemas['ContributionEnrichment']
   canPreview: boolean
   canSelect: boolean
   disabled: boolean
@@ -30,6 +32,9 @@ export function SubmissionPhotos({
     <section className={styles.section} aria-label={t('submissions.photos.title')}>
       <h3 className={styles.title}>{t('submissions.photos.title')}</h3>
       <p className={styles.hint}>{t('submissions.photos.hint')}</p>
+      {enrichment?.photos?.length ? (
+        <p className={styles.hint}>{t('submissions.wizard.publicPhotos')}</p>
+      ) : null}
       {photos.length === 0 ? (
         <p>{t('submissions.photos.empty')}</p>
       ) : (
@@ -40,6 +45,7 @@ export function SubmissionPhotos({
               submissionId={submissionId}
               photo={photo}
               index={index + 1}
+              kind={enrichment?.photos?.find((item) => item.mediaId === photo.mediaId)?.kind}
               canPreview={canPreview}
               canSelect={canSelect}
               disabled={disabled}
@@ -57,6 +63,7 @@ function SubmissionPhoto({
   submissionId,
   photo,
   index,
+  kind,
   canPreview,
   canSelect,
   disabled,
@@ -66,6 +73,7 @@ function SubmissionPhoto({
   submissionId: string
   photo: Schemas['SubmissionPhoto']
   index: number
+  kind?: NonNullable<Schemas['ContributionEnrichment']['photos']>[number]['kind']
   canPreview: boolean
   canSelect: boolean
   disabled: boolean
@@ -130,6 +138,7 @@ function SubmissionPhoto({
 
   return (
     <div className={styles.card}>
+      {kind ? <p className={styles.hint}>{t(`submissions.wizard.${kind}`)}</p> : null}
       {!available ? (
         <p>
           {t(
