@@ -1300,8 +1300,25 @@ export const contributionEnrichmentSchema = z.object({
   space: contributionRatingSchema.optional(),
 }) satisfies z.ZodType<Schemas['ContributionEnrichment']>
 
+export const submissionCreditFactsSchema = z.object({
+  base: z.number().int().nonnegative(),
+  photoBonus: z.number().int().nonnegative(),
+  total: z.number().int().nonnegative(),
+}) satisfies z.ZodType<Schemas['SubmissionCreditFacts']>
+
+export const submissionCreditPreviewSchema = z.object({
+  expectedCredit: submissionCreditFactsSchema,
+})
+
 /** `GET /cms/place-submissions/{id}` — everything a decision needs, no provider call. */
 export const placeSubmissionDetailSchema = z.object({
+  expectedCredit: submissionCreditFactsSchema.optional(),
+  enrichmentItems: z
+    .object({
+      factKeys: z.array(z.string()),
+      photoMediaIds: z.array(z.string()),
+    })
+    .optional(),
   id: z.string(),
   googlePlaceId: z.string(),
   googleMapsUrl: z.string(),
@@ -1319,6 +1336,7 @@ export const placeSubmissionDetailSchema = z.object({
       z.object({
         id: z.string(),
         mediaId: z.string(),
+        kind: z.enum(['menu', 'bill']).optional(),
         width: z.number(),
         height: z.number(),
         status: z.enum(['pending', 'approved', 'rejected']),

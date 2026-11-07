@@ -4073,8 +4073,11 @@ export const en: Record<MessageKey, string> = {
   'priceUnit.per_group': 'group',
   'submissions.wizard.title': 'Contributor enrichment',
   'submissions.wizard.empty': 'No wizard enrichment',
-  'submissions.wizard.contractGap':
-    'Wizard approval and merge are unavailable: the API does not support keeping or dropping individual facts. The data below is read-only and is not written to the place.',
+  'submissions.wizard.selectionHint':
+    'Check each fact to keep it. Unchecked facts are dropped on approval or merge.',
+  'submissions.wizard.keepFact': 'Keep {fact}',
+  'submissions.wizard.selectionUnavailable':
+    'Moderation items are unavailable. Reload the contribution before approving or merging.',
   'submissions.wizard.unknownTaxonomy': 'Label unavailable: {key}',
   'submissions.wizard.price': 'Price and unit',
   'submissions.wizard.purposes': 'Purposes',
@@ -4090,8 +4093,8 @@ export const en: Record<MessageKey, string> = {
   'submissions.wizard.menu': 'Menu photo',
   'submissions.wizard.bill': 'Bill photo',
   'submissions.wizard.credit':
-    'Expected credits on approval: base {base} + photo bonus {bonus} = {total}. On merge: {bonus}. On rejection: 0.',
+    'Expected credits: base {base} + photo bonus {photoBonus} = {total}.',
   'submissions.wizard.creditHint':
-    'Contract rates; the API does not return the actual award. Only kept menu/bill evidence earns the one-time photo bonus; the server determines the grant.',
+    'Server estimate for the current selection; the server checks eligibility and grants credits on approval or merge. This is not an awarded balance.',
   'submissions.wizard.guestCredit': 'Unregistered guests receive no credits.',
 }

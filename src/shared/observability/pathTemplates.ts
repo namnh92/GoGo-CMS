@@ -120,6 +120,7 @@ export const PATH_TEMPLATES: readonly string[] = [
   '/cms/place-submissions/{id}',
   '/cms/place-submissions/{id}/provider-preview',
   '/cms/place-submissions/{id}/review',
+  '/cms/place-submissions/{id}/credit-preview',
   '/cms/place-submissions/{id}/decide',
   '/cms/place-imports',
   '/cms/place-imports/google-sheet',

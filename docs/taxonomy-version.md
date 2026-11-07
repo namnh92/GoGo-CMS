@@ -14,9 +14,9 @@ nhận; đọc metadata lỗi có nút thử lại và không che danh sách. Lo
 đọc/ghi và offline dùng cơ chế chung của CMS. Nhãn vi/en dùng sentence case.
 
 Contract được vendor nguyên byte từ GoGo-BE `origin/re-design` tại
-`6cee1378d81d6c13409bd7aa0afd9cb4e6dba811` (gồm #802), phiên bản
-`7.5.0-alpha.1`; SHA-256:
-`ce4eba0233308b4fc3891ba3599cbe3c8009e7e3f10ab95d5ae43678b678a57a`.
+`0d238eb` (BE #807), phiên bản
+`7.6.0-alpha.1`; SHA-256:
+`038741aac5098a56ff27117c6de97533baa674837620700dccd94571b8280f41`.
 Types sinh bằng `pnpm api:types`; drift gate, digest, số operation và danh sách
 path telemetry cập nhật đồng bộ. Lỗi schema đi qua observability contract
 mismatch hiện có; không thêm payload hay nhãn vào telemetry.

@@ -45,7 +45,10 @@ export function SubmissionPhotos({
               submissionId={submissionId}
               photo={photo}
               index={index + 1}
-              kind={enrichment?.photos?.find((item) => item.mediaId === photo.mediaId)?.kind}
+              kind={
+                photo.kind ??
+                enrichment?.photos?.find((item) => item.mediaId === photo.mediaId)?.kind
+              }
               canPreview={canPreview}
               canSelect={canSelect}
               disabled={disabled}

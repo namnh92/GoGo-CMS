@@ -4104,8 +4104,11 @@ export const vi = {
   'priceUnit.per_group': 'nhóm',
   'submissions.wizard.title': 'Dữ liệu bổ sung từ người đóng góp',
   'submissions.wizard.empty': 'Không có dữ liệu wizard',
-  'submissions.wizard.contractGap':
-    'Chưa thể duyệt hoặc gộp đóng góp wizard: API chưa hỗ trợ giữ/bỏ từng thông tin. Dữ liệu bên dưới chỉ để xem, chưa được ghi vào địa điểm.',
+  'submissions.wizard.selectionHint':
+    'Đánh dấu để giữ từng thông tin. Thông tin bỏ chọn sẽ bị loại khi duyệt hoặc gộp.',
+  'submissions.wizard.keepFact': 'Giữ {fact}',
+  'submissions.wizard.selectionUnavailable':
+    'Chưa tải được danh sách thông tin có thể kiểm duyệt. Tải lại đóng góp trước khi duyệt hoặc gộp.',
   'submissions.wizard.unknownTaxonomy': 'Nhãn chưa có: {key}',
   'submissions.wizard.price': 'Giá và đơn vị',
   'submissions.wizard.purposes': 'Mục đích',
@@ -4121,9 +4124,9 @@ export const vi = {
   'submissions.wizard.menu': 'Ảnh thực đơn',
   'submissions.wizard.bill': 'Ảnh hóa đơn',
   'submissions.wizard.credit':
-    'Tín dụng dự kiến khi duyệt: cơ bản {base} + thưởng ảnh {bonus} = {total}. Khi gộp: {bonus}. Khi từ chối: 0.',
+    'Tín dụng dự kiến: cơ bản {base} + thưởng ảnh {photoBonus} = {total}.',
   'submissions.wizard.creditHint':
-    'Mức theo hợp đồng; API chưa trả số tín dụng thực nhận. Chỉ thưởng ảnh thực đơn/hóa đơn được giữ, tối đa một lần; việc cấp tín dụng do máy chủ quyết định.',
+    'Dự kiến từ máy chủ cho lựa chọn hiện tại; máy chủ kiểm tra điều kiện và cấp tín dụng khi duyệt hoặc gộp. Đây chưa phải tín dụng đã cấp.',
   'submissions.wizard.guestCredit': 'Khách chưa đăng ký không được cấp tín dụng.',
 } as const
 
