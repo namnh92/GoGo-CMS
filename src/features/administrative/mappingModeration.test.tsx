@@ -343,7 +343,7 @@ describe('verifying', () => {
     const bodies: Record<string, unknown>[] = []
     server.use(
       http.post(`${BASE}/cms/places/:id/administrative-mapping/verify`, async ({ request }) => {
-        bodies.push((await request.json()) as Record<string, unknown>)
+        bodies.push((await request.clone().json()) as Record<string, unknown>)
         return undefined
       }),
     )
@@ -359,6 +359,8 @@ describe('verifying', () => {
     await waitFor(() => expect(bodies).toHaveLength(1))
     expect(bodies[0]).toMatchObject({ provinceCode: '01', communeCode: '00163' })
     expect(bodies[0]).toHaveProperty('expectedUpdatedAt')
+    // Verify fallthrough completed, not just that the observer saw a request.
+    await screen.findByText(/Đã xác nhận ánh xạ/)
   })
 
   it('refuses a hierarchy the active dataset does not hold, and clears the commune', async () => {

@@ -110,6 +110,7 @@ export const PATH_TEMPLATES: readonly string[] = [
   '/me/push-subscriptions',
   '/places/resolve-google-maps-link',
   '/place-submissions',
+  '/me/place-submissions',
   '/place-submissions/{id}',
   '/cms/place-submissions',
   '/cms/place-submissions/{id}',
@@ -267,4 +268,7 @@ export const PATH_TEMPLATES: readonly string[] = [
   '/cms/ops/config-readiness',
   '/cms/ops/providers',
   '/cms/ops/providers/{provider}',
+  '/cms/place-submissions/{id}/photos/{photoId}/content',
+  '/places/{id}/photos/{photoId}/content',
+  '/cms/place-submissions/{id}/photos/{photoId}',
 ]

@@ -3655,6 +3655,21 @@ export const en: Record<MessageKey, string> = {
   'submissions.identityConflictHint':
     'Two GoGo places claim this Google ID. Merge them before approving.',
   'submissions.open': 'Open for review',
+  'error.PHOTO_UNAVAILABLE': 'Unable to load this photo. Retry or uncheck it.',
+  'submissions.photos.title': 'Contribution photos',
+  'submissions.photos.hint':
+    'Uncheck photos to exclude on approval or merge. Uncheck all to reject every photo. Choices apply with the decision, not when saving review edits.',
+  'submissions.photos.empty': 'No contribution photos.',
+  'submissions.photos.image': 'Contribution photo {n}',
+  'submissions.photos.enlarge': 'Enlarge photo {n}',
+  'submissions.photos.keep': 'Keep photo {n}',
+  'submissions.photos.loading': 'Loading private photo…',
+  'submissions.photos.unavailable': 'This photo is unavailable.',
+  'submissions.photos.approved': 'Photo approved.',
+  'submissions.photos.rejected': 'Photo rejected.',
+  'submissions.photos.reviewRequired':
+    'Photo review is required before approval or merge. The submission has been reloaded; your previous choices are preserved. Review new photos, select which to keep and confirm your review.',
+  'submissions.photos.confirmReview': 'Confirm photo review',
   'submissions.reviewTitle': 'Review submission',
   'submissions.section.identity': 'Identity',
   'submissions.section.provider': 'Google data',

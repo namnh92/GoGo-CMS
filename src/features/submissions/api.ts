@@ -75,3 +75,11 @@ export function decideSubmission(id: string, body: DecidePlaceSubmissionBody) {
     idempotencyKey: newIdempotencyKey(),
   })
 }
+
+/** Only the authenticated, sanitised BE endpoint; never a public asset/original URL. */
+export function fetchSubmissionPhoto(id: string, photoId: string, signal?: AbortSignal) {
+  return apiFetch<Blob>(
+    `/cms/place-submissions/${encodeURIComponent(id)}/photos/${encodeURIComponent(photoId)}/content`,
+    { raw: true, accept: 'image/webp', cache: 'no-store', signal },
+  )
+}
