@@ -82,6 +82,7 @@ export const PATH_TEMPLATES: readonly string[] = [
   '/places/search',
   '/places/{id}',
   '/places/{id}/reviews',
+  '/places/google-provider-photo/{googlePlaceId}',
   '/places/{id}/provider-photos',
   '/places/{id}/reports',
   '/rooms/{roomId}/suggestions',

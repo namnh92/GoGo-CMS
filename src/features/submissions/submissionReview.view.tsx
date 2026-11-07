@@ -9,7 +9,7 @@ import { Button } from '@/shared/ui/Button'
 import { Badge } from '@/shared/ui/Badge'
 import { Select, TextArea, TextInput } from '@/shared/ui/Field'
 import { Drawer } from '@/shared/ui/Overlay'
-import { AsyncBoundary } from '@/shared/ui/State'
+import { AsyncBoundary, ErrorState } from '@/shared/ui/State'
 import { UnsavedChangesDialog } from '@/shared/ui/UnsavedChangesGuard'
 import { useToast } from '@/shared/ui/Toast'
 import { CloseIcon } from '@/shared/ui/icons'
@@ -25,7 +25,12 @@ import {
 } from '@/features/places/contactEvidence'
 import { fetchTaxonomies } from '@/features/taxonomy/api'
 import { fetchPlaces } from '@/features/places/api'
-import type { SubmissionReviewDraft } from '@/shared/api/contracts'
+import {
+  submissionRejectionReasonSchema,
+  submissionHistoryReasonSchema,
+  type SubmissionReviewDraft,
+} from '@/shared/api/contracts'
+import type { Schemas } from '@/shared/api/generated'
 import {
   decideSubmission,
   fetchSubmission,
@@ -46,6 +51,15 @@ import {
   type ReviewForm,
 } from './reviewForm'
 import { styles } from './submissionReview.style'
+
+const REJECTION_LABELS = {
+  duplicate_place: 'submissions.rejectionReason.duplicate_place',
+  incorrect_location: 'submissions.rejectionReason.incorrect_location',
+  permanently_closed: 'submissions.rejectionReason.permanently_closed',
+  not_public_place: 'submissions.rejectionReason.not_public_place',
+  inappropriate_content: 'submissions.rejectionReason.inappropriate_content',
+  other: 'submissions.rejectionReason.other',
+} as const satisfies Record<Schemas['SubmissionRejectionReason'], MessageKey>
 
 const MIN_REASON = 3
 const MAX_REASON = 500
@@ -114,6 +128,8 @@ export function SubmissionReviewDrawer({
   const [taxonomyIds, setTaxonomyIds] = useState<string[]>([])
   const [taxonomyBaseline, setTaxonomyBaseline] = useState<string>('')
   const [reason, setReason] = useState('')
+  const [rejectionReason, setRejectionReason] = useState('')
+  const [rejectionError, setRejectionError] = useState(false)
   const [mergeQuery, setMergeQuery] = useState('')
   const [mergeTarget, setMergeTarget] = useState<{ id: string; name: string } | null>(null)
   const [leaving, setLeaving] = useState(false)
@@ -255,11 +271,26 @@ export function SubmissionReviewDrawer({
   })
 
   const decide = useMutation({
-    mutationFn: (decision: SubmissionDecision) =>
-      decideSubmission(submissionId!, decision, reason.trim(), mergeTarget?.id),
+    mutationFn: (decision: SubmissionDecision) => {
+      if (decision === 'rejected') {
+        const key = submissionRejectionReasonSchema.parse(rejectionReason)
+        return decideSubmission(submissionId!, {
+          decision,
+          rejectionReason: key,
+          ...(reason.trim() ? { reason: reason.trim() } : {}),
+        })
+      }
+      return decideSubmission(submissionId!, {
+        decision,
+        reason: reason.trim(),
+        ...(decision === 'merged' && mergeTarget ? { mergeIntoPlaceId: mergeTarget.id } : {}),
+      })
+    },
     onSuccess: (_result, decision) => {
       toast.success(t(`submissions.decided.${decision}`))
       setReason('')
+      setRejectionReason('')
+      setRejectionError(false)
       setMergeTarget(null)
       void queryClient.invalidateQueries({ queryKey: queryKeys.submissions.all })
       // Approving creates a catalog place, so the catalog is stale too.
@@ -277,9 +308,20 @@ export function SubmissionReviewDrawer({
         toast.error(t('submissions.review.evidenceRequired'), apiError.requestId || undefined)
         return
       }
-      toast.error(t('submissions.decideFailed'))
+      setRejectionError(apiError.fieldErrors.some((error) => error.field === 'rejectionReason'))
+      toast.error(t('submissions.decideFailed'), apiError.requestId || undefined)
     },
   })
+
+  const resetDecision = decide.reset
+  useEffect(() => {
+    setReason('')
+    setRejectionReason('')
+    setRejectionError(false)
+    setMergeTarget(null)
+    setMergeQuery('')
+    resetDecision()
+  }, [submissionId, resetDecision])
 
   const mergeResults = useQuery({
     queryKey: ['submissions', 'merge-search', mergeQuery] as const,
@@ -288,8 +330,13 @@ export function SubmissionReviewDrawer({
   })
 
   const data = detail.data
-  const canDecide = can('submission.decide') && data?.status === 'pending'
+  const canDecide =
+    can('submission.decide') && data?.status === 'pending' && !toApiError(decide.error).isForbidden
   const reasonTooShort = reason.trim().length < MIN_REASON
+  const rejectInvalid =
+    !submissionRejectionReasonSchema.safeParse(rejectionReason).success ||
+    (reason.trim().length > 0 && reasonTooShort)
+  const decisionPending = decide.isPending || save.isPending
 
   const close = () => {
     if (dirty) {
@@ -316,7 +363,7 @@ export function SubmissionReviewDrawer({
             {canDecide ? (
               <Button
                 variant="secondary"
-                disabled={!dirty || save.isPending}
+                disabled={!dirty || save.isPending || decide.isPending}
                 loading={save.isPending}
                 onClick={() => save.mutate()}
               >
@@ -361,6 +408,11 @@ export function SubmissionReviewDrawer({
                   <Fact label={t('submissions.field.count')}>
                     {formatNumber(submission.submissionCount, locale)}
                   </Fact>
+                  {submission.rejectionReason ? (
+                    <Fact label={t('submissions.rejectionReason.label')}>
+                      {t(REJECTION_LABELS[submission.rejectionReason])}
+                    </Fact>
+                  ) : null}
                   <Fact label={t('submissions.field.status')}>
                     {t(`submissions.tab.${submission.status}`)}
                   </Fact>
@@ -581,6 +633,24 @@ export function SubmissionReviewDrawer({
                     <span aria-hidden="true">ℹ</span>
                     {t('submissions.decisionsAreSeparate')}
                   </p>
+                  <Select
+                    label={t('submissions.rejectionReason.label')}
+                    hint={t('submissions.rejectionReason.hint')}
+                    value={rejectionReason}
+                    disabled={decisionPending}
+                    error={rejectionError ? t('submissions.rejectionReason.invalid') : undefined}
+                    onChange={(event) => {
+                      setRejectionReason(event.target.value)
+                      setRejectionError(false)
+                    }}
+                  >
+                    <option value="">{t('submissions.rejectionReason.placeholder')}</option>
+                    {submissionRejectionReasonSchema.options.map((key) => (
+                      <option key={key} value={key}>
+                        {t(REJECTION_LABELS[key])}
+                      </option>
+                    ))}
+                  </Select>
                   <TextArea
                     label={t('submissions.reason')}
                     value={reason}
@@ -631,14 +701,16 @@ export function SubmissionReviewDrawer({
                   <div className={styles.footer}>
                     <Button
                       variant="success"
-                      disabled={reasonTooShort || decide.isPending}
+                      disabled={reasonTooShort || decisionPending}
+                      loading={decide.isPending && decide.variables === 'approved'}
                       onClick={() => decide.mutate('approved')}
                     >
                       {t('submissions.action.approved')}
                     </Button>
                     <Button
                       variant="danger"
-                      disabled={reasonTooShort || decide.isPending}
+                      disabled={rejectInvalid || decisionPending}
+                      loading={decide.isPending && decide.variables === 'rejected'}
                       onClick={() => decide.mutate('rejected')}
                     >
                       {t('submissions.action.rejected')}
@@ -648,7 +720,8 @@ export function SubmissionReviewDrawer({
                       // The server requires a target for a merge and refuses
                       // without one; and a target is chosen from the catalogue,
                       // never typed as a UUID.
-                      disabled={reasonTooShort || mergeTarget === null || decide.isPending}
+                      disabled={reasonTooShort || mergeTarget === null || decisionPending}
+                      loading={decide.isPending && decide.variables === 'merged'}
                       onClick={() => decide.mutate('merged')}
                     >
                       {t('submissions.action.merged')}
@@ -664,18 +737,32 @@ export function SubmissionReviewDrawer({
                 </p>
               )}
 
+              {decide.isError ? <ErrorState error={decide.error} /> : null}
+
               {submission.history.length > 0 ? (
                 <section className={styles.section}>
                   <h3 className={styles.sectionTitle}>{t('submissions.section.history')}</h3>
-                  {submission.history.map((entry, index) => (
-                    <div key={`${entry.action}-${entry.at}-${index}`} className={styles.historyRow}>
-                      <span className={styles.historyAction}>{entry.action}</span>
-                      <span className={styles.historyMeta}>
-                        {formatRelative(entry.at, locale)}
-                        {entry.actorName ? ` · ${entry.actorName}` : ''}
-                      </span>
-                    </div>
-                  ))}
+                  {submission.history.map((entry, index) => {
+                    const publicReason = submissionHistoryReasonSchema.safeParse(entry.detail)
+                    return (
+                      <div
+                        key={`${entry.action}-${entry.at}-${index}`}
+                        className={styles.historyRow}
+                      >
+                        <span className={styles.historyAction}>{entry.action}</span>
+                        {publicReason.success ? (
+                          <span>
+                            {t('submissions.rejectionReason.label')}:{' '}
+                            {t(REJECTION_LABELS[publicReason.data.rejectionReason])}
+                          </span>
+                        ) : null}
+                        <span className={styles.historyMeta}>
+                          {formatRelative(entry.at, locale)}
+                          {entry.actorName ? ` · ${entry.actorName}` : ''}
+                        </span>
+                      </div>
+                    )
+                  })}
                 </section>
               ) : null}
             </div>

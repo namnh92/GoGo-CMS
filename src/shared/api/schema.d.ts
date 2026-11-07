@@ -1666,7 +1666,7 @@ export interface paths {
         };
         /**
          * Place detail with sources, freshness, hours, verified prices
-         * @description GoGo-BE#217 (ADR-0028): carries the GoGo community rating (`gogoRating`, `gogoRatingCount`) beside the provider's (`rating`, `ratingCount`, attributed through `sources`). The two are separate facts from separate populations and are never merged into one score. The GoGo rating is computed on every read from the place's moderator-published reviews, so the response is served `Cache-Control: no-store` and a publish, rejection, edit back to moderation or emergency hide shows on the next read.
+         * @description GoGo-BE#217 (ADR-0028): carries the GoGo community rating (`gogoRating`, `gogoRatingCount`) beside the provider's (`rating`, `ratingCount`, attributed through `sources`). The two are separate facts from separate populations and are never merged into one score. The GoGo rating is computed on every read from the place's moderator-published reviews, so the response is served `Cache-Control: no-store` and a publish, rejection, edit back to moderation or emergency hide shows on the next read. GoGo-BE#784: optional `areaSummary` uses the same current VERIFIED administrative mapping as search (commune preferred, province fallback), with Vietnamese labels like search with `locale=vi`. Omitted when no eligible mapping exists; `addressText` remains a separate postal address.
          */
         get: operations["getPlaceDetail"];
         put?: never;
@@ -1691,6 +1691,26 @@ export interface paths {
          *     BE-BFF-019 (ADR-0026, proposal): `order=helpful` ranks by `helpfulCount` descending, then the same newest-first order, so with no reactions it answers exactly what `latest` does. Counts only; no response names who reacted.
          */
         get: operations["listPlaceReviews"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/places/google-provider-photo/{googlePlaceId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Fetch at most one transient Google candidate photo through the BFF
+         * @description Public, 10/min/IP. Fetch the candidate photo reference as JSON and render its base64 bytes with its Google Maps and author attribution; the URL is not a directly loadable image. No Google key/name/URL for image retrieval is exposed. Fresh first photo at fetch time; response credits are authoritative. Flag place_provider_photos, google.places.display budgets, 800px/400KiB, 6s overall deadline and bounded expired-reference retry apply. Nothing is stored.
+         */
+        get: operations["getCandidateProviderPhoto"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2247,7 +2267,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Poll a submission (owner only) */
+        /**
+         * Poll a submission (owner only)
+         * @description Owner only (registered user or guest). `rejectionReason` is a stable public key when rejected; absent for historical decisions without a key and for other statuses. Internal moderation notes are never returned.
+         */
         get: operations["getPlaceSubmission"];
         put?: never;
         post?: never;
@@ -2360,9 +2383,11 @@ export interface paths {
         put?: never;
         /**
          * Moderator/editor: approve, reject or merge a submission (PI-CMS-007)
-         * @description `approved` creates the catalogue place and applies whatever a reviewer supplemented through `PUT /cms/place-submissions/{id}/review` over the provider's answer (GoGo-BE#528). Fields the reviewer typed are recorded `editorial` in `place_field_provenance` and carry their id; fields left as Google answered them are `google_derived` and carry the Place ID — so a later provider refresh can tell what it may overwrite.
+         * @description GoGo-BE#787: `rejected` requires `rejectionReason` from the fixed key list. Missing/unknown keys return 400 VALIDATION_FAILED with field_errors on rejectionReason. This key is public; `reason` remains internal. `approved` creates the catalogue place and applies whatever a reviewer supplemented through `PUT /cms/place-submissions/{id}/review` over the provider's answer (GoGo-BE#528). Fields the reviewer typed are recorded `editorial` in `place_field_provenance` and carry their id; fields left as Google answered them are `google_derived` and carry the Place ID — so a later provider refresh can tell what it may overwrite.
          *
          *     **Address, phone and website (GoGo-BE#280)** are GoGo-owned and come only from the review draft, each with the evidence in its `provenance`. The provider's formatted address is no longer a fallback: a place approved with no reviewer address has none. A draft saved before #280 that carries one of these values without evidence is refused `409 REVIEW_EVIDENCE_REQUIRED`, naming the fields in `field_errors`; re-save the draft with its sources and approve again.
+         *
+         *     #786 / ADR-0043: with provider photos enabled, approval retains at most one current first Google photo with provider provenance and per-photo credits. No image or references were stored while pending. Disabled or confirmed no-photo results permit approval without imagery; photo budget, provider or storage failures return retryable `503 SUBMISSION_PHOTO_UNAVAILABLE` and leave the submission pending. Google may change photo order since preview.
          *
          *     `rejected` creates no place. `merged` points the proposal at an existing one and writes nothing to it.
          *
@@ -6569,15 +6594,7 @@ export interface components {
                 kind: "category" | "mood" | "setting" | "amenity";
                 key: string;
             }[];
-            /** @description Current VERIFIED administrative mapping only; commune preferred, province fallback; actual label locale reported. */
-            areaSummary?: {
-                datasetVersion: string;
-                provinceCode: string;
-                communeCode: string | null;
-                label: string;
-                /** @enum {string} */
-                locale: "vi" | "en";
-            };
+            areaSummary?: components["schemas"]["PlaceAreaSummary"];
             verification: components["schemas"]["VenueVerification"];
             /** Format: uuid */
             id: string;
@@ -8039,6 +8056,17 @@ export interface components {
             currency?: string;
             confidence?: number;
         };
+        /** @description Optional single-photo BFF reference, only from a live resolved candidate with a provider photo and the flag/budget configured. Resolve buys no photo media and persists nothing. Fetch url as JSON, not an image src. Omitted for disabled/no-photo/provider-error/DB-first/ambiguous results. Approval re-fetches the current first Google photo; Google can change photo order between preview and moderation. */
+        CandidateProviderPhotoReference: {
+            /** @description Relative BFF path; no provider key or photo name */
+            url: string;
+            /** @constant */
+            provider: "google";
+            attribution: string;
+            authorAttributions: components["schemas"]["ProviderPhotoAuthor"][];
+            /** Format: uri */
+            googleMapsUri: string | null;
+        };
         /** @description GoGo-BE#509 — transient provider photos. Display once, never persist. */
         PlaceProviderPhotos: {
             /** @description Why `photos` may be empty. Unknown values mean "no photos". */
@@ -8080,6 +8108,15 @@ export interface components {
              */
             photoUri: string | null;
         };
+        /** @description Current VERIFIED administrative mapping only; commune preferred, province fallback; actual label locale reported. */
+        PlaceAreaSummary: {
+            datasetVersion: string;
+            provinceCode: string;
+            communeCode: string | null;
+            label: string;
+            /** @enum {string} */
+            locale: "vi" | "en";
+        };
         PlaceDetail: {
             verification?: components["schemas"]["VenueVerification"];
             /** Format: uuid */
@@ -8089,6 +8126,7 @@ export interface components {
             status?: string;
             /** @description GoGo-owned postal address (GoGo-BE#280). Absent when unknown — never an empty string. Render as plain text. */
             addressText?: string;
+            areaSummary?: components["schemas"]["PlaceAreaSummary"];
             areaKey?: string;
             lat?: number;
             lng?: number;
@@ -8104,6 +8142,8 @@ export interface components {
             gogoRating?: number;
             /** @description GoGo-BE#217 (ADR-0028) — how many moderator-published GoGo reviews of this place `gogoRating` is computed from; always present, including 0. Counts reviews, not people: one author may have several. Pending, rejected, removed and hidden reviews, plan reviews, check-ins and provider reviews are never counted. Below 5 the client says in words that there are not enough GoGo reviews yet, beside this count, and renders no score. */
             gogoRatingCount: number;
+            /** @description GoGo-BE#785 — all-time distinct rooms with at least one stored stop check-in at this place, across members, stops and plan versions. Always null below 5 rooms (including zero); otherwise an integer. Completed stops, plans, votes, saves and reviews alone do not count. Check-in content moderation does not change visit participation. No room or member identities are returned. Read from a transactionally precomputed database count for each request without process value or in-flight promise caching; deletions, cascades and place merges committed before that read are reflected immediately across API processes. Hide this fact when null. */
+            checkedInGroupCount: number | null;
             priceLevel?: number;
             avgVisitMinutes?: number;
             suitability?: {
@@ -8424,6 +8464,7 @@ export interface components {
              */
             administrative?: components["schemas"]["ImportAdministrativeIdentity"] | null;
             candidate?: {
+                photo?: components["schemas"]["CandidateProviderPhotoReference"];
                 googlePlaceId?: string;
                 name?: string;
                 address?: string;
@@ -8775,6 +8816,11 @@ export interface components {
             /** @description #248. True when a `super_admin` issued a temporary password that has not been replaced. The console must route to the change screen; the obligation itself is enforced server-side — every other CMS route answers 403 `PASSWORD_CHANGE_REQUIRED` until it is cleared. */
             mustChangePassword?: boolean;
         };
+        /**
+         * @description Public reason key (GoGo-BE#787); clients translate labels. In order: trùng địa điểm, sai vị trí, đã đóng cửa, không phải địa điểm công khai, nội dung không phù hợp, khác. No free-text note, including for other.
+         * @enum {string}
+         */
+        SubmissionRejectionReason: "duplicate_place" | "incorrect_location" | "permanently_closed" | "not_public_place" | "inappropriate_content" | "other";
         PlaceSubmissionSummary: {
             /** Format: uuid */
             id: string;
@@ -8808,6 +8854,7 @@ export interface components {
             /** Format: date-time */
             decidedAt?: string;
             decisionReason?: string;
+            rejectionReason?: components["schemas"]["SubmissionRejectionReason"];
             /**
              * @description A human-readable name for the row, when GoGo has one (GoGo-BE#528).
              *
@@ -8881,6 +8928,7 @@ export interface components {
             /** Format: date-time */
             decidedAt?: string;
             decisionReason?: string;
+            rejectionReason?: components["schemas"]["SubmissionRejectionReason"];
             /** @description What the contributor sent, untouched by any review. */
             contribution: {
                 categoryKey?: string;
@@ -9010,6 +9058,10 @@ export interface components {
             source: "google" | "community" | "manual";
             /** @description Present for provider imagery, which must be displayed with it. Community photos are only returned once approved in moderation. */
             attribution?: string;
+            /** @description Per-photo provider credits that must be rendered with this image. */
+            authorAttributions?: components["schemas"]["ProviderPhotoAuthor"][];
+            /** Format: uri */
+            googleMapsUri?: string | null;
         };
         RoomListItem: {
             /** Format: uuid */
@@ -9076,6 +9128,13 @@ export interface components {
             caption?: string | null;
             /** @description Provider terms survive an editor touching the list (FR-INGEST-014). */
             attribution?: string | null;
+            /** @description Per-photo provider credits that must be rendered with this image. */
+            authorAttributions?: components["schemas"]["ProviderPhotoAuthor"][];
+            /**
+             * Format: uri
+             * @description Provider source link for this photo, when supplied.
+             */
+            googleMapsUri?: string | null;
             /** @description At most one per place. */
             isCover: boolean;
             /** @enum {string} */
@@ -14104,6 +14163,33 @@ export interface operations {
             429: components["responses"]["RateLimited"];
         };
     };
+    getCandidateProviderPhoto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                googlePlaceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Photo or an empty degraded response; never prevents link submission */
+            200: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaceProviderPhotos"] & {
+                        photos?: components["schemas"]["PlaceProviderPhoto"][];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
     getPlaceProviderPhotos: {
         parameters: {
             query?: never;
@@ -15147,6 +15233,7 @@ export interface operations {
                         submissionCount?: number;
                         /** Format: date-time */
                         createdAt?: string;
+                        rejectionReason?: components["schemas"]["SubmissionRejectionReason"];
                         /** Format: date-time */
                         decidedAt?: string;
                     };
@@ -15308,8 +15395,17 @@ export interface operations {
             content: {
                 "application/json": {
                     /** @enum {string} */
-                    decision: "approved" | "rejected" | "merged";
+                    decision: "rejected";
+                    rejectionReason: components["schemas"]["SubmissionRejectionReason"];
+                    /** @description Optional internal note. Never returned by public polling. */
+                    reason?: string;
+                    /** Format: uuid */
+                    mergeIntoPlaceId?: string;
+                } | {
+                    /** @enum {string} */
+                    decision: "approved" | "merged";
                     reason: string;
+                    rejectionReason?: components["schemas"]["SubmissionRejectionReason"];
                     /**
                      * Format: uuid
                      * @description Required for `merged`, and the place must exist — `404 MERGE_TARGET_NOT_FOUND` otherwise (GoGo-BE#528). Merging records where this proposal went; nothing about the target place is written.
@@ -15337,6 +15433,15 @@ export interface operations {
                 };
             };
             409: components["responses"]["Conflict"];
+            /** @description Retryable provider verification or photo/storage/budget outage. SUBMISSION_PHOTO_UNAVAILABLE leaves the submission pending. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
         };
     };
     listPlaceImports: {
