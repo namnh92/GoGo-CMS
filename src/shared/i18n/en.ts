@@ -1924,6 +1924,9 @@ export const en: Record<MessageKey, string> = {
   'moderation.communityHint':
     'This place is already in the catalog with the “User-submitted” status. The queue of unprocessed submissions — with approve, reject and merge — is on the “App submissions” screen.',
   'moderation.openPlace': 'Open place',
+  'taxonomy.version': 'Taxonomy version',
+  'taxonomy.lastChanged': 'Last changed',
+  'taxonomy.edit': 'Edit taxonomy key',
   'taxonomy.title': 'Taxonomy system',
   'taxonomy.labelRule':
     'One line of letters, digits, spaces and the marks \' " ‘ ’ “ ” ( ) & + , . / - – —, at most 80 characters.',
