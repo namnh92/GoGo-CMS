@@ -383,10 +383,10 @@ cho nghiệm thu cms-dev.
 
 ### Lý do từ chối đóng góp (GoGo-CMS#281)
 
-Contract tạm vendor nguyên byte từ GoGo-BE PR #790 head `e89e494`, phiên bản
-`6.3.0-alpha.1`; thay bằng bản merged khi BE hoàn tất. Types sinh bằng
+Contract vendor nguyên byte từ GoGo-BE `origin/re-design` tại `1ee7544` sau
+PR #790, phiên bản `7.0.0-alpha.1`. Types sinh bằng
 `pnpm api:types`; drift gate và SHA-256 trong contract test pin cùng bản này.
-Đã đối chiếu `PATH_TEMPLATES`: tập path và thứ tự không đổi trong lần bump này.
+Đã cập nhật `PATH_TEMPLATES` với route ảnh provider mới, giữ thứ tự của contract.
 
 Ở **Đề xuất từ app → Kiểm duyệt**, editor/moderator (và super_admin) chọn một
 `rejectionReason` trước khi từ chối: trùng địa điểm, sai vị trí, đã đóng cửa

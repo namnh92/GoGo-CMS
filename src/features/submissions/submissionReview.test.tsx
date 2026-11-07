@@ -534,8 +534,37 @@ it('requires three characters if an optional rejection note is entered', async (
   const reject = within(dialog).getByRole('button', { name: 'Từ chối' })
   const note = within(dialog).getByLabelText(/^Lý do quyết định/)
   expect(reject).toBeEnabled()
+  await user.type(note, '  ')
+  expect(reject).toBeEnabled()
   await user.type(note, 'ab')
   expect(reject).toBeDisabled()
   await user.type(note, 'c')
   expect(reject).toBeEnabled()
+  await user.click(reject)
+  await waitFor(() => expect(mockDb.decisions).toHaveLength(1))
+  expect(mockDb.decisions[0]).toEqual({
+    id: FRESH.split('/').at(-1),
+    decision: 'rejected',
+    rejectionReason: 'other',
+    reason: 'abc',
+  })
+})
+
+it('omits a whitespace-only rejection note and still requires the public key', async () => {
+  signInAs('moderator')
+  const user = userEvent.setup()
+  renderWithProviders(<SubmissionRoutes />, { route: FRESH })
+  const dialog = await openDrawer()
+  await user.type(within(dialog).getByLabelText(/^Lý do quyết định/), '   ')
+  const reject = within(dialog).getByRole('button', { name: 'Từ chối' })
+  expect(reject).toBeDisabled()
+  await user.selectOptions(within(dialog).getByRole('combobox', { name: /Lý do từ chối/ }), 'other')
+  expect(reject).toBeEnabled()
+  await user.click(reject)
+  await waitFor(() => expect(mockDb.decisions).toHaveLength(1))
+  expect(mockDb.decisions[0]).toEqual({
+    id: FRESH.split('/').at(-1),
+    decision: 'rejected',
+    rejectionReason: 'other',
+  })
 })

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: GoGo API
-  version: 6.3.0-alpha.1
+  version: 7.0.0-alpha.1
   description: |
     Public contract for GoGo clients (Mobile, Web, Mini App). This page is the
     integration guide — every rule below is enforced by the API, not advisory.
@@ -3675,6 +3675,10 @@ paths:
         moderator-published reviews, so the response is served
         `Cache-Control: no-store` and a publish, rejection, edit back to
         moderation or emergency hide shows on the next read.
+        GoGo-BE#784: optional `areaSummary` uses the same current VERIFIED
+        administrative mapping as search (commune preferred, province fallback),
+        with Vietnamese labels like search with `locale=vi`. Omitted when no
+        eligible mapping exists; `addressText` remains a separate postal address.
       security: []
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
@@ -3700,6 +3704,7 @@ paths:
                     rating: 4.6
                     ratingCount: 980
                     gogoRatingCount: 0
+                    checkedInGroupCount: null
                     isLodging: false
                     taxonomies: []
                     hours: []
@@ -3718,6 +3723,7 @@ paths:
                     rating: 4.6
                     ratingCount: 980
                     gogoRatingCount: 4
+                    checkedInGroupCount: null
                     isLodging: false
                     taxonomies: []
                     hours: []
@@ -3737,6 +3743,7 @@ paths:
                     ratingCount: 980
                     gogoRating: 4.2
                     gogoRatingCount: 5
+                    checkedInGroupCount: 5
                     isLodging: false
                     taxonomies: []
                     hours: []
@@ -3791,6 +3798,43 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '429': { $ref: '#/components/responses/RateLimited' }
 
+  /places/google-provider-photo/{googlePlaceId}:
+    get:
+      tags: [places]
+      operationId: getCandidateProviderPhoto
+      summary: Fetch at most one transient Google candidate photo through the BFF
+      description: >
+        Public, 10/min/IP. Fetch the candidate photo reference as JSON and render
+        its base64 bytes with its Google Maps and author attribution; the URL is
+        not a directly loadable image. No Google key/name/URL for image retrieval
+        is exposed. Fresh first photo at fetch time; response credits are authoritative.
+        Flag place_provider_photos, google.places.display budgets, 800px/400KiB,
+        6s overall deadline and bounded expired-reference retry apply. Nothing is stored.
+      security: []
+      parameters:
+        - name: googlePlaceId
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[A-Za-z0-9_-]{5,255}$' }
+      responses:
+        '200':
+          description: Photo or an empty degraded response; never prevents link submission
+          headers:
+            Cache-Control:
+              schema: { type: string, const: 'private, no-store' }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/PlaceProviderPhotos' }
+                  - type: object
+                    properties:
+                      photos:
+                        type: array
+                        maxItems: 1
+                        items: { $ref: '#/components/schemas/PlaceProviderPhoto' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /places/{id}/provider-photos:
     get:
       operationId: getPlaceProviderPhotos
@@ -5053,6 +5097,14 @@ paths:
         `field_errors`; re-save the draft with its sources and approve again.
 
 
+        #786 / ADR-0043: with provider photos enabled, approval retains at most
+        one current first Google photo with provider provenance and per-photo
+        credits. No image or references were stored while pending. Disabled or
+        confirmed no-photo results permit approval without imagery; photo budget,
+        provider or storage failures return retryable `503 SUBMISSION_PHOTO_UNAVAILABLE`
+        and leave the submission pending. Google may change photo order since preview.
+
+
         `rejected` creates no place. `merged` points the proposal at an existing
         one and writes nothing to it.
 
@@ -5070,6 +5122,13 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '503':
+          description: >
+            Retryable provider verification or photo/storage/budget outage.
+            SUBMISSION_PHOTO_UNAVAILABLE leaves the submission pending.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
 
   /cms/place-imports:
     post:
@@ -13572,16 +13631,7 @@ components:
             properties:
               kind: { type: string, enum: [category, mood, setting, amenity] }
               key: { type: string }
-        areaSummary:
-          type: object
-          description: Current VERIFIED administrative mapping only; commune preferred, province fallback; actual label locale reported.
-          required: [datasetVersion, provinceCode, communeCode, label, locale]
-          properties:
-            datasetVersion: { type: string }
-            provinceCode: { type: string }
-            communeCode: { type: [string, 'null'] }
-            label: { type: string }
-            locale: { type: string, enum: [vi, en] }
+        areaSummary: { $ref: '#/components/schemas/PlaceAreaSummary' }
         verification: { $ref: '#/components/schemas/VenueVerification' }
         id: { type: string, format: uuid }
         name: { type: string }
@@ -15955,6 +16005,24 @@ components:
         max: { type: integer }
         currency: { type: string }
         confidence: { type: number, minimum: 0, maximum: 1 }
+    CandidateProviderPhotoReference:
+      type: object
+      description: >
+        Optional single-photo BFF reference, only from a live resolved candidate
+        with a provider photo and the flag/budget configured. Resolve buys no
+        photo media and persists nothing. Fetch url as JSON, not an image src.
+        Omitted for disabled/no-photo/provider-error/DB-first/ambiguous results.
+        Approval re-fetches the current first Google photo; Google can change
+        photo order between preview and moderation.
+      required: [url, provider, attribution, authorAttributions, googleMapsUri]
+      properties:
+        url: { type: string, description: Relative BFF path; no provider key or photo name }
+        provider: { type: string, const: google }
+        attribution: { type: string }
+        authorAttributions:
+          type: array
+          items: { $ref: '#/components/schemas/ProviderPhotoAuthor' }
+        googleMapsUri: { type: [string, 'null'], format: uri }
     PlaceProviderPhotos:
       type: object
       description: >
@@ -16019,9 +16087,20 @@ components:
           format: uri
           nullable: true
           description: Author avatar (`https`, Google image host); null when absent or unsafe.
+    PlaceAreaSummary:
+      type: object
+      description: Current VERIFIED administrative mapping only; commune preferred, province fallback; actual label locale reported.
+      required: [datasetVersion, provinceCode, communeCode, label, locale]
+      properties:
+        datasetVersion: { type: string }
+        provinceCode: { type: string }
+        communeCode: { type: [string, 'null'] }
+        label: { type: string }
+        locale: { type: string, enum: [vi, en] }
+
     PlaceDetail:
       type: object
-      required: [gogoRatingCount]
+      required: [gogoRatingCount, checkedInGroupCount]
       properties:
         verification: { $ref: '#/components/schemas/VenueVerification' }
         id: { type: string, format: uuid }
@@ -16033,6 +16112,7 @@ components:
           description: >
             GoGo-owned postal address (GoGo-BE#280). Absent when unknown —
             never an empty string. Render as plain text.
+        areaSummary: { $ref: '#/components/schemas/PlaceAreaSummary' }
         areaKey: { type: string }
         lat: { type: number }
         lng: { type: number }
@@ -16081,6 +16161,19 @@ components:
             reviews, check-ins and provider reviews are never counted. Below 5
             the client says in words that there are not enough GoGo reviews
             yet, beside this count, and renders no score.
+        checkedInGroupCount:
+          type: [integer, 'null']
+          minimum: 5
+          description: >
+            GoGo-BE#785 — all-time distinct rooms with at least one stored
+            stop check-in at this place, across members, stops and plan versions.
+            Always null below 5 rooms (including zero); otherwise an integer.
+            Completed stops, plans, votes, saves and reviews alone do not count.
+            Check-in content moderation does not change visit participation.
+            No room or member identities are returned. Read from a transactionally precomputed database count for
+            each request without process value or in-flight promise caching; deletions,
+            cascades and place merges committed before that read are reflected
+            immediately across API processes. Hide this fact when null.
         priceLevel: { type: integer }
         avgVisitMinutes: { type: integer }
         suitability:
@@ -16673,6 +16766,8 @@ components:
         candidate:
           type: object
           properties:
+            photo:
+              $ref: '#/components/schemas/CandidateProviderPhotoReference'
             googlePlaceId: { type: string }
             name: { type: string }
             address: { type: string }
@@ -17698,6 +17793,11 @@ components:
           description: >
             Present for provider imagery, which must be displayed with it.
             Community photos are only returned once approved in moderation.
+        authorAttributions:
+          type: array
+          description: Per-photo provider credits that must be rendered with this image.
+          items: { $ref: '#/components/schemas/ProviderPhotoAuthor' }
+        googleMapsUri: { type: [string, 'null'], format: uri }
     RoomListItem:
       type: object
       required: [id, type, status, decisionMode, participantCount, updatedAt, myRole, myMemberId]
@@ -17780,6 +17880,14 @@ components:
         attribution:
           type: [string, 'null']
           description: Provider terms survive an editor touching the list (FR-INGEST-014).
+        authorAttributions:
+          type: array
+          description: Per-photo provider credits that must be rendered with this image.
+          items: { $ref: '#/components/schemas/ProviderPhotoAuthor' }
+        googleMapsUri:
+          type: [string, 'null']
+          format: uri
+          description: Provider source link for this photo, when supplied.
         isCover: { type: boolean, description: At most one per place. }
         sourceType: { type: string, enum: [editorial, provider, community, google_derived] }
         createdAt: { type: [string, 'null'], format: date-time }
