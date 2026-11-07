@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { useState } from 'react'
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { delay, http, HttpResponse } from 'msw'
@@ -310,6 +311,21 @@ describe('submission photo review', () => {
     expect(screen.getByRole('checkbox', { name: 'Giữ ảnh 1' })).toBeChecked()
   })
 
+  it('discards choices when switching away even before the next detail loads', async () => {
+    server.use(
+      http.get(`/v1/cms/place-submissions/${OTHER}`, async () => {
+        await delay('infinite')
+        return HttpResponse.json(detail(OTHER))
+      }),
+    )
+    const { user, keep, rerender } = await open()
+    await user.click(keep)
+    rerender(<SubmissionReviewDrawer submissionId={OTHER} onClose={vi.fn()} />)
+    expect(screen.queryByRole('checkbox', { name: /Giữ ảnh/ })).not.toBeInTheDocument()
+    rerender(<SubmissionReviewDrawer submissionId={ID} onClose={vi.fn()} />)
+    expect(await screen.findByRole('checkbox', { name: 'Giữ ảnh 1' })).toBeChecked()
+  })
+
   it.each([403, 404, 503, 0])(
     'renders preview failure %s without loading an original, with retry where permitted',
     async (status) => {
@@ -388,4 +404,50 @@ describe('submission photo review', () => {
       'Ảnh đóng góp',
     )
   })
+
+  it.each(['approved', 'merged'] as const)(
+    'discards the closed review session and keeps all server photos on reopening for %s',
+    async (decision) => {
+      function ReviewSession() {
+        const [submissionId, setSubmissionId] = useState<string | null>(ID)
+        return (
+          <>
+            <button onClick={() => setSubmissionId(ID)}>Reopen submission</button>
+            <SubmissionReviewDrawer
+              submissionId={submissionId}
+              onClose={() => setSubmissionId(null)}
+            />
+          </>
+        )
+      }
+      const user = userEvent.setup()
+      renderWithProviders(<ReviewSession />)
+      await user.click(await screen.findByRole('checkbox', { name: 'Giữ ảnh 1' }))
+      await user.click(screen.getAllByRole('button', { name: 'Đóng' }).at(-1)!)
+      await user.click(screen.getByRole('button', { name: 'Ở lại trang' }))
+      expect(screen.getByRole('checkbox', { name: 'Giữ ảnh 1' })).not.toBeChecked()
+      await user.click(screen.getAllByRole('button', { name: 'Đóng' }).at(-1)!)
+      await user.click(screen.getByRole('button', { name: 'Rời đi và bỏ thay đổi' }))
+      expect(screen.queryByRole('dialog', { name: 'Kiểm duyệt đề xuất' })).not.toBeInTheDocument()
+      expect(mockDb.decisions).toHaveLength(0)
+      expect(mockDb.reviewSaves).toHaveLength(0)
+
+      await user.click(screen.getByRole('button', { name: 'Reopen submission' }))
+      expect(await screen.findByRole('checkbox', { name: 'Giữ ảnh 1' })).toBeChecked()
+      expect(screen.getByRole('checkbox', { name: 'Giữ ảnh 2' })).toBeChecked()
+      await reason(user)
+      if (decision === 'merged') {
+        await user.type(screen.getByLabelText(/Tìm địa điểm để gộp vào/), 'Chào')
+        await user.click(await screen.findByRole('button', { name: /Chào Bạn/ }))
+      }
+      await user.click(
+        screen.getByRole('button', { name: decision === 'approved' ? 'Duyệt' : 'Gộp' }),
+      )
+      await waitFor(() => expect(mockDb.decisions).toHaveLength(1))
+      expect(mockDb.decisions[0]).toMatchObject({
+        decision,
+        approvedPhotoIds: photos.map((photo) => photo.id),
+      })
+    },
+  )
 })

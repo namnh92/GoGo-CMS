@@ -416,6 +416,11 @@ Lựa chọn áp dụng khi ra quyết định, không nằm trong bản nháp b
 cầu kiểm tra/chọn lại ảnh. Có trạng thái tải/rỗng/không còn ảnh/lỗi/403/mất mạng
 và thử lại; blob riêng tư bị huỷ khi đóng, đổi đề xuất hoặc quyết định thành công.
 
+Các ảnh bỏ chọn chỉ thuộc phiên kiểm duyệt đang mở: lưu bổ sung hoặc tải lại
+chi tiết giữ lựa chọn; “Rời đi và bỏ thay đổi” hay đổi đề xuất kết thúc phiên
+và xoá lựa chọn. Mở lại cùng đề xuất bắt đầu từ ảnh máy chủ trả về, không giữ
+các ảnh đã bỏ chọn trong phiên trước.
+
 Các route ảnh mới được chuẩn hoá trong telemetry bằng path template; không ghi
 ID ảnh, URL hay nội dung ảnh vào sự kiện mới. Kiểm thử local không thay nghiệm
 thu cms-dev: cần moderator mở đóng góp có ảnh, xem lớn, bỏ một ảnh, duyệt/gộp
