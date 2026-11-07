@@ -2263,6 +2263,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/place-contribution-drafts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List own unexpired drafts (registered users only)
+         * @description Bounded collection, at most 20 live drafts. Private, no-store. Stable UUID order.
+         */
+        get: operations["listPlaceContributionDrafts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/place-contribution-drafts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Resume own draft (registered users only) */
+        get: operations["getPlaceContributionDraft"];
+        /**
+         * Save complete draft snapshot (registered users only)
+         * @description Owned photos are claimed and copied to private retained storage through draft expiry. Client-generated UUID. expectedVersion 0 creates, otherwise matches the current version; success increments it. 30-day sliding expiry, at most 20 live drafts. Draft enrichment fields are optional. No provider content or resolution token is persisted. Private no-store; optimistic version handles retries without retaining free text in replay storage. Bill photos require enrichment.billPhotoPublicConsent=true (400 with field error otherwise). Only authorised moderators can preview pending bill images. All menu/bill photos are public contributions: explicitly approved photos become userPhotos with uploader attribution, never official gallery/cover; moderators can drop any photo.
+         */
+        put: operations["savePlaceContributionDraft"];
+        post?: never;
+        /** Delete own draft (registered users only) */
+        delete: operations["deletePlaceContributionDraft"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/place-submissions": {
         parameters: {
             query?: never;
@@ -2301,13 +2345,60 @@ export interface paths {
          *     All registered contributors recorded on a deduplicated proposal see
          *     that same proposal and its current decision once per account. Original
          *     submitters remain included. Earlier deduplicated contributors whose
-         *     identities were never stored cannot be backfilled. No provider calls.
-         *     Names come from the result place or review draft when available;
-         *     missing names and photos are omitted. Photos are approved editorial
-         *     or community catalogue media only. Raw moderator reasons, contributor
-         *     notes, reviewer identities, room IDs and other users' PII are excluded.
+         *     identities were never stored cannot be backfilled. ZERO provider calls:
+         *     list reads only stored display snapshots, captured on submission from the
+         *     signed resolved candidate. Snapshots older than 30 days or missing are
+         *     omitted with providerStatus=deferred; open detail for a budgeted refresh.
+         *     Approved/merged rows use canonical GoGo data without provider calls.
+         *     Names prefer result place/review draft, then snapshot; addressShort prefers
+         *     result place address, then snapshot short address (full address fallback).
+         *     categoryKey prefers active submitted taxonomy, then the snapshot category
+         *     validated against taxonomy when fetched. No automatic photo lookup or bytes.
+         *     Render attribution whenever Google display facts are used; never present
+         *     them as GoGo verified facts. providerDisplay.photo is a JSON proxy URL,
+         *     not an image src; proxy response credit is authoritative (ADR-0043).
+         *     Missing facts are omitted. photoUrl remains approved editorial/community
+         *     catalogue media only. No moderator notes, reviewer identities, room IDs,
+         *     contributor inputs or other users' PII. Cache-Control: no-store.
+         *     Rate limit: 10/minute/IP+actor.
          */
         get: operations["listMyPlaceSubmissions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/place-submissions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read an account contribution for the shared pending-place detail screen
+         * @description Registered original submitter or recorded contributor only. Unknown and
+         *     inaccessible IDs return the same 404 SUBMISSION_NOT_FOUND, before any
+         *     provider call. Guest/admin actors receive 403. Fresh snapshots (at most 30
+         *     days old) require no provider calls. Only pending/rejected rows with missing
+         *     or expired snapshots may refresh quality Details within the shared display
+         *     budget. An atomic 60-second lease prevents concurrent refresh purchases;
+         *     successful refreshes are reused for 30 days. A six-second deadline preserves
+         *     completed facts even if optional photo lookup times out and is canceled.
+         *     Approved/merged use canonical GoGo data without provider calls. Same
+         *     attribution and lazy photo proxy rules as list. pending is the client i18n
+         *     key for "Đang chờ duyệt". approved/merged carry placeId when the result
+         *     still exists, allowing navigation to the canonical shared detail.
+         *     contribution contains only the original submitter's own unverified input;
+         *     omitted for other contributors. Enrichment follows #796 when deployed;
+         *     historical rows without enrichment omit it. No moderator draft, decision
+         *     note, reviewer, room, contributor identity, upload URL or private bytes.
+         *     Rate limit: 30/minute/IP+actor. Cache-Control: no-store.
+         */
+        get: operations["getMyPlaceSubmission"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2325,7 +2416,7 @@ export interface paths {
         };
         /**
          * Poll a submission (recorded contributor or original submitter only)
-         * @description Original submitter (registered user or guest) or recorded registered contributor only. `rejectionReason` is a stable public key when rejected; absent for historical decisions without a key and for other statuses. Internal moderation notes are never returned.
+         * @description Original submitter (registered user or guest) or recorded registered contributor only. `rejectionReason` is a stable public key when rejected; absent for historical decisions without a key and for other statuses. Internal moderation notes are never returned. Enrichment and verificationStatus are returned only to the original submitter; deduplicated contributors receive status metadata without private text or evidence references.
          */
         get: operations["getPlaceSubmission"];
         put?: never;
@@ -2445,7 +2536,7 @@ export interface paths {
          *
          *     #786 / ADR-0043: with provider photos enabled, approval retains at most one current first Google photo with provider provenance and per-photo credits. No image or references were stored while pending. Disabled or confirmed no-photo results permit approval without imagery; photo budget, provider or storage failures return retryable `503 SUBMISSION_PHOTO_UNAVAILABLE` and leave the submission pending. Google may change photo order since preview.
          *
-         *     `rejected` creates no place. `merged` points the proposal at an existing one and attaches the explicitly selected photos to it.
+         *     `rejected` creates no place. `merged` points the proposal at an existing one and attaches the explicitly selected photos to it. Every approved menu/bill photo is public in userPhotos with uploader credit, never in the official gallery or cover. Unselected menu photos are rejected and cleaned after seven days; rejected bills and their derivatives are queued for immediate cleanup. These menu/bill rules take precedence over the general cleanup description on approvedPhotoIds. Accepted menu/bill evidence adds 20 credits once; approval also grants the 50-credit base.
          *
          *     Approval is not verification and not publication: the administrative mapping is resolved from the new place's own coordinate and is never `VERIFIED`, and the publication blocker stays until somebody confirms it (ADM-017, GoGo-BE#525).
          */
@@ -3678,7 +3769,7 @@ export interface paths {
          *
          *     It is a separate route from `resolveGoogleMapsLink` for two reasons, neither of them the response shape. **Who pays:** the public route is unauthenticated and rate-limited on IP without an edge-client-IP hop, so behind Cloudflare every caller in the world shares one bucket of 10/minute, and an editor entering a morning's worth of places would be throttled by strangers. This route keys on `ip+actor`, 20/minute. **Who is asking:** a resolution that misses cache costs a provider request, and a request that costs money should name the person who spent it.
          *
-         *     Requires `place.write`. Nothing is written — this is a preview, and the place is created by `cmsCreatePlace` carrying the `googlePlaceId` this returned.
+         *     Requires `place.write`. The catalogue is unchanged by this preview; a short-lived server-side resolution snapshot may be retained until its token expires (ADR-0048). The place is created by `cmsCreatePlace` carrying the `googlePlaceId` this returned.
          *
          *     Takes either a link or a Place ID; see the request body. A `CANDIDATE_SELECTION` answer is meant to be resolved by sending one of its `candidates[].googlePlaceId` straight back here.
          */
@@ -7686,11 +7777,8 @@ export interface components {
              * @description UTC ledger timestamp, including all six fractional digits.
              */
             createdAt: string;
-            /**
-             * @description Signed credits; +50 for submission_approved, -1 for message_spent.
-             * @enum {integer}
-             */
-            delta: 50 | -1;
+            /** @description Signed credits; +50 or +70 for approval, +20 for accepted evidence on merge (ledger reason submission_approved), -1 for message_spent. Bonus requires approved menu/bill evidence (#794). Values are extensible; consumers must accept unknown integer deltas. */
+            delta: number;
             /** @enum {string} */
             reason: "submission_approved" | "message_spent";
             /**
@@ -8287,8 +8375,10 @@ export interface components {
             curatedRank?: number;
             /** Format: date-time */
             freshnessCheckedAt?: string;
-            /** @description Ordered gallery; empty when the place has no approved imagery. */
+            /** @description Official place gallery; user contributions are returned separately in userPhotos. */
             photos?: components["schemas"]["PlacePhoto"][];
+            /** @description Ảnh từ người dùng: approved community/review contributions, credited to the original uploader. Includes menu and bill photos from the wizard. Empty before approval. Separate from the official photos gallery and cover; only an editor/moderator may promote a photo in a separately tracked feature. */
+            readonly userPhotos?: components["schemas"]["PlacePhoto"][];
             taxonomies?: {
                 kind?: string;
                 key?: string;
@@ -8597,7 +8687,7 @@ export interface components {
             reasonCodes?: string[];
             /** Format: uuid */
             existingPlaceId?: string;
-            /** @description Opaque, short-lived proof that this request verified the Google Place ID with the provider (#337). Present only when the answer came from a live provider check and the place is operational; send it back on `POST /place-submissions` to skip the duplicate verification fetch. It carries no provider content and authorises nothing — an expired or edited token is rejected with a retryable `RESOLUTION_TOKEN_INVALID` and the client resolves again. */
+            /** @description Opaque, short-lived proof that this request verified the Google Place ID with the provider (#337). Present only when the answer came from a live provider check and the place is operational; send it back on `POST /place-submissions` to skip the duplicate verification fetch. It carries a signed resolution id referencing a short-lived server-side display snapshot for persistence at submit (ADR-0048), never display facts, raw payload or photo references, and authorises nothing. An expired or edited token, or an unavailable resolution record, is rejected with a retryable `RESOLUTION_TOKEN_INVALID` and the client resolves again. */
             resolutionToken?: string;
             /**
              * @description ADM-017 — the two current administrative levels the candidate's coordinate falls in, so a create form can open on a real identity instead of two empty boxes.
@@ -8655,6 +8745,59 @@ export interface components {
                 address?: string;
                 confidence?: number;
             }[];
+        };
+        /** @description Integer minor units; max >= min. Free requires both amounts zero. Omit unknown price. */
+        ContributionPrice: {
+            min: number;
+            max: number;
+            /** @enum {string} */
+            currency: "VND";
+            /** @enum {string} */
+            unit: "per_person" | "per_group" | "per_item" | "per_hour" | "per_night" | "free";
+        };
+        ContributionRating: {
+            rating: number;
+            chipKeys: string[];
+        };
+        /** @description Unverified user claims. Stable active taxonomy keys only: purposes use suitability, vibes mood, amenities amenity, service/space chips checkin_tag. Keys are managed by CMS and checked against enabled taxonomy rows at request time. Unknown price/amenities omitted. Never automatically copied to catalogue, including on approval. Menu photos use private submission-photo processing; bills require explicit billPhotoPublicConsent=true on each save or submit (400 field error otherwise). Every menu/bill photo is a public contribution, attached to the place with uploader attribution only after explicit moderator approval. Moderators can drop any photo, including personal data. Draft expiry deletes retained photos. No DLP or external personal-data processing provider. */
+        ContributionEnrichmentDraft: {
+            price?: components["schemas"]["ContributionPrice"];
+            purposeKeys?: string[];
+            vibeKeys?: string[];
+            /** @description Keys are active amenity taxonomy keys managed by CMS. False is explicit absence; omitted is unknown. No closed key enum. */
+            amenities?: {
+                [key: string]: boolean;
+            };
+            /** @description Optional for menu-only requests. Must be true when saving or submitting any bill photo. The user confirms the photo may be shown publicly after moderator approval and that they removed or hid personal information themselves. Missing or false with bills returns 400 VALIDATION_FAILED, field_errors field enrichment.billPhotoPublicConsent. */
+            billPhotoPublicConsent?: boolean;
+            /** @description Unique mediaId; private owner claim and sanitisation before CMS access. Bills require explicit consent. All menu/bill photos become userPhotos only after explicit approval with uploader attribution; never official gallery/cover. Draft photos are retained to draft expiry and transferred on submission. */
+            photos?: {
+                /** Format: uuid */
+                mediaId: string;
+                /** @enum {string} */
+                kind: "menu" | "bill";
+            }[];
+            recommendedDishes?: string;
+            visitTips?: string;
+            service?: components["schemas"]["ContributionRating"];
+            space?: components["schemas"]["ContributionRating"];
+        };
+        ContributionEnrichment: components["schemas"]["ContributionEnrichmentDraft"] & {
+            purposeKeys: string[];
+            vibeKeys: string[];
+        };
+        ContributionDraft: {
+            /** Format: uuid */
+            id: string;
+            googlePlaceId: string;
+            enrichment: components["schemas"]["ContributionEnrichmentDraft"];
+            /** @enum {string} */
+            verificationStatus: "unverified";
+            version: number;
+            /** Format: date-time */
+            updatedAt: string;
+            /** Format: date-time */
+            expiresAt: string;
         };
         SubmissionResult: {
             /** @enum {string} */
@@ -8973,8 +9116,18 @@ export interface components {
         MyPlaceSubmission: {
             /** Format: uuid */
             id: string;
-            /** @description Available stored name, omitted when unknown. */
+            /** @description Stored GoGo name or fresh submission snapshot fallback; use providerDisplay attribution for the fallback. */
             name?: string;
+            /** @description Catalogue address or fresh snapshot short address; omitted when unknown. */
+            addressShort?: string;
+            /** @description Active submitted key or Google-derived snapshot category validated when fetched. */
+            categoryKey?: string;
+            /**
+             * @description Display availability; never infer submission status or closure from provider failure. Deferred means no fresh provider projection; pending/rejected rows can be opened in detail for budgeted hydration. Approved/merged use canonical fields.
+             * @enum {string}
+             */
+            providerStatus?: "ok" | "budget_exhausted" | "not_found" | "identity_mismatch" | "unavailable" | "deferred";
+            providerDisplay?: components["schemas"]["SubmissionProviderDisplay"];
             /**
              * Format: uri
              * @description Approved GoGo catalogue photo, omitted when unavailable or hosting is unconfigured.
@@ -8998,6 +9151,114 @@ export interface components {
              * @description Decision timestamp, omitted before a decision.
              */
             decidedAt?: string;
+        };
+        MyPlaceSubmissionDetail: {
+            /** Format: uuid */
+            id: string;
+            /** @description Stored GoGo name or fresh submission snapshot fallback; use providerDisplay attribution for the fallback. */
+            name?: string;
+            /** @description Catalogue address or fresh snapshot short address; omitted when unknown. */
+            addressShort?: string;
+            /** @description Active submitted key or Google-derived snapshot category validated when fetched. */
+            categoryKey?: string;
+            /**
+             * @description Display availability; never infer submission status or closure from provider failure. Deferred means no fresh provider projection; pending/rejected rows can be opened in detail for budgeted hydration. Approved/merged use canonical fields.
+             * @enum {string}
+             */
+            providerStatus?: "ok" | "budget_exhausted" | "not_found" | "identity_mismatch" | "unavailable" | "deferred";
+            providerDisplay?: components["schemas"]["SubmissionProviderDisplay"];
+            /**
+             * Format: uri
+             * @description Approved GoGo catalogue photo, omitted when unavailable or hosting is unconfigured.
+             */
+            photoUrl?: string;
+            /** @enum {string} */
+            status: "pending" | "approved" | "rejected" | "merged";
+            /** @description Stored public key for rejected submissions; omitted for historical rows without a key. Raw CMS reasons are private. */
+            rejectionReason?: components["schemas"]["SubmissionRejectionReason"];
+            /**
+             * Format: uuid
+             * @description Result place for approved or merged submissions, omitted if the place has been deleted.
+             */
+            placeId?: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            /**
+             * Format: date-time
+             * @description Decision timestamp, omitted before a decision.
+             */
+            decidedAt?: string;
+            contribution?: components["schemas"]["MySubmissionContribution"];
+        };
+        /** @description Owner-approved submission display snapshot (ADR-0048), reused for at most 30 days. Render Google Maps attribution; never promote to catalogue facts or cache on clients. Photo is a locally constructed lazy BFF reference with empty author credits until the proxy responds; proxy credits are authoritative. No photo refs or bytes are persisted in the snapshot. */
+        SubmissionProviderDisplay: {
+            /** @constant */
+            source: "google_places";
+            /** Format: date-time */
+            fetchedAt: string;
+            attributions: string[];
+            /** Format: uri */
+            googleMapsUri: string | null;
+            name: string;
+            addressShort: string;
+            categoryKey?: string;
+            googleRating: number | null;
+            googleRatingCount: number;
+            /** @description Weekly local hours; an empty array means unknown, never closed. */
+            openingHours: {
+                dayOfWeek: number;
+                openMinute: number;
+                closeMinute: number;
+                isOvernight: boolean;
+            }[];
+            photo?: components["schemas"]["CandidateProviderPhotoReference"];
+        };
+        MySubmissionContribution: {
+            /** @constant */
+            verificationStatus: "unverified";
+            categoryKey?: string;
+            estimatedPrice?: {
+                min: number;
+                max: number;
+                /** @constant */
+                currency: "VND";
+                unit: string;
+            };
+            vibeKeys?: string[];
+            note?: string;
+            enrichment?: components["schemas"]["MySubmissionEnrichment"];
+        };
+        /** @description Original submitter's own */
+        MySubmissionEnrichment: {
+            price?: {
+                min: number;
+                max: number;
+                /** @constant */
+                currency: "VND";
+                /** @enum {string} */
+                unit: "per_person" | "per_group" | "per_item" | "per_hour" | "per_night" | "free";
+            };
+            purposeKeys?: string[];
+            vibeKeys?: string[];
+            amenities?: {
+                [key: string]: boolean;
+            };
+            photos?: {
+                /** Format: uuid */
+                mediaId: string;
+                /** @enum {string} */
+                kind: "menu" | "bill";
+            }[];
+            recommendedDishes?: string;
+            visitTips?: string;
+            service?: components["schemas"]["MySubmissionExperienceRating"];
+            space?: components["schemas"]["MySubmissionExperienceRating"];
+        };
+        MySubmissionExperienceRating: {
+            rating: number;
+            chipKeys: string[];
         };
         PlaceSubmissionSummary: {
             /** Format: uuid */
@@ -9095,6 +9356,11 @@ export interface components {
             height: number;
             /** @enum {string} */
             status: "pending" | "approved" | "rejected";
+            /**
+             * @description Bill classification is durable; ordinary submission photos use menu.
+             * @enum {string}
+             */
+            kind?: "menu" | "bill";
             /** @description Root-relative API URL for an authenticated CMS fetch; null after decision or removal. */
             url: string | null;
         };
@@ -9121,8 +9387,11 @@ export interface components {
             rejectionReason?: components["schemas"]["SubmissionRejectionReason"];
             /** @description Sanitised photos with bearer-authenticated CMS preview URLs. Fetch with the CMS Authorization header; never load from the public asset host. No original keys. */
             photos?: components["schemas"]["SubmissionPhoto"][];
-            /** @description What the contributor sent, untouched by any review. */
+            /** @description What the contributor sent, untouched by any review. Never automatically promoted to place facts. */
             contribution: {
+                enrichment?: components["schemas"]["ContributionEnrichment"];
+                /** @enum {string} */
+                verificationStatus?: "unverified";
                 categoryKey?: string;
                 estimatedPrice?: {
                     min?: number;
@@ -10364,7 +10633,7 @@ export interface components {
             }[];
         };
         AssistantStatus: {
-            /** @description No-expiry contributor credits. Prospective registered-user submission approval grants +50 once. Daily allowance first, then one credit per accepted user send (202), including later provider failure. Replay/rejection costs zero; credits never bypass burst/readiness/budget gates. */
+            /** @description No-expiry contributor credits. Prospective registered-user submission approval grants +50 once, or +70 with at least one approved menu/bill photo; merge grants +20 only when menu/bill evidence is accepted. All bill uploads require public consent; approved menu/bill photos appear in userPhotos with uploader credit, separately from the official gallery/cover. Daily allowance first, then one credit per accepted user send (202), including later provider failure. Replay/rejection costs zero; credits never bypass burst/readiness/budget gates. */
             creditBalance: number;
             /** @description `enabled` — sending works. `disabled` — kill switch off (`assistant.enabled`), or the environment cannot take new replies (for example its spending limit is reached). `limit_reached` — this account's daily messages and contributor credits are both spent until `resetsAt`. Unknown values mean "cannot send now". */
             state: string;
@@ -10800,6 +11069,14 @@ export interface components {
         };
         /** @description The allowlisted export document served by `GET /me/export` and by a redeemed secure export (`POST /me/exports/{id}/download`) — one shared collector, so both carry the same sections. Only the sections whose shape this contract pins are listed here; the rest of the allowlist (profile, memberships, preferences, votes, saved, reviews, reviewReactions, notificationSettings) is described on `exportMyData`. Unknown sections may appear; ignore them. */
         UserExportDocument: {
+            contributionDrafts?: components["schemas"]["ContributionDraft"][];
+            contributionEnrichments?: {
+                /** Format: uuid */
+                submissionId: string;
+                enrichment: components["schemas"]["ContributionEnrichment"] | null;
+                /** @enum {string} */
+                verificationStatus: "unverified";
+            }[];
             assistantCreditBalance?: number;
             /** Format: date-time */
             exportedAt?: string;
@@ -15396,7 +15673,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             429: components["responses"]["RateLimited"];
-            /** @description PLACE_PROVIDER_UNAVAILABLE — GoGo cannot verify places right now: no working provider credential, an API not enabled, quota exhausted, or the provider is down. A statement about this deployment, not about the link, so the client must not present it as "địa điểm không tồn tại" (GoGo-BE#279). `retryable` is true; the envelope deliberately names neither the provider nor the fault. */
+            /** @description PLACE_PROVIDER_UNAVAILABLE — GoGo cannot verify places right now: no working provider credential, an API not enabled, quota exhausted, or the provider is down, or the short-lived resolution record cannot be stored. A statement about this deployment, not about the link, so the client must not present it as "địa điểm không tồn tại" (GoGo-BE#279). `retryable` is true; the envelope deliberately names neither the provider nor the fault. */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -15405,6 +15682,138 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
+        };
+    };
+    listPlaceContributionDrafts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description All own live drafts */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["ContributionDraft"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getPlaceContributionDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Own live draft, private no-store */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContributionDraft"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    savePlaceContributionDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    googlePlaceId: string;
+                    expectedVersion: number;
+                    enrichment: components["schemas"]["ContributionEnrichmentDraft"];
+                };
+            };
+        };
+        responses: {
+            /** @description Saved draft */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContributionDraft"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description DRAFT_MODIFIED or DRAFT_LIMIT_REACHED */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            /** @description SUBMISSION_EVIDENCE_BLOCKED until private claim and sanitise pipeline */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    deletePlaceContributionDraft: {
+        parameters: {
+            query: {
+                version: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Draft deleted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        deleted: true;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     submitPlace: {
@@ -15417,6 +15826,7 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
+                    enrichment?: components["schemas"]["ContributionEnrichment"];
                     googlePlaceId: string;
                     /** Format: uuid */
                     roomId?: string;
@@ -15431,7 +15841,7 @@ export interface operations {
                     note?: string;
                     /** @description Optional media ids from POST /uploads purpose place_photo, owned by this actor. JPEG/PNG/WebP only, at most 10 MiB each; actual bytes and size are verified. HEIC must be converted by the client. Originals are never served. Photos stay private until explicitly selected by staff at the submission decision. Deduplicated submissions retain each photo's actual uploader; at most five non-rejected photos per pending submission, including concurrent requests. */
                     mediaIds?: string[];
-                    /** @description The `resolutionToken` from the preceding `POST /places/resolve-google-maps-link` (#337). Optional — without it the server verifies the place with the provider again, which is the behaviour before this field existed. */
+                    /** @description The `resolutionToken` from the preceding `POST /places/resolve-google-maps-link` (#337). Optional — without it the server verifies the place with the provider again with core Details and snapshots only those fetched facts; it does not buy rating or opening hours for the snapshot. A signed resolution id references an allowlisted server-side snapshot with the same expiry as the token. The snapshot is persisted on the submission only on successful submission; legacy identity-only tokens remain valid without a snapshot. */
                     resolutionToken?: string;
                 };
             };
@@ -15504,6 +15914,35 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    getMyPlaceSubmission: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current authorized contribution detail. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyPlaceSubmissionDetail"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
         };
     };
     getPlaceSubmission: {
@@ -15531,6 +15970,9 @@ export interface operations {
                         googlePlaceId?: string;
                         /** Format: uuid */
                         placeId?: string;
+                        enrichment?: components["schemas"]["ContributionEnrichment"];
+                        /** @enum {string} */
+                        verificationStatus?: "unverified";
                         submissionCount?: number;
                         /** Format: date-time */
                         createdAt?: string;
@@ -18197,7 +18639,7 @@ export interface operations {
             };
             403: components["responses"]["Forbidden"];
             429: components["responses"]["RateLimited"];
-            /** @description PLACE_PROVIDER_UNAVAILABLE — GoGo cannot verify places right now. A statement about this deployment, not about the link, so the console must not present it as "không tìm thấy địa điểm" (GoGo-BE#279). `retryable` is true. */
+            /** @description PLACE_PROVIDER_UNAVAILABLE — GoGo cannot verify places right now. A statement about this deployment, not about the link, so the console must not present it as "không tìm thấy địa điểm" (GoGo-BE#279). This also covers failure to store the short-lived resolution record. `retryable` is true. */
             503: {
                 headers: {
                     [name: string]: unknown;

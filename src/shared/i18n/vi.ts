@@ -4100,6 +4100,31 @@ export const vi = {
   'configReadiness.finding.tag-missing': 'Thiếu tag infra-readable',
   'configReadiness.finding.tag-misplaced': 'Tag infra-readable đặt sai chỗ',
   'configReadiness.finding.dependency-planned': 'Phụ thuộc khoá dự kiến',
+  'priceUnit.free': 'Miễn phí',
+  'priceUnit.per_group': 'nhóm',
+  'submissions.wizard.title': 'Dữ liệu bổ sung từ người đóng góp',
+  'submissions.wizard.empty': 'Không có dữ liệu wizard',
+  'submissions.wizard.contractGap':
+    'Chưa thể duyệt hoặc gộp đóng góp wizard: API chưa hỗ trợ giữ/bỏ từng thông tin. Dữ liệu bên dưới chỉ để xem, chưa được ghi vào địa điểm.',
+  'submissions.wizard.unknownTaxonomy': 'Nhãn chưa có: {key}',
+  'submissions.wizard.price': 'Giá và đơn vị',
+  'submissions.wizard.purposes': 'Mục đích',
+  'submissions.wizard.vibes': 'Bầu không khí / tâm trạng',
+  'submissions.wizard.yes': 'Có',
+  'submissions.wizard.no': 'Không',
+  'submissions.wizard.dishes': 'Món nên thử',
+  'submissions.wizard.tips': 'Mẹo khi ghé thăm',
+  'submissions.wizard.service': 'Đánh giá dịch vụ của người đóng góp',
+  'submissions.wizard.space': 'Đánh giá không gian của người đóng góp',
+  'submissions.wizard.publicPhotos':
+    'Ảnh thực đơn/hóa đơn đã được người dùng đồng ý công khai. Không có DLP hay tự động che thông tin cá nhân; kiểm tra và bỏ từng ảnh không phù hợp. Ảnh được duyệt là ảnh NGƯỜI DÙNG trong phần đánh giá, có ghi công người tải lên; không vào thư viện chính thức hay ảnh bìa. Chỉ biên tập viên/kiểm duyệt viên mới có thể đưa ảnh vào thư viện chính thức qua thao tác riêng.',
+  'submissions.wizard.menu': 'Ảnh thực đơn',
+  'submissions.wizard.bill': 'Ảnh hóa đơn',
+  'submissions.wizard.credit':
+    'Tín dụng dự kiến khi duyệt: cơ bản {base} + thưởng ảnh {bonus} = {total}. Khi gộp: {bonus}. Khi từ chối: 0.',
+  'submissions.wizard.creditHint':
+    'Mức theo hợp đồng; API chưa trả số tín dụng thực nhận. Chỉ thưởng ảnh thực đơn/hóa đơn được giữ, tối đa một lần; việc cấp tín dụng do máy chủ quyết định.',
+  'submissions.wizard.guestCredit': 'Khách chưa đăng ký không được cấp tín dụng.',
 } as const
 
 export type MessageKey = keyof typeof vi

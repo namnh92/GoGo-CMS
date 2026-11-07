@@ -9,7 +9,7 @@ import { Button } from '@/shared/ui/Button'
 import { Badge } from '@/shared/ui/Badge'
 import { Select, TextArea, TextInput } from '@/shared/ui/Field'
 import { Drawer } from '@/shared/ui/Overlay'
-import { AsyncBoundary, ErrorState } from '@/shared/ui/State'
+import { AsyncBoundary, ErrorState, PermissionDeniedState, OfflineState } from '@/shared/ui/State'
 import { UnsavedChangesDialog } from '@/shared/ui/UnsavedChangesGuard'
 import { useToast } from '@/shared/ui/Toast'
 import { CloseIcon } from '@/shared/ui/icons'
@@ -52,6 +52,9 @@ import {
 } from './reviewForm'
 import { styles } from './submissionReview.style'
 import { SubmissionPhotos } from './submissionPhotos.view'
+import { SubmissionEnrichment } from './submissionEnrichment.view'
+import { submissionCreditPreview } from './submissionCredits'
+import { useOnline } from '@/shared/ui/useOnline'
 
 const REJECTION_LABELS = {
   duplicate_place: 'submissions.rejectionReason.duplicate_place',
@@ -125,6 +128,7 @@ function SubmissionReviewSession({
   const toast = useToast()
   const queryClient = useQueryClient()
   const { can } = useSession()
+  const online = useOnline()
 
   const [form, setForm] = useState<ReviewForm>(EMPTY_REVIEW_FORM)
   const [baseline, setBaseline] = useState<ReviewForm>(EMPTY_REVIEW_FORM)
@@ -163,7 +167,7 @@ function SubmissionReviewSession({
   const taxonomies = useQuery({
     queryKey: queryKeys.taxonomies.all,
     queryFn: ({ signal }) => fetchTaxonomies({}, signal),
-    enabled: Boolean(submissionId) && can('submission.decide'),
+    enabled: Boolean(submissionId) && can('submission.read'),
     staleTime: 5 * 60_000,
   })
   const taxonomyById = useMemo(
@@ -325,6 +329,10 @@ function SubmissionReviewSession({
           ...(reason.trim() ? { reason: reason.trim() } : {}),
         })
       }
+      // 7.5.0-alpha.1 cannot persist per-fact selections; never silently approve wizard claims.
+      if (detail.data?.contribution.enrichment) {
+        throw new Error(t('submissions.wizard.contractGap'))
+      }
       return decideSubmission(submissionId!, {
         decision,
         reason: reason.trim(),
@@ -382,6 +390,13 @@ function SubmissionReviewSession({
     !submissionRejectionReasonSchema.safeParse(rejectionReason).success ||
     (reason.trim().length > 0 && reasonTooShort)
   const decisionPending = decide.isPending || save.isPending
+  const wizardApprovalBlocked = Boolean(data?.contribution.enrichment)
+  const credits = submissionCreditPreview(
+    data?.fromRegisteredUser ?? false,
+    data?.contribution.enrichment,
+    photos,
+    excludedPhotoIds,
+  )
 
   const close = () => {
     if (dirty || photoDirty) {
@@ -389,6 +404,14 @@ function SubmissionReviewSession({
       return
     }
     onClose()
+  }
+
+  if (!can('submission.read')) {
+    return (
+      <Drawer open onClose={onClose} width="lg" title={t('submissions.reviewTitle')}>
+        <PermissionDeniedState />
+      </Drawer>
+    )
   }
 
   return (
@@ -408,7 +431,7 @@ function SubmissionReviewSession({
             {canDecide ? (
               <Button
                 variant="secondary"
-                disabled={!dirty || save.isPending || decide.isPending}
+                disabled={!online || !dirty || save.isPending || decide.isPending}
                 loading={save.isPending}
                 onClick={() => save.mutate()}
               >
@@ -418,6 +441,7 @@ function SubmissionReviewSession({
           </div>
         }
       >
+        {!online ? <OfflineState /> : null}
         <AsyncBoundary
           status={detail.status}
           error={detail.error}
@@ -548,15 +572,18 @@ function SubmissionReviewSession({
                 ) : null}
               </section>
 
+              <SubmissionEnrichment enrichment={submission.contribution.enrichment} />
+
               <SubmissionPhotos
                 key={photoKey}
                 submissionId={submission.id}
                 photos={photos}
+                enrichment={submission.contribution.enrichment}
                 canPreview={
                   can('submission.read') && submission.status === 'pending' && !decide.isSuccess
                 }
                 canSelect={Boolean(canDecide) && !decide.isSuccess}
-                disabled={decisionPending}
+                disabled={decisionPending || !online}
                 excludedIds={excludedPhotoIds}
                 onToggle={(id) =>
                   setPhotoSelection({
@@ -785,10 +812,20 @@ function SubmissionReviewSession({
                     </div>
                   ) : null}
 
+                  <p className={styles.note} aria-live="polite">
+                    {submission.fromRegisteredUser
+                      ? t('submissions.wizard.credit', credits)
+                      : t('submissions.wizard.guestCredit')}
+                  </p>
+                  {submission.fromRegisteredUser ? (
+                    <p className={styles.hint}>{t('submissions.wizard.creditHint')}</p>
+                  ) : null}
                   <div className={styles.footer}>
                     <Button
                       variant="success"
                       disabled={
+                        !online ||
+                        wizardApprovalBlocked ||
                         reasonTooShort ||
                         photoReviewRequired ||
                         decisionPending ||
@@ -802,7 +839,7 @@ function SubmissionReviewSession({
                     </Button>
                     <Button
                       variant="danger"
-                      disabled={rejectInvalid || decisionPending}
+                      disabled={!online || rejectInvalid || decisionPending}
                       loading={decide.isPending && decide.variables === 'rejected'}
                       onClick={() => decide.mutate('rejected')}
                     >
@@ -814,6 +851,8 @@ function SubmissionReviewSession({
                       // without one; and a target is chosen from the catalogue,
                       // never typed as a UUID.
                       disabled={
+                        !online ||
+                        wizardApprovalBlocked ||
                         reasonTooShort ||
                         mergeTarget === null ||
                         photoReviewRequired ||

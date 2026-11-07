@@ -384,7 +384,7 @@ cho nghiệm thu cms-dev.
 ### Lý do từ chối đóng góp (GoGo-CMS#281)
 
 Contract hiện tại vendor nguyên byte từ GoGo-BE `origin/re-design` tại
-`45d9d08` (sau #800), phiên bản `7.3.0-alpha.1`. Types sinh bằng
+`6cee137` (gồm #802), phiên bản `7.5.0-alpha.1`. Types sinh bằng
 `pnpm api:types`; drift gate và SHA-256 trong contract test pin cùng bản này.
 Đã cập nhật `PATH_TEMPLATES` với route ảnh provider mới, giữ thứ tự của contract.
 
@@ -430,6 +430,6 @@ Rollback UI cần giữ contract mới: console cũ không chọn ảnh sẽ b�
 
 ### Phiên bản phân loại (GoGo-CMS#285)
 
-Contract hiện tại: `7.3.0-alpha.1` từ BE `origin/re-design` sau #800.
+Contract hiện tại: `7.5.0-alpha.1` từ BE `origin/re-design` gồm #802.
 Màn Phân loại hiện phiên bản toàn cục và lần thay đổi cuối; mỗi write cập nhật
 metadata từ response. Chi tiết và nghiệm thu: [Phiên bản phân loại](docs/taxonomy-version.md).

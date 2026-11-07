@@ -4069,4 +4069,29 @@ export const en: Record<MessageKey, string> = {
   'configReadiness.finding.tag-missing': 'infra-readable tag missing',
   'configReadiness.finding.tag-misplaced': 'infra-readable tag misplaced',
   'configReadiness.finding.dependency-planned': 'Depends on a planned key',
+  'priceUnit.free': 'Free',
+  'priceUnit.per_group': 'group',
+  'submissions.wizard.title': 'Contributor enrichment',
+  'submissions.wizard.empty': 'No wizard enrichment',
+  'submissions.wizard.contractGap':
+    'Wizard approval and merge are unavailable: the API does not support keeping or dropping individual facts. The data below is read-only and is not written to the place.',
+  'submissions.wizard.unknownTaxonomy': 'Label unavailable: {key}',
+  'submissions.wizard.price': 'Price and unit',
+  'submissions.wizard.purposes': 'Purposes',
+  'submissions.wizard.vibes': 'Vibe / mood',
+  'submissions.wizard.yes': 'Yes',
+  'submissions.wizard.no': 'No',
+  'submissions.wizard.dishes': 'Recommended dishes',
+  'submissions.wizard.tips': 'Visit tips',
+  'submissions.wizard.service': 'Contributor service rating',
+  'submissions.wizard.space': 'Contributor space rating',
+  'submissions.wizard.publicPhotos':
+    'Users consented to menu/bill photos being PUBLIC. There is no DLP or automatic personal-data masking; inspect and drop unsuitable photos individually. Approved photos are USER photos in the review section with uploader credit, separate from the official gallery and cover. Only an editor/moderator can promote a photo to the official gallery through a separate action.',
+  'submissions.wizard.menu': 'Menu photo',
+  'submissions.wizard.bill': 'Bill photo',
+  'submissions.wizard.credit':
+    'Expected credits on approval: base {base} + photo bonus {bonus} = {total}. On merge: {bonus}. On rejection: 0.',
+  'submissions.wizard.creditHint':
+    'Contract rates; the API does not return the actual award. Only kept menu/bill evidence earns the one-time photo bonus; the server determines the grant.',
+  'submissions.wizard.guestCredit': 'Unregistered guests receive no credits.',
 }
