@@ -7,7 +7,7 @@ import { PATH_TEMPLATES } from './pathTemplates'
  * GoGo-CMS#238 — the only file that talks to the Sentry SDK (pinned by
  * `sentry-usage.test.ts`). Policy: GoGo-Infra ADR-0011, adopted by
  * `docs/adr/0005-bao-cao-loi-sentry.md`; every case of the vendored oracle
- * `__fixtures__/redaction-cases.v1.json` runs in `sentry.test.ts`.
+ * `__fixtures__/redaction-cases.v2.json` runs in `sentry.test.ts`.
  *
  * Structural limits (nothing to pattern-match, so nothing to miss):
  * - errors only — no tracing, no replay, no release-health sessions, no
@@ -171,6 +171,12 @@ const LONGEST_ENCODED_KEYWORD = 'share-links'.length * 3
 /** `room|rooms` carry a credential only when the segment looks like one and is not a uuid. */
 const ROOM_SEGMENT = /^[A-Za-z0-9_-]{6,64}$/
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+/**
+ * ADR-0011 D-9 / C-24: only a whole, raw `[name]` or `:name` segment is a
+ * template placeholder. Letters only: no later stage rewrites the name.
+ * Percent-encoded placeholders are credentials, not templates.
+ */
+const PLACEHOLDER_SEGMENT = /^(?:\[[A-Za-z]+\]|:[A-Za-z]+)$/
 
 /** Length of the path separator (`/` or `%2F`, any case) at `i`, else 0. */
 function separatorAt(text: string, i: number): number {
@@ -226,7 +232,8 @@ function percentDecode(text: string): string {
 /**
  * Stage 2 — the segment after a keyword. Keyword and value are each evaluated
  * on the raw text and on its percent-decoded form (`/inv%69te/…`,
- * `room/%41BC_123`); either match redacts the raw span.
+ * `room/%41BC_123`); either match redacts the raw span, unless that whole raw
+ * segment is a route-template placeholder (C-24).
  */
 function redactPathSegments(text: string): string {
   const segments = pathSegments(text)
@@ -240,7 +247,7 @@ function redactPathSegments(text: string): string {
     const keyword = percentDecode(text.slice(key.start, key.end)).toLowerCase()
     if (!SEGMENT_KEYWORDS.has(keyword)) continue
     const raw = text.slice(value.start, value.end)
-    if (raw === REDACTED) continue
+    if (raw === REDACTED || PLACEHOLDER_SEGMENT.test(raw)) continue
     if (keyword === 'room' || keyword === 'rooms') {
       const decoded = percentDecode(raw)
       const looksLikeCode = [raw, decoded].some(

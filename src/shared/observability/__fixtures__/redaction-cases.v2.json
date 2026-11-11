@@ -1,6 +1,6 @@
 {
-  "version": 1,
-  "source": "GoGo-Infra ADR-0011 (shape: dev/handoffs/sa-shape-sentry-clients.fable.md rev 3 §4)",
+  "version": 2,
+  "source": "GoGo-Infra ADR-0011 (shape: dev/handoffs/sa-shape-sentry-clients.fable.md rev 3 §4); v2 adds C-24 (GoGo-Infra#229, shape dev/handoffs/sa-shape-mobile-341-screen-tag.fable.md rev 2)",
   "literal": "[redacted]",
   "cases": [
     {
@@ -1521,6 +1521,299 @@
         "ci": 1000,
         "local": 300
       }
+    },
+    {
+      "id": "C-24.1",
+      "surface": "deep",
+      "input": {
+        "tags": {
+          "screen": "/room/[roomId]/preference"
+        }
+      },
+      "expected": {
+        "tags": {
+          "screen": "/room/[roomId]/preference"
+        }
+      },
+      "note": "tag screen = route template (GoGo-MobileApp#341): a placeholder segment is not a credential"
+    },
+    {
+      "id": "C-24.2",
+      "surface": "deep",
+      "input": {
+        "tags": {
+          "screen": "/r/[inviteCode]"
+        }
+      },
+      "expected": {
+        "tags": {
+          "screen": "/r/[inviteCode]"
+        }
+      },
+      "note": "v1 redacted this to /r/[redacted] (stage 2); v2 keeps a route-template placeholder (D-9)"
+    },
+    {
+      "id": "C-24.3",
+      "surface": "deep",
+      "input": {
+        "tags": {
+          "screen": "/l/[slug]"
+        }
+      },
+      "expected": {
+        "tags": {
+          "screen": "/l/[slug]"
+        }
+      },
+      "note": "v1 redacted this to /l/[redacted] (stage 2)"
+    },
+    {
+      "id": "C-24.4",
+      "surface": "deep",
+      "input": {
+        "tags": {
+          "screen": "/places/[placeId]"
+        }
+      },
+      "expected": {
+        "tags": {
+          "screen": "/places/[placeId]"
+        }
+      }
+    },
+    {
+      "id": "C-24.5",
+      "surface": "deep",
+      "input": {
+        "tags": {
+          "screen": "/plans/[planId]/active"
+        }
+      },
+      "expected": {
+        "tags": {
+          "screen": "/plans/[planId]/active"
+        }
+      }
+    },
+    {
+      "id": "C-24.6",
+      "surface": "deep",
+      "input": {
+        "tags": {
+          "screen": "/(tabs)/plans"
+        }
+      },
+      "expected": {
+        "tags": {
+          "screen": "/(tabs)/plans"
+        }
+      }
+    },
+    {
+      "id": "C-24.7",
+      "surface": "deep",
+      "input": {
+        "tags": {
+          "screen": "/"
+        }
+      },
+      "expected": {
+        "tags": {
+          "screen": "/"
+        }
+      }
+    },
+    {
+      "id": "C-24.8",
+      "surface": "deep",
+      "input": {
+        "tags": {
+          "screen": "/room/YDi_00PB1z4FSQZjpLbgdw/preference"
+        }
+      },
+      "expected": {
+        "tags": {
+          "screen": "/room/[redacted]/preference"
+        }
+      },
+      "note": "a pathname passed by mistake: the code is still redacted"
+    },
+    {
+      "id": "C-24.9a",
+      "surface": "deep",
+      "input": {
+        "tags": {
+          "screen": "/r/YDi_00PB1z4FSQZjpLbgdw"
+        }
+      },
+      "expected": {
+        "tags": {
+          "screen": "/r/[redacted]"
+        }
+      }
+    },
+    {
+      "id": "C-24.9b",
+      "surface": "deep",
+      "input": {
+        "tags": {
+          "screen": "/r/[inviteCode]x"
+        }
+      },
+      "expected": {
+        "tags": {
+          "screen": "/r/[redacted]"
+        }
+      },
+      "note": "only the exact placeholder shape is exempt"
+    },
+    {
+      "id": "C-24.9c",
+      "surface": "deep",
+      "input": {
+        "tags": {
+          "screen": "/r/[invite-code]"
+        }
+      },
+      "expected": {
+        "tags": {
+          "screen": "/r/[redacted]"
+        }
+      },
+      "note": "only the exact placeholder shape is exempt: letters only inside the brackets"
+    },
+    {
+      "id": "C-24.9d",
+      "surface": "deep",
+      "input": {
+        "tags": {
+          "screen": "/r/%5BinviteCode%5D"
+        }
+      },
+      "expected": {
+        "tags": {
+          "screen": "/r/[redacted]"
+        }
+      },
+      "note": "judged on the raw segment: an encoded placeholder is not exempt"
+    },
+    {
+      "id": "C-24.9e",
+      "surface": "deep",
+      "input": {
+        "tags": {
+          "screen": "/r/[invite2Code]"
+        }
+      },
+      "expected": {
+        "tags": {
+          "screen": "/r/[redacted]"
+        }
+      },
+      "note": "a digit in the name is not a placeholder (stage 6 would rewrite it anyway)"
+    },
+    {
+      "id": "C-24.10a",
+      "surface": "deep",
+      "input": {
+        "tags": {
+          "screen": "/places/:id"
+        }
+      },
+      "expected": {
+        "tags": {
+          "screen": "/places/:id"
+        }
+      },
+      "note": "React Router template (GoGo-CMS#241)"
+    },
+    {
+      "id": "C-24.10b",
+      "surface": "deep",
+      "input": {
+        "tags": {
+          "screen": "/places/:id/edit"
+        }
+      },
+      "expected": {
+        "tags": {
+          "screen": "/places/:id/edit"
+        }
+      }
+    },
+    {
+      "id": "C-24.10c",
+      "surface": "deep",
+      "input": {
+        "tags": {
+          "screen": "/share-links/:id"
+        }
+      },
+      "expected": {
+        "tags": {
+          "screen": "/share-links/:id"
+        }
+      },
+      "note": "v1 redacted this to /share-links/[redacted] (stage 2)"
+    },
+    {
+      "id": "C-24.10d",
+      "surface": "deep",
+      "input": {
+        "tags": {
+          "screen": "/share-links/:dataset2Id"
+        }
+      },
+      "expected": {
+        "tags": {
+          "screen": "/share-links/[redacted]"
+        }
+      },
+      "note": "a digit in the name is not a placeholder"
+    },
+    {
+      "id": "C-24.11",
+      "surface": "deep",
+      "input": {
+        "tags": {
+          "screen": "/places/abc123xyz"
+        }
+      },
+      "expected": {
+        "tags": {
+          "screen": "/places/[redacted]"
+        }
+      }
+    },
+    {
+      "id": "C-24.12",
+      "surface": "deep",
+      "input": {
+        "tags": {
+          "screen": "/places/5f1c2a3e-1234-4abc-8def-0123456789ab"
+        }
+      },
+      "expected": {
+        "tags": {
+          "screen": "/places/5f1c2a3e-1234-4abc-8def-0123456789ab"
+        }
+      },
+      "note": "a uuid is kept (C-21): only the template rule, not the redactor, keeps a raw uuid out of the tag"
+    },
+    {
+      "id": "C-24.13",
+      "surface": "deep",
+      "input": {
+        "tags": {
+          "screen": "unknown"
+        }
+      },
+      "expected": {
+        "tags": {
+          "screen": "unknown"
+        }
+      },
+      "note": "the admitted sentinel (ADR-0011 D-12, D-7 record addition 4): a value that is not a declared template is sent as `unknown`, which the redactor keeps"
     }
   ]
 }
