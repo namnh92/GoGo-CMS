@@ -31,11 +31,24 @@ content-length content-type user-agent x-request-id`, giá trị giữ nguyên),
 - **Hợp đồng:** `apiFetchParsed` báo `ContractMismatchError(path, issuePaths)` (`kind: 'contract'`)
   trước khi đổi lỗi zod thành `ApiError{CONTRACT_MISMATCH}`; chỉ template đường dẫn và đường dẫn
   issue, không giá trị, không message của zod.
-- **Oracle:** `src/shared/observability/__fixtures__/redaction-cases.v1.json` chép nguyên văn từ
-  GoGo-Infra `docs/adr/0011/redaction-cases.v1.json`, **v1, sha256
-  `decf6c4336269b086b209a4d27a9c36ca2c392b307c9d76e4b24883a4f4ef6a0`**; `sentry.test.ts` kiểm digest
+- **Tag màn hình (GoGo-CMS#241, bổ sung D-7 lần 3 trên GoGo-Infra#208):** `main.tsx` gọi
+  `trackSentryRoute(router)` ngay sau `initSentry()`, trước `await` đầu tiên; hàm đặt route hiện tại và
+  đăng ký `router.subscribe` cho mỗi lần điều hướng. `beforeSend` gắn `tags.route` sau bước redact. Giá
+  trị chỉ ghép từ `path` của định nghĩa route React Router (`/places/:id`), không có setter nhận chuỗi,
+  không bao giờ từ location; bị từ chối (không gắn tag) nếu một segment không phải chữ thường-gạch nối,
+  `:param` hay `*` (riêng màn `/403` được nhận nguyên), hoặc nếu `redactText` làm đổi giá trị. Action
+  Discord 6164951 thêm `route` vào `data.tags`.
+- **Oracle (cập nhật 2026-11-11, GoGo-CMS#241 / PR #243):**
+  `src/shared/observability/__fixtures__/redaction-cases.v2.json` chép nguyên văn từ
+  GoGo-Infra `docs/adr/0011/redaction-cases.v2.json`, **v2, sha256
+  `5869939957e5f68280974f9d34fb8896d4df117873b84a3b19bf2e3edb7c213e`**; `sentry.test.ts` kiểm digest
   và chạy mọi case (`platforms` có `cms` hoặc không ghi), `sentry-perf.test.ts` chạy các dòng C-16.
   File nằm trong `.prettierignore` để formatter không đổi digest.
+  Theo quyết định owner ngày 2026-10-16, chuyển sang v2 sau khi GoGo-Infra PR #230 merge
+  (2026-10-20, `2149fdce`). C-24 và điều khoản placeholder D-9 chỉ giữ nguyên segment thô
+  đúng dạng `[name]` hoặc `:name`, với `name` chỉ gồm `[A-Za-z]+`; không giải mã trước khi
+  xét ngoại lệ. Placeholder mã hoá, có chữ số hoặc ký tự thừa vẫn qua luật redact thông thường.
+  Guard tag route tiếp tục yêu cầu `redactText(value) === value`.
 
 ## Khác với shape / cần biết
 
