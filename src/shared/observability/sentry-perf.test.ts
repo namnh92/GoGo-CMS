@@ -19,7 +19,7 @@ type PerfCase = {
   boundMs: { ci: number; local: number }
 }
 
-const FIXTURE = resolve(__dirname, '__fixtures__/redaction-cases.v1.json')
+const FIXTURE = resolve(__dirname, '__fixtures__/redaction-cases.v2.json')
 const perf = (JSON.parse(readFileSync(FIXTURE, 'utf8')) as { cases: PerfCase[] }).cases.filter(
   (c) => c.surface === 'perf',
 )
