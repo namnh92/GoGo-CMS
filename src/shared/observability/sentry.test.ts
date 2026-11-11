@@ -22,9 +22,9 @@ vi.mock('@sentry/react', () => sdk)
 
 type Sentry = typeof import('./sentry')
 
-const FIXTURE = resolve(__dirname, '__fixtures__/redaction-cases.v1.json')
-/** ADR-0005 pins this digest; it must equal GoGo-Infra `docs/adr/0011/redaction-cases.v1.json`. */
-const PINNED_SHA256 = 'decf6c4336269b086b209a4d27a9c36ca2c392b307c9d76e4b24883a4f4ef6a0'
+const FIXTURE = resolve(__dirname, '__fixtures__/redaction-cases.v2.json')
+/** ADR-0005 pins this digest; it must equal GoGo-Infra `docs/adr/0011/redaction-cases.v2.json`. */
+const PINNED_SHA256 = '5869939957e5f68280974f9d34fb8896d4df117873b84a3b19bf2e3edb7c213e'
 
 type Construct =
   | { kind: 'cycle' }
@@ -67,12 +67,19 @@ beforeEach(async () => {
 })
 
 describe('vendored oracle', () => {
-  it('is redaction-cases v1 with the pinned digest', () => {
-    expect(oracle.version).toBe(1)
+  it('is redaction-cases v2 with the pinned digest', () => {
+    expect(oracle.version).toBe(2)
     expect(createHash('sha256').update(raw).digest('hex')).toBe(PINNED_SHA256)
   })
 
   it('has a runner for every surface it contains', () => {
+    expect(oracle.cases).toHaveLength(136)
+    // Only these mobile-specific error classes are outside the CMS contract.
+    expect(oracle.cases.filter((c) => !cases.includes(c)).map((c) => c.id)).toEqual([
+      'C-14.2',
+      'C-14.3',
+      'C-14.4',
+    ])
     const known = ['text', 'deep', 'request', 'breadcrumb', 'user', 'filter', 'init', 'perf']
     expect(oracle.cases.every((c) => known.includes(c.surface))).toBe(true)
   })
@@ -81,6 +88,32 @@ describe('vendored oracle', () => {
 describe('redactText (oracle)', () => {
   it.each(bySurface('text').map((c) => [c.id, c] as const))('%s', (_id, c) => {
     expect(sentry.redactText(c.input as string)).toBe(c.expected)
+  })
+})
+
+describe('ADR-0011 D-9 raw placeholder segments', () => {
+  it.each(['r', 'l', 'invite', 'share-links', 'room', 'rooms'])(
+    'keeps exact placeholders after %s through every text stage',
+    (keyword) => {
+      for (const placeholder of ['[inviteCode]', ':inviteCode']) {
+        const input = `/${keyword}/${placeholder}/edit`
+        expect(sentry.redactText(input)).toBe(input)
+      }
+    },
+  )
+
+  it.each([
+    '[inviteCode]x',
+    '[invite-code]',
+    '[invite2Code]',
+    '%5BinviteCode%5D',
+    ':inviteCode-x',
+    ':invite2Code',
+    '%3AinviteCode',
+    '[]',
+    ':',
+  ])('does not exempt malformed or encoded placeholder %s', (segment) => {
+    expect(sentry.redactText(`/share-links/${segment}`)).toBe('/share-links/[redacted]')
   })
 })
 
@@ -468,5 +501,92 @@ describe('F-07 SA ruling', () => {
 
   it('falls back to positional {id} when no template matches', () => {
     expect(sentry.toPathTemplate('/cms/nowhere/abc/search')).toBe('/cms/{id}/{id}/search')
+  })
+})
+
+/**
+ * GoGo-CMS#241 (D-7 record addition 3) — the screen an error happened on, as a
+ * route template and nothing else.
+ */
+describe('route tag', () => {
+  const event = () =>
+    ({ exception: { values: [{ type: 'TypeError', value: 'x' }] } }) as unknown as ErrorEvent
+  const send = () => sentry.beforeSend(event(), { originalException: new TypeError('x') })
+
+  type Match = { route: { path?: string } }
+  function fakeRouter(matches: Match[]) {
+    let listener: ((state: { matches: Match[] }) => void) | undefined
+    return {
+      state: { matches },
+      subscribe: (fn: (state: { matches: Match[] }) => void) => {
+        listener = fn
+        return () => undefined
+      },
+      go: (next: Match[]) => listener?.({ matches: next }),
+    }
+  }
+
+  it('tags the event with the route the router shows, and follows navigation', () => {
+    const router = fakeRouter([
+      { route: { path: '/' } },
+      { route: {} },
+      { route: { path: 'places' } },
+    ])
+    sentry.trackSentryRoute(router)
+    expect(send()?.tags).toEqual({ route: '/places' })
+    router.go([{ route: { path: '/' } }, { route: {} }, { route: { path: 'places/:id' } }])
+    expect(send()?.tags).toEqual({ route: '/places/:id' })
+  })
+
+  it('keeps the tags the event already had', () => {
+    sentry.trackSentryRoute(fakeRouter([{ route: { path: '/login' } }]))
+    const tagged = { ...event(), tags: { kind: 'boundary' } } as ErrorEvent
+    expect(sentry.beforeSend(tagged, { originalException: new TypeError('x') })?.tags).toEqual({
+      kind: 'boundary',
+      route: '/login',
+    })
+  })
+
+  it('a definition that is no template clears the tag', () => {
+    const router = fakeRouter([{ route: { path: '/login' } }])
+    sentry.trackSentryRoute(router)
+    router.go([{ route: { path: 'places/3f2504e0-4f89-11d3-9a0c-0305e82c3301' } }])
+    expect(send()?.tags).toBeUndefined()
+  })
+
+  it.each([
+    ['a real path with a uuid', '/places/3f2504e0-4f89-11d3-9a0c-0305e82c3301'],
+    ['a numeric id', '/costs/test-runs/42'],
+    ['a status code where an id belongs', '/places/403'],
+    ['a query', '/places?lat=10.7'],
+    ['an invite path', '/r/YDi_00PB1z4FSQZjpLbgdw'],
+    ['an email', '/users/a.b@example.com'],
+    ['a full URL', 'https://cms-dev.gogo.id.vn/places'],
+    ['upper case or underscores', '/Places/some_slug'],
+  ])('refuses %s', (_label, value) => {
+    expect(sentry.asRouteTemplate(value)).toBeNull()
+  })
+
+  it('builds the template from route definitions, outermost first', () => {
+    expect(
+      sentry.routeTemplateOf([
+        { route: { path: '/' } },
+        { route: {} },
+        { route: { path: 'places/:id' } },
+      ]),
+    ).toBe('/places/:id')
+    expect(sentry.routeTemplateOf([{ route: { path: '/' } }, { route: {} }, { route: {} }])).toBe(
+      '/',
+    )
+    expect(sentry.routeTemplateOf([{ route: { path: '/' } }, { route: { path: '*' } }])).toBe('/*')
+    expect(sentry.routeTemplateOf([{ route: { path: '/' } }, { route: { path: '403' } }])).toBe(
+      '/403',
+    )
+  })
+
+  it('keeps a template the redaction would touch out entirely, never sends it redacted', () => {
+    expect(sentry.asRouteTemplate('/r/abcdefghijklmnopqrstuv')).toBeNull()
+    expect(sentry.asRouteTemplate('/share-links/:dataset2Id')).toBeNull()
+    expect(sentry.asRouteTemplate('/share-links/:id')).toBe('/share-links/:id')
   })
 })
