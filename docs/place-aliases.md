@@ -3,8 +3,8 @@
 Refs #293. Phụ thuộc GoGo-BE#887, đã merge qua PR #901 (`c7321100`).
 Nhánh `feature/GOGO-293-place-aliases`, base `re-design` tại `9d776b3`.
 Feature đã commit tại `4b7fe232eb9220d3f565ababa37363c863206dd2` (PR #294).
-Vòng sửa review 1 giữ nguyên HEAD này; phần sửa nằm trong working tree,
-không commit, push hay mở PR mới.
+Các sửa review round 1 đã commit tại
+`f9629ea58e56cddadbe44676a2a6343794f7d338` trong PR #294.
 
 ## Hành vi
 
@@ -179,7 +179,7 @@ chúng cho SHA hoặc working tree mới. Log gates đã cung cấp cho review n
 Basis đã commit: `4b7fe232eb9220d3f565ababa37363c863206dd2`.
 FAIL-before chạy test hồi quy mới trên production code và tài liệu nguyên
 byte của SHA này. PASS-after chạy trên working tree sửa từ cùng SHA;
-không gọi working tree này là một commit mới.
+các sửa round 1 sau đó đã commit tại `f9629ea58e56cddadbe44676a2a6343794f7d338`.
 
 - **F-01:** response từng dùng default rỗng và bỏ qua bounds của alias.
   Dùng lại `placeAliasesSchema` bắt buộc, không default. Test response thiếu
@@ -201,11 +201,19 @@ Evidence round 1 nằm ngoài repo tại `/private/tmp/cms-293-round1/`:
 Mỗi log kèm JSON ghi lệnh, UTC, exit code, full HEAD và SHA-256 từng tracked
 file lúc bắt đầu. `summary.json` ghi kết quả gates của round 1;
 `snapshots/` giữ manifest + patch có thể verify bằng `dev/handoffs/snapshot.sh`.
-Chưa chép log round 1 vào thư mục evidence chuẩn
-`/Users/maxnguyen/MyWorks/GoGo/dev/test-evidence/cms-293/` vì thư mục đó
-ngoài writable roots của phiên này; các log cũ ở đó không bị thay thế.
+Evidence chuẩn đã được chép vào workspace, ngoài repo:
+
+- Gates: `/Users/maxnguyen/MyWorks/GoGo/dev/test-evidence/cms-293/r2/`.
+- FAIL-before/PASS-after round 1:
+  `/Users/maxnguyen/MyWorks/GoGo/dev/test-evidence/cms-293/sol-round1/`.
 
 Các gates round 1: `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`,
 `pnpm api:check`, `git diff --check`; lệnh/exit code thực tế xem evidence
 round 1. Không có merge, deploy, DEV acceptance hoặc kết luận review độc lập
 được tuyên bố từ các kết quả local này.
+
+## Confirm-round — quyết định owner
+
+**OWNER DECISION 2026-11-12:** confirm-round **F-04** (untrimmed response
+aliases) **won't-fix** — BE trim khi ghi; response alias chưa trim không phải
+trường hợp thực tế.
