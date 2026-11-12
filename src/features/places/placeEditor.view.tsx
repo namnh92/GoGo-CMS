@@ -78,6 +78,8 @@ import {
   type PlaceIdentityForm,
   numberFieldRegister,
 } from './placeForm'
+import { PlaceAliasesFields } from './placeAliases.view'
+import { aliasEvidenceIssues, aliasesChanged } from './placeAliases'
 import { styles } from './placeEditor.style'
 
 const PRICE_UNITS: PriceUnit[] = ['per_person', 'per_item', 'per_hour', 'per_night']
@@ -149,7 +151,8 @@ export default function PlaceEditorScreen() {
 
   const describeField = usePlaceFieldError()
 
-  const canWrite = can('place.write')
+  const [writeDenied, setWriteDenied] = useState(false)
+  const canWrite = can('place.write') && !writeDenied
   const [auditOpen, setAuditOpen] = useState(false)
   const [takedownOpen, setTakedownOpen] = useState(false)
   const [leaveOpen, setLeaveOpen] = useState(false)
@@ -261,6 +264,9 @@ export default function PlaceEditorScreen() {
     (detail: CmsPlaceDetail) => {
       const values: PlaceIdentityForm = {
         name: detail.name,
+        aliases: detail.aliases,
+        aliasDraft: '',
+        aliasProvenance: { sourceType: 'editorial', sourceReference: '', collectedAt: '' },
         addressText: detail.addressText ?? '',
         areaKey: detail.areaKey ?? '',
         city: detail.city ?? '',
@@ -353,7 +359,12 @@ export default function PlaceEditorScreen() {
       // Keep exactly what was typed, but stop calling it unsaved. Evidence went
       // with the write it was given for — code references (F-07) and contact
       // provenance (GoGo-BE#280) alike; the next change asks again.
-      const values = { ...sent, sourceReferences: {}, evidence: emptyEvidenceDrafts() }
+      const values = {
+        ...sent,
+        sourceReferences: {},
+        evidence: emptyEvidenceDrafts(),
+        aliasProvenance: { sourceType: 'editorial', sourceReference: '', collectedAt: '' },
+      }
       setIdentityError(null)
       setConflict(null)
       setIdentitySavedAt(new Date().toISOString())
@@ -378,6 +389,7 @@ export default function PlaceEditorScreen() {
     },
     onError: (error, { values: sentValues, baseline: sentBaseline }) => {
       const apiError = toApiError(error)
+      if (apiError.isForbidden) setWriteDenied(true)
       /*
        * Somebody else saved between load and submit. Nothing the editor typed
        * is thrown away: the form keeps it, the panel says which fields differ
@@ -561,6 +573,39 @@ export default function PlaceEditorScreen() {
     />
   )
 
+  const submitIdentity = (values: PlaceIdentityForm, baseline: PlaceEditBaseline) => {
+    if (!canWrite || !online || saveIdentity.isPending) return
+    setIdentityError(null)
+    // F-07 — a code sent without evidence is refused by the server;
+    // say so beside the code instead of after a round trip.
+    // GoGo-BE#280 — a contact value without its source is refused
+    // here too, on the box that is empty, before a request is made.
+    const gaps = missingCodeSources(toPlaceEditBody(values, taxonomyIds, baseline))
+    const missing = contactEvidenceIssues(values, baseline)
+    const issues = [
+      ...gaps.map((key) => ({
+        field: `sourceReferences.${key}` as const,
+        code: 'required',
+        message: 'placeCreate.source.required',
+      })),
+      ...missing,
+      ...(aliasesChanged(values.aliases, baseline.values.aliases)
+        ? aliasEvidenceIssues(values.aliasProvenance)
+        : []),
+    ]
+    if (issues.length > 0) {
+      issues.forEach((issue, index) =>
+        setError(
+          issue.field,
+          { type: issue.code, message: issue.message },
+          { shouldFocus: index === 0 },
+        ),
+      )
+      return
+    }
+    saveIdentity.mutate({ values, baseline })
+  }
+
   /** Vietnamese text for a field the form — or the server — rejected. */
   const codeSourceError = (key: CodeSourceKey): string | undefined => {
     const error = errors.sourceReferences?.[key]
@@ -572,7 +617,7 @@ export default function PlaceEditorScreen() {
   }
 
   const fieldError = (
-    name: Exclude<keyof PlaceIdentityForm, 'evidence' | 'sourceReferences'>,
+    name: Exclude<keyof PlaceIdentityForm, 'evidence' | 'sourceReferences' | 'aliasProvenance'>,
   ): string | undefined => {
     const error = errors[name]
     if (!error) return undefined
@@ -654,41 +699,16 @@ export default function PlaceEditorScreen() {
               // The schema owns validation (as on the create form): a native
               // `required` popup would pre-empt the sentences it writes.
               noValidate
-              onSubmit={handleSubmit((values) => {
-                setIdentityError(null)
-                // Never absent in practice: the form only renders once the
-                // detail has loaded, and that is what sets the baseline.
-                const baseline = identityBaseline ?? {
+              onSubmit={handleSubmit((values) =>
+                submitIdentity(
                   values,
-                  taxonomyIds,
-                  updatedAt: detail.updatedAt,
-                }
-                // F-07 — a code sent without evidence is refused by the server;
-                // say so beside the code instead of after a round trip.
-                // GoGo-BE#280 — a contact value without its source is refused
-                // here too, on the box that is empty, before a request is made.
-                const gaps = missingCodeSources(toPlaceEditBody(values, taxonomyIds, baseline))
-                const missing = contactEvidenceIssues(values, baseline)
-                const issues = [
-                  ...gaps.map((key) => ({
-                    field: `sourceReferences.${key}` as const,
-                    code: 'required',
-                    message: 'placeCreate.source.required',
-                  })),
-                  ...missing,
-                ]
-                if (issues.length > 0) {
-                  issues.forEach((issue, index) =>
-                    setError(
-                      issue.field,
-                      { type: issue.code, message: issue.message },
-                      { shouldFocus: index === 0 },
-                    ),
-                  )
-                  return
-                }
-                saveIdentity.mutate({ values, baseline })
-              })}
+                  identityBaseline ?? {
+                    values,
+                    taxonomyIds,
+                    updatedAt: detail.updatedAt,
+                  },
+                ),
+              )}
             >
               <div className={styles.grid}>
                 <div className={styles.main}>
@@ -727,19 +747,13 @@ export default function PlaceEditorScreen() {
                             setReloadChanges(changes)
                             setReloadOpen(true)
                           }}
-                          onOverwrite={() =>
-                            saveIdentity.mutate({
-                              values: form.getValues(),
-                              baseline: {
-                                // The editor's own starting point, so an
-                                // untouched field is still not claimed — but
-                                // against the row as it stands now.
-                                values: identityBaseline?.values ?? form.getValues(),
-                                taxonomyIds: identityBaseline?.taxonomyIds ?? taxonomyIds,
-                                updatedAt: detail.updatedAt,
-                              },
-                            })
-                          }
+                          onOverwrite={handleSubmit((values) =>
+                            submitIdentity(values, {
+                              values: identityBaseline?.values ?? values,
+                              taxonomyIds: identityBaseline?.taxonomyIds ?? taxonomyIds,
+                              updatedAt: detail.updatedAt,
+                            }),
+                          )}
                         />
                       ) : null}
                       <PlaceProviderStatusBadge providerStatus={detail.providerStatus} />
@@ -785,6 +799,12 @@ export default function PlaceEditorScreen() {
                           ))}
                         </Select>
                       </div>
+                      <PlaceAliasesFields
+                        form={form}
+                        baseline={identityBaseline?.values.aliases}
+                        readOnly={!canWrite}
+                        disabled={!canWrite || !online || saveIdentity.isPending}
+                      />
                       <TextArea
                         label={t('placeEditor.description')}
                         rows={4}
@@ -1695,6 +1715,7 @@ function ConflictPanel({
   const values = useWatch({ control }) as PlaceIdentityForm
   const differences = diffAgainstServer(values, {
     name: server.name,
+    aliases: server.aliases,
     addressText: server.addressText,
     areaKey: server.areaKey,
     city: server.city,
@@ -1708,7 +1729,7 @@ function ConflictPanel({
   })
   const empty = t('placeEditor.conflictEmpty')
   const changes: ChangeLine[] = differences.map((difference) => ({
-    label: difference.field,
+    label: difference.field === 'aliases' ? t('placeAliases.label') : difference.field,
     from: difference.mine || empty,
     to: difference.theirs || empty,
   }))
@@ -1731,7 +1752,9 @@ function ConflictPanel({
           <ul className={styles.errorList}>
             {differences.map((difference) => (
               <li key={difference.field}>
-                <span className={styles.errorField}>{difference.field}</span>{' '}
+                <span className={styles.errorField}>
+                  {difference.field === 'aliases' ? t('placeAliases.label') : difference.field}
+                </span>{' '}
                 <span className={styles.conflictMine}>
                   {t('placeEditor.conflictMine')}: {difference.mine || empty}
                 </span>{' '}

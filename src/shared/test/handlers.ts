@@ -8,6 +8,7 @@ import {
   cmsPlaceMediaAttachSchema,
   cmsPlaceMediaPatchSchema,
   mockHoursIssues,
+  mockAliasWriteIssues,
   moderationReasonMissing,
   toFieldErrors,
   mockContactWriteIssues,
@@ -1851,7 +1852,40 @@ export const handlers = [
     if (!place) return envelope(404, 'NOT_FOUND', 'place not found')
     const parsed = cmsPlaceEditMockSchema.safeParse(await request.json())
     if (!parsed.success) return validationEnvelope(parsed.error.issues)
-    const { expectedUpdatedAt, sourceReferences, ...input } = parsed.data
+    if (parsed.data.aliases !== undefined) {
+      const denied = requireEditor()
+      if (denied) return denied
+    }
+    const aliasIssues = mockAliasWriteIssues(parsed.data)
+    if (aliasIssues.length)
+      return HttpResponse.json(
+        {
+          code: 'VALIDATION_FAILED',
+          message: 'Independent alias evidence required',
+          field_errors: aliasIssues,
+          request_id: 'mock-alias-invalid',
+          retryable: false,
+        },
+        { status: 400 },
+      )
+    const {
+      expectedUpdatedAt,
+      sourceReferences,
+      aliasProvenance: _aliasEvidence,
+      ...input
+    } = parsed.data
+    void _aliasEvidence
+    if (input.aliases)
+      input.aliases = [
+        ...new Map(
+          input.aliases.map((alias) => [
+            foldVietnamese(alias)
+              .replace(/[\u2013\u2014]/g, '-')
+              .replace(/[\u2018\u2019\u201B\u02BC]/g, "'"),
+            alias.trim(),
+          ]),
+        ).values(),
+      ]
     /*
      * GoGo-BE#440 F-07 / #672 — an edit takes references for the two codes
      * only; `sourceReferences.phone` and friends are `unknown` (contact

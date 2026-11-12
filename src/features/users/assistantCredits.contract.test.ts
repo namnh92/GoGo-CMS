@@ -57,9 +57,26 @@ describe('assistant credit client contract (BE#778)', () => {
     expect(parsed.items[0]?.createdAt).toBe(creditGrant.createdAt)
     expect(assistantCreditsSchema.safeParse({ ...creditPage, balance: -1 }).success).toBe(false)
     expect(
-      assistantCreditsSchema.safeParse({ ...creditPage, items: [{ ...creditGrant, delta: 2 }] })
+      assistantCreditsSchema.safeParse({ ...creditPage, items: [{ ...creditGrant, delta: 0 }] })
         .success,
     ).toBe(false)
+  })
+
+  it('accepts signed usage adjustments and open reasons from contract 10.3, rejecting invalid deltas', () => {
+    for (const delta of [2, -2, Number.MAX_SAFE_INTEGER, Number.MIN_SAFE_INTEGER]) {
+      expect(
+        assistantCreditsSchema.parse({
+          ...creditPage,
+          items: [{ ...creditGrant, delta, reason: 'assistant_usage_adjustment' }],
+        }).items[0],
+      ).toMatchObject({ delta, reason: 'assistant_usage_adjustment' })
+    }
+    for (const delta of [0, 0.5, Number.MAX_SAFE_INTEGER + 1, Number.MIN_SAFE_INTEGER - 1]) {
+      expect(
+        assistantCreditsSchema.safeParse({ ...creditPage, items: [{ ...creditGrant, delta }] })
+          .success,
+      ).toBe(false)
+    }
   })
 
   it('honors an aborted query signal', async () => {

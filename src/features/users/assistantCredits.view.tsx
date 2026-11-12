@@ -4,7 +4,7 @@ import { PageBody, PageHeader } from '@/app/PageHeader'
 import { ApiError } from '@/shared/api/errors'
 import { useSession } from '@/shared/auth/session'
 import { formatDateTime, formatNumber } from '@/shared/format'
-import { useI18n, useT } from '@/shared/i18n/i18n'
+import { useI18n, useLabel, useT } from '@/shared/i18n/i18n'
 import { Button } from '@/shared/ui/Button'
 import {
   AsyncBoundary,
@@ -42,6 +42,7 @@ export default function AssistantCreditsScreen() {
 function CreditLedger({ id }: { id: string }) {
   const t = useT()
   const { locale } = useI18n()
+  const label = useLabel()
   const online = useOnline()
   const query = useInfiniteQuery({
     queryKey: ['appUsers', id, 'assistantCredits'],
@@ -110,7 +111,9 @@ function CreditLedger({ id }: { id: string }) {
                           {formatNumber(entry.delta, locale)}
                         </span>
                       </td>
-                      <td className={styles.cell}>{t(`credits.reason.${entry.reason}`)}</td>
+                      <td className={styles.cell}>
+                        {label(`credits.reason.${entry.reason}`, t('credits.reason.other'))}
+                      </td>
                       <td className={styles.cell}>
                         <div className={styles.references}>
                           {entry.submissionId ? (

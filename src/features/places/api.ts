@@ -1,5 +1,10 @@
 import { apiFetch, apiFetchParsed, newIdempotencyKey } from '@/shared/api/client'
-import type { CmsCreatePlaceBody, RequestBody, operations } from '@/shared/api/generated'
+import type {
+  CmsCreatePlaceBody,
+  CmsUpdatePlaceBody,
+  RequestBody,
+  operations,
+} from '@/shared/api/generated'
 import type { ContactProvenanceWire } from './contactEvidence'
 import {
   CREATE_SOURCE_REFERENCE_KEYS,
@@ -175,7 +180,7 @@ export function fetchPlaceAudit(
  * clears the column, an absent key leaves it — and its recorded provenance —
  * untouched. `?: T | null` is therefore the type, never `?: T`.
  */
-export type UpdatePlaceInput = {
+export type UpdatePlaceInput = Pick<CmsUpdatePlaceBody, 'aliases' | 'aliasProvenance'> & {
   name?: string
   description?: string | null
   addressText?: string | null
@@ -248,7 +253,10 @@ export function updatePlace(id: string, input: UpdatePlaceInput) {
  * Google preview is not a GoGo fact however it arrives, and the server refuses
  * a non-empty list with `400 GOOGLE_CONTENT_NOT_PERSISTABLE`.
  */
-export type CreatePlaceInput = Omit<UpdatePlaceInput, 'sourceReferences'> & {
+export type CreatePlaceInput = Omit<
+  UpdatePlaceInput,
+  'sourceReferences' | 'aliases' | 'aliasProvenance'
+> & {
   name: string
   lat: number
   lng: number

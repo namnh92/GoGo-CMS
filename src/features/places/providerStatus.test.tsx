@@ -84,7 +84,7 @@ describe('place editor — provider status (GoGo-BE#360)', () => {
     signInAs('editor')
     open()
 
-    expect(await screen.findByRole('textbox', { name: /Tên/ })).toBeInTheDocument()
+    expect(await screen.findByRole('textbox', { name: 'Tên hiển thị' })).toBeInTheDocument()
     expect(screen.queryByText(/^Google báo:/)).not.toBeInTheDocument()
   })
 })

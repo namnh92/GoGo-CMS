@@ -163,6 +163,7 @@ export const taxonomies: Taxonomy[] = [
 export const places: CmsPlaceDetail[] = [
   {
     id: 'pl-chao-ban',
+    aliases: [],
     name: 'Chào Bạn Cafe & Space',
     status: 'published',
     areaKey: 'hcm_q3',
@@ -396,6 +397,7 @@ export const places: CmsPlaceDetail[] = [
   },
   {
     id: 'pl-pho-bat-dan',
+    aliases: [],
     name: 'Phở Bát Đàn',
     status: 'published',
     areaKey: 'hn_hoankiem',
@@ -438,6 +440,7 @@ export const places: CmsPlaceDetail[] = [
   },
   {
     id: 'pl-tay-ho-sup',
+    aliases: [],
     name: 'Tây Hồ Sunset SUP Club',
     status: 'review',
     areaKey: 'hn_tayho',
@@ -470,6 +473,7 @@ export const places: CmsPlaceDetail[] = [
   },
   {
     id: 'pl-goplay',
+    aliases: [],
     name: 'GoPlay Entertainment',
     status: 'suspended',
     areaKey: 'hcm_q10',
@@ -503,6 +507,7 @@ export const places: CmsPlaceDetail[] = [
   },
   {
     id: 'pl-com-tam-ba-ghien',
+    aliases: [],
     name: 'Cơm Tấm Ba Ghiền',
     status: 'community_submitted',
     areaKey: 'hcm_phunhuan',

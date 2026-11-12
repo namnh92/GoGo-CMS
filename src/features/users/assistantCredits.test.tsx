@@ -78,6 +78,26 @@ describe('user assistant credits (#277)', () => {
     },
   )
 
+  it('renders usage corrections and unknown reasons without failing the ledger', async () => {
+    signInAs('ops_admin')
+    server.use(
+      http.get(endpoint, () =>
+        HttpResponse.json({
+          ...creditPage,
+          items: [
+            { ...creditGrant, delta: 2, reason: 'assistant_usage_adjustment' },
+            { ...creditSpend, delta: -2, reason: 'future_reason' },
+          ],
+        }),
+      ),
+    )
+    renderCredits()
+    expect(await screen.findByText('Điều chỉnh sử dụng GoGo AI')).toBeInTheDocument()
+    expect(screen.getByText('Lý do khác')).toBeInTheDocument()
+    expect(screen.getByText('+2')).toBeInTheDocument()
+    expect(screen.getByText('-2')).toBeInTheDocument()
+  })
+
   it('loads more with the unchanged user-scoped cursor, appends rows and uses the latest full balance', async () => {
     signInAs('ops_admin')
     const user = userEvent.setup()

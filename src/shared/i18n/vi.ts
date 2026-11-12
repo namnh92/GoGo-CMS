@@ -3,6 +3,25 @@
  * resolves through a key here — display labels never live in business data.
  */
 export const vi = {
+  'placeAliases.label': 'Tên khác (alias)',
+  'placeAliases.hint':
+    'Tối đa 20 tên, mỗi tên tối đa 120 ký tự. Nhấn Thêm để đưa tên vào danh sách.',
+  'placeAliases.readOnly': 'Bạn chỉ có quyền xem tên khác.',
+  'placeAliases.empty': 'Chưa có tên khác.',
+  'placeAliases.new': 'Tên khác mới',
+  'placeAliases.add': 'Thêm tên khác',
+  'placeAliases.remove': 'Xoá tên khác {alias}',
+  'placeAliases.source': 'Nguồn tham chiếu tên khác',
+  'placeAliases.sourceHint':
+    'Nguồn biên tập độc lập cho toàn bộ danh sách hoặc việc xoá: xác nhận của cơ sở, website chính thức hoặc khảo sát. Không dùng Google, nội dung AI, hội thoại hay chỉ mã job/sheet.',
+  'placeAliases.collectedAt': 'Ngày giờ thu thập tên khác',
+  'placeAliases.tooLong': 'Mỗi tên khác tối đa 120 ký tự.',
+  'placeAliases.tooMany': 'Tối đa 20 tên khác.',
+  'placeAliases.invalid': 'Nhập tên khác không rỗng, không có ký tự điều khiển hoặc xuống dòng.',
+  'placeAliases.addFirst': 'Nhấn Thêm tên khác hoặc xoá ô nhập trước khi lưu.',
+  'credits.reason.assistant_usage_adjustment': 'Điều chỉnh sử dụng GoGo AI',
+  'credits.reason.other': 'Lý do khác',
+
   'venueVerification.coordinates': 'Toạ độ địa điểm',
   'venueVerification.title': 'Xác minh địa điểm',
   'venueVerification.scope':
