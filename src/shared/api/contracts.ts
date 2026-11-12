@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import type { Schemas } from './generated'
+import { placeAliasesSchema } from './cmsPlaceContract'
 
 /*
  * Boundary schemas for the `/v1/cms/*` surface.
@@ -429,7 +430,7 @@ export const cmsVenueVerificationSchema = z.object({
 
 /** `CmsPlaceDetail` (GoGo-BE#157) — every field `cmsUpdatePlace` accepts, plus relations. */
 export const cmsPlaceDetailSchema = z.object({
-  aliases: z.array(z.string()).default([]),
+  aliases: placeAliasesSchema,
   /** Optional in 6.0; retain the ETag for future verification decisions. */
   verification: cmsVenueVerificationSchema.nullish(),
   id: z.string(),

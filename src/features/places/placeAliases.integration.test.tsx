@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { delay, http, HttpResponse } from 'msw'
@@ -227,6 +227,129 @@ describe('place aliases editor (#293)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Lưu thông tin' }))
     expect(await screen.findByText('Bạn chỉ có quyền xem tên khác.')).toBeInTheDocument()
     expect(screen.queryByLabelText('Tên khác mới')).not.toBeInTheDocument()
+  })
+
+  it.each(['reload', 'overwrite'] as const)(
+    'blocks an immediate %s click until the delayed conflict row arrives',
+    async (action) => {
+      const current = { ...place, aliases: ['Server alias'], updatedAt: '2026-08-03T00:00:00.000Z' }
+      let finishRead!: () => void
+      const readGate = new Promise<void>((resolve) => {
+        finishRead = resolve
+      })
+      const bodies: Record<string, unknown>[] = []
+      let reads = 0
+      server.use(
+        http.get(endpoint, async () => {
+          reads++
+          if (reads === 1) return HttpResponse.json(place)
+          await readGate
+          return HttpResponse.json(current)
+        }),
+        http.patch(endpoint, async ({ request }) => {
+          bodies.push((await request.json()) as Record<string, unknown>)
+          return bodies.length === 1
+            ? HttpResponse.json({ code: 'PLACE_MODIFIED', message: 'Changed' }, { status: 409 })
+            : HttpResponse.json(current)
+        }),
+      )
+      open()
+      await add()
+      await evidence()
+      await userEvent.click(screen.getByRole('button', { name: 'Lưu thông tin' }))
+      const button = await screen.findByRole('button', {
+        name: action === 'reload' ? 'Tải lại' : 'Ghi đè',
+      })
+      // A click in the first rendered conflict frame must do nothing.
+      fireEvent.click(button)
+      try {
+        expect(button).toBeDisabled()
+        expect(
+          screen.getByRole('button', { name: action === 'reload' ? 'Ghi đè' : 'Tải lại' }),
+        ).toBeDisabled()
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+        expect(bodies).toHaveLength(1)
+        expect(screen.getByRole('button', { name: 'Xoá tên khác Chao Ban' })).toBeInTheDocument()
+      } finally {
+        finishRead()
+        await waitFor(() => expect(screen.queryAllByText(/Server alias/).length).toBeGreaterThan(0))
+      }
+      await waitFor(() => expect(button).toBeEnabled())
+      expect(await screen.findByText(/Server alias/)).toBeInTheDocument()
+      await userEvent.click(button)
+      if (action === 'overwrite') {
+        await waitFor(() => expect(bodies).toHaveLength(2))
+        expect(bodies[1]).toMatchObject({
+          aliases: ['CB', 'Chao Ban'],
+          expectedUpdatedAt: current.updatedAt,
+        })
+      } else {
+        const dialog = await screen.findByRole('dialog')
+        await userEvent.click(within(dialog).getByRole('button', { name: 'Tải lại' }))
+        expect(
+          await screen.findByRole('button', { name: 'Xoá tên khác Server alias' }),
+        ).toBeInTheDocument()
+        expect(
+          screen.queryByRole('button', { name: 'Xoá tên khác Chao Ban' }),
+        ).not.toBeInTheDocument()
+        expect(bodies).toHaveLength(1)
+      }
+    },
+  )
+
+  it('keeps conflict actions unavailable after a failed refetch and preserves the draft through retry', async () => {
+    const current = { ...place, aliases: ['Server alias'], updatedAt: '2026-08-03T00:00:00.000Z' }
+    let reads = 0
+    let finishRead!: () => void
+    const readGate = new Promise<void>((resolve) => {
+      finishRead = resolve
+    })
+    const bodies: Record<string, unknown>[] = []
+    server.use(
+      http.get(endpoint, async () => {
+        reads++
+        if (reads === 1) return HttpResponse.json(place)
+        if (reads === 2) {
+          await readGate
+          return HttpResponse.json(
+            { code: 'INTERNAL_ERROR', message: 'Unavailable' },
+            { status: 500 },
+          )
+        }
+        return HttpResponse.json(current)
+      }),
+      http.patch(endpoint, async ({ request }) => {
+        bodies.push((await request.json()) as Record<string, unknown>)
+        return bodies.length === 1
+          ? HttpResponse.json({ code: 'PLACE_MODIFIED', message: 'Changed' }, { status: 409 })
+          : HttpResponse.json(current)
+      }),
+    )
+    open()
+    await add()
+    await evidence()
+    await userEvent.click(screen.getByRole('button', { name: 'Lưu thông tin' }))
+    const overwrite = await screen.findByRole('button', { name: 'Ghi đè' })
+    fireEvent.click(overwrite)
+    try {
+      expect(overwrite).toBeDisabled()
+    } finally {
+      finishRead()
+    }
+    const retry = await screen.findByRole('button', { name: 'Thử lại' })
+    expect(screen.queryByRole('button', { name: 'Ghi đè' })).not.toBeInTheDocument()
+    expect(bodies).toHaveLength(1)
+    await userEvent.click(retry)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Ghi đè' })).toBeEnabled())
+    expect(screen.getByRole('button', { name: 'Xoá tên khác Chao Ban' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Nguồn tham chiếu tên khác')).toHaveValue('Merchant interview')
+    await userEvent.click(screen.getByRole('button', { name: 'Ghi đè' }))
+    await waitFor(() => expect(bodies).toHaveLength(2))
+    expect(bodies[1]).toMatchObject({
+      aliases: ['CB', 'Chao Ban'],
+      expectedUpdatedAt: current.updatedAt,
+      aliasProvenance: { sourceReference: 'Merchant interview' },
+    })
   })
 
   it('rechecks evidence and uses the freshly read version when explicitly overwriting a conflict', async () => {

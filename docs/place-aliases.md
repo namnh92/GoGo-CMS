@@ -2,7 +2,9 @@
 
 Refs #293. Phụ thuộc GoGo-BE#887, đã merge qua PR #901 (`c7321100`).
 Nhánh `feature/GOGO-293-place-aliases`, base `re-design` tại `9d776b3`.
-Không commit, push hay mở PR trong phiên này.
+Feature đã commit tại `4b7fe232eb9220d3f565ababa37363c863206dd2` (PR #294).
+Vòng sửa review 1 giữ nguyên HEAD này; phần sửa nằm trong working tree,
+không commit, push hay mở PR mới.
 
 ## Hành vi
 
@@ -121,7 +123,7 @@ nguyên dữ liệu; rollback UI không xoá alias đã lưu. Không cần migra
 - `src/shared/test/fixtures.ts`
 - `src/shared/test/handlers.ts`
 
-## Mutation proof
+## Mutation proof — lịch sử trước commit feature
 
 Tạm chèn 14 lỗi có chủ đích vào production code, mỗi lần chạy test nhắm đúng
 hành vi rồi phục hồi nguyên byte file. Mỗi lần trả exit **1** với assertion
@@ -152,7 +154,7 @@ Log chi tiết giữ local tại `/tmp/cms-293-mutations/M01.log` … `M14.log`;
 `summary.json` ghi test cụ thể và exit code; script phục hồi trong `finally`
 ở `/tmp/cms-293-mutate.py`. Gates local ở `/tmp/cms-293-final-*.log`.
 
-## Gates cuối — 2026-11-12
+## Gates ban đầu — 2026-11-12, trước commit feature
 
 | Lệnh                                         | Exit | Kết quả                                        |
 | -------------------------------------------- | ---- | ---------------------------------------------- |
@@ -167,5 +169,43 @@ Log chi tiết giữ local tại `/tmp/cms-293-mutations/M01.log` … `M14.log`;
 
 Mutation harness exit 0: 14/14 mutant bị test bắt (từng test run exit 1),
 18/18 alias test có bằng chứng đỏ và xanh. Mọi mutation đã phục hồi.
-HEAD vẫn `9d776b3`; 26 file thay đổi, chưa commit. Không có merge, deploy,
-DEV acceptance hoặc review độc lập được tuyên bố từ kết quả local này.
+Các kết quả ban đầu ở trên được ghi khi feature chưa commit; không gán lại
+chúng cho SHA hoặc working tree mới. Log gates đã cung cấp cho review nằm tại
+`/Users/maxnguyen/MyWorks/GoGo/dev/test-evidence/cms-293/`
+(`typecheck.log`, `lint.log`, `test.log`, `build.log`, `api:check.log`).
+
+## PR #294 — sửa review round 1
+
+Basis đã commit: `4b7fe232eb9220d3f565ababa37363c863206dd2`.
+FAIL-before chạy test hồi quy mới trên production code và tài liệu nguyên
+byte của SHA này. PASS-after chạy trên working tree sửa từ cùng SHA;
+không gọi working tree này là một commit mới.
+
+- **F-01:** response từng dùng default rỗng và bỏ qua bounds của alias.
+  Dùng lại `placeAliasesSchema` bắt buộc, không default. Test response thiếu
+  alias và 9 nhóm giá trị không hợp lệ trả exit **1** trước, **0** sau;
+  response rỗng và giá trị biên hợp lệ vẫn được chấp nhận.
+- **F-02:** panel từng dùng detail trong cache khi refetch chưa xong.
+  Diff, tải lại và phiên bản ghi đè dùng đúng row từ lần đọc thành công sau
+  conflict; khoá cả hai action trong lúc đợi hoặc khi đọc lỗi. Retry dùng
+  lại bản nháp/nguồn. Ba test giữ GET bằng promise, click ngay khi panel
+  xuất hiện, rồi kiểm tra tải lại/ghi đè và lỗi GET → retry: exit **1**
+  trước, **0** sau. Lưu thường không đi vòng qua quyết định conflict.
+- **F-03:** ghi chú từng gọi HEAD là base cũ và chưa commit. Ghi rõ SHA
+  feature đã commit ở trên, tách kết quả lịch sử với kết quả round 1.
+  Kiểm tra tài liệu bằng script ngoài repo: exit **1** trước, **0** sau.
+
+Evidence round 1 nằm ngoài repo tại `/private/tmp/cms-293-round1/`:
+`F01-before.log`/`F01-after.log`, `F02-before.log`/`F02-after.log`,
+`F03-before.log`/`F03-after.log`; `run.py` và `check-docs.py` tái hiện lệnh.
+Mỗi log kèm JSON ghi lệnh, UTC, exit code, full HEAD và SHA-256 từng tracked
+file lúc bắt đầu. `summary.json` ghi kết quả gates của round 1;
+`snapshots/` giữ manifest + patch có thể verify bằng `dev/handoffs/snapshot.sh`.
+Chưa chép log round 1 vào thư mục evidence chuẩn
+`/Users/maxnguyen/MyWorks/GoGo/dev/test-evidence/cms-293/` vì thư mục đó
+ngoài writable roots của phiên này; các log cũ ở đó không bị thay thế.
+
+Các gates round 1: `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`,
+`pnpm api:check`, `git diff --check`; lệnh/exit code thực tế xem evidence
+round 1. Không có merge, deploy, DEV acceptance hoặc kết luận review độc lập
+được tuyên bố từ các kết quả local này.

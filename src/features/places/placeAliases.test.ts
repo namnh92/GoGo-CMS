@@ -25,6 +25,34 @@ const baseline = { values, taxonomyIds: [], updatedAt: '2026-08-02T00:00:00.000Z
 describe('alias contract and form', () => {
   it('preserves aliases when parsing the read DTO', () => {
     expect(cmsPlaceDetailSchema.parse({ ...places[0], aliases: ['CB'] }).aliases).toEqual(['CB'])
+    expect(cmsPlaceDetailSchema.parse({ ...places[0], aliases: [] }).aliases).toEqual([])
+    expect(
+      cmsPlaceDetailSchema.parse({
+        ...places[0],
+        aliases: Array.from({ length: 20 }, () => 'a'.repeat(120)),
+      }).aliases,
+    ).toHaveLength(20)
+  })
+
+  it('rejects a read DTO with missing aliases instead of inventing an empty set', () => {
+    const response = Object.fromEntries(
+      Object.entries(places[0]!).filter(([key]) => key !== 'aliases'),
+    )
+    expect(cmsPlaceDetailSchema.safeParse(response).success).toBe(false)
+  })
+
+  it.each([
+    ['too many', Array.from({ length: 21 }, () => 'CB')],
+    ['too long', ['a'.repeat(121)]],
+    ['empty', ['']],
+    ['whitespace only', ['  ']],
+    ['combining mark only', ['\u0301']],
+    ['control character', ['CB\n']],
+    ['format character', ['CB\u200b']],
+    ['line separator', ['CB\u2028']],
+    ['paragraph separator', ['CB\u2029']],
+  ])('rejects invalid response aliases: %s', (_name, aliases) => {
+    expect(cmsPlaceDetailSchema.safeParse({ ...places[0], aliases }).success).toBe(false)
   })
 
   it('accepts boundary values and rejects every out-of-bounds/plain-text violation', () => {
