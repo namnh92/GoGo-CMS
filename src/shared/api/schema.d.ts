@@ -125,19 +125,53 @@ export interface paths {
         put?: never;
         /**
          * Request an in-app password recovery code
-         * @description Always returns the same 202 shape for eligible, missing, guest,
-         *     passwordless, disabled and deleted accounts. No code is returned.
+         * @description Eligible active password accounts receive 202 with a challengeId.
+         *     Missing, passwordless, disabled and deleted accounts receive the same
+         *     404 RECOVERY_ACCOUNT_NOT_FOUND, retryable false, message "Tài khoản không tồn tại".
+         *     This intentionally reveals recovery eligibility (owner decision #835).
+         *     No code or ineligibility reason is returned.
          *     Active password accounts may recover even if email was unverified.
          *     Six-digit code expires after 300 seconds; resend replaces the proof.
-         *     Limits count all requests, including replays: 1/minute + 3/hour/email,
+         *     Limits count all requests, including 404 responses and replays: 1/minute + 3/hour/email,
          *     10/minute + 50/hour/IP. Cooldown is 60 seconds, also on replay.
          *     Idempotency is scoped to IP + operation + key for 24 hours; same key
-         *     and normalized body replays the original result even after resend.
+         *     and normalized body replays the original result even after resend for
+         *     accounts that remain eligible. Ineligible accounts receive the generic 404.
          *     A changed body returns 422. Account-specific delivery failure still
          *     returns 202 and invalidates the affected challenge internally.
          *     Production is disabled until mail and shared fail-closed quotas exist.
          */
         post: operations["requestPasswordRecovery"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/password-recovery/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check a recovery code before entering a new password
+         * @description Returns 204 only for a matching, unexpired, unconsumed proof bound to
+         *     the original active password account. Does not consume the code, reset
+         *     the password, verify the account email, or revoke sessions.
+         *     Complete still revalidates and consumes the proof exactly once.
+         *     Wrong, expired, consumed, exhausted, superseded, mismatched or ineligible
+         *     proofs return 400 RECOVERY_INVALID. Failed proof checks against a live
+         *     challenge count toward the same maximum of five failures as complete,
+         *     including mismatched challenge IDs. Five failures invalidate the challenge.
+         *     Shares complete limits: 10/15 minutes/email, 30/15 minutes/IP, including
+         *     repeated checks. Every call revalidates; Idempotency-Key does not replay
+         *     a prior success or suppress failed attempts.
+         */
+        post: operations["verifyPasswordRecovery"];
         delete?: never;
         options?: never;
         head?: never;
@@ -258,6 +292,69 @@ export interface paths {
          * @description `displayName` and `locale` are never null. `homeAreaKey` must be an active service area. `interests` carries stable taxonomy keys by kind and only `mood` is accepted (ADR-0022); an unknown key or an unsupported kind is `INVALID_TAXONOMY_KEYS`. `usualBudget.perPerson` is integer minor units, a create-room default, never a room constraint. `dateOfBirth` (PROF-BE-013) is a calendar date `YYYY-MM-DD`: a date that does not exist is `VALIDATION_FAILED` with field error code `invalid_date`, and a date after today in `Asia/Ho_Chi_Minh` is `VALIDATION_FAILED` with field error code `too_big`; today itself is accepted. No minimum age applies. It is returned only on the owner's `/me` and export, never in a member or public summary. Users only: a guest gets 403.
          */
         patch: operations["updateProfile"];
+        trace?: never;
+    };
+    "/me/credits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Own posted credit balance and lifetime totals
+         * @description Active registered users only; guests and staff receive USER_ONLY.
+         *     Requires the independent default-off assistant_credits.display_enabled
+         *     flag. GET /me capabilities.assistantCredits advertises this release's
+         *     support; clients must treat absence as unavailable (contract before 9.5).
+         *     Reads never create an account. No account means zero facts.
+         *     One statement snapshot reads posted balance and lifetime ledger totals;
+         *     totals do not depend on history pagination, source/usage retention or
+         *     catalogue entitlements. Refunds reduce spent, never increase earned.
+         *     reserved is 0 and policyKey is legacy_allowance_v1 in slice V.
+         *     Existing daily allowance and one-credit charging stay unchanged.
+         *     A mismatch is monitored, never repaired during GET.
+         *     Rate limit: 60 requests per minute per actor.
+         *     Success and errors use Cache-Control: private, no-store.
+         */
+        get: operations["getMyCredits"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/credits/ledger": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Own credit ledger, ten entries per page
+         * @description Same active-user, display flag and private, no-store policy as /me/credits,
+         *     including errors. No user ID parameter is accepted. Fixed page size 10,
+         *     fetch 11, descending (created_at, id) with strict keyset pagination.
+         *     Cursor is opaque, versioned and bound to the authenticated user; it retains
+         *     all six timestamp digits. Invalid or another user's cursor returns
+         *     400 INVALID_CURSOR. Other query validation failures use VALIDATION_FAILED.
+         *     No-account history is empty. Source deletion and usage purge preserve
+         *     posted history. Refresh without cursor to see concurrent new entries;
+         *     pagination is not a frozen multi-request snapshot.
+         *     direction, eventKey and source.type are open strings: unknown keys need
+         *     a generic client label. No localized copy, venue/entitlement identity,
+         *     internal usage ID or provider billing data is returned. Rate: 60/minute/actor.
+         */
+        get: operations["getMyCreditLedger"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/me/avatar": {
@@ -756,7 +853,7 @@ export interface paths {
          *
          *     `context` overrides the conversation's context for this turn only (same rules as on create: place **or** plan, readable by the caller, else `404 CONTEXT_NOT_FOUND`). `attachments` are image upload keys from `POST /uploads` with `purpose: assistant_image` — images only, at most 3, each bound to the caller; anything else is `400 ATTACHMENT_INVALID` without saying which reason.
          *
-         *     One reply at a time per conversation: sending while a reply is still streaming is `409 ASSISTANT_TURN_IN_PROGRESS` — stop it first. The per-account daily message limit (default 30 per day, resetting at midnight Asia/Ho_Chi_Minh) and the per-minute burst limit (default 5 in any rolling minute) both answer `429` with `Retry-After`. Defaults are provisional and configurable: the current values are in `GET /assistant/status` (`dailyMessageLimit`, `messagesPerMinuteLimit`) — never hardcode them. Only an accepted send counts; an idempotent replay consumes nothing. An unconfigured limit refuses with `503 ASSISTANT_DISABLED`, never unlimited.
+         *     One reply at a time per conversation: sending while a reply is still streaming is `409 ASSISTANT_TURN_IN_PROGRESS` — stop it first. Free accepted sends use the configured daily allowance, resetting at midnight Asia/Ho_Chi_Minh. Exhausted free allowance requires paid readiness and sufficient available credits for the verified hold: unavailable is 503 ASSISTANT_DISABLED; insufficient is 409 ASSISTANT_INSUFFICIENT_CREDIT with typed details and retryable false. Burst remains 429 RATE_LIMITED. Legacy policy retains its daily-limit 429. The current limits are in `GET /assistant/status` (`dailyMessageLimit`, `messagesPerMinuteLimit`) — never hardcode them. Only an accepted send counts; an idempotent replay consumes nothing. An unconfigured limit refuses with `503 ASSISTANT_DISABLED`, never unlimited.
          */
         post: operations["sendAssistantMessage"];
         delete?: never;
@@ -1731,31 +1828,9 @@ export interface paths {
         };
         /**
          * Fetch at most one transient Google candidate photo through the BFF
-         * @description Public, 10/min/IP. Fetch the candidate photo reference as JSON and render its base64 bytes with its Google Maps and author attribution; the URL is not a directly loadable image. No Google key/name/URL for image retrieval is exposed. Fresh first photo at fetch time; response credits are authoritative. Flag place_provider_photos, google.places.display budgets, 800px/400KiB, 6s overall deadline and bounded expired-reference retry apply. Nothing is stored.
+         * @description Resolve-preview only (ADR-0052). Submission views use the stored CDN cover. Public. 120/min per verified actor when a valid session is sent, otherwise per IP. Fetch the candidate photo reference as JSON and render its base64 bytes with its Google Maps and author attribution; the URL is not a directly loadable image. No Google key/name/URL for image retrieval is exposed. Fresh first photo at fetch time; response credits are authoritative. Flag place_provider_photos, google.places.display budgets, 800px/400KiB, 6s overall deadline and bounded expired-reference retry apply. Nothing is stored.
          */
         get: operations["getCandidateProviderPhoto"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/places/{id}/provider-photos": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Transient Google photos for one Place Detail view (never stored)
-         * @description GoGo-BE#509 (owner decision 2026-10-02, ADR-0030). Fetched from Google when Place Detail is opened and returned once: photo names, image URLs and bytes are not stored anywhere (database, object storage, cache, jobs, snapshots), and the response is `Cache-Control: private, no-store` — clients must not persist it in a disk/offline image cache or persisted query state either. Images arrive inline as base64 so the client never calls Google directly. At most three photos, each with its author credit (`authorAttributions`) to render beside it, plus the `attribution` text (Google Maps) whenever any photo is shown. Never call this per list card.
-         *
-         *     Always 200 for a place Place Detail opens (404 otherwise). `status` says why `photos` is empty: `disabled` (kill switch off), `not_linked` (no Google Place ID), `budget_exhausted` (daily provider budget reached or not configured), `unavailable` (provider error, timeout or moved place). Treat an unknown `status` like `unavailable`. GoGo imagery stays on `PlaceDetail.photos`; Google price ranges are never returned (core rule 13: a price without its unit).
-         */
-        get: operations["getPlaceProviderPhotos"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2200,6 +2275,110 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/system-notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Public system announcements, available while signed out
+         * @description Published announcements with publishedAt <= server time and no expiry or expiresAt > server time. Ordered by (publishedAt DESC, id DESC), with opaque full-precision tuple cursors. No account-specific fields or read state. CMS-authored title/body are editorial copy, not composed facts. Clients display this section above the personal inbox for signed-in users; no duplication into /me/notifications or its unread summary. Rate limit is 60 requests/minute per IP, including conditional GETs. The shared cache can serve a representation for up to 60 seconds after expiry, edit or archive. Revalidation evaluates current visibility.
+         */
+        get: operations["listSystemNotifications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/system-notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ops/super admin: list announcements including drafts and archived rows
+         * @description Ordered by (createdAt DESC, id DESC). Cache-Control is private, no-store.
+         */
+        get: operations["cmsListSystemNotifications"];
+        put?: never;
+        /**
+         * Ops/super admin: create a draft announcement
+         * @description Idempotency-Key is mandatory (8-128 ASCII word/hyphen characters). Creation, append-only audit and 24-hour replay record commit together. Same actor/key/body replays the original 201 even after later edits; changed body returns 422. Locale defaults to vi. No inbox/push rows.
+         */
+        post: operations["cmsCreateSystemNotification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/system-notifications/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Ops/super admin: edit draft or published announcement copy
+         * @description Row-locked update and append-only audit commit together. Does not change status or publishedAt. Archived rows cannot be edited (409). Null deepLink/expiresAt clears the field; expiry must follow publication.
+         */
+        patch: operations["cmsPatchSystemNotification"];
+        trace?: never;
+    };
+    "/cms/system-notifications/{id}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ops/super admin: publish announcement
+         * @description Publishes a draft immediately with a server-owned publishedAt. Expired drafts return 400. Archived rows cannot be published (409). Repeating the same transition is a no-op returning 200 without another audit row or changing publishedAt. State and append-only audit commit together under a row lock. Creates no personal inbox or push records.
+         */
+        post: operations["cmsPublishSystemNotification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cms/system-notifications/{id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ops/super admin: archive announcement
+         * @description Archives a draft or published row. Archived is terminal; data and audit history remain. Repeating the same transition is a no-op returning 200 without another audit row or changing publishedAt. State and append-only audit commit together under a row lock. Creates no personal inbox or push records.
+         */
+        post: operations["cmsArchiveSystemNotification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/notifications": {
         parameters: {
             query?: never;
@@ -2207,8 +2386,68 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** In-app notification inbox (cursor by createdAt) */
+        /**
+         * In-app notification inbox (createdAt and id descending)
+         * @description New opaque signed cursors bind the account, canonical kinds filter and committed sequence snapshot for 24 hours. Equal timestamps use id as a tie breaker. Previously issued ISO timestamp cursors remain accepted during transition; these retain their original exclusive timestamp boundary. Before backfill opens the rollout gate, this endpoint stays available, includes historical rows, and issues full-precision unsigned (createdAt,id) fallback cursors. Fallback continuations retain that boundary across gate activation without acquiring a sequence snapshot; only summary/read-all are gated. Optional repeatable kinds query parameters select NotificationKind values server-side. Unknown values return 400 VALIDATION_FAILED. Order and duplicates are ignored; changing the filter on a cursor returns 400 INVALID_NOTIFICATION_CURSOR. Timestamp and old unfiltered fallback cursors belong to the all-kinds filter. Summary unreadCount always counts the unfiltered inbox. Invalid/foreign/purpose-mismatched cursors return INVALID_NOTIFICATION_CURSOR; expired signed cursors return NOTIFICATION_CURSOR_EXPIRED.
+         */
         get: operations["listNotifications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/notifications/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Shared account unread count and committed read-through cutoff
+         * @description Source for the bell, new-item count and profile (#809). Counts all account-owned inbox kinds with readAt absent in the same database snapshot as the cutoff. Push preferences do not affect it. Refetch after reads; mutation replays are not a current count. Cutoff APIs return 503 until the resumable historical backfill and concurrent indexes complete.
+         */
+        get: operations["getNotificationSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/notifications/read-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark unread rows through a fixed account cutoff
+         * @description Requires Idempotency-Key. The signed summary cursor is account-bound and valid for 24 hours. At most 500 rows change in one transaction. Further batches resume durably in bounded worker ticks after crashes. Each changed row receives the operation action timestamp; existing readAt is preserved. Concurrent reads count each changed row once. Arrivals above the cutoff remain unread. Retrying the same key/body replays the original operation response (even after cursor expiry); poll Location for current progress, then refetch summary. A different body with the same key returns 422.
+         */
+        post: operations["readAllNotifications"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/notifications/read-all/{operationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Poll an account-owned durable read-all operation */
+        get: operations["getNotificationReadOperation"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2925,7 +3164,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Mark one notification read */
+        /**
+         * Mark one notification read
+         * @description Retries preserve the first readAt. Missing and foreign ids return the same success without changing another account. Does not decline or revoke an invitation. Refetch the shared notification summary after success.
+         */
         post: operations["markNotificationRead"];
         delete?: never;
         options?: never;
@@ -3091,12 +3333,12 @@ export interface paths {
         };
         /**
          * Per-channel, per-kind notification opt-ins (legacy clients)
-         * @description Kept for clients released before NTF-BE-014 (#572). Push is now one switch per account (`GET /me/notification-settings`, ADR-0025), so every push kind here reports that switch's value; email rows are returned as stored. New clients read the settings resource instead.
+         * @description ADR-0050 supersedes ADR-0025: each push kind reports its effective permission (registered push support AND master AND category). Email rows remain stored choices. Moderation has no authorized push producer. New clients use the versioned settings resource to distinguish configured choices from suspension.
          */
         get: operations["getNotificationPreferences"];
         /**
          * Opt in/out of one notification kind on one channel (legacy clients)
-         * @description Kept for clients released before NTF-BE-014 (#572). The row is stored, but only a push opt-out changes delivery: it turns the account's push switch off (`source: legacy`), since a single kind can no longer be stopped on its own. `enabled: true` never turns push back on — that is `PUT /me/notification-settings`.
+         * @description Push opt-out disables the master (source legacy), retaining category choices. Push opt-in never enables the master or overrides a disabled category. Effective push mirrors are maintained atomically; email behavior is unchanged. No new headers are required on this existing PUT.
          */
         put: operations["setNotificationPreference"];
         post?: never;
@@ -3114,20 +3356,24 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * The account's one push switch (NTF-BE-014)
-         * @description ADR-0025. `pushEnabled` is what this account asked GoGo to do and nothing more: it is not this device's OS notification permission, not a registered push subscription (`PUT /me/push-subscriptions`), and never evidence that anything was delivered. The in-app inbox is written whatever it says.
+         * Account master and five category preferences (ADR-0050)
+         * @description ADR-0050. Master suspends all push including non-configurable other; each of five categories independently suppresses its registered push kinds. Missing category rows default true; existing master/default consent is preserved. Inbox and email are independent. Not OS permission, subscription or delivery. Returns a strong ETag over the decimal-string resource version.
          */
         get: operations["getNotificationSettings"];
         /**
          * Turn every push notification kind on or off
-         * @description Idempotent. `true` allows every push kind GoGo sends, CMS campaigns included; `false` stops all of them. Once set, per-kind rows written by older clients no longer affect delivery (ADR-0025). A client should keep showing the previous value until this returns, and restore it on failure.
+         * @description Existing global-enable semantics preserved: true enables master and all five categories atomically; false disables master and remembers category choices. Does not newly require If-Match or Idempotency-Key. During rollback freeze, preference mutations return 503 NOTIFICATION_PREFERENCES_FROZEN.
          */
         put: operations["setNotificationSettings"];
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Change master, category and quiet-hour choices atomically
+         * @description At least one field or category is required; omitted choices remain unchanged. quietHours defaults off. If enabled, defer account push during 23:00–07:00 in the stored IANA timezone; enabling requires a timezone in this request or already stored. Invalid timezone or enabled without timezone returns VALIDATION_FAILED. Inbox stays immediate. No emergency exception. Disabling or changing timezone wakes deferred work to recheck current settings; expired/cancelled reminders are suppressed. Quiet-hour changes share the same version, audit, concurrency and idempotency semantics as category changes. Master changes retain category choices. Changing a category never enables master. Enable all submits all five categories true and leaves master unchanged. If-Match must equal the current strong ETag. Idempotency replay precedes stale version rejection and returns the original response/ETag without another write. Mutation, version increment, effective legacy mirrors, audit and replay commit together under the account lock. Suppressed push is terminal; opt-in never replays backlog. A change after the final eligibility check may race an already-starting provider call.
+         */
+        patch: operations["patchNotificationSettings"];
         trace?: never;
     };
     "/docs": {
@@ -3755,7 +4001,7 @@ export interface paths {
          *
          *     **Contact evidence (1.0.0-alpha.66, GoGo-BE#280).** `addressText`, `phone` and `website` are the exception to `sourceReferences`: each non-null value carries its structured evidence in `provenance.<field>` (`sourceType` `editorial | community | provider`, `sourceReference`, `collectedAt`) and is recorded with that evidence, the acting editor and `verifiedAt` = now — never `google_derived`. A non-null value without its entry is `400 VALIDATION_FAILED` (`provenance.<field>`, `required`); an entry without a value is `value_missing`; an entry beside `null` is `not_allowed`; `null` alone writes nothing. A `sourceReferences` key for any of the three is refused `400 SOURCE_REFERENCE_INVALID` with `code: unknown` and a message naming `provenance.<field>` — there is no fallback or alias, even when both carry the same text. **Breaking versus alpha.65** (as introduced in alpha.62), which accepted `sourceReferences.<contact>` and required it for a contact value.
          *
-         *     **No provider content.** This route calls no Google provider and persists no provider fact — no rating, review count, price level, hours or canonical link. A `googlePlaceId` is stored as identity only. The PI-BE-021 enrichment that did so on this route is withdrawn (`docs/adr/0020-provider-facts-on-editor-created-places.md`, #440 amendment).
+         *     **Photo-only provider exception.** With `googlePlaceId`, acquires one Google cover photo when enabled (ADR-0052 / ADR-0020 amendment #2), with no opt-in field. Still persists no other provider fact: no rating, review count, price level, hours or canonical link. The place and idempotency record commit before acquisition; any photo failure leaves creation successful, and replay never re-runs acquisition. A missing cover requires editor upload; #797 remains published-only.
          *
          *     **Identity beats similarity.** Given a `googlePlaceId`, the catalogue is asked first whether that Google record already belongs to a place — it does, and the answer is `409 PLACE_ALREADY_LINKED` naming it; two places already claim it, and the answer is `409 PLACE_IDENTITY_CONFLICT` naming both. Checked again inside the creating transaction, and a concurrent create that loses the race gets the same 409, never a 500. `allowDuplicate` does not open this gate.
          *
@@ -4076,7 +4322,7 @@ export interface paths {
         put?: never;
         /**
          * Editor: merge a duplicate into this canonical place
-         * @description References (sources, media, prices, reviews, seeds) move over; the duplicate is archived, never deleted.
+         * @description References (sources, media, prices, reviews, seeds, curated aliases) move over; the duplicate is archived, never deleted. Alias rows retain their provenance; on normalized collisions the canonical alias and its provenance win. A union over 20 normalized aliases rejects the entire merge with 409 PLACE_ALIAS_LIMIT_EXCEEDED; editors must reconcile aliases before retrying. A successful merge advances the canonical updatedAt version.
          */
         post: operations["cmsMergePlaces"];
         delete?: never;
@@ -5892,6 +6138,151 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        MyCredits: {
+            balance: number;
+            earned: number;
+            spent: number;
+            reserved: number;
+            availableBalance: number;
+            /** Format: date-time */
+            asOf: string;
+            /** @description Open policy key; known legacy_allowance_v1 and free_then_actual_cost_v1. Unknown values must be tolerated. */
+            policyKey: string;
+        };
+        MyCreditEntry: {
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            createdAt: string;
+            delta: number;
+            /** @description Open key; known earned, spent, adjustment. */
+            direction: string;
+            /** @description Open catalogue key or assistant_usage; never localized copy. */
+            eventKey: string;
+            source: {
+                /** @description Open key; contribution, review, event, assistant_usage, legacy. */
+                type: string;
+            };
+            /**
+             * Format: uuid
+             * @description Catalogue event ID when present; never an entitlement or source-subject key.
+             */
+            eventId?: string;
+            /** @description Conversation of this owner's usage entry (message_spent or assistant_usage_adjustment), resolved from the credit turn or legacy usage/message link. Null for non-usage, deleted, expired, unknown or otherwise unreadable conversations. Never another user's conversation. Clients group by local day and conversation; pagination and ordering remain unchanged. */
+            conversation?: {
+                /** Format: uuid */
+                id: string;
+                title: string | null;
+            } | null;
+            /** @description Catalogue credit_events.labels for an event-sourced grant; null otherwise. Facts, not composed copy. */
+            eventLabels?: {
+                vi: string;
+                en: string;
+            } | null;
+            /**
+             * Format: uuid
+             * @description Optional only if still readable by this actor; omitted in V.
+             */
+            messageId?: string;
+        };
+        MyCreditPage: {
+            items: components["schemas"]["MyCreditEntry"][];
+            nextCursor: string | null;
+        };
+        /** @description Consumers must tolerate future system announcement kinds. */
+        SystemNotificationKind: string;
+        /** @description Canonical gogo app route only; no query, fragment, encoding or credentials. Null means no destination. */
+        SystemNotificationDeepLink: string | null;
+        SystemNotification: {
+            /** Format: uuid */
+            id: string;
+            kind: components["schemas"]["SystemNotificationKind"];
+            /** @description CMS-authored editorial copy */
+            title: string;
+            /** @description CMS-authored editorial copy */
+            body: string;
+            deepLink: components["schemas"]["SystemNotificationDeepLink"];
+            /** Format: date-time */
+            publishedAt: string;
+            /** Format: date-time */
+            expiresAt: string | null;
+        };
+        CmsSystemNotification: {
+            /** Format: uuid */
+            id: string;
+            kind: components["schemas"]["SystemNotificationKind"];
+            /** @description CMS-authored editorial copy */
+            title: string;
+            /** @description CMS-authored editorial copy */
+            body: string;
+            deepLink: components["schemas"]["SystemNotificationDeepLink"];
+            /** Format: date-time */
+            publishedAt: string | null;
+            /** Format: date-time */
+            expiresAt: string | null;
+            /** @enum {string} */
+            locale: "vi";
+            /** @enum {string} */
+            status: "draft" | "published" | "archived";
+            /** Format: uuid */
+            createdBy: string;
+            /** Format: uuid */
+            updatedBy: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        CmsSystemNotificationCreate: {
+            /** @enum {string} */
+            kind: "maintenance" | "update" | "general";
+            title: string;
+            body: string;
+            /**
+             * @default vi
+             * @enum {string}
+             */
+            locale: "vi";
+            deepLink?: components["schemas"]["SystemNotificationDeepLink"];
+            /** Format: date-time */
+            expiresAt?: string | null;
+        };
+        CmsSystemNotificationPatch: {
+            kind?: components["schemas"]["CmsSystemNotificationCreate"]["kind"];
+            title?: components["schemas"]["CmsSystemNotificationCreate"]["title"];
+            body?: components["schemas"]["CmsSystemNotificationCreate"]["body"];
+            locale?: components["schemas"]["CmsSystemNotificationCreate"]["locale"];
+            deepLink?: components["schemas"]["CmsSystemNotificationCreate"]["deepLink"];
+            expiresAt?: components["schemas"]["CmsSystemNotificationCreate"]["expiresAt"];
+        };
+        SystemNotificationPage: {
+            items: components["schemas"]["SystemNotification"][];
+            nextCursor: string | null;
+        };
+        CmsSystemNotificationPage: {
+            items: components["schemas"]["CmsSystemNotification"][];
+            nextCursor: string | null;
+        };
+        NotificationSummary: {
+            unreadCount: number;
+            /** Format: date-time */
+            asOf: string;
+            /** @description Signed opaque account cutoff; expires in 24 hours */
+            readThroughCursor: string;
+        };
+        NotificationReadOperation: {
+            /** Format: uuid */
+            operationId: string;
+            /** @enum {string} */
+            status: "running" | "completed";
+            /**
+             * Format: date-time
+             * @description Fixed action timestamp
+             */
+            asOf: string;
+            /** @description Rows changed by this operation only */
+            changedCount: number;
+        };
         AdministrativeUnit: {
             /** @description Official GSO code. Not unique on its own — see ADR-0019 §2. */
             code: string;
@@ -6703,6 +7094,8 @@ export interface components {
              */
             dateOfBirth?: string | null;
             capabilities?: {
+                /** @description Optional capability (9.5+); absence or false means unavailable. Independent default-off display flag; no grant or charging activation. */
+                assistantCredits?: boolean;
                 /**
                  * @description Known before a picker opens; the server still enforces it.
                  * @enum {string}
@@ -7799,10 +8192,10 @@ export interface components {
              * @description UTC ledger timestamp, including all six fractional digits.
              */
             createdAt: string;
-            /** @description Signed credits; +50 or +70 for approval, +20 for accepted evidence on merge (ledger reason submission_approved), -1 for message_spent. Bonus requires approved menu/bill evidence (#794). Values are extensible; consumers must accept unknown integer deltas. */
+            /** @description Signed nonzero credits. Usage debits are negative; usage corrections can be positive refunds or negative charges. Positive adjustments are not grants. */
             delta: number;
-            /** @enum {string} */
-            reason: "submission_approved" | "message_spent";
+            /** @description Open reason; known catalogue keys, submission_approved, message_spent and assistant_usage_adjustment. */
+            reason: string;
             /**
              * Format: uuid
              * @description Immutable contribution reference, even after source deletion; null for spending.
@@ -8044,20 +8437,86 @@ export interface components {
             decision: "published" | "rejected" | "approved" | "actioned" | "dismissed";
             reason: string;
         };
-        /** @description ADR-0025. One app-level push switch per account. Deliberately carries no OS permission, subscription or delivery field: the device knows its own permission, `PUT /me/push-subscriptions` records reachability, and only the provider knows about delivery. */
+        /** @description ADR-0050. Account master plus five remembered category choices. Carries no OS permission, subscription or delivery field: the device knows its own permission, `PUT /me/push-subscriptions` records reachability, and only the provider knows about delivery. */
         NotificationSettings: {
-            /** @description Whether GoGo may ask the provider to push to this account, for every kind. */
+            /** @description Account master gate; registered kind and category must also permit push. */
             pushEnabled: boolean;
             /**
              * @description `default` — never chosen, so on. `explicit` — set through `PUT /me/notification-settings`. `migrated` — derived once by migration 0064 from per-kind choices: on only if every stored push kind was on. `legacy` — an older client turned one kind off, which turns push off.
              * @enum {string}
              */
             source: "default" | "explicit" | "migrated" | "legacy";
+            /** @description Monotonic resource version represented without JavaScript precision loss. */
+            version?: string;
+            categories?: components["schemas"]["NotificationCategoryPatch"] & unknown;
+            /** @description Fixed 23:00 inclusive to 07:00 exclusive in the account timezone. Default off; no inferred timezone. Across DST, resume at the first UTC instant outside the local window. */
+            quietHours?: {
+                /** @default false */
+                enabled: boolean;
+                /** @description Stored IANA timezone or null if never set. */
+                timezone: string | null;
+            };
             /**
              * Format: date-time
              * @description When the switch was last stored; null while it is the default.
              */
             updatedAt: string | null;
+        };
+        /** @description At least one quiet-hour change. Enabled requires a valid stored timezone; omitted values are retained. */
+        NotificationQuietHoursPatch: {
+            enabled: boolean;
+            /**
+             * @example Asia/Ho_Chi_Minh
+             * @example America/New_York
+             */
+            timezone?: string;
+        } | {
+            enabled?: boolean;
+            /**
+             * @example Asia/Ho_Chi_Minh
+             * @example America/New_York
+             */
+            timezone: string;
+        };
+        /** @description Five configurable categories only. Other is non-configurable and follows master. */
+        NotificationCategoryPatch: {
+            invite?: boolean;
+            preference_reminder?: boolean;
+            plan_ready?: boolean;
+            plan_changed?: boolean;
+            date_reminder?: boolean;
+        };
+        /** @description At least one category choice; all supplied values are booleans. */
+        NotificationCategoryChanges: {
+            invite: boolean;
+            preference_reminder?: boolean;
+            plan_ready?: boolean;
+            plan_changed?: boolean;
+            date_reminder?: boolean;
+        } | {
+            invite?: boolean;
+            preference_reminder: boolean;
+            plan_ready?: boolean;
+            plan_changed?: boolean;
+            date_reminder?: boolean;
+        } | {
+            invite?: boolean;
+            preference_reminder?: boolean;
+            plan_ready: boolean;
+            plan_changed?: boolean;
+            date_reminder?: boolean;
+        } | {
+            invite?: boolean;
+            preference_reminder?: boolean;
+            plan_ready?: boolean;
+            plan_changed: boolean;
+            date_reminder?: boolean;
+        } | {
+            invite?: boolean;
+            preference_reminder?: boolean;
+            plan_ready?: boolean;
+            plan_changed?: boolean;
+            date_reminder: boolean;
         };
         /** @description Declared extensible (alpha.69): a client treats a kind it does not know as an opaque notification it cannot render specially — never as a malformed item — so a new kind is not a breaking change on the inbox or the preference list. `privacy_export_ready` (GoGo-BE#256) is in-app only: its payload is `{ exportId, expiresAt }` and is never pushed. */
         NotificationKind: string;
@@ -8223,6 +8682,66 @@ export interface components {
             source: string | null;
             campaign: string | null;
         };
+        /** @description Independently evidenced persistable GoGo text captured at event time. Provider origin requires non-Google independent evidence; a label or canonical column is insufficient. Private evidence references and actors are never returned. */
+        NotificationSourcedText: {
+            value: string;
+            /** @enum {string} */
+            sourceType: "gogo";
+            /** @enum {string} */
+            originType: "editorial" | "community" | "provider";
+            /** Format: date-time */
+            verifiedAt: string;
+            /** Format: date-time */
+            collectedAt?: string;
+        };
+        /** @description Event-time facts, never a composed countdown. This release emits only room_started, meaning the outing started, with scheduledFor=null and no leadTimeSeconds. scheduled is reserved for the separate advance-reminder scheduler (PR4). startsAt comes only from the current room_constraints.start_at; null means unknown. */
+        NotificationReminder: {
+            /** @enum {string} */
+            trigger: "room_started" | "scheduled";
+            /** Format: date-time */
+            triggeredAt: string;
+            /** Format: date-time */
+            scheduledFor: string | null;
+            /** Format: date-time */
+            startsAt: string | null;
+            leadTimeSeconds?: number;
+            scheduleRevision?: string;
+        };
+        /** @description Immutable event-time preview, not a promise of current plan or place availability. Opening resolves the current authorized plan. Missing provenance omits text; Google names/addresses/coordinates/photos/ratings/hours are never snapshotted. startAt is omitted when no confirmed instant exists or the plan's constraint version differs from the room's current constraints. Stop arrivals remain separate facts. Current access/resource availability can suppress the preview, stop text or media references. Resolve current authorized place media separately; never treat a media id as a URL. */
+        NotificationPlanPreview: {
+            /** Format: uuid */
+            planId: string;
+            planVersion: number;
+            constraintVersion: number;
+            /** Format: date-time */
+            capturedAt: string;
+            /** Format: date-time */
+            startAt?: string;
+            /** @enum {string} */
+            startAtSource?: "room_constraints";
+            stopCount: number;
+            /** @description First three stops in position order; stopCount counts the full plan. */
+            stops: {
+                position: number;
+                /** Format: date-time */
+                arriveAt?: string;
+                /** Format: uuid */
+                placeId: string;
+                name?: components["schemas"]["NotificationSourcedText"];
+                addressText?: components["schemas"]["NotificationSourcedText"];
+                /**
+                 * Format: uuid
+                 * @description Approved independently uploaded GoGo place_media id; provider photos excluded.
+                 */
+                mediaId?: string;
+            }[];
+        };
+        /** @description GoGo-owned processed public avatar reference captured at event time, never an external URL. Omitted when absent, replaced, deleted or the inviter is no longer accessible. Resolve current authorized member media separately. Contains no account or actor id. */
+        NotificationInviterAvatar: {
+            /** @enum {string} */
+            sourceType: "gogo";
+            mediaKey: string;
+        };
         /** @description Facts only — compose the display string client-side from `kind` + `payload`. */
         Notification: {
             /** Format: uuid */
@@ -8245,6 +8764,9 @@ export interface components {
                 roomName?: string;
                 /** @description Display name of the room member who created the invite used to join. */
                 inviterName?: string;
+                inviterAvatar?: components["schemas"]["NotificationInviterAvatar"];
+                reminder?: components["schemas"]["NotificationReminder"];
+                planPreview?: components["schemas"]["NotificationPlanPreview"];
                 /** @description Aggregate completion only; never contains a member's private selections. */
                 preferenceProgress?: {
                     completedCount: number;
@@ -8823,6 +9345,8 @@ export interface components {
             expiresAt: string;
         };
         SubmissionResult: {
+            /** @description Stored attributed cover (ADR-0052); rejected photos are shown only while updateDeadline is in the future. */
+            photo?: components["schemas"]["PlacePhoto"];
             /** @enum {string} */
             status?: "PENDING" | "ALREADY_EXISTS";
             /** Format: uuid */
@@ -8848,7 +9372,19 @@ export interface components {
             /** @description Access token TTL in seconds. */
             expiresIn: number;
         };
+        AssistantInsufficientCreditDetails: {
+            creditBalance: number;
+            creditReserved: number;
+            creditAvailable: number;
+            requiredCredits: number;
+            /** @constant */
+            remainingToday: 0;
+            /** Format: date-time */
+            resetsAt: string;
+        };
         ErrorEnvelope: {
+            /** @description Required for ASSISTANT_INSUFFICIENT_CREDIT (409); no internal provider/usage data. */
+            details?: components["schemas"]["AssistantInsufficientCreditDetails"];
             /** @description Stable machine-readable error code. */
             code: string;
             message: string;
@@ -9137,6 +9673,13 @@ export interface components {
             nextCursor: string | null;
         };
         MyPlaceSubmission: {
+            /** @description Stored attributed cover (ADR-0052); rejected photos are shown only while updateDeadline is in the future. */
+            photo?: components["schemas"]["PlacePhoto"];
+            /**
+             * Format: date-time
+             * @description Rejected submissions only; decidedAt plus seven days, for every rejection reason.
+             */
+            updateDeadline?: string;
             /** Format: uuid */
             id: string;
             /** @description Stored GoGo name or fresh submission snapshot fallback; use providerDisplay attribution for the fallback. */
@@ -9176,6 +9719,13 @@ export interface components {
             decidedAt?: string;
         };
         MyPlaceSubmissionDetail: {
+            /** @description Stored attributed cover (ADR-0052); rejected photos are shown only while updateDeadline is in the future. */
+            photo?: components["schemas"]["PlacePhoto"];
+            /**
+             * Format: date-time
+             * @description Rejected submissions only; decidedAt plus seven days, for every rejection reason.
+             */
+            updateDeadline?: string;
             /** Format: uuid */
             id: string;
             /** @description Stored GoGo name or fresh submission snapshot fallback; use providerDisplay attribution for the fallback. */
@@ -9215,7 +9765,7 @@ export interface components {
             decidedAt?: string;
             contribution?: components["schemas"]["MySubmissionContribution"];
         };
-        /** @description Owner-approved submission display snapshot (ADR-0048), reused for at most 30 days. Render Google Maps attribution; never promote to catalogue facts or cache on clients. Photo is a locally constructed lazy BFF reference with empty author credits until the proxy responds; proxy credits are authoritative. No photo refs or bytes are persisted in the snapshot. */
+        /** @description Owner-approved submission display snapshot (ADR-0048), reused for at most 30 days. Render Google Maps attribution; never promote to catalogue facts or cache on clients. The deprecated photo property is no longer emitted; use photo on the parent submission. Stored covers carry their own credits. No photo refs or bytes are persisted in the snapshot. */
         SubmissionProviderDisplay: {
             /** @constant */
             source: "google_places";
@@ -9236,6 +9786,10 @@ export interface components {
                 closeMinute: number;
                 isOvernight: boolean;
             }[];
+            /**
+             * @deprecated
+             * @description Servers no longer emit this property; use photo on the parent submission.
+             */
             photo?: components["schemas"]["CandidateProviderPhotoReference"];
         };
         MySubmissionContribution: {
@@ -9284,6 +9838,8 @@ export interface components {
             chipKeys: string[];
         };
         PlaceSubmissionSummary: {
+            /** @description Stored attributed cover (ADR-0052); rejected photos are shown only while updateDeadline is in the future. */
+            providerPhoto?: components["schemas"]["PlacePhoto"];
             /** Format: uuid */
             id: string;
             googlePlaceId: string;
@@ -9403,6 +9959,8 @@ export interface components {
         };
         /** @description PI-BE-031 (GoGo-BE#528) — everything a decision needs that GoGo already holds. No provider request: this endpoint costs nothing to open, and `POST /cms/place-submissions/{id}/provider-preview` is the explicit, separately-counted way to ask Google. */
         PlaceSubmissionDetail: {
+            /** @description Stored attributed cover (ADR-0052); rejected photos are shown only while updateDeadline is in the future. */
+            providerPhoto?: components["schemas"]["PlacePhoto"];
             /** @description Potential explicit-selection approval credit with all still-pending original evidence kept. Zero if contributor/ledger/state ineligible. Use credit-preview after changing selection; no client arithmetic. */
             expectedCredit?: components["schemas"]["SubmissionCreditFacts"];
             enrichmentItems?: {
@@ -9683,7 +10241,22 @@ export interface components {
                 message: string;
             } | null;
         };
+        /** @description GoGo-owned curated names only; never model, provider or user-chat output. Whole normalized equality is exact. Shared aliases require branch choice. CMS PATCH replaces the complete set; omitted leaves it unchanged; [] clears. Every replacement (including clear) requires expectedUpdatedAt and aliasProvenance. Normalized duplicates collapse. Editor writes (and the existing super_admin override) only; immutable audit stores counts/digests and evidence, never raw aliases. Invalid input is 400 VALIDATION_FAILED; stale version is 409 PLACE_MODIFIED. The version is rechecked under lock. */
+        CmsPlaceAliases: string[];
+        /** @description Independent evidence supporting the entire replacement set (or its removal). No Google reference, provider response, model output or user-chat text; copying/transcription does not change ownership. Not fetched by the server. Stored atomically with aliases and audit. Required when aliases is supplied; rejected without aliases. */
+        CmsAliasProvenance: {
+            /** @enum {string} */
+            sourceType: "editorial";
+            /** @description Independent source, e.g. merchant statement, official website or field visit; Google and transport-only job/sheet references rejected. */
+            sourceReference: string;
+            /**
+             * Format: date-time
+             * @description Zoned collection timestamp, normalized to UTC; maximum five-minute future clock skew.
+             */
+            collectedAt: string;
+        };
         CmsPlaceDetail: {
+            aliases: components["schemas"]["CmsPlaceAliases"];
             verification?: components["schemas"]["CmsVenueVerification"];
             /** Format: uuid */
             id: string;
@@ -10676,20 +11249,54 @@ export interface components {
             }[];
         };
         AssistantStatus: {
-            /** @description No-expiry contributor credits. Prospective registered-user submission approval grants +50 once, or +70 with at least one approved menu/bill photo; merge grants +20 only when menu/bill evidence is accepted. All bill uploads require public consent; approved menu/bill photos appear in userPhotos with uploader credit, separately from the official gallery/cover. Daily allowance first, then one credit per accepted user send (202), including later provider failure. Replay/rejection costs zero; credits never bypass burst/readiness/budget gates. */
+            /** @description Posted no-expiry credit balance. Free allowance first; actual-cost paid funding reserves credits without posting a debit. Replays and refusals consume nothing. */
             creditBalance: number;
-            /** @description `enabled` — sending works. `disabled` — kill switch off (`assistant.enabled`), or the environment cannot take new replies (for example its spending limit is reached). `limit_reached` — this account's daily messages and contributor credits are both spent until `resetsAt`. Unknown values mean "cannot send now". */
+            creditReserved: number;
+            creditAvailable: number;
+            /** @description Open effective admission policy, independent of temporary paid availability. */
+            creditPolicy: string;
+            /** @description Required hold from the verified whole-turn bound; null when unavailable. Independent of remaining free sends. */
+            paidCreditsRequired: number | null;
+            /** @description Spend and settlement switches plus bound/finality/config readiness and settlement health. General readiness still applies; POST repeats every check. */
+            paidSendEnabled: boolean;
+            /** Format: date-time */
+            asOf: string;
+            /** @description Open state. General unavailability or exhausted free allowance with paid admission off is disabled. With free allowance remaining, enabled regardless of balance. Otherwise insufficient_credit means available credits are below the required hold. limit_reached is legacy-only. Unknown values mean sending is unavailable. Burst/busy may still reject a send. */
             state: string;
-            /** @description Accepted messages this account may send per day (default **30**; provisional and configurable — read it from here, never hardcode it). Only an accepted send (`202`) counts; an idempotent replay (`x-idempotent-replay: true`) consumes nothing. A limit that is not configured refuses (`503 ASSISTANT_DISABLED`), it never means unlimited. */
+            /** @description Configured ASSISTANT_USER_DAILY_MAX_MESSAGES free accepted sends per Asia/Ho_Chi_Minh day; no hardcoded default. Paid sends do not consume free allowance. Missing configuration disables admission. Replays/refusals consume nothing; accepted failures still consume their free slot. */
             dailyMessageLimit: number;
             remainingToday: number;
             /**
              * Format: date-time
-             * @description When `remainingToday` refills: midnight Asia/Ho_Chi_Minh (start of the next local day), expressed in UTC.
+             * @description Next Asia/Ho_Chi_Minh midnight in UTC. Only free allowance refills; credits never expire or refill here.
              */
             resetsAt: string;
-            /** @description 2.0.0-alpha.3. Accepted messages this account may send in any rolling 60-second window (default **5**; provisional and configurable — read it from here, never hardcode it). Same counting as `dailyMessageLimit`: replays consume nothing. Exceeding it is `429 RATE_LIMITED` with `Retry-After`. */
+            /** @description Configured rolling-minute burst limit across all funding sources. Exceeding it is 429 RATE_LIMITED with Retry-After. */
             messagesPerMinuteLimit?: number;
+        };
+        AssistantTurnCredits: {
+            /** @description Open frozen billing policy. */
+            policyKey: string;
+            /** @description Open funding source; free stays free even when provider accounting is pending. */
+            fundingSource: string;
+            /** @description Open state. Quarantined turns remain pending or reconciling, never settled. */
+            state: string;
+            /** @description Latest net POSTED charge, not a final-cost promise. Initial paid reservation is 0. Missing historical attribution is null, never invented zero. */
+            creditsCharged: number | null;
+            /** @description Residual held credits, not the original ceiling. Unknown historical attribution is null. */
+            creditsReserved: number | null;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        AssistantConversationCredits: {
+            /** @description Full conversation net posted usage, including failed/stopped turns and refunds. Null if historical attribution is incomplete. */
+            creditsUsed: number | null;
+            creditsReserved: number;
+            pendingTurns: number;
+            /** @description Open state. Incomplete history takes precedence over pending paid turns. New conversations are settled with zero amounts. */
+            state: string;
+            /** Format: date-time */
+            asOf: string;
         };
         /** @description What the assistant was opened from. Exactly one of `placeId` / `planId`. Used only when sent, only when the caller may read it. */
         AssistantContext: {
@@ -10724,11 +11331,19 @@ export interface components {
          *       "createdAt": "2026-10-26T02:10:00Z",
          *       "lastMessageAt": "2026-10-26T02:14:31Z",
          *       "expiresAt": "2027-01-24T02:14:31Z",
+         *       "credits": {
+         *         "creditsUsed": 0,
+         *         "creditsReserved": 0,
+         *         "pendingTurns": 0,
+         *         "state": "settled",
+         *         "asOf": "2026-10-26T02:14:31Z"
+         *       },
          *       "messageCount": 4,
          *       "preview": "I found 3 cafés that match."
          *     }
          */
         AssistantConversation: {
+            credits: components["schemas"]["AssistantConversationCredits"];
             /** Format: uuid */
             id: string;
             /** @description User-set, or derived after the first exchange. `null` until then; the client shows its own "New chat" copy. */
@@ -10783,7 +11398,15 @@ export interface components {
             /** Format: date-time */
             urlExpiresAt?: string;
         };
+        /** @description Optional source-bound follow-up fields use contract 10.1 (S1). S3 validates state and emits branch options while the route stays dark. Send both or neither: the server enforces the pairing and answers `400 VALIDATION_FAILED` when only one is present (the schema carries no dependency keyword). Valid pairs bind only to the latest accessible QA message. Typed messages omit both fields. Stale/expired/disabled QA options must never resume a recommendation. */
         AssistantMessageSend: {
+            /**
+             * Format: uuid
+             * @description Latest accessible assistant message owning the option. Send only together with followUpOptionId; alone it is a 400.
+             */
+            replyToMessageId?: string;
+            /** @description Opaque server option id, not a place id. Send only together with replyToMessageId; alone it is a 400. S3 validates kind, config, expiry and latest source. */
+            followUpOptionId?: string;
             /** @description Trimmed server-side; blank after trimming is a 400. */
             text: string;
             context?: components["schemas"]["AssistantContext"];
@@ -10797,6 +11420,8 @@ export interface components {
         /** @description `streaming` — being generated. `complete` — ended normally. `stopped` — the user pressed Stop; `text` is what was written. `fallback` — the model did not answer within 15 s; a deterministic reply was stored. `failed` — ended by an error; `text` keeps any partial answer. `truncated` (2.0.0-alpha.3) — the reply hit the server's hard ceiling (length or time) before it finished: `text` is the partial answer as persisted, and structured outputs (cards, proposals, follow-ups) that had not completed are discarded, never half-rendered. The client shows "Reply cut short" with an explicit retry action; there is no automatic continuation. User messages are always `complete`. As with every `x-extensible-enum`, treat an unknown value as a finished message. */
         AssistantMessageStatus: string;
         AssistantMessage: {
+            /** @description Always present on assistant messages; omitted on user messages. */
+            credits?: components["schemas"]["AssistantTurnCredits"];
             /** Format: uuid */
             id: string;
             /** Format: uuid */
@@ -10804,7 +11429,7 @@ export interface components {
             /** @enum {string} */
             role: "user" | "assistant";
             status: components["schemas"]["AssistantMessageStatus"];
-            /** @description Markdown-light answer text (paragraphs, lists, `[n]` citation markers that index `sources`). For a user message, what they sent. */
+            /** @description Markdown-light answer text (paragraphs, lists, `[n]` citation markers that index `sources`). Place QA text, cards, sources and topic options use one current eligible fact snapshot per response group. Private semantic tokens never reach clients. Replay is a current rendering, not a historical fact snapshot. Fact-read failure/timeout gives fixed localized load-error text and omits cards/sources/options; live SSE terminates with an error frame even if production completed. For a user message, what they sent. */
             text: string;
             /** Format: date-time */
             createdAt: string;
@@ -10822,11 +11447,13 @@ export interface components {
             error?: components["schemas"]["ErrorEnvelope"];
         };
         AssistantMessagePage: {
+            conversationCredits: components["schemas"]["AssistantConversationCredits"];
             /** @description Newest first. */
             items: components["schemas"]["AssistantMessage"][];
             nextCursor: string | null;
         };
         AssistantTurn: {
+            conversationCredits: components["schemas"]["AssistantConversationCredits"];
             userMessage: components["schemas"]["AssistantMessage"];
             /** @description `status: streaming`; attach to `streamAssistantMessage` with its `id`. */
             assistantMessage: components["schemas"]["AssistantMessage"];
@@ -10857,7 +11484,7 @@ export interface components {
             description?: string;
             /**
              * Format: date-time
-             * @description For `place_data`, the verified data's `freshnessCheckedAt`.
+             * @description Legacy place_data uses place freshness. QA omits this aggregate date; each actually rendered fact carries its own verification date in prose or the source description. Community and Google are never blended. Google facts are never relabelled GoGo-verified.
              */
             checkedAt?: string;
         };
@@ -10874,6 +11501,9 @@ export interface components {
          *         "priceMin": 45000,
          *         "priceMax": 90000,
          *         "currency": "VND",
+         *         "providerRating": 4.6,
+         *         "providerRatingCount": 980,
+         *         "providerRatingSource": "google",
          *         "openNow": true,
          *         "checkedAt": "2026-10-20T03:00:00Z"
          *       }
@@ -10899,6 +11529,15 @@ export interface components {
                 priceMin?: number;
                 priceMax?: number;
                 currency?: string;
+                /** @description Google rating from the same verified PlaceDetail.rating read and freshness rules, including stored ratings without Google source rows, matching PlaceSummary. Omitted together with count/source when the rating is absent or non-finite. Never supplied by AI or stored in conversation history. Render with a visible Google mark and its own count; never merge with gogoRating (core rule 14, ADR-0020). */
+                providerRating?: number;
+                /** @description PlaceDetail.ratingCount, accompanying providerRating. */
+                providerRatingCount?: number;
+                /**
+                 * @description Attribution source accompanying providerRating and providerRatingCount.
+                 * @enum {string}
+                 */
+                providerRatingSource?: "google";
                 /** @description Present under the same rule as `PlaceDetail.gogoRating` (5+ reviews). */
                 gogoRating?: number;
                 gogoRatingCount?: number;
@@ -11068,7 +11707,7 @@ export interface components {
             confirmedAt: string;
         };
         /**
-         * @description A missing detail the assistant asks for, with quick answers. At most two groups per reply; the user may type instead.
+         * @description A missing detail the assistant asks for, with quick answers. At most two groups per reply; the user may type instead. Place QA uses place_choice, place_confirm and place_topic. Labels are derived from current identity/eligible topic keys at read time, never retained facts. S3 emits source-bound branch option ids; topic consumers remain pending S4.
          * @example {
          *       "field": "date",
          *       "label": "Which day?",
@@ -11089,6 +11728,8 @@ export interface components {
             field: string;
             label: string;
             options: {
+                /** @description Source-bound option key; send with the owning message id. Omit on manually typed messages. */
+                id?: string;
                 label: string;
                 /** @description What is sent as the next user message when tapped. */
                 text: string;
@@ -11428,6 +12069,15 @@ export interface components {
         };
     };
     responses: {
+        /** @description NOTIFICATION_INBOX_UNAVAILABLE when the inbox rollout or signing key is unavailable, or SERVICE_UNAVAILABLE (retryable true) when the authoritative consumer session lookup encounters an operational database connection, pool or query timeout/unavailability. Retry with backoff; cached state cannot authorize access. SQL/schema/permission/configuration errors retain existing error handling. Standard error envelope. */
+        NotificationInboxUnavailable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorEnvelope"];
+            };
+        };
         /** @description SERVICE_UNAVAILABLE (retryable true) — the authoritative consumer session lookup encountered an operational database connection, pool or query timeout/unavailability. Retry with backoff; cached state cannot authorize access. SQL/schema/permission/configuration errors retain existing error handling. */
         SessionLookupUnavailable: {
             headers: {
@@ -11525,7 +12175,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorEnvelope"];
             };
         };
-        /** @description `RATE_LIMITED` (`retryable: true`) for the per-minute burst limit (default 5 accepted messages in any rolling minute), or `ASSISTANT_DAILY_LIMIT` (`retryable: false`) when the account's daily message budget is spent (default 30 accepted messages per day, reset at midnight Asia/Ho_Chi_Minh). Both carry `Retry-After`; for the daily limit it points at the reset. Defaults are provisional and configurable — `GET /assistant/status` carries the current values. Idempotent replays consume nothing; an unconfigured limit is `503 ASSISTANT_DISABLED`, never unlimited. */
+        /** @description `RATE_LIMITED` (`retryable: true`) for the per-minute burst limit (default 5 accepted messages in any rolling minute), or Legacy policy only: `ASSISTANT_DAILY_LIMIT` (`retryable: false`) when the account's daily message budget is spent (configured accepted free sends per day, reset at midnight Asia/Ho_Chi_Minh). Both carry `Retry-After`; for the daily limit it points at the reset. Defaults are provisional and configurable — `GET /assistant/status` carries the current values. Idempotent replays consume nothing; an unconfigured limit is `503 ASSISTANT_DISABLED`, never unlimited. */
         AssistantRateLimited: {
             headers: {
                 "Retry-After": components["headers"]["RetryAfter"];
@@ -11560,7 +12210,7 @@ export interface components {
     headers: {
         /** @description Deterministic entity tag over datasetVersion + the resolved request. */
         ETag: string;
-        /** @description Always `public, max-age=0, must-revalidate` — immutable per version, but the active version can change. */
+        /** @description Always `public, max-age=0, must-revalidate, no-transform` — immutable per version, but the active version can change. */
         CacheControl: string;
         /** @description Seconds until the request can succeed. */
         RetryAfter: number;
@@ -11776,7 +12426,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Accepted without confirming account eligibility or delivery */
+            /** @description Eligible account accepted; delivery is not confirmed */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -11793,6 +12443,22 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            /** @description RECOVERY_ACCOUNT_NOT_FOUND — Tài khoản không tồn tại; identical for all ineligible accounts, retryable false */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"] & {
+                        /** @constant */
+                        code?: "RECOVERY_ACCOUNT_NOT_FOUND";
+                        /** @constant */
+                        message?: "Tài khoản không tồn tại";
+                        /** @constant */
+                        retryable?: false;
+                    };
+                };
+            };
             /** @description IDEMPOTENCY_KEY_REUSED — key was used with a different normalized body */
             422: {
                 headers: {
@@ -11804,6 +12470,53 @@ export interface operations {
             };
             429: components["responses"]["RateLimited"];
             /** @description RECOVERY_MAIL_NOT_CONFIGURED (retryable false), or global RECOVERY_UNAVAILABLE (retryable true) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    verifyPasswordRecovery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: email */
+                    email: string;
+                    /** Format: uuid */
+                    challengeId: string;
+                    code: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Recovery proof is valid and remains unconsumed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description RECOVERY_INVALID or VALIDATION_FAILED */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            /** @description RECOVERY_MAIL_NOT_CONFIGURED (retryable false), or RECOVERY_UNAVAILABLE (retryable true) */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -12047,6 +12760,78 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["SessionLookupUnavailable"];
+        };
+    };
+    getMyCredits: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Posted credit facts at asOf */
+            200: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyCredits"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["AssistantUserOnly"];
+            /** @description CREDITS_DISPLAY_DISABLED — visibility is not enabled */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["SessionLookupUnavailable"];
+        };
+    };
+    getMyCreditLedger: {
+        parameters: {
+            query?: {
+                limit?: 10;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Own ledger page */
+            200: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyCreditPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["AssistantUserOnly"];
+            /** @description CREDITS_DISPLAY_DISABLED — visibility is not enabled */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
             429: components["responses"]["RateLimited"];
             503: components["responses"]["SessionLookupUnavailable"];
         };
@@ -13121,7 +13906,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description `ASSISTANT_TURN_IN_PROGRESS` — a reply in this conversation is still streaming; or `IDEMPOTENT_REQUEST_IN_FLIGHT`. */
+            /** @description `ASSISTANT_TURN_IN_PROGRESS` — a reply in this conversation is still streaming; `IDEMPOTENT_REQUEST_IN_FLIGHT`; or `ASSISTANT_INSUFFICIENT_CREDIT` with required typed details and retryable false. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -14772,32 +15557,6 @@ export interface operations {
             429: components["responses"]["RateLimited"];
         };
     };
-    getPlaceProviderPhotos: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Zero to three provider photos with attribution, for this view only */
-            200: {
-                headers: {
-                    /** @description Always `private, no-store`. */
-                    "Cache-Control"?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PlaceProviderPhotos"];
-                };
-            };
-            404: components["responses"]["NotFound"];
-            429: components["responses"]["RateLimited"];
-        };
-    };
     reportPlace: {
         parameters: {
             query?: never;
@@ -15604,11 +16363,203 @@ export interface operations {
             };
         };
     };
+    listSystemNotifications: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string;
+            };
+            header?: {
+                /** @description Entity tags (including weak tags or a list), or *. */
+                "If-None-Match"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Visible announcements */
+            200: {
+                headers: {
+                    "Cache-Control"?: "public, max-age=60, no-transform";
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemNotificationPage"];
+                };
+            };
+            /** @description Current page matches If-None-Match; no response body */
+            304: {
+                headers: {
+                    "Cache-Control"?: "public, max-age=60, no-transform";
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    cmsListSystemNotifications: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string;
+                status?: "draft" | "published" | "archived";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Announcement page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsSystemNotificationPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    cmsCreateSystemNotification: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CmsSystemNotificationCreate"];
+            };
+        };
+        responses: {
+            /** @description Created draft (or original replay) */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsSystemNotification"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            /** @description Idempotency-Key reused with a different body */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    cmsPatchSystemNotification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CmsSystemNotificationPatch"];
+            };
+        };
+        responses: {
+            /** @description Updated announcement */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsSystemNotification"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    cmsPublishSystemNotification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Announcement in the requested state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsSystemNotification"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    cmsArchiveSystemNotification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Announcement in the requested state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsSystemNotification"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
     listNotifications: {
         parameters: {
             query?: {
                 /** @description Opaque cursor from a previous page. */
                 cursor?: components["parameters"]["Cursor"];
+                /** @description Known NotificationKind values only; repeat for multiple kinds. Omit for all kinds. */
+                kinds?: (components["schemas"]["NotificationKind"] & ("invite" | "preference_reminder" | "plan_ready" | "plan_changed" | "date_reminder" | "moderation_update" | "campaign" | "privacy_export_ready"))[];
             };
             header?: never;
             path?: never;
@@ -15628,7 +16579,177 @@ export interface operations {
                     };
                 };
             };
-            503: components["responses"]["SessionLookupUnavailable"];
+            /** @description INVALID_NOTIFICATION_CURSOR */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description NOTIFICATION_CURSOR_EXPIRED */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["NotificationInboxUnavailable"];
+        };
+    };
+    getNotificationSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Account snapshot; never cache */
+            200: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationSummary"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["NotificationInboxUnavailable"];
+        };
+    };
+    readAllNotifications: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    through: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Completed immediately */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationReadOperation"];
+                };
+            };
+            /** @description Durable operation running */
+            202: {
+                headers: {
+                    /** @description Account-authenticated operation status URL */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationReadOperation"];
+                };
+            };
+            /** @description VALIDATION_FAILED, INVALID_IDEMPOTENCY_KEY or INVALID_NOTIFICATION_CURSOR */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description IDEMPOTENT_REQUEST_IN_FLIGHT */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description NOTIFICATION_CURSOR_EXPIRED */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description IDEMPOTENCY_KEY_REUSED */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["NotificationInboxUnavailable"];
+        };
+    };
+    getNotificationReadOperation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current progress; never cache */
+            200: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationReadOperation"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description NOTIFICATION_READ_OPERATION_NOT_FOUND (foreign and missing indistinguishable) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["NotificationInboxUnavailable"];
         };
     };
     registerPushSubscription: {
@@ -17276,7 +18397,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Every push kind carrying the switch's value, then stored email rows */
+            /** @description Effective permission per legacy push kind, then stored email rows */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -17333,6 +18454,9 @@ export interface operations {
             /** @description The switch as the server applies it */
             200: {
                 headers: {
+                    /** @description Strong notification settings resource ETag */
+                    ETag?: string;
+                    "Cache-Control"?: "private, no-store, no-transform";
                     [name: string]: unknown;
                 };
                 content: {
@@ -17367,6 +18491,9 @@ export interface operations {
             /** @description The switch as stored */
             200: {
                 headers: {
+                    /** @description Strong notification settings resource ETag */
+                    ETag?: string;
+                    "Cache-Control"?: "private, no-store, no-transform";
                     [name: string]: unknown;
                 };
                 content: {
@@ -17382,6 +18509,94 @@ export interface operations {
                 content?: never;
             };
             503: components["responses"]["SessionLookupUnavailable"];
+        };
+    };
+    patchNotificationSettings: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": string;
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    pushEnabled: boolean;
+                    categories?: components["schemas"]["NotificationCategoryPatch"];
+                } | {
+                    pushEnabled?: boolean;
+                    categories: components["schemas"]["NotificationCategoryChanges"];
+                } | {
+                    pushEnabled?: boolean;
+                    categories?: components["schemas"]["NotificationCategoryPatch"];
+                    quietHours: components["schemas"]["NotificationQuietHoursPatch"];
+                };
+            };
+        };
+        responses: {
+            /** @description Updated settings or original idempotent replay */
+            200: {
+                headers: {
+                    ETag?: string;
+                    "Cache-Control"?: "private, no-store, no-transform";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationSettings"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description IDEMPOTENT_REQUEST_IN_FLIGHT */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description NOTIFICATION_SETTINGS_VERSION_MISMATCH */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description IDEMPOTENCY_KEY_REUSED */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description PRECONDITION_REQUIRED */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            /** @description NOTIFICATION_PREFERENCES_FROZEN or dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
         };
     };
     getDocsPage: {
@@ -18893,6 +20108,8 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
+                    aliases?: components["schemas"]["CmsPlaceAliases"];
+                    aliasProvenance?: components["schemas"]["CmsAliasProvenance"];
                     /** @description Enforced: trimmed, 1..200 characters. Required to be non-empty. */
                     name?: string;
                     /** @description Enforced: at most 4000 characters. */
@@ -19026,6 +20243,7 @@ export interface operations {
             /** @description Verification decision; same ETag in body and header */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store, no-transform";
                     ETag?: string;
                     [name: string]: unknown;
                 };
@@ -19337,6 +20555,7 @@ export interface operations {
                 content?: never;
             };
             400: components["responses"]["BadRequest"];
+            409: components["responses"]["Conflict"];
         };
     };
     cmsSearchAnalytics: {

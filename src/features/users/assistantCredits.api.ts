@@ -6,8 +6,12 @@ import type { operations, Schemas } from '@/shared/api/generated'
 export const assistantCreditEntrySchema = z.object({
   id: z.string().uuid(),
   createdAt: z.string().datetime(),
-  delta: z.union([z.literal(50), z.literal(-1)]),
-  reason: z.enum(['submission_approved', 'message_spent']),
+  delta: z
+    .number()
+    .int()
+    .safe()
+    .refine((value) => value !== 0),
+  reason: z.string(),
   submissionId: z.string().uuid().nullable(),
   venueIdentity: z.string().nullable(),
   placeId: z.string().uuid().nullable(),

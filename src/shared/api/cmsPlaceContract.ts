@@ -1,5 +1,24 @@
 import { z } from 'zod'
 
+export const ALIAS_LIMIT = 20
+export const ALIAS_LENGTH = 120
+
+// BE validates before trimming: even a trailing newline must be rejected.
+export const placeAliasSchema = z
+  .string()
+  .max(ALIAS_LENGTH, 'placeAliases.tooLong')
+  .refine(
+    (value) =>
+      !/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(value) &&
+      value
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim().length > 0,
+    'placeAliases.invalid',
+  )
+
+export const placeAliasesSchema = z.array(placeAliasSchema).max(ALIAS_LIMIT, 'placeAliases.tooMany')
+
 /**
  * The CMS place **write** contract, mirrored field for field from
  * `placeEditSchema` / `hoursSchema` in
@@ -793,6 +812,8 @@ export function mockSourceReferenceIssues(
 
 function buildPlaceEditSchema(taxonomyId: z.ZodType<string>) {
   return z.object({
+    aliases: placeAliasesSchema.optional(),
+    aliasProvenance: contactEvidenceSchema.optional(),
     name: z.string().trim().min(L.name.min).max(L.name.max).optional(),
     description: z.string().max(L.description.max).nullable().optional(),
     addressText: z.string().max(L.addressText.max).nullable().optional(),
@@ -833,6 +854,28 @@ function buildPlaceEditSchema(taxonomyId: z.ZodType<string>) {
     /** Optimistic concurrency — the `updatedAt` the form was loaded from. */
     expectedUpdatedAt: z.string().datetime({ offset: true }).optional(),
   })
+}
+
+/** Alias evidence uses the same independent-source checks as contact evidence. */
+export function mockAliasWriteIssues(
+  input: z.infer<ReturnType<typeof buildPlaceEditSchema>>,
+  now = new Date(),
+): { field: string; code: string; message: string }[] {
+  if (input.aliases === undefined)
+    return input.aliasProvenance === undefined
+      ? []
+      : [{ field: 'aliasProvenance', code: 'value_missing', message: '' }]
+  const checked = mockValidateEvidence(
+    input.aliasProvenance ?? {},
+    mockEvidencePaths('aliasProvenance'),
+    now,
+  )
+  const issues = checked.ok ? [] : checked.issues
+  if (checked.ok && checked.value.sourceType !== 'editorial')
+    issues.push({ field: 'aliasProvenance.sourceType', code: 'invalid', message: '' })
+  if (input.expectedUpdatedAt === undefined)
+    issues.push({ field: 'expectedUpdatedAt', code: 'required', message: '' })
+  return issues
 }
 
 /** Exactly what GoGo-BE enforces on `PATCH /cms/places/{id}`. */

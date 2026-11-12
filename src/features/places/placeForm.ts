@@ -17,11 +17,19 @@ import {
   isContactField,
   useContactValueError,
   toWireEvidence,
+  fromLocalInput,
   type ContactField,
   type ContactProvenanceWire,
   type EvidenceDrafts,
   type EvidenceProperty,
 } from './contactEvidence'
+
+import {
+  aliasErrorPath,
+  aliasesChanged,
+  placeAliasesSchema,
+  type AliasErrorPath,
+} from './placeAliases'
 
 const L = PLACE_FIELD_LIMITS
 
@@ -108,6 +116,12 @@ function sourceReference() {
  * from the contract mirror, so they cannot drift away from GoGo-BE silently.
  */
 const placeIdentityFields = z.object({
+  aliases: placeAliasesSchema.optional(),
+  aliasDraft: z
+    .string()
+    .refine((value) => value === '', 'placeAliases.addFirst')
+    .optional(),
+  aliasProvenance: evidenceDraftSchema().optional(),
   name: z.string().trim().min(L.name.min, 'placeEditor.error.required').max(L.name.max),
   addressText: z.string().max(L.addressText.max).optional(),
   areaKey: z.string().max(L.areaKey.max).optional(),
@@ -428,6 +442,7 @@ export type PlaceIdentityForm = z.infer<typeof placeIdentitySchema>
 /** The fields `PATCH /cms/places/{id}` shares with this form, by wire name. */
 export const PLACE_IDENTITY_FIELDS = [
   'name',
+  'aliases',
   'addressText',
   'areaKey',
   'city',
@@ -457,16 +472,28 @@ export function isIdentityField(field: string): field is PlaceIdentityField {
 export type EvidencePath = `evidence.${ContactField}.${EvidenceProperty}`
 
 export function splitFieldErrors(fieldErrors: readonly FieldError[]): {
-  mapped: (FieldError & { field: PlaceIdentityField | EvidencePath })[]
+  mapped: (FieldError & { field: PlaceIdentityField | EvidencePath | AliasErrorPath })[]
   unmapped: FieldError[]
 } {
-  const mapped: (FieldError & { field: PlaceIdentityField | EvidencePath })[] = []
+  const mapped: (FieldError & { field: PlaceIdentityField | EvidencePath | AliasErrorPath })[] = []
   const unmapped: FieldError[] = []
   for (const error of fieldErrors) {
     // GoGo-BE#280 — `provenance.phone.sourceReference` belongs to the evidence
     // box the editor typed it in, not to an error list under the save bar.
     const target = evidenceTarget(error.field)
-    if (target) mapped.push({ ...error, field: `evidence.${target.field}.${target.property}` })
+    const aliasTarget = aliasErrorPath(error.field)
+    if (aliasTarget)
+      mapped.push({
+        ...error,
+        field: aliasTarget,
+        message:
+          aliasTarget === 'aliases' && error.code === 'too_big'
+            ? error.field === 'aliases'
+              ? 'placeAliases.tooMany'
+              : 'placeAliases.tooLong'
+            : error.message,
+      })
+    else if (target) mapped.push({ ...error, field: `evidence.${target.field}.${target.property}` })
     else if (isIdentityField(error.field)) mapped.push({ ...error, field: error.field })
     else unmapped.push(error)
   }
@@ -517,6 +544,14 @@ export function toPlaceEditBody(
   baseline?: PlaceEditBaseline,
 ): UpdatePlaceInput {
   const body: UpdatePlaceInput = {}
+  if (baseline && aliasesChanged(values.aliases, baseline.values.aliases)) {
+    body.aliases = values.aliases ?? []
+    body.aliasProvenance = {
+      sourceType: 'editorial',
+      sourceReference: values.aliasProvenance?.sourceReference.trim() ?? '',
+      collectedAt: fromLocalInput(values.aliasProvenance?.collectedAt ?? ''),
+    }
+  }
 
   const text = (
     field:
@@ -669,12 +704,18 @@ export type { EvidenceDrafts }
  */
 export function diffAgainstServer(
   values: PlaceIdentityForm,
-  server: Partial<Record<PlaceIdentityField, string | number | null | undefined>>,
+  server: Partial<Record<PlaceIdentityField, string | number | string[] | null | undefined>>,
 ): { field: PlaceIdentityField; mine: string; theirs: string }[] {
   const out: { field: PlaceIdentityField; mine: string; theirs: string }[] = []
   for (const field of PLACE_IDENTITY_FIELDS) {
-    const mine = String(values[field] ?? '').trim()
-    const theirs = String(server[field] ?? '').trim()
+    const mine =
+      field === 'aliases'
+        ? JSON.stringify(values.aliases ?? [])
+        : String(values[field] ?? '').trim()
+    const theirs =
+      field === 'aliases'
+        ? JSON.stringify(server.aliases ?? [])
+        : String(server[field] ?? '').trim()
     if (mine !== theirs) out.push({ field, mine, theirs })
   }
   return out

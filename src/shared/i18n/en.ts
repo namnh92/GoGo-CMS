@@ -7,6 +7,24 @@ import type { MessageKey } from './vi'
  * English text a type error, and `i18n.test.tsx` checks the placeholders.
  */
 export const en: Record<MessageKey, string> = {
+  'placeAliases.label': 'Other names (aliases)',
+  'placeAliases.hint': 'Up to 20 aliases, 120 characters each. Select Add to include a name.',
+  'placeAliases.readOnly': 'You can only view aliases.',
+  'placeAliases.empty': 'No aliases yet.',
+  'placeAliases.new': 'New alias',
+  'placeAliases.add': 'Add alias',
+  'placeAliases.remove': 'Remove alias {alias}',
+  'placeAliases.source': 'Alias source reference',
+  'placeAliases.sourceHint':
+    'Independent editorial evidence for the entire list or its removal: merchant statement, official website or field visit. No Google, AI output, chat text or job/sheet-only references.',
+  'placeAliases.collectedAt': 'Alias collection date and time',
+  'placeAliases.tooLong': 'Each alias must be at most 120 characters.',
+  'placeAliases.tooMany': 'At most 20 aliases.',
+  'placeAliases.invalid': 'Enter a non-empty alias without control characters or line breaks.',
+  'placeAliases.addFirst': 'Select Add alias or clear the input before saving.',
+  'credits.reason.assistant_usage_adjustment': 'GoGo AI usage adjustment',
+  'credits.reason.other': 'Other reason',
+
   'venueVerification.coordinates': 'Venue coordinates',
   'venueVerification.title': 'Venue verification',
   'venueVerification.scope':
