@@ -19,6 +19,7 @@ export const vi = {
   'placeAliases.tooMany': 'Tối đa 20 tên khác.',
   'placeAliases.invalid': 'Nhập tên khác không rỗng, không có ký tự điều khiển hoặc xuống dòng.',
   'placeAliases.addFirst': 'Nhấn Thêm tên khác hoặc xoá ô nhập trước khi lưu.',
+  'credits.reason.assistant_usage': 'Trừ theo chi phí GoGo AI',
   'credits.reason.assistant_usage_adjustment': 'Điều chỉnh sử dụng GoGo AI',
   'credits.reason.other': 'Lý do khác',
 

@@ -78,25 +78,72 @@ describe('user assistant credits (#277)', () => {
     },
   )
 
-  it('renders usage corrections and unknown reasons without failing the ledger', async () => {
-    signInAs('ops_admin')
-    server.use(
-      http.get(endpoint, () =>
-        HttpResponse.json({
-          ...creditPage,
-          items: [
-            { ...creditGrant, delta: 2, reason: 'assistant_usage_adjustment' },
-            { ...creditSpend, delta: -2, reason: 'future_reason' },
-          ],
-        }),
-      ),
-    )
-    renderCredits()
-    expect(await screen.findByText('Điều chỉnh sử dụng GoGo AI')).toBeInTheDocument()
-    expect(screen.getByText('Lý do khác')).toBeInTheDocument()
-    expect(screen.getByText('+2')).toBeInTheDocument()
-    expect(screen.getByText('-2')).toBeInTheDocument()
-  })
+  it.each([
+    {
+      locale: 'vi',
+      usage: 'Trừ theo chi phí GoGo AI',
+      adjustment: 'Điều chỉnh sử dụng GoGo AI',
+      other: 'Lý do khác',
+    },
+    {
+      locale: 'en',
+      usage: 'GoGo AI usage cost',
+      adjustment: 'GoGo AI usage adjustment',
+      other: 'Other reason',
+    },
+  ])(
+    'renders usage costs, signed corrections and unknown reasons in $locale',
+    async ({ locale, usage, adjustment, other }) => {
+      window.localStorage.setItem('gogo.cms.locale', locale)
+      signInAs('ops_admin')
+      server.use(
+        http.get(endpoint, () =>
+          HttpResponse.json({
+            ...creditPage,
+            items: [
+              {
+                ...creditSpend,
+                id: '00000000-0000-4000-8000-000000000001',
+                delta: -3,
+                reason: 'assistant_usage',
+              },
+              {
+                ...creditSpend,
+                id: '00000000-0000-4000-8000-000000000002',
+                delta: 2,
+                reason: 'assistant_usage_adjustment',
+              },
+              {
+                ...creditSpend,
+                id: '00000000-0000-4000-8000-000000000003',
+                delta: -2,
+                reason: 'assistant_usage_adjustment',
+              },
+              {
+                ...creditSpend,
+                id: '00000000-0000-4000-8000-000000000004',
+                delta: -1,
+                reason: 'future_reason',
+              },
+            ],
+          }),
+        ),
+      )
+      renderCredits()
+      const table = await screen.findByRole('table')
+      for (const [delta, reason] of [
+        ['-3', usage],
+        ['+2', adjustment],
+        ['-2', adjustment],
+        ['-1', other],
+      ] as const) {
+        const row = within(table).getByText(delta).closest('tr')!
+        expect(within(row).getByText(reason)).toBeInTheDocument()
+        expect(within(row).queryAllByRole('link')).toHaveLength(0)
+        expect(within(row).getAllByRole('cell')[3]).toHaveTextContent(/^$/)
+      }
+    },
+  )
 
   it('loads more with the unchanged user-scoped cursor, appends rows and uses the latest full balance', async () => {
     signInAs('ops_admin')
