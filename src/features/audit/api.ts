@@ -23,7 +23,11 @@ export type AuditFilters = {
  * here and answers 404 to one even for super_admin, so this module has no
  * mutation to offer.
  */
-export function fetchAudit(filters: AuditFilters, signal?: AbortSignal): Promise<AuditPage> {
+export function fetchAudit(
+  filters: AuditFilters,
+  signal?: AbortSignal,
+  cache?: RequestCache,
+): Promise<AuditPage> {
   return apiFetchParsed(auditPageSchema, '/cms/audit', {
     query: {
       resourceType: filters.resourceType || undefined,
@@ -37,5 +41,6 @@ export function fetchAudit(filters: AuditFilters, signal?: AbortSignal): Promise
       cursor: filters.cursor ?? undefined,
     },
     signal,
+    cache,
   })
 }

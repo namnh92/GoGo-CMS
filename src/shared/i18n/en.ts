@@ -7,6 +7,44 @@ import type { MessageKey } from './vi'
  * English text a type error, and `i18n.test.tsx` checks the placeholders.
  */
 export const en: Record<MessageKey, string> = {
+  'roles.domain.inviteSettings': 'Invite lifetime',
+  'nav.inviteSettings': 'Invite lifetime',
+  'inviteSettings.title': 'Invite lifetime',
+  'inviteSettings.description': 'Configure the lifetime of new invites in this environment.',
+  'inviteSettings.duration': 'Duration',
+  'inviteSettings.current': 'Current value',
+  'inviteSettings.unit': 'Unit',
+  'inviteSettings.unit.seconds': 'seconds',
+  'inviteSettings.unit.minutes': 'minutes',
+  'inviteSettings.unit.hours': 'hours',
+  'inviteSettings.unit.days': 'days',
+  'inviteSettings.normalizedDuration': 'Normalized duration: {seconds} seconds',
+  'inviteSettings.range': 'Enter a whole number from 1 to 2147483647 seconds after conversion.',
+  'inviteSettings.validation.positiveInteger':
+    'Enter a positive whole number; fractions are not rounded.',
+  'inviteSettings.validation.maximum': 'The converted duration must not exceed 2147483647 seconds.',
+  'inviteSettings.confirm.title': 'Change the lifetime of new invites?',
+  'inviteSettings.confirm.scope':
+    'Only invites created after a successful save use the new lifetime. Existing invites keep their stored expiry.',
+  'inviteSettings.confirm.codeCap':
+    'Six-digit codes last at most 48 hours and never beyond room expiry.',
+  'inviteSettings.confirm.roomExpiry':
+    'Room expiry or invite revocation can invalidate an invite earlier.',
+  'inviteSettings.confirm.save': 'Save changes',
+  'inviteSettings.saved': 'Saved — applies to new invites.',
+  'inviteSettings.conflict':
+    'The revision changed or the update precondition was missing. Reloading current value: {current}. Your draft is preserved; review and confirm again before saving.',
+  'inviteSettings.reload': 'Reload lifetime',
+  'inviteSettings.unavailable':
+    'Invite lifetime settings are unavailable. Your draft is preserved; retry when the server is ready.',
+  'inviteSettings.ssoRequired':
+    'Only a super_admin signed in through SSO may view or change invite lifetime.',
+  'inviteSettings.updatedBy': 'Last changed by',
+  'inviteSettings.updatedAt': 'Last changed at',
+  'inviteSettings.system': 'System (initial value)',
+  'inviteSettings.history': 'Change history',
+  'inviteSettings.retryIntent':
+    'The draft is locked to preserve this request. Retry uses the same request key, duration and revision; reconnection never submits automatically.',
   'placeAliases.label': 'Other names (aliases)',
   'placeAliases.hint': 'Up to 20 aliases, 120 characters each. Select Add to include a name.',
   'placeAliases.readOnly': 'You can only view aliases.',

@@ -226,6 +226,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/invite-attempt-contexts/csrf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Recover the existing browser context CSRF token
+         * @description Credentialed HTTPS same-site browser POST with an explicit empty JSON object. Exact HTTPS CORS_ORIGINS allowlist and Sec-Fetch-Site same-origin/same-site are mandatory. Cookie-only proof: any X-GoGo-Invite-Context header is rejected, including mixed transport. No authentication, previous CSRF or Idempotency-Key is required; incidental CSRF is ignored and no generic replay is stored. Returns the deterministic context-bound token and original deadline without creation, rotation, renewal, issuance audit or success Set-Cookie. Shares bootstrap flood buckets (10/IP/min, 30/prefix/min, 1000/global/min). After accepted origin checks, missing/unusable cookie proof expires both invite cookies on 401. Header/mixed rejection does not clear cookies; 403/429/503 never clear cookies. Every response is no-store. Never cache in service workers/persisted query caches or log/send credentials to Tenjin. Proof-bearing bootstrap and every CODE6 POST still require X-GoGo-Invite-CSRF.
+         */
+        post: operations["recoverInviteAttemptCsrf"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/invite-attempt-contexts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bootstrap or reuse an invite-attempt device context
+         * @description I05 / #891. Random 256-bit bearer proof with purpose invite_attempts; fixed 48-hour TTL, no sliding renewal or room/user authority. This operation does not enable CODE6. Proof is mandatory only for future CODE6 operations; legacy/TOKEN128 callers need no new fields, headers, cookies, tickets or bootstrap. Never send proof or invite credentials to Tenjin, logs, analytics, URLs or persisted query caches. MOBILE_HEADER stores contextToken in Keychain/Keystore and sends X-GoGo-Invite-Context, independently of user Authorization. BROWSER_COOKIE uses HTTPS same-site BFF; exact CORS allowlisted Origin and Sec-Fetch-Site same-origin/same-site are required, including first bootstrap (JSON + required UUID key force preflight). Browser receives only csrfToken (also in a deprecated Secure host-only Lax cookie __Host-gogo_invite_csrf retained for compatibility; reload recovery uses POST /invite-attempt-contexts/csrf response-body delivery); proof is Secure, HttpOnly, host-only, Path=/, SameSite=Lax cookie __Host-gogo_invite_ctx. Cookie-proof bootstrap and future CODE6 POSTs require X-GoGo-Invite-CSRF. Mobile transport rejects Origin; mixed/mismatched transports reject. No cross-site cookie downgrade. Valid existing proof reuses context and original expiry. Invalid, expired or revoked supplied proof is never silently replaced. Browser 401 expires both context cookies so the client can explicitly bootstrap again. First bootstrap replay is IP + UUID scoped, encrypted and atomically committed with the concrete context. Existing proof binds that context. Replay revalidates expiry/revocation. Quotas are independent per IP, prefix (IPv4 /24, IPv6 /64), and global; storage failure fails closed.
+         */
+        post: operations["bootstrapInviteAttemptContext"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/sessions/guest": {
         parameters: {
             query?: never;
@@ -463,6 +503,26 @@ export interface paths {
         patch: operations["transitionRoom"];
         trace?: never;
     };
+    "/rooms/{id}/host-transfer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Host-only: transfer room ownership to an active user member
+         * @description GoGo-BE#879. Allowed in draft/collecting/matching/ready before room expiry. Target is a RoomMember ID, never a User ID. Guests, removed members, inactive accounts and self are ineligible; pending preference selection is eligible. Preserves membership IDs, preferences, votes, constraints, stale flags and plans. Atomically demotes the caller, promotes the target and increments hostVersion. All host-only powers move on commit. Existing invites keep their expiry/revocation and issuer; creators may still revoke links they issued (ADR-0018). No revoke-all. Idempotency scope is actor + operation + concrete room ID + key; normalized request includes roomId, memberId and expectedHostVersion. A valid receipt replays before current host/state/version checks for 24 hours, with no repeated side effects. Authentication is always required. After retention this is a new mutation. This response is an operation receipt, never a current room snapshot. Clients refetch on success/replay/403/conflict and never overwrite a newer hostVersion with a receipt or SSE event. Member/guest/non-member authorization precedes state and target checks. Transfer stays unavailable until schema, workers, all API guards and client compatibility are ready. Business errors are not automatically retryable. Bounded lock/in-flight failures are retryable with backoff.
+         */
+        post: operations["transferRoomHost"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/rooms/{id}/title": {
         parameters: {
             query?: never;
@@ -496,7 +556,7 @@ export interface paths {
          *
          *     SSE rather than a WebSocket because every event here is server → client; nothing needs a bidirectional channel, and this keeps the same bearer auth as the rest of the API.
          *
-         *     Event types: `room.status_changed`, `participant.joined`, `participant.left`, `participant.selection_changed`, `matching.started`, `matching.completed`, `matching.failed`, `suggestions.generated`, `suggestions.updated`, `vote.changed`, `plan.updated`, plus one stream-level type — `resync`, which says the client's resume point cannot be honoured exactly and it must refetch. `resync` exists so a gap is reported rather than silently skipped: a client that is wrong without knowing it is the failure this endpoint is meant to prevent.
+         *     Event types: `room.host_transferred`, `room.status_changed`, `participant.joined`, `participant.left`, `participant.selection_changed`, `matching.started`, `matching.completed`, `matching.failed`, `suggestions.generated`, `suggestions.updated`, `vote.changed`, `plan.updated`, plus one stream-level type — `resync`, which says the client's resume point cannot be honoured exactly and it must refetch. `resync` exists so a gap is reported rather than silently skipped: a client that is wrong without knowing it is the failure this endpoint is meant to prevent.
          *
          *     Keep-alive is an SSE **comment frame** (`: ping`) sent while the stream is idle so proxies do not close it. It has no `event:` name, no `id:` and no `data:`; `EventSource` and conforming parsers never surface it as an event and it never changes the resume point. There is no `heartbeat` event any more (ADR-0027) — a client must not rely on receiving one.
          *
@@ -582,7 +642,10 @@ export interface paths {
         /** Host-only: invite metadata (never codes) */
         get: operations["listRoomInvites"];
         put?: never;
-        /** Host-only: create a high-entropy expiring invite (code shown once) */
+        /**
+         * Host-only: create a high-entropy expiring invite (code shown once)
+         * @description New invites use the primary database room invite TTL setting (seeded at 86400 seconds). Existing credentials retain their stored expiry. There is no runtime default on setting failure.
+         */
         post: operations["createRoomInvite"];
         delete?: never;
         options?: never;
@@ -650,7 +713,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Host-only: attach verified places to the room (FR-ROOM-010) */
+        /**
+         * Host and account members add verified seed places before matching (FR-ROOM-010)
+         * @description Requires active account membership; guests always receive 403 SEED_PLACES_FORBIDDEN (ROOM_SCOPE_VIOLATION for a different room). Only draft/collecting, before room expiry. New places must be published and satisfy both the current administrative area and origin/radius. At most 10 distinct seeds per room across all contributors; existing over-quota rooms are retained. Duplicates preserve attribution and are no-ops. A changed set increments constraintVersion once and marks dependent scores/plans stale. Client must refetch on room.seed_places_changed, focus/reconnect/resync and use polling fallback: post-commit SSE is best-effort. Optional Idempotency-Key binds actor, method, concrete resource and normalized body for 24 hours. Replay rechecks membership and editability; legacy unbound keys require a reload and new key. No key promises only current-state no-op behavior, not exact replay across intervening mutations.
+         */
         post: operations["addRoomSeedPlaces"];
         delete?: never;
         options?: never;
@@ -668,7 +734,10 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Host-only: remove a seed place */
+        /**
+         * Host removes any seed; account members remove their own membership contribution
+         * @description Guests always receive 403; outsiders/removed members receive NOT_A_MEMBER. Active host/member must be in draft/collecting before room expiry, otherwise ROOM_NOT_EDITABLE (even for replay). State is checked before ownership. Member removing another contribution receives SEED_PLACE_NOT_OWNED. Missing seed is a no-op after authorization/state checks; deletion never validates current catalog/area. Idempotency-Key is optional, retained 24 hours and bound to actor/method/room/place. A completed replay returns the old response without deleting a later re-added contribution. Legacy records without resource binding return IDEMPOTENCY_CONTEXT_CHANGED; reload and use a new key.
+         */
         delete: operations["removeRoomSeedPlace"];
         options?: never;
         head?: never;
@@ -3291,7 +3360,7 @@ export interface paths {
         put?: never;
         /**
          * Mint a canonical share link for a room invite, plan or place (LNK-BE-002)
-         * @description Returns `https://<share-host>/l/{slug}` — a random 128-bit slug and nothing else in the URL (FR-LINK-001). The sharer's right to point at the entity is checked here: room host for `ROOM_INVITE` (the slug then doubles as the invite code, joined with `POST /rooms/join`), room member for `PLAN`, any signed-in user for a published `PLACE`. `COLLECTION` and `REFERRAL` are reserved and answer 400 `SHARE_LINK_TYPE_UNSUPPORTED`. Guests cannot mint. 503 `SHARE_LINKS_UNAVAILABLE` (not retryable) when the environment has no share host configured.
+         * @description Returns `https://<share-host>/l/{slug}` — a random 128-bit slug and nothing else in the URL (FR-LINK-001). The sharer's right to point at the entity is checked here: room host for `ROOM_INVITE` (the slug then doubles as the invite code, joined with `POST /rooms/join`), room member for `PLAN`, any signed-in user for a published `PLACE`. `COLLECTION` and `REFERRAL` are reserved and answer 400 `SHARE_LINK_TYPE_UNSUPPORTED`. Guests cannot mint. 503 `SHARE_LINKS_UNAVAILABLE` (not retryable) when the environment has no share host configured. ROOM_INVITE mint also fails closed with `INVITE_TTL_SETTING_UNAVAILABLE`: retryable false for a missing/invalid setting, true for a database or lock timeout. Its expiry exactly copies the invite in the same transaction.
          */
         post: operations["createShareLink"];
         delete?: never;
@@ -3393,6 +3462,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/cms/settings/room-invites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Super admin SSO: read the lifetime for new room invites
+         * @description Reads the primary database every time. Requires active super_admin and a current access_sso session. No conditional cache or 304 response.
+         */
+        get: operations["getCmsRoomInviteSettings"];
+        /**
+         * Super admin SSO: update the lifetime for new room invites
+         * @description Requires active super_admin, access_sso session and existing cookie CSRF protection. Only new invites use the value; existing stored deadlines remain unchanged. CODE6 retains its independent 172800-second and room-expiry caps. Claims idempotency before locking the singleton FOR UPDATE. Checks If-Match even for a no-op. Actual changes increment the decimal-string version and append room_invite_ttl.updated audit with before/after TTL and version. No-op keeps version, actor and timestamp and writes no change audit. Replay completion is atomic with update and audit. Same key/body/If-Match replays the original DTO and ETag before checking current revision; changing body or If-Match with that key returns 422. Replay retention remains 24h.
+         */
+        put: operations["updateCmsRoomInviteSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/cms/audit": {
         parameters: {
             query?: never;
@@ -3402,7 +3495,7 @@ export interface paths {
         };
         /**
          * Admin: read the audit log (filterable, cursor-paged)
-         * @description Audit is a feature, not a log — ops must be able to answer "who suspended this place and why" without database access. Read-only: FR-CMS-008 makes the log immutable, so there is no update or delete path here by design.
+         * @description Audit is a feature, not a log — ops must be able to answer "who suspended this place and why" without database access. Read-only: FR-CMS-008 makes the log immutable, so there is no update or delete path here by design. Rows for resourceType room_invite_ttl are included only for an active super_admin with an access_sso session; every other caller has these rows excluded before filters, limit and cursor pagination.
          *     `breakGlass=true` is the incident-review query: it returns emergency takedowns on their own, with actor, role, reason and request id.
          */
         get: operations["cmsListAudit"];
@@ -6138,6 +6231,24 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        InviteAttemptCsrfResult: {
+            /** Format: date-time */
+            expiresAt: string;
+            csrfToken: string;
+        };
+        InviteAttemptBootstrap: {
+            /** @enum {string} */
+            transport: "MOBILE_HEADER" | "BROWSER_COOKIE";
+        };
+        InviteAttemptBootstrapResult: {
+            /** Format: date-time */
+            expiresAt: string;
+            contextToken: string;
+        } | {
+            /** Format: date-time */
+            expiresAt: string;
+            csrfToken: string;
+        };
         MyCredits: {
             balance: number;
             earned: number;
@@ -7163,6 +7274,37 @@ export interface components {
                 currency: string;
             };
         };
+        RoomHostTransferredPayload: {
+            /** Format: uuid */
+            previousHostMemberId: string;
+            /** Format: uuid */
+            newHostMemberId: string;
+            hostVersion: number;
+        };
+        TransferRoomHostRequest: {
+            /**
+             * Format: uuid
+             * @description Active user RoomMember ID in this room.
+             */
+            memberId: string;
+            expectedHostVersion: number;
+        };
+        TransferRoomHostResult: {
+            /**
+             * Format: uuid
+             * @description Transactional domain event ID.
+             */
+            transferId: string;
+            /** Format: uuid */
+            roomId: string;
+            /** Format: uuid */
+            previousHostMemberId: string;
+            /** Format: uuid */
+            hostMemberId: string;
+            hostVersion: number;
+            /** Format: date-time */
+            transferredAt: string;
+        };
         /** @description Facts only — audience copy is composed client-side from type/participantCount/budgetMode. */
         RoomSummary: {
             /** Format: uuid */
@@ -7177,6 +7319,10 @@ export interface components {
             decisionMode: "match" | "vote" | "host";
             participantCount: number;
             constraintVersion: number;
+            /** Format: uuid */
+            hostMemberId: string;
+            /** @description Independent ownership version; changes only on transfer. */
+            hostVersion: number;
             title?: string;
             /** Format: date-time */
             scheduledDate?: string;
@@ -7196,11 +7342,22 @@ export interface components {
             };
             constraints?: components["schemas"]["RoomConstraints"];
             members?: components["schemas"]["RoomMember"][];
-            seedPlaces?: {
-                /** Format: uuid */
-                placeId?: string;
-                name?: string;
-            }[];
+            seedPlaces?: components["schemas"]["RoomSeedPlace"][];
+        };
+        RoomSeedPlace: {
+            /** Format: uuid */
+            placeId: string;
+            name: string;
+            position: number;
+            /**
+             * Format: uuid
+             * @description Immutable room membership attribution, retained after creator removal. Never an account ID. Guests may read but cannot mutate.
+             */
+            addedByMemberId: string;
+        };
+        RoomSeedPlacesResponse: {
+            seedPlaces: components["schemas"]["RoomSeedPlace"][];
+            constraintVersion: number;
         };
         /** @description Venue identity and location independently checked by a CMS admin; never certifies quality or safety. Revoked on material name/address/location change; requires re-verification. No evidence or actor exposed publicly. */
         VenueVerification: {
@@ -7208,6 +7365,27 @@ export interface components {
             status: "unverified" | "verified";
             /** Format: date-time */
             verifiedAt?: string;
+        };
+        UpdateCmsRoomInviteSettings: {
+            /** @description JSON number only; no coercion. Applies to new invites. */
+            ttlSeconds: number;
+        };
+        CmsRoomInviteSettings: {
+            readonly ttlSeconds: number;
+            /** @description PostgreSQL bigint revision serialized losslessly as a decimal string */
+            readonly version: string;
+            /** @example "room-invite-ttl-v1-r1" */
+            readonly etag: string;
+            /** Format: date-time */
+            readonly updatedAt: string;
+            /** Format: uuid */
+            readonly updatedByAdminId: string | null;
+            /** @constant */
+            readonly minTtlSeconds: 1;
+            /** @constant */
+            readonly maxTtlSeconds: 2147483647;
+            /** @constant */
+            readonly codeMaxTtlSeconds: 172800;
         };
         CmsVenueVerification: components["schemas"]["VenueVerification"] & {
             identityRevision: number;
@@ -8518,7 +8696,7 @@ export interface components {
             plan_changed?: boolean;
             date_reminder: boolean;
         };
-        /** @description Declared extensible (alpha.69): a client treats a kind it does not know as an opaque notification it cannot render specially — never as a malformed item — so a new kind is not a breaking change on the inbox or the preference list. `privacy_export_ready` (GoGo-BE#256) is in-app only: its payload is `{ exportId, expiresAt }` and is never pushed. */
+        /** @description Declared extensible (alpha.69): a client treats a kind it does not know as an opaque notification it cannot render specially — never as a malformed item — so a new kind is not a breaking change on the inbox or the preference list. `privacy_export_ready` (GoGo-BE#256) is in-app only: its payload is `{ exportId, expiresAt }` and is never pushed. `host_transferred` opens the room and belongs to category other; master push permission and quiet hours still apply. Its recipient is the membership named in the event, even if ownership changed again. */
         NotificationKind: string;
         /**
          * @description The kinds a legacy client may opt in or out of on `PUT /me/notification-preferences` — closed, exactly what the route accepts. `privacy_export_ready` is not among them: it is in-app only and has no channel to switch.
@@ -11138,7 +11316,7 @@ export interface components {
             /** Format: uuid */
             event_id: string;
             /** @enum {string} */
-            event_type: "room.status_changed" | "participant.joined" | "participant.left" | "participant.selection_changed" | "matching.started" | "matching.completed" | "matching.failed" | "suggestions.generated" | "suggestions.updated" | "vote.changed" | "plan.updated";
+            event_type: "room.host_transferred" | "room.status_changed" | "room.seed_places_changed" | "participant.joined" | "participant.left" | "participant.selection_changed" | "matching.started" | "matching.completed" | "matching.failed" | "suggestions.generated" | "suggestions.updated" | "vote.changed" | "plan.updated";
             event_version: number;
             /** Format: date-time */
             occurred_at: string;
@@ -12078,6 +12256,15 @@ export interface components {
                 "application/json": components["schemas"]["ErrorEnvelope"];
             };
         };
+        /** @description INVITE_TTL_SETTING_UNAVAILABLE — issuance is rolled back, with no partial invite/share. Missing or invalid singleton setting is non-retryable (repair data/migration); database connectivity/query/lock timeout is retryable. No runtime 24h fallback. SERVICE_UNAVAILABLE (retryable true) is also possible for authoritative session lookup. */
+        InviteIssuanceUnavailable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorEnvelope"];
+            };
+        };
         /** @description SERVICE_UNAVAILABLE (retryable true) — the authoritative consumer session lookup encountered an operational database connection, pool or query timeout/unavailability. Retry with backoff; cached state cannot authorize access. SQL/schema/permission/configuration errors retain existing error handling. */
         SessionLookupUnavailable: {
             headers: {
@@ -12187,6 +12374,12 @@ export interface components {
         };
     };
     parameters: {
+        /** @description Browser-managed HttpOnly proof. Optional for initial browser bootstrap; proof-bearing bootstrap requires X-GoGo-Invite-CSRF. Never read or write this bearer from JavaScript. */
+        InviteContextCookie: string;
+        /** @description Opaque mobile proof; optional at bootstrap, mandatory only for future CODE6. Independent of user Authorization and push Device credentials. */
+        InviteContextHeader: string;
+        /** @description Required with browser proof cookie on bootstrap and future CODE6 POSTs. Independent of user-session CSRF. */
+        InviteCSRFHeader: string;
         /** @description ADM-003 / ADR-0019 §8. The ETag a client already holds. The tag is derived from the active datasetVersion plus the resolved request, so it carries no clock and no process-local state: two instances serving the same version answer with the same tag, and a restart does not invalidate anyone's cache. */
         IfNoneMatch: string;
         /** @description District-level units were dissolved on 2025-07-01 and are excluded from every response unless this is `true`. A form offering "Quận Ba Đình" would be offering something that no longer exists. */
@@ -12615,6 +12808,172 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             429: components["responses"]["RateLimited"];
+        };
+    };
+    recoverInviteAttemptCsrf: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Exact configured HTTPS Web origin. */
+                Origin: string;
+                "Sec-Fetch-Site": "same-origin" | "same-site";
+            };
+            path?: never;
+            cookie?: {
+                /** @description Browser-managed HttpOnly proof. Optional for initial browser bootstrap; proof-bearing bootstrap requires X-GoGo-Invite-CSRF. Never read or write this bearer from JavaScript. */
+                "__Host-gogo_invite_ctx"?: components["parameters"]["InviteContextCookie"];
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description Existing CSRF and original expiry; no Set-Cookie. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InviteAttemptCsrfResult"];
+                };
+            };
+            /** @description VALIDATION_FAILED for missing/malformed JSON, non-object or extra fields. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description INVITE_CONTEXT_REQUIRED for missing/malformed/forged/expired/revoked/wrong-purpose/wrong-transport proof or forbidden proof header. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description CSRF_FAILED for rejected Origin or Fetch Metadata. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description UNSUPPORTED_MEDIA_TYPE; requires application/json (optional charset). */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            /** @description INVITE_LOOKUP_UNAVAILABLE; secret, database or security dependency unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    bootstrapInviteAttemptContext: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                /** @description Opaque mobile proof; optional at bootstrap, mandatory only for future CODE6. Independent of user Authorization and push Device credentials. */
+                "X-GoGo-Invite-Context"?: components["parameters"]["InviteContextHeader"];
+                /** @description Required with browser proof cookie on bootstrap and future CODE6 POSTs. Independent of user-session CSRF. */
+                "X-GoGo-Invite-CSRF"?: components["parameters"]["InviteCSRFHeader"];
+                /** @description Required exact allowlisted HTTPS origin for BROWSER_COOKIE. */
+                Origin?: string;
+                /** @description Browser bootstrap requires same-origin or same-site. */
+                "Sec-Fetch-Site"?: "same-origin" | "same-site";
+            };
+            path?: never;
+            cookie?: {
+                /** @description Browser-managed HttpOnly proof. Optional for initial browser bootstrap; proof-bearing bootstrap requires X-GoGo-Invite-CSRF. Never read or write this bearer from JavaScript. */
+                "__Host-gogo_invite_ctx"?: components["parameters"]["InviteContextCookie"];
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InviteAttemptBootstrap"];
+            };
+        };
+        responses: {
+            /** @description Context created, replayed or reused; original expiry retained. */
+            201: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    /** @description BROWSER_COOKIE only; __Host-gogo_invite_ctx with Secure, HttpOnly, Path=/, SameSite=Lax, fixed Expires and remaining Max-Age. A separate __Host-gogo_invite_csrf cookie has the same scope/expiry and is readable by JavaScript. No Domain. */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InviteAttemptBootstrapResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description INVITE_CONTEXT_REQUIRED for missing (CODE6 only), malformed, forged, expired, revoked, wrong-purpose or wrong-transport proof. No invite lookup. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description CSRF_FAILED for missing/mismatched CSRF or rejected browser Origin/fetch site. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description IDEMPOTENCY_IN_PROGRESS; retry same request and key. */
+            409: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description IDEMPOTENCY_KEY_REUSED for different transport on the same initial IP/key. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            /** @description INVITE_LOOKUP_UNAVAILABLE; no key, schema or security storage available. No anonymous fallback. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
         };
     };
     createGuestSession: {
@@ -13086,6 +13445,112 @@ export interface operations {
             503: components["responses"]["SessionLookupUnavailable"];
         };
     };
+    transferRoomHost: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransferRoomHostRequest"];
+            };
+        };
+        responses: {
+            /** @description Original immutable transfer receipt (also after caller loses host role). */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    /** @description Present and true on a completed receipt replay. */
+                    "x-idempotent-replay"?: "true";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransferRoomHostResult"];
+                };
+            };
+            /** @description VALIDATION_ERROR, IDEMPOTENCY_KEY_REQUIRED or INVALID_IDEMPOTENCY_KEY. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description ROOM_SCOPE_VIOLATION, NOT_A_MEMBER or HOST_ONLY. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description ROOM_NOT_FOUND or MEMBER_NOT_FOUND (also cross-room/removed target). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description CANNOT_TRANSFER_TO_SELF, HOST_TRANSFER_TARGET_INELIGIBLE, ROOM_NOT_EDITABLE, HOST_VERSION_CONFLICT, or IDEMPOTENT_REQUEST_IN_FLIGHT (retryable true; Retry-After seconds). */
+            409: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description ROOM_EXPIRED (planning room past expiresAt after lock). */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description IDEMPOTENCY_KEY_REUSED with a different normalized request. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description RATE_LIMITED by the transfer limiter. */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description ROOM_HOST_TRANSFER_UNAVAILABLE or existing session-lookup unavailability. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     renameRoom: {
         parameters: {
             query?: never;
@@ -13302,7 +13767,7 @@ export interface operations {
                     };
                 };
             };
-            503: components["responses"]["SessionLookupUnavailable"];
+            503: components["responses"]["InviteIssuanceUnavailable"];
         };
     };
     revokeRoomInvite: {
@@ -13433,7 +13898,10 @@ export interface operations {
     addRoomSeedPlaces: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Client-generated key for retryable mutations. Repeating a request with the same key returns the original result instead of re-applying it. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 id: string;
             };
@@ -13447,21 +13915,71 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Updated seed list */
+            /** @description Updated seed list and current constraint version (including no-op or replay). */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["RoomSeedPlacesResponse"];
+                };
             };
-            400: components["responses"]["BadRequest"];
+            /** @description Validation error, INVALID_IDEMPOTENCY_KEY, INVALID_SEED_PLACE or SEED_PLACE_OUT_OF_AREA. field_errors identifies placeIds. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description ROOM_SCOPE_VIOLATION, NOT_A_MEMBER, SEED_PLACES_FORBIDDEN or SEED_PLACE_NOT_OWNED. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description ROOM_NOT_FOUND. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description ROOM_NOT_EDITABLE, SEED_PLACE_LIMIT_REACHED, ADMINISTRATIVE_VERSION_CHANGED, ROOM_AREA_UNRESOLVED, IDEMPOTENT_REQUEST_IN_FLIGHT or IDEMPOTENCY_CONTEXT_CHANGED. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description IDEMPOTENCY_KEY_REUSED with different normalized body or resource. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
             503: components["responses"]["SessionLookupUnavailable"];
         };
     };
     removeRoomSeedPlace: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Client-generated key for retryable mutations. Repeating a request with the same key returns the original result instead of re-applying it. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 id: string;
                 placeId: string;
@@ -13470,12 +13988,60 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Updated seed list */
+            /** @description Updated seed list and current constraint version (including no-op or replay). */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["RoomSeedPlacesResponse"];
+                };
+            };
+            /** @description Validation error, INVALID_IDEMPOTENCY_KEY, INVALID_SEED_PLACE or SEED_PLACE_OUT_OF_AREA. field_errors identifies placeIds. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description ROOM_SCOPE_VIOLATION, NOT_A_MEMBER, SEED_PLACES_FORBIDDEN or SEED_PLACE_NOT_OWNED. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description ROOM_NOT_FOUND. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description ROOM_NOT_EDITABLE, SEED_PLACE_LIMIT_REACHED, ADMINISTRATIVE_VERSION_CHANGED, ROOM_AREA_UNRESOLVED, IDEMPOTENT_REQUEST_IN_FLIGHT or IDEMPOTENCY_CONTEXT_CHANGED. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description IDEMPOTENCY_KEY_REUSED with different normalized body or resource. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
             };
             503: components["responses"]["SessionLookupUnavailable"];
         };
@@ -14145,7 +14711,15 @@ export interface operations {
                 };
             };
             429: components["responses"]["RateLimited"];
-            503: components["responses"]["AssistantDisabled"];
+            /** @description ASSISTANT_DISABLED when the assistant is unavailable. For create_invite, INVITE_TTL_SETTING_UNAVAILABLE (retryable false for missing/invalid setting, true for database/lock failure) rolls back issuance without a grant. SERVICE_UNAVAILABLE (retryable true) is also possible for session lookup. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
         };
     };
     dismissAssistantProposal: {
@@ -18314,7 +18888,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             429: components["responses"]["RateLimited"];
-            /** @description No share host configured in this environment (`SHARE_LINKS_UNAVAILABLE`) */
+            /** @description SHARE_LINKS_UNAVAILABLE (retryable false) when no share host is configured; INVITE_TTL_SETTING_UNAVAILABLE for ROOM_INVITE (retryable false for missing/invalid setting, true for database/lock failure); SERVICE_UNAVAILABLE for session lookup. */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -18615,6 +19189,125 @@ export interface operations {
                 };
                 content: {
                     "text/html": string;
+                };
+            };
+        };
+    };
+    getCmsRoomInviteSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current setting; ETag in body and header is identical */
+            200: {
+                headers: {
+                    ETag?: string;
+                    "Cache-Control"?: "private, no-store, no-transform";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsRoomInviteSettings"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description INVITE_TTL_SETTING_UNAVAILABLE; missing/invalid non-retryable, database/lock failure retryable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    updateCmsRoomInviteSettings: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description One opaque strong ETag from GET; no wildcard, weak tag or list. */
+                "If-Match": string;
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateCmsRoomInviteSettings"];
+            };
+        };
+        responses: {
+            /** @description Current setting; ETag in body and header is identical */
+            200: {
+                headers: {
+                    ETag?: string;
+                    "Cache-Control"?: "private, no-store, no-transform";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CmsRoomInviteSettings"];
+                };
+            };
+            /** @description VALIDATION_FAILED (ttlSeconds field_errors), IDEMPOTENCY_KEY_REQUIRED, INVALID_IDEMPOTENCY_KEY or INVALID_IF_MATCH; retryable false */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description IDEMPOTENT_REQUEST_IN_FLIGHT; retryable true, retry the same key */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description PRECONDITION_FAILED; retryable false, reload and retain draft */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description IDEMPOTENCY_KEY_REUSED; retryable false */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description PRECONDITION_REQUIRED; missing If-Match, retryable false */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description INVITE_TTL_SETTING_UNAVAILABLE; missing/invalid non-retryable, database/lock failure retryable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
         };
