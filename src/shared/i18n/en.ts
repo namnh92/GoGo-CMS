@@ -22,6 +22,7 @@ export const en: Record<MessageKey, string> = {
   'placeAliases.tooMany': 'At most 20 aliases.',
   'placeAliases.invalid': 'Enter a non-empty alias without control characters or line breaks.',
   'placeAliases.addFirst': 'Select Add alias or clear the input before saving.',
+  'credits.reason.assistant_usage': 'GoGo AI usage cost',
   'credits.reason.assistant_usage_adjustment': 'GoGo AI usage adjustment',
   'credits.reason.other': 'Other reason',
 
