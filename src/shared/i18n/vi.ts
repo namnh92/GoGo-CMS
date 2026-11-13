@@ -3,6 +3,42 @@
  * resolves through a key here — display labels never live in business data.
  */
 export const vi = {
+  'roles.domain.inviteSettings': 'Thời hạn lời mời',
+  'nav.inviteSettings': 'Thời hạn lời mời',
+  'inviteSettings.title': 'Thời hạn lời mời',
+  'inviteSettings.description': 'Cấu hình thời hạn cho lời mời mới trong môi trường hiện hành.',
+  'inviteSettings.duration': 'Thời lượng',
+  'inviteSettings.current': 'Giá trị hiện tại',
+  'inviteSettings.unit': 'Đơn vị',
+  'inviteSettings.unit.seconds': 'giây',
+  'inviteSettings.unit.minutes': 'phút',
+  'inviteSettings.unit.hours': 'giờ',
+  'inviteSettings.unit.days': 'ngày',
+  'inviteSettings.normalizedDuration': 'Thời lượng sau chuyển đổi: {seconds} giây',
+  'inviteSettings.range': 'Nhập số nguyên từ 1 đến 2147483647 giây sau chuyển đổi.',
+  'inviteSettings.validation.positiveInteger': 'Nhập số nguyên dương, không làm tròn số thập phân.',
+  'inviteSettings.validation.maximum': 'Thời lượng sau chuyển đổi không được vượt 2147483647 giây.',
+  'inviteSettings.confirm.title': 'Đổi thời hạn lời mời mới?',
+  'inviteSettings.confirm.scope':
+    'Chỉ lời mời được tạo sau khi lưu thành công áp dụng thời hạn mới. Lời mời đã tạo giữ nguyên hạn đã lưu.',
+  'inviteSettings.confirm.codeCap': 'Mã 6 số tối đa 48 giờ và không vượt thời điểm phòng hết hạn.',
+  'inviteSettings.confirm.roomExpiry':
+    'Phòng hết hạn hoặc lời mời bị thu hồi có thể làm lời mời mất hiệu lực sớm hơn.',
+  'inviteSettings.confirm.save': 'Lưu thay đổi',
+  'inviteSettings.saved': 'Đã lưu — áp dụng cho lời mời mới.',
+  'inviteSettings.conflict':
+    'Phiên bản đã thay đổi hoặc thiếu điều kiện cập nhật. Đang tải lại giá trị hiện tại: {current}. Bản nháp được giữ; kiểm tra và xác nhận lại trước khi lưu.',
+  'inviteSettings.reload': 'Tải lại thời hạn',
+  'inviteSettings.unavailable':
+    'Cấu hình thời hạn tạm thời không khả dụng. Giữ bản nháp và thử lại theo trạng thái máy chủ.',
+  'inviteSettings.ssoRequired':
+    'Chỉ super_admin đăng nhập qua SSO được xem và chỉnh thời hạn lời mời.',
+  'inviteSettings.updatedBy': 'Người cập nhật gần nhất',
+  'inviteSettings.updatedAt': 'Thời điểm cập nhật',
+  'inviteSettings.system': 'Hệ thống (khởi tạo)',
+  'inviteSettings.history': 'Lịch sử thay đổi',
+  'inviteSettings.retryIntent':
+    'Bản nháp đã khoá để giữ nguyên yêu cầu. Thử lại dùng cùng mã yêu cầu, thời lượng và phiên bản; không tự gửi khi có mạng trở lại.',
   'placeAliases.label': 'Tên khác (alias)',
   'placeAliases.hint':
     'Tối đa 20 tên, mỗi tên tối đa 120 ký tự. Nhấn Thêm để đưa tên vào danh sách.',

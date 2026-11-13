@@ -62,7 +62,8 @@ export function AuditTrail({ entries }: { entries: AuditEntry[] }) {
           >
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <p className="text-body font-semibold text-text-primary">
-                {entry.actorRole ? t(`role.${entry.actorRole}` as const) : entry.actorType}{' '}
+                {entry.actorRole ? t(`role.${entry.actorRole}` as const) : entry.actorType}
+                {entry.actorId ? ` · ${entry.actorId}` : ''}{' '}
                 <span className="font-normal text-text-muted">{entry.action}</span>
               </p>
               <time

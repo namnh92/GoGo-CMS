@@ -227,7 +227,8 @@ export const queryKeys = {
 
   audit: {
     all: ['audit'] as const,
-    list: (filters: Record<string, unknown>) => ['audit', 'list', filters] as const,
+    list: (filters: Record<string, unknown>, epoch: number) =>
+      ['audit', epoch, 'list', filters] as const,
   },
 
   searchAnalytics: (days: number) => ['search-analytics', days] as const,

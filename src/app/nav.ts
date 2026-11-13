@@ -150,7 +150,7 @@ const OPERATIONS: NavLeaf[] = [
     to: '/settings',
     labelKey: 'nav.settings',
     permission: 'ranking.read',
-    match: (p) => p.startsWith('/settings'),
+    match: (p) => p === '/settings' || p === '/settings/',
   },
   {
     to: '/search-quality',
@@ -259,6 +259,12 @@ const USERS: NavLeaf[] = [
 ]
 
 const ADMINISTRATION: NavLeaf[] = [
+  {
+    to: '/settings/room-invites',
+    labelKey: 'nav.inviteSettings',
+    permission: 'inviteSettings.read',
+    match: (p) => p === '/settings/room-invites' || p === '/settings/room-invites/',
+  },
   {
     // Super-admin only in both directions: who holds which role is the shape
     // of the authorization model itself.

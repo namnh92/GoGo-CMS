@@ -3,6 +3,7 @@ import { useInfiniteQuery } from '@tanstack/react-query'
 import { useI18n, useLabel, useT } from '@/shared/i18n/i18n'
 import { queryKeys } from '@/shared/api/queryKeys'
 import { useSession } from '@/shared/auth/session'
+import { useSessionQueryCleanup } from '@/shared/auth/useSessionQueryCleanup'
 import { formatDateTime } from '@/shared/format'
 import { PageBody, PageHeader } from '@/app/PageHeader'
 import { Card, CardBody, CardHeader } from '@/shared/ui/Card'
@@ -28,7 +29,9 @@ export default function AuditLogScreen() {
   const t = useT()
   const label = useLabel()
   const { locale } = useI18n()
-  const { can } = useSession()
+  const { can, currentEpoch } = useSession()
+  const epoch = currentEpoch()
+  useSessionQueryCleanup('audit', epoch)
 
   const [form, setForm] = useState({
     resourceType: '',
@@ -53,7 +56,7 @@ export default function AuditLogScreen() {
    * offset would repeat or skip entries between one page and the next.
    */
   const query = useInfiniteQuery({
-    queryKey: queryKeys.audit.list(filters as Record<string, unknown>),
+    queryKey: queryKeys.audit.list(filters as Record<string, unknown>, epoch),
     queryFn: ({ pageParam, signal }) =>
       fetchAudit({ ...filters, cursor: pageParam as string | null }, signal),
     initialPageParam: null as string | null,

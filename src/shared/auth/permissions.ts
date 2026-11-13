@@ -99,6 +99,7 @@ const ROUTE_ROLES = {
   assistantFeedback: ['moderator', 'ops_admin'],
   /** `POST /cms/auth/admins` — @RequireRole('super_admin') */
   admins: ['super_admin'],
+  inviteSettings: ['super_admin'],
 } as const satisfies Record<string, readonly AdminRole[]>
 
 export type RouteGroup = keyof typeof ROUTE_ROLES
@@ -253,6 +254,8 @@ const PERMISSIONS = {
   // the server keeps it super-admin-only rather than opening it to rank-read.
   // `canAccess` lands on the same answer: 'admins' asks for super_admin, whose
   // rank nothing else reaches.
+  'inviteSettings.read': ['inviteSettings', 'read'],
+  'inviteSettings.write': ['inviteSettings', 'write'],
   'admin.read': ['admins', 'read'],
   'admin.create': ['admins', 'write'],
 } as const satisfies Record<string, readonly [RouteGroup, Access]>

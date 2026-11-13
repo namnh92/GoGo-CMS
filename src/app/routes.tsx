@@ -56,6 +56,7 @@ const AssistantCreditsScreen = lazy(() => import('@/features/users/assistantCred
 const RoomListScreen = lazy(() => import('@/features/users/roomList.view'))
 const PlanListScreen = lazy(() => import('@/features/users/planList.view'))
 const AppControlScreen = lazy(() => import('@/features/appControl/appControl.view'))
+const InviteSettingsScreen = lazy(() => import('@/features/invite-settings/inviteSettings.view'))
 const SettingsScreen = lazy(() => import('@/features/ranking/settings.view'))
 const NewAccountScreen = lazy(() => import('@/features/admins/newAccount.view'))
 const AdminListScreen = lazy(() => import('@/features/admins/adminList.view'))
@@ -174,6 +175,7 @@ export const router = createBrowserRouter([
           { path: 'plans', element: <PlanListScreen /> },
           { path: 'app-control', element: <AppControlScreen /> },
           { path: 'settings', element: <SettingsScreen /> },
+          { path: 'settings/room-invites', element: <InviteSettingsScreen /> },
           { path: 'settings/accounts', element: <AdminListScreen /> },
           { path: 'settings/accounts/new', element: <NewAccountScreen /> },
           // No role gate: everyone has a password, and this screen is about the
