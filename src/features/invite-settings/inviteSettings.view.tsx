@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { PageBody, PageHeader } from '@/app/PageHeader'
 import { useSession } from '@/shared/auth/session'
+import { useSessionQueryCleanup } from '@/shared/auth/useSessionQueryCleanup'
 import { newIdempotencyKey } from '@/shared/api/client'
 import { ApiError, toApiError } from '@/shared/api/errors'
 import { useI18n, useT } from '@/shared/i18n/i18n'
@@ -90,18 +91,10 @@ function InviteSettingsSession({ epoch }: { epoch: number }) {
     ([query.error, audit.error].find((error) => error instanceof ApiError && error.isForbidden) as
       ApiError | undefined)
 
+  useSessionQueryCleanup('inviteSettings', epoch, !!forbidden)
   useEffect(() => {
-    const key = ['inviteSettings', epoch]
-    if (forbidden) {
-      setDenied(forbidden)
-      void client.cancelQueries({ queryKey: key })
-      client.removeQueries({ queryKey: key })
-    }
-    return () => {
-      void client.cancelQueries({ queryKey: key })
-      client.removeQueries({ queryKey: key })
-    }
-  }, [client, epoch, forbidden])
+    if (forbidden) setDenied(forbidden)
+  }, [forbidden])
 
   // Do not let an old session's replies paint the next operator's screen.
   if (epoch !== currentEpoch()) return null

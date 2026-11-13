@@ -4,6 +4,7 @@ import type { ColumnDef } from '@tanstack/react-table'
 import { useI18n, useT, type Locale } from '@/shared/i18n/i18n'
 import { queryKeys } from '@/shared/api/queryKeys'
 import { useSession } from '@/shared/auth/session'
+import { useSessionQueryCleanup } from '@/shared/auth/useSessionQueryCleanup'
 import { formatDateTime, formatMoney } from '@/shared/format'
 import { newIdempotencyKey } from '@/shared/api/client'
 import { ApiError } from '@/shared/api/errors'
@@ -125,7 +126,9 @@ export default function ManualCostsScreen() {
   const { locale } = useI18n()
   const toast = useToast()
   const queryClient = useQueryClient()
-  const { can } = useSession()
+  const { can, currentEpoch } = useSession()
+  const epoch = currentEpoch()
+  useSessionQueryCleanup('audit', epoch)
   const describeError = useErrorMessage()
 
   const canRead = can('cost.read')
@@ -138,7 +141,7 @@ export default function ManualCostsScreen() {
     enabled: canRead,
   })
   const audit = useQuery({
-    queryKey: queryKeys.audit.list({ resourceType: AUDIT_RESOURCE }),
+    queryKey: queryKeys.audit.list({ resourceType: AUDIT_RESOURCE }, epoch),
     queryFn: ({ signal }) => fetchAudit({ resourceType: AUDIT_RESOURCE, limit: 20 }, signal),
     enabled: canRead && canAudit,
   })

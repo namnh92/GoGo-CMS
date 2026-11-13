@@ -95,6 +95,31 @@ beforeEach(() => {
 })
 
 describe('invite lifetime settings CMS-C', () => {
+  it('identifies two distinct administrators in the history entries', async () => {
+    server.use(
+      http.get('*/v1/cms/audit', () =>
+        HttpResponse.json({
+          items: ['admin-history-a', 'admin-history-b'].map((actorId, index) => ({
+            id: `history-${index}`,
+            actorId,
+            actorType: 'admin',
+            actorRole: 'super_admin',
+            action: 'room_invite_ttl.updated',
+            resourceType: 'room_invite_ttl',
+            resourceId: 'global',
+            occurredAt: '2026-11-13T00:00:00Z',
+            diff: { before: { ttlSeconds: 3600 }, after: { ttlSeconds: 86400 } },
+          })),
+          nextCursor: null,
+        }),
+      ),
+    )
+    render()
+    for (const actor of ['admin-history-a', 'admin-history-b']) {
+      expect(await screen.findByText(actor, { exact: false })).toBeInTheDocument()
+    }
+  })
+
   it.each(['editor', 'moderator', 'ops_admin'] as const)(
     'hides navigation and forbids direct access for %s without a request',
     async (role) => {
