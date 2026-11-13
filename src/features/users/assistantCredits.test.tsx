@@ -101,8 +101,18 @@ describe('user assistant credits (#277)', () => {
           HttpResponse.json({
             ...creditPage,
             items: [
-              { ...creditGrant, delta: -3, reason: 'assistant_usage' },
-              { ...creditSpend, delta: 2, reason: 'assistant_usage_adjustment' },
+              {
+                ...creditSpend,
+                id: '00000000-0000-4000-8000-000000000001',
+                delta: -3,
+                reason: 'assistant_usage',
+              },
+              {
+                ...creditSpend,
+                id: '00000000-0000-4000-8000-000000000002',
+                delta: 2,
+                reason: 'assistant_usage_adjustment',
+              },
               {
                 ...creditSpend,
                 id: '00000000-0000-4000-8000-000000000003',
@@ -129,6 +139,8 @@ describe('user assistant credits (#277)', () => {
       ] as const) {
         const row = within(table).getByText(delta).closest('tr')!
         expect(within(row).getByText(reason)).toBeInTheDocument()
+        expect(within(row).queryAllByRole('link')).toHaveLength(0)
+        expect(within(row).getAllByRole('cell')[3]).toHaveTextContent(/^$/)
       }
     },
   )
